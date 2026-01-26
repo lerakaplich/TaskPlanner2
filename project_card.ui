@@ -1,0 +1,168 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>ProjectCard</class>
+ <widget class="QFrame" name="projectCard">
+  <property name="minimumSize">
+   <size>
+    <width>200</width>
+    <height>200</height>
+   </size>
+  </property>
+  <property name="maximumSize">
+   <size>
+    <width>16777215</width>
+    <height>200</height>
+   </size>
+  </property>
+  <property name="styleSheet">
+   <string notr="true">QFrame#projectCard {
+    background-color: white;
+    border-radius: 12px;
+    border: 1px solid #E0E0E0;
+    padding: 15px;
+}
+QFrame#projectCard:hover {
+    border: 2px solid #ccab6e;
+    background-color: #FFFDF6;
+}</string>
+  </property>
+  <property name="frameShape">
+   <enum>QFrame::StyledPanel</enum>
+  </property>
+  <property name="frameShadow">
+   <enum>QFrame::Raised</enum>
+  </property>
+  <layout class="QVBoxLayout" name="verticalLayout">
+   <item>
+    <widget class="QLabel" name="projectTitle">
+     <property name="styleSheet">
+      <string notr="true">QLabel {
+    font-size: 16px;
+    font-weight: bold;
+    color: #1B232A;
+}</string>
+     </property>
+     <property name="text">
+      <string/>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <widget class="QProgressBar" name="progressBar">
+     <property name="value">
+      <number>0</number>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <widget class="QLabel" name="projectInfo">
+     <property name="styleSheet">
+      <string notr="true">QLabel {
+    font-size: 12px;
+    color: #666;
+    padding: 2px 0px;
+}</string>
+     </property>
+     <property name="text">
+      <string/>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <widget class="QLabel" name="startDate">
+     <property name="styleSheet">
+      <string notr="true">QLabel {
+    font-size: 11px;
+    color: #999;
+    padding: 1px 0px;
+}</string>
+     </property>
+     <property name="text">
+      <string/>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <widget class="QLabel" name="participants">
+     <property name="styleSheet">
+      <string notr="true">QLabel {
+    font-size: 11px;
+    color: #666;
+    padding: 1px 0px;
+}</string>
+     </property>
+     <property name="text">
+      <string/>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <spacer name="verticalSpacer">
+     <property name="orientation">
+      <enum>Qt::Vertical</enum>
+     </property>
+     <property name="sizeHint" stdset="0">
+      <size>
+       <width>20</width>
+       <height>10</height>
+      </size>
+     </property>
+    </spacer>
+   </item>
+   <item>
+    <layout class="QHBoxLayout" name="horizontalLayout">
+     <item>
+      <widget class="QLabel" name="deadline">
+       <property name="styleSheet">
+        <string notr="true">QLabel {
+    font-size: 11px;
+    color: #666;
+    padding: 4px 8px;
+    background-color: #F0F0F0;
+    border-radius: 4px;
+}</string>
+       </property>
+       <property name="text">
+        <string/>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <spacer name="horizontalSpacer">
+       <property name="orientation">
+        <enum>Qt::Horizontal</enum>
+       </property>
+       <property name="sizeHint" stdset="0">
+        <size>
+         <width>40</width>
+         <height>20</height>
+        </size>
+       </property>
+      </spacer>
+     </item>
+     <item>
+      <widget class="QPushButton" name="btnOpen">
+       <property name="styleSheet">
+        <string notr="true">QPushButton {
+    background-color: #1B232A;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    padding: 6px 12px;
+    font-size: 12px;
+}
+QPushButton:hover {
+    background-color: #D9D9D6;
+    color: black;
+}</string>
+       </property>
+       <property name="text">
+        <string>Открыть →</string>
+       </property>
+      </widget>
+     </item>
+    </layout>
+   </item>
+  </layout>
+ </widget>
+</ui>

@@ -1,0 +1,663 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>MyTasksPage</class>
+ <widget class="QWidget" name="MyTasksPage">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>1400</width>
+    <height>900</height>
+   </rect>
+  </property>
+  <layout class="QVBoxLayout" name="mainLayout">
+   <property name="spacing">
+    <number>15</number>
+   </property>
+   <!-- Панель управления -->
+   <item>
+    <widget class="QFrame" name="controlPanel">
+     <property name="styleSheet">
+      <string notr="true">QFrame {
+    background-color: white;
+    border-radius: 12px;
+    padding: 15px;
+    border: 1px solid #E0E0E0;
+    margin-bottom: 15px;
+}</string>
+     </property>
+     <layout class="QHBoxLayout" name="horizontalLayout">
+      <item>
+       <widget class="QLabel" name="pageTitleLabel">
+        <property name="styleSheet">
+         <string notr="true">QLabel {
+    font-size: 28px;
+    font-weight: bold;
+    color: #1B232A;
+}</string>
+        </property>
+        <property name="text">
+         <string>📋 Мои задачи</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <spacer name="horizontalSpacer">
+        <property name="orientation">
+         <enum>Qt::Horizontal</enum>
+        </property>
+        <property name="sizeHint" stdset="0">
+         <size>
+          <width>40</width>
+          <height>20</height>
+         </size>
+        </property>
+       </spacer>
+      </item>
+      <item>
+       <widget class="QLineEdit" name="searchTasksInput">
+        <property name="styleSheet">
+         <string notr="true">QLineEdit {
+    border: 2px solid #E0E0E0;
+    border-radius: 20px;
+    padding: 10px 20px;
+    font-size: 14px;
+    background-color: #FFFFFF;
+}
+QLineEdit:focus {
+    border: 2px solid #ccab6e;
+}</string>
+        </property>
+        <property name="placeholderText">
+         <string>🔍 Поиск по задачам...</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QComboBox" name="priorityFilter">
+        <property name="styleSheet">
+         <string notr="true">QComboBox {
+    border: 2px solid #E0E0E0;
+    border-radius: 8px;
+    padding: 8px 16px;
+    font-size: 14px;
+    background-color: white;
+    min-width: 150px;
+}
+QComboBox:hover {
+    border: 2px solid #ccab6e;
+}</string>
+        </property>
+        <item>
+         <property name="text">
+          <string>Все приоритеты</string>
+         </property>
+        </item>
+        <item>
+         <property name="text">
+          <string>Высокий</string>
+         </property>
+        </item>
+        <item>
+         <property name="text">
+          <string>Средний</string>
+         </property>
+        </item>
+        <item>
+         <property name="text">
+          <string>Низкий</string>
+         </property>
+        </item>
+       </widget>
+      </item>
+      <item>
+       <widget class="QComboBox" name="projectFilter">
+        <property name="styleSheet">
+         <string notr="true">QComboBox {
+    border: 2px solid #E0E0E0;
+    border-radius: 8px;
+    padding: 8px 16px;
+    font-size: 14px;
+    background-color: white;
+    min-width: 150px;
+}
+QComboBox:hover {
+    border: 2px solid #ccab6e;
+}</string>
+        </property>
+        <item>
+         <property name="text">
+          <string>Все проекты</string>
+         </property>
+        </item>
+       </widget>
+      </item>
+      <item>
+       <widget class="QPushButton" name="btnShowArchived">
+        <property name="styleSheet">
+         <string notr="true">QPushButton {
+    background-color: #1B232A;
+    color: white;
+    border-radius: 8px;
+    border: none;
+    padding: 10px 20px;
+    font-size: 14px;
+    font-weight: bold;
+}
+QPushButton:hover {
+    background-color: #2C3640;
+}</string>
+        </property>
+        <property name="text">
+         <string>📦 Архив задач</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QPushButton" name="btnAddTask">
+        <property name="styleSheet">
+         <string notr="true">QPushButton {
+    background-color: #ccab6e;
+    color: white;
+    border-radius: 8px;
+    border: none;
+    padding: 10px 20px;
+    font-size: 14px;
+    font-weight: bold;
+}
+QPushButton:hover {
+    background-color: #998664;
+}</string>
+        </property>
+        <property name="text">
+         <string>+ Добавить задачу</string>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+
+   <!-- Статистика -->
+   <item>
+    <widget class="QFrame" name="statsPanel">
+     <property name="styleSheet">
+      <string notr="true">QFrame {
+    background-color: white;
+    border-radius: 12px;
+    padding: 15px;
+    border: 1px solid #E0E0E0;
+}</string>
+     </property>
+     <layout class="QHBoxLayout" name="horizontalLayout_2">
+      <item>
+       <widget class="QLabel" name="totalTasksLabel">
+        <property name="styleSheet">
+         <string notr="true">QLabel {
+    font-size: 16px;
+    color: #1B232A;
+    padding: 10px;
+}</string>
+        </property>
+        <property name="text">
+         <string>📊 Всего задач: 0</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QLabel" name="completedTasksLabel">
+        <property name="styleSheet">
+         <string notr="true">QLabel {
+    font-size: 16px;
+    color: #1B232A;
+    padding: 10px;
+}</string>
+        </property>
+        <property name="text">
+         <string>✅ Выполнено: 0</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QLabel" name="overdueTasksLabel">
+        <property name="styleSheet">
+         <string notr="true">QLabel {
+    font-size: 16px;
+    color: #1B232A;
+    padding: 10px;
+}</string>
+        </property>
+        <property name="text">
+         <string>⏰ Просрочено: 0</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <spacer name="horizontalSpacer_2">
+        <property name="orientation">
+         <enum>Qt::Horizontal</enum>
+        </property>
+        <property name="sizeHint" stdset="0">
+         <size>
+          <width>40</width>
+          <height>20</height>
+         </size>
+        </property>
+       </spacer>
+      </item>
+      <item>
+       <widget class="QProgressBar" name="overallProgress">
+        <property name="styleSheet">
+         <string notr="true">QProgressBar {
+    border: 1px solid #E0E0E0;
+    border-radius: 6px;
+    text-align: center;
+    background-color: #F5F5F5;
+    height: 12px;
+}
+QProgressBar::chunk {
+    border-radius: 6px;
+    background-color: #D22730;
+}</string>
+        </property>
+        <property name="value">
+         <number>0</number>
+        </property>
+        <property name="textVisible">
+         <bool>true</bool>
+        </property>
+        <property name="format">
+         <string>Общий прогресс: %p%</string>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+
+   <!-- Канбан доска -->
+   <item>
+    <widget class="QScrollArea" name="kanbanScrollArea">
+     <property name="widgetResizable">
+      <bool>true</bool>
+     </property>
+     <property name="horizontalScrollBarPolicy">
+      <enum>Qt::ScrollBarAsNeeded</enum>
+     </property>
+     <property name="verticalScrollBarPolicy">
+      <enum>Qt::ScrollBarAlwaysOff</enum>
+     </property>
+     <property name="frameShape">
+      <enum>QFrame::NoFrame</enum>
+     </property>
+     <widget class="QWidget" name="kanbanContainer">
+      <layout class="QHBoxLayout" name="kanbanLayout">
+       <property name="spacing">
+        <number>15</number>
+       </property>
+       <property name="margin">
+        <number>10</number>
+       </property>
+
+       <!-- Колонка: К выполнению -->
+       <item>
+        <widget class="QFrame" name="columnTodo">
+         <property name="minimumWidth">
+          <number>280</number>
+         </property>
+         <property name="sizePolicy">
+          <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
+           <horstretch>1</horstretch>
+           <verstretch>0</verstretch>
+          </sizepolicy>
+         </property>
+         <layout class="QVBoxLayout" name="todoLayout">
+          <property name="spacing">
+           <number>10</number>
+          </property>
+          <item>
+           <widget class="QLabel" name="columnTitleTodo">
+            <property name="text">
+             <string>📝 К выполнению (0)</string>
+            </property>
+            <property name="styleSheet">
+<string notr="true">QLabel {
+    font-size: 18px;
+    font-weight: bold;
+    color: #1B232A;
+    padding: 15px 20px;
+    border-bottom: 2px solid #F0F0F0;
+}</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QScrollArea" name="todoScrollArea">
+            <property name="widgetResizable">
+             <bool>true</bool>
+            </property>
+            <property name="horizontalScrollBarPolicy">
+             <enum>Qt::ScrollBarAlwaysOff</enum>
+            </property>
+            <property name="verticalScrollBarPolicy">
+             <enum>Qt::ScrollBarAsNeeded</enum>
+            </property>
+            <property name="frameShape">
+             <enum>QFrame::NoFrame</enum>
+            </property>
+            <widget class="QWidget" name="todoTasksContainer">
+             <layout class="QVBoxLayout" name="todoTasksLayout">
+              <property name="spacing">
+               <number>10</number>
+              </property>
+              <property name="margin">
+               <number>5</number>
+              </property>
+             </layout>
+            </widget>
+           </widget>
+          </item>
+          <item>
+           <widget class="QPushButton" name="btnAddToTodo">
+            <property name="minimumHeight">
+             <number>40</number>
+            </property>
+            <property name="text">
+             <string>+ Добавить задачу</string>
+            </property>
+            <property name="styleSheet">
+<string notr="true">QPushButton {
+    background-color: transparent;
+    color: #666;
+    border: 2px dashed #E0E0E0;
+    border-radius: 8px;
+    padding: 12px;
+    font-size: 14px;
+    text-align: center;
+    margin: 8px;
+}
+QPushButton:hover {
+    background-color: #F8F9FA;
+    border-color: #ccab6e;
+    color: #ccab6e;
+}</string>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </widget>
+       </item>
+
+       <!-- Колонка: В работе -->
+       <item>
+        <widget class="QFrame" name="columnInProgress">
+         <property name="minimumWidth">
+          <number>280</number>
+         </property>
+         <property name="sizePolicy">
+          <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
+           <horstretch>1</horstretch>
+           <verstretch>0</verstretch>
+          </sizepolicy>
+         </property>
+         <layout class="QVBoxLayout" name="inProgressLayout">
+          <property name="spacing">
+           <number>10</number>
+          </property>
+          <item>
+           <widget class="QLabel" name="columnTitleInProgress">
+            <property name="text">
+             <string>🔧 В работе (0)</string>
+            </property>
+            <property name="styleSheet">
+<string notr="true">QLabel {
+    font-size: 18px;
+    font-weight: bold;
+    color: #1B232A;
+    padding: 15px 20px;
+    border-bottom: 2px solid #F0F0F0;
+}</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QScrollArea" name="inProgressScrollArea">
+            <property name="widgetResizable">
+             <bool>true</bool>
+            </property>
+            <property name="horizontalScrollBarPolicy">
+             <enum>Qt::ScrollBarAlwaysOff</enum>
+            </property>
+            <property name="verticalScrollBarPolicy">
+             <enum>Qt::ScrollBarAsNeeded</enum>
+            </property>
+            <property name="frameShape">
+             <enum>QFrame::NoFrame</enum>
+            </property>
+            <widget class="QWidget" name="inProgressTasksContainer">
+             <layout class="QVBoxLayout" name="inProgressTasksLayout">
+              <property name="spacing">
+               <number>10</number>
+              </property>
+              <property name="margin">
+               <number>5</number>
+              </property>
+             </layout>
+            </widget>
+           </widget>
+          </item>
+          <item>
+           <widget class="QPushButton" name="btnAddToInProgress">
+            <property name="minimumHeight">
+             <number>40</number>
+            </property>
+            <property name="text">
+             <string>+ Добавить задачу</string>
+            </property>
+            <property name="styleSheet">
+<string notr="true">QPushButton {
+    background-color: transparent;
+    color: #666;
+    border: 2px dashed #E0E0E0;
+    border-radius: 8px;
+    padding: 12px;
+    font-size: 14px;
+    text-align: center;
+    margin: 8px;
+}
+QPushButton:hover {
+    background-color: #F8F9FA;
+    border-color: #ccab6e;
+    color: #ccab6e;
+}</string>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </widget>
+       </item>
+
+       <!-- Колонка: На проверке -->
+       <item>
+        <widget class="QFrame" name="columnReview">
+         <property name="minimumWidth">
+          <number>280</number>
+         </property>
+         <property name="sizePolicy">
+          <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
+           <horstretch>1</horstretch>
+           <verstretch>0</verstretch>
+          </sizepolicy>
+         </property>
+         <layout class="QVBoxLayout" name="reviewLayout">
+          <property name="spacing">
+           <number>10</number>
+          </property>
+          <item>
+           <widget class="QLabel" name="columnTitleReview">
+            <property name="text">
+             <string>👀 На проверке (0)</string>
+            </property>
+            <property name="styleSheet">
+<string notr="true">QLabel {
+    font-size: 18px;
+    font-weight: bold;
+    color: #1B232A;
+    padding: 15px 20px;
+    border-bottom: 2px solid #F0F0F0;
+}</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QScrollArea" name="reviewScrollArea">
+            <property name="widgetResizable">
+             <bool>true</bool>
+            </property>
+            <property name="horizontalScrollBarPolicy">
+             <enum>Qt::ScrollBarAlwaysOff</enum>
+            </property>
+            <property name="verticalScrollBarPolicy">
+             <enum>Qt::ScrollBarAsNeeded</enum>
+            </property>
+            <property name="frameShape">
+             <enum>QFrame::NoFrame</enum>
+            </property>
+            <widget class="QWidget" name="reviewTasksContainer">
+             <layout class="QVBoxLayout" name="reviewTasksLayout">
+              <property name="spacing">
+               <number>10</number>
+              </property>
+              <property name="margin">
+               <number>5</number>
+              </property>
+             </layout>
+            </widget>
+           </widget>
+          </item>
+          <item>
+           <widget class="QPushButton" name="btnAddToReview">
+            <property name="minimumHeight">
+             <number>40</number>
+            </property>
+            <property name="text">
+             <string>+ Добавить задачу</string>
+            </property>
+            <property name="styleSheet">
+<string notr="true">QPushButton {
+    background-color: transparent;
+    color: #666;
+    border: 2px dashed #E0E0E0;
+    border-radius: 8px;
+    padding: 12px;
+    font-size: 14px;
+    text-align: center;
+    margin: 8px;
+}
+QPushButton:hover {
+    background-color: #F8F9FA;
+    border-color: #ccab6e;
+    color: #ccab6e;
+}</string>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </widget>
+       </item>
+
+       <!-- Колонка: Выполнено -->
+       <item>
+        <widget class="QFrame" name="columnDone">
+         <property name="minimumWidth">
+          <number>280</number>
+         </property>
+         <property name="sizePolicy">
+          <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
+           <horstretch>1</horstretch>
+           <verstretch>0</verstretch>
+          </sizepolicy>
+         </property>
+         <layout class="QVBoxLayout" name="doneLayout">
+          <property name="spacing">
+           <number>10</number>
+          </property>
+          <item>
+           <widget class="QLabel" name="columnTitleDone">
+            <property name="text">
+             <string>✅ Выполнено (0)</string>
+            </property>
+            <property name="styleSheet">
+<string notr="true">QLabel {
+    font-size: 18px;
+    font-weight: bold;
+    color: #1B232A;
+    padding: 15px 20px;
+    border-bottom: 2px solid #F0F0F0;
+}</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QScrollArea" name="doneScrollArea">
+            <property name="widgetResizable">
+             <bool>true</bool>
+            </property>
+            <property name="horizontalScrollBarPolicy">
+             <enum>Qt::ScrollBarAlwaysOff</enum>
+            </property>
+            <property name="verticalScrollBarPolicy">
+             <enum>Qt::ScrollBarAsNeeded</enum>
+            </property>
+            <property name="frameShape">
+             <enum>QFrame::NoFrame</enum>
+            </property>
+            <widget class="QWidget" name="doneTasksContainer">
+             <layout class="QVBoxLayout" name="doneTasksLayout">
+              <property name="spacing">
+               <number>10</number>
+              </property>
+              <property name="margin">
+               <number>5</number>
+              </property>
+             </layout>
+            </widget>
+           </widget>
+          </item>
+          <item>
+           <widget class="QPushButton" name="btnArchiveDone">
+            <property name="minimumHeight">
+             <number>40</number>
+            </property>
+            <property name="text">
+             <string>📦 Архивировать выполненные</string>
+            </property>
+            <property name="styleSheet">
+<string notr="true">QPushButton {
+    background-color: #F0F0F0;
+    color: #666;
+    border-radius: 8px;
+    border: none;
+    padding: 10px;
+    font-size: 13px;
+    margin: 8px;
+}
+QPushButton:hover {
+    background-color: #E0E0E0;
+    color: #1B232A;
+}</string>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </widget>
+       </item>
+      </layout>
+     </widget>
+    </widget>
+   </item>
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>

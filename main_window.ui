@@ -1,0 +1,390 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>MainWindow</class>
+ <widget class="QMainWindow" name="MainWindow">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>1400</width>
+    <height>900</height>
+   </rect>
+  </property>
+  <property name="windowTitle">
+   <string>МАЗ - Система управления проектами</string>
+  </property>
+  <property name="styleSheet">
+   <string notr="true">QMainWindow {
+    background-color: #F5F5F7;
+    font-family: 'Segoe UI', Arial;
+}
+
+/* Общие стили для кнопок */
+QPushButton[styleClass="gold"] {
+    background-color: #ccab6e;
+    color: white;
+    border-radius: 10px;
+    font-weight: bold;
+    font-size: 18px;
+    border: none;
+    padding: 12px 24px;
+}
+QPushButton[styleClass="gold"]:hover {
+    background-color: #998664;
+}
+QPushButton[styleClass="gold"]:pressed {
+    background-color: #7a6a50;
+}
+
+QPushButton[styleClass="red"] {
+    background-color: #D22730;
+    color: white;
+    border-radius: 10px;
+    font-weight: bold;
+    font-size: 18px;
+    border: none;
+    padding: 12px 24px;
+}
+QPushButton[styleClass="red"]:hover {
+    background-color: #862633;
+}
+QPushButton[styleClass="red"]:pressed {
+    background-color: #6a1e29;
+}
+
+QPushButton[styleClass="gray"] {
+    background-color: #1B232A;
+    color: white;
+    border: none;
+    border-radius: 10px;
+    padding: 8px 12px;
+    font-size: 13px;
+    font-weight: bold;
+}
+QPushButton[styleClass="gray"]:hover {
+    background-color: #D9D9D6;
+    color: black;
+}
+QPushButton[styleClass="gray"]:pressed {
+    background-color: #B8B8B5;
+}
+
+/* Стили для карточек */
+QFrame.projectCard {
+    background-color: white;
+    border-radius: 12px;
+    border: 1px solid #E0E0E0;
+}
+QFrame.projectCard:hover {
+    border: 2px solid #ccab6e;
+    background-color: #FFFDF6;
+}
+
+/* Стили для прогресс-бара */
+QProgressBar {
+    border: 1px solid #E0E0E0;
+    border-radius: 6px;
+    text-align: center;
+    background-color: white;
+    height: 20px;
+}
+QProgressBar::chunk {
+    background-color: #D22730;
+    border-radius: 6px;
+}
+
+/* Стили для меток проекта */
+QLabel.projectInfo {
+    font-size: 12px;
+    color: #666;
+    padding: 2px 0px;
+}
+
+QLabel.projectDate {
+    font-size: 11px;
+    color: #999;
+    padding: 1px 0px;
+}
+
+QLabel.projectParticipants {
+    font-size: 11px;
+    color: #666;
+    padding: 1px 0px;
+}</string>
+  </property>
+  <widget class="QWidget" name="centralwidget">
+   <layout class="QHBoxLayout" name="horizontalLayout">
+    <item>
+     <widget class="QFrame" name="leftPanel">
+      <property name="minimumSize">
+       <size>
+        <width>80</width>
+        <height>0</height>
+       </size>
+      </property>
+      <property name="maximumSize">
+       <size>
+        <width>280</width>
+        <height>16777215</height>
+       </size>
+      </property>
+      <property name="styleSheet">
+       <string notr="true">QFrame#leftPanel {
+    background-color: #1B232A;
+    border-radius: 0px;
+}</string>
+      </property>
+      <property name="frameShape">
+       <enum>QFrame::StyledPanel</enum>
+      </property>
+      <property name="frameShadow">
+       <enum>QFrame::Raised</enum>
+      </property>
+     </widget>
+    </item>
+    <item>
+     <widget class="QWidget" name="mainArea">
+      <layout class="QVBoxLayout" name="verticalLayout">
+       <item>
+        <widget class="QFrame" name="topPanel">
+         <property name="styleSheet">
+          <string notr="true">QFrame#topPanel {
+    background-color: white;
+    border-radius: 0px;
+    border-bottom: 1px solid #E0E0E0;
+}</string>
+         </property>
+         <property name="frameShape">
+          <enum>QFrame::StyledPanel</enum>
+         </property>
+         <property name="frameShadow">
+          <enum>QFrame::Raised</enum>
+         </property>
+         <layout class="QHBoxLayout" name="horizontalLayout_2">
+          <item>
+           <widget class="QLineEdit" name="searchInput">
+            <property name="styleSheet">
+             <string notr="true">QLineEdit {
+    border: 2px solid #E0E0E0;
+    border-radius: 20px;
+    padding: 10px 20px;
+    font-size: 14px;
+    background-color: #F8F9FA;
+}
+QLineEdit:focus {
+    border: 2px solid #ccab6e;
+    background-color: white;
+}</string>
+            </property>
+            <property name="placeholderText">
+             <string>🔍 Поиск проектов, задач, людей...</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QPushButton" name="btnNotifications">
+            <property name="styleSheet">
+             <string notr="true">QPushButton {
+    background-color: transparent;
+    border: none;
+    font-size: 20px;
+    padding: 10px;
+}
+QPushButton:hover {
+    background-color: #F0F0F0;
+    border-radius: 10px;
+}</string>
+            </property>
+            <property name="text">
+             <string>🔔</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <spacer name="horizontalSpacer_4">
+            <property name="orientation">
+             <enum>Qt::Horizontal</enum>
+            </property>
+            <property name="sizeHint" stdset="0">
+             <size>
+              <width>40</width>
+              <height>20</height>
+             </size>
+            </property>
+           </spacer>
+          </item>
+          <item>
+           <widget class="QPushButton" name="btnProfile">
+            <property name="styleSheet">
+             <string notr="true">QPushButton {
+    background-color: #1B232A;
+    color: white;
+    border-radius: 20px;
+    font-weight: bold;
+    font-size: 14px;
+    border: none;
+    padding: 10px 20px;
+    min-width: 120px;
+}
+QPushButton:hover {
+    background-color: #2C3640;
+}</string>
+            </property>
+            <property name="text">
+             <string>👤 Иванов И.И.</string>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </widget>
+       </item>
+       <item>
+        <widget class="QStackedWidget" name="contentStack">
+         <property name="currentIndex">
+          <number>0</number>
+         </property>
+         <widget class="QWidget" name="projectsPage">
+          <layout class="QVBoxLayout" name="verticalLayout_3">
+           <item>
+            <widget class="QFrame" name="projectsHeader">
+             <layout class="QHBoxLayout" name="horizontalLayout_3">
+              <item>
+               <widget class="QLabel" name="label_2">
+                <property name="styleSheet">
+                 <string notr="true">QLabel {
+    font-size: 28px;
+    font-weight: bold;
+    color: #1B232A;
+}</string>
+                </property>
+                <property name="text">
+                 <string>Проекты</string>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <spacer name="horizontalSpacer">
+                <property name="orientation">
+                 <enum>Qt::Horizontal</enum>
+                </property>
+                <property name="sizeHint" stdset="0">
+                 <size>
+                  <width>40</width>
+                  <height>20</height>
+                 </size>
+                </property>
+               </spacer>
+              </item>
+              <item>
+               <widget class="QComboBox" name="filterCombo">
+                <property name="styleSheet">
+                 <string notr="true">QComboBox {
+    border: 2px solid #E0E0E0;
+    border-radius: 8px;
+    padding: 8px 16px;
+    font-size: 14px;
+    background-color: white;
+    min-width: 150px;
+}
+QComboBox:hover {
+    border: 2px solid #ccab6e;
+}
+QComboBox::drop-down {
+    border: none;
+}</string>
+                </property>
+                <item>
+                 <property name="text">
+                  <string>Все проекты</string>
+                 </property>
+                </item>
+                <item>
+                 <property name="text">
+                  <string>Мои проекты</string>
+                 </property>
+                </item>
+                <item>
+                 <property name="text">
+                  <string>Редактирую</string>
+                 </property>
+                </item>
+               </widget>
+              </item>
+              <item>
+               <widget class="QPushButton" name="btnCreateProject">
+                <property name="styleSheet">
+                 <string notr="true">QPushButton {
+    background-color: #ccab6e;
+    color: white;
+    border-radius: 10px;
+    font-weight: bold;
+    font-size: 16px;
+    border: none;
+    padding: 12px 24px;
+}
+QPushButton:hover {
+    background-color: #998664;
+}
+QPushButton:pressed {
+    background-color: #7a6a50;
+}</string>
+                </property>
+                <property name="text">
+                 <string>+ Новый проект</string>
+                </property>
+               </widget>
+              </item>
+             </layout>
+            </widget>
+           </item>
+           <item>
+            <widget class="QScrollArea" name="scrollArea">
+             <property name="widgetResizable">
+              <bool>true</bool>
+             </property>
+             <widget class="QWidget" name="scrollAreaWidgetContents">
+              <layout class="QGridLayout" name="projectsGrid">
+               <property name="spacing">
+                <number>15</number>
+               </property>
+               <property name="leftMargin">
+                <number>10</number>
+               </property>
+               <property name="topMargin">
+                <number>10</number>
+               </property>
+               <property name="rightMargin">
+                <number>10</number>
+               </property>
+               <property name="bottomMargin">
+                <number>10</number>
+               </property>
+               <property name="horizontalSpacing">
+                <number>15</number>
+               </property>
+               <property name="verticalSpacing">
+                <number>15</number>
+               </property>
+              </layout>
+             </widget>
+            </widget>
+           </item>
+          </layout>
+         </widget>
+         <widget class="QWidget" name="myTasksPage"/>
+         <widget class="QWidget" name="otherTasksPage"/>
+         <widget class="QWidget" name="ganttPage"/>
+         <widget class="QWidget" name="analyticsPage"/>
+         <widget class="QWidget" name="chatPage"/>
+         <widget class="QWidget" name="settingsPage"/>
+        </widget>
+       </item>
+      </layout>
+     </widget>
+    </item>
+   </layout>
+  </widget>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>

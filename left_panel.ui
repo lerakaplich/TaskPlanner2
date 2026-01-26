@@ -1,0 +1,267 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>LeftPanel</class>
+ <widget class="QWidget" name="leftPanel">
+  <layout class="QVBoxLayout" name="verticalLayout_2">
+   <item>
+    <widget class="QLabel" name="label">
+     <property name="styleSheet">
+      <string notr="true">QLabel {
+    color: white;
+    font-size: 24px;
+    font-weight: bold;
+    padding: 20px;
+    border-bottom: 2px solid #ccab6e;
+}</string>
+     </property>
+     <property name="text">
+      <string>МАЗ Проекты</string>
+     </property>
+     <property name="alignment">
+      <set>Qt::AlignCenter</set>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <widget class="QPushButton" name="btnMain">
+     <property name="styleSheet">
+      <string notr="true">QPushButton {
+    color: white;
+    font-size: 16px;
+    font-weight: bold;
+    padding: 15px 20px;
+    text-align: left;
+    border: none;
+    background-color: transparent;
+}
+QPushButton:hover {
+    background-color: #2C3640;
+    border-left: 4px solid #D22730;
+}
+QPushButton:checked {
+    background-color: #2C3640;
+    border-left: 4px solid #ccab6e;
+}</string>
+     </property>
+     <property name="text">
+      <string>📊  Доски/Главная</string>
+     </property>
+     <property name="checkable">
+      <bool>true</bool>
+     </property>
+     <property name="checked">
+      <bool>true</bool>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <widget class="QPushButton" name="btnMyTasks">
+     <property name="styleSheet">
+      <string notr="true">QPushButton {
+    color: white;
+    font-size: 16px;
+    font-weight: bold;
+    padding: 15px 20px;
+    text-align: left;
+    border: none;
+    background-color: transparent;
+}
+QPushButton:hover {
+    background-color: #2C3640;
+    border-left: 4px solid #D22730;
+}
+QPushButton:checked {
+    background-color: #2C3640;
+    border-left: 4px solid #ccab6e;
+}</string>
+     </property>
+     <property name="text">
+      <string>✅  Мои задачи</string>
+     </property>
+     <property name="checkable">
+      <bool>true</bool>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <widget class="QPushButton" name="btnOtherTasks">
+     <property name="styleSheet">
+      <string notr="true">QPushButton {
+    color: white;
+    font-size: 16px;
+    font-weight: bold;
+    padding: 15px 20px;
+    text-align: left;
+    border: none;
+    background-color: transparent;
+}
+QPushButton:hover {
+    background-color: #2C3640;
+    border-left: 4px solid #D22730;
+}
+QPushButton:checked {
+    background-color: #2C3640;
+    border-left: 4px solid #ccab6e;
+}</string>
+     </property>
+     <property name="text">
+      <string>👥  Чужие задачи</string>
+     </property>
+     <property name="checkable">
+      <bool>true</bool>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <widget class="QPushButton" name="btnGantt">
+     <property name="styleSheet">
+      <string notr="true">QPushButton {
+    color: white;
+    font-size: 16px;
+    font-weight: bold;
+    padding: 15px 20px;
+    text-align: left;
+    border: none;
+    background-color: transparent;
+}
+QPushButton:hover {
+    background-color: #2C3640;
+    border-left: 4px solid #D22730;
+}
+QPushButton:checked {
+    background-color: #2C3640;
+    border-left: 4px solid #ccab6e;
+}</string>
+     </property>
+     <property name="text">
+      <string>📈  Диаграмма Ганта</string>
+     </property>
+     <property name="checkable">
+      <bool>true</bool>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <widget class="QPushButton" name="btnAnalytics">
+     <property name="styleSheet">
+      <string notr="true">QPushButton {
+    color: white;
+    font-size: 16px;
+    font-weight: bold;
+    padding: 15px 20px;
+    text-align: left;
+    border: none;
+    background-color: transparent;
+}
+QPushButton:hover {
+    background-color: #2C3640;
+    border-left: 4px solid #D22730;
+}
+QPushButton:checked {
+    background-color: #2C3640;
+    border-left: 4px solid #ccab6e;
+}</string>
+     </property>
+     <property name="text">
+      <string>📊  Аналитика/Навыки</string>
+     </property>
+     <property name="checkable">
+      <bool>true</bool>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <widget class="QPushButton" name="btnChat">
+     <property name="styleSheet">
+      <string notr="true">QPushButton {
+    color: white;
+    font-size: 16px;
+    font-weight: bold;
+    padding: 15px 20px;
+    text-align: left;
+    border: none;
+    background-color: transparent;
+}
+QPushButton:hover {
+    background-color: #2C3640;
+    border-left: 4px solid #D22730;
+}
+QPushButton:checked {
+    background-color: #2C3640;
+    border-left: 4px solid #ccab6e;
+}</string>
+     </property>
+     <property name="text">
+      <string>💬  Чат</string>
+     </property>
+     <property name="checkable">
+      <bool>true</bool>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <widget class="QPushButton" name="btnSettings">
+     <property name="styleSheet">
+      <string notr="true">QPushButton {
+    color: white;
+    font-size: 16px;
+    font-weight: bold;
+    padding: 15px 20px;
+    text-align: left;
+    border: none;
+    background-color: transparent;
+}
+QPushButton:hover {
+    background-color: #2C3640;
+    border-left: 4px solid #D22730;
+}
+QPushButton:checked {
+    background-color: #2C3640;
+    border-left: 4px solid #ccab6e;
+}</string>
+     </property>
+     <property name="text">
+      <string>⚙️  Настройки</string>
+     </property>
+     <property name="checkable">
+      <bool>true</bool>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <spacer name="verticalSpacer">
+     <property name="orientation">
+      <enum>Qt::Vertical</enum>
+     </property>
+     <property name="sizeHint" stdset="0">
+      <size>
+       <width>20</width>
+       <height>40</height>
+      </size>
+     </property>
+    </spacer>
+   </item>
+   <item>
+    <widget class="QPushButton" name="btnCollapse">
+     <property name="styleSheet">
+      <string notr="true">QPushButton {
+    background-color: transparent;
+    color: #ccab6e;
+    font-size: 14px;
+    border: 1px solid #ccab6e;
+    border-radius: 6px;
+    padding: 8px;
+}
+QPushButton:hover {
+    background-color: #ccab6e;
+    color: white;
+}</string>
+     </property>
+     <property name="text">
+      <string>◀ Свернуть</string>
+     </property>
+    </widget>
+   </item>
+  </layout>
+ </widget>
+</ui>
