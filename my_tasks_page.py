@@ -1,614 +1,486 @@
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QFrame, QLabel,
                              QCheckBox, QPushButton, QScrollArea, QComboBox,
-                             QLineEdit, QProgressBar, QMenu, QApplication, QSizePolicy)
-from PyQt6.QtCore import Qt, QMimeData, pyqtSignal, QPoint
-from PyQt6.QtGui import QDrag, QPixmap, QPainter
+                             QLineEdit, QProgressBar, QMenu, QApplication,
+                             QSizePolicy, QGridLayout, QTextEdit, QDateEdit)
+from PyQt6.QtCore import Qt, QMimeData, pyqtSignal, QPoint, QDate, QDateTime
+from PyQt6.QtGui import QDrag, QPixmap, QPainter, QFont
 from PyQt6.uic import loadUi
 import json
+from datetime import datetime, timedelta
 
-
-class TaskCard(QFrame):
-    """Карточка задачи с поддержкой drag&drop"""
-
-    def __init__(self, task_data, parent=None):
-        super().__init__(parent)
-        self.task_data = task_data
-
-        # Загружаем UI из файла
-        loadUi("task_card.ui", self)
-
-
-        self.setObjectName("taskCard")
-
-        self.setup_ui()
-        self.setAcceptDrops(True)
-
-    def setup_ui(self):
-        """Настройка UI карточки на основе данных"""
-        # Устанавливаем фиксированные размеры
-        self.setMinimumHeight(180)
-        self.setMaximumHeight(220)
-        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-
-        # Заполняем данные
-        self.checkboxTitle.setText(self.task_data["title"])
-        self.checkboxTitle.stateChanged.connect(self.on_checkbox_changed)
-
-        # Описание
-        if self.task_data.get("description"):
-            self.descriptionLabel.setText(self.task_data["description"])
-            self.descriptionLabel.show()
-        else:
-            self.descriptionLabel.hide()
-
-        # Теги
-        if self.task_data.get("tags"):
-            self.setup_tags()
-        else:
-            # Скрываем layout с тегами если их нет
-            for i in reversed(range(self.tagsLayout.count())):
-                self.tagsLayout.itemAt(i).widget().setParent(None)
-
-        # Дедлайн
-        deadline_text = self.task_data.get("deadline", "")
-        self.deadlineLabel.setText(f"⏰ {deadline_text}")
-        self.update_deadline_style()
-
-        # Проект
-        self.projectLabel.setText(self.task_data["project"])
-
-        # Аватар
-        self.avatarLabel.setText(self.task_data.get("assignee_initials", "ИИ"))
-
-        # Кнопки действий
-        self.setup_action_buttons()
-
-        # Соединяем сигналы
-        self.menuButton.clicked.connect(self.show_context_menu)
-
-        # Устанавливаем цвет левой границы в зависимости от приоритета
-        self.update_card_style()
-
-    def setup_tags(self):
-        """Настройка тегов"""
-        # Очищаем существующие теги
-        for i in reversed(range(self.tagsLayout.count())):
-            widget = self.tagsLayout.itemAt(i).widget()
-            if widget:
-                widget.setParent(None)
-
-        # Добавляем новые теги
-        for tag in self.task_data["tags"]:
-            tag_label = QLabel(tag["text"])
-            color_map = {
-                "Дизайн": "#E3F2FD",
-                "Срочно": "#FFF3E0",
-                "ERP": "#E8F5E9",
-                "Баг": "#FFEBEE",
-                "Разработка": "#F3E5F5",
-                "Тестирование": "#FFF3E0"
-            }
-            text_color_map = {
-                "Дизайн": "#1565C0",
-                "Срочно": "#EF6C00",
-                "ERP": "#2E7D32",
-                "Баг": "#D22730",
-                "Разработка": "#7B1FA2",
-                "Тестирование": "#EF6C00"
-            }
-            bg_color = color_map.get(tag["type"], "#F0F0F0")
-            text_color = text_color_map.get(tag["type"], "#666")
-
-            tag_label.setStyleSheet(f"""
-                QLabel {{
-                    font-size: 11px;
-                    padding: 3px 8px;
-                    border-radius: 12px;
-                    font-weight: bold;
-                    background-color: {bg_color};
-                    color: {text_color};
-                    border: 1px solid {bg_color};
-                }}
-            """)
-            tag_label.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
-            self.tagsLayout.addWidget(tag_label)
-
-        # Добавляем растягивающийся спейсер
-        self.tagsLayout.addStretch()
-
-    def update_deadline_style(self):
-        """Обновление стиля дедлайна"""
-        deadline_text = self.task_data.get("deadline", "")
-
-        # Определяем цвет дедлайна
-        if "Просрочено" in deadline_text:
-            deadline_color = "#D22730"
-            deadline_bg = "#FFEBEE"
-        elif self.task_data.get("priority") == "high":
-            deadline_color = "#FF9800"
-            deadline_bg = "#FFF3E0"
-        elif "✅" in deadline_text:
-            deadline_color = "#4CAF50"
-            deadline_bg = "#E8F5E9"
-        else:
-            deadline_color = "#666"
-            deadline_bg = "#F5F5F5"
-
-        self.deadlineLabel.setStyleSheet(f"""
-            QLabel {{
-                font-size: 12px;
-                color: {deadline_color};
-                padding: 2px 6px;
-                background-color: {deadline_bg};
-                border-radius: 4px;
-                font-weight: bold;
-            }}
-        """)
-
-    def setup_action_buttons(self):
-        """Настройка кнопок действий"""
-        # Кнопка подзадач
-        if self.task_data.get("has_subtasks", False):
-            self.subtaskButton.setText(f"+ Подзадача ({self.task_data.get('subtask_count', 0)})")
-            self.subtaskButton.clicked.connect(lambda: self.on_add_subtask())
-            self.subtaskButton.show()
-        else:
-            self.subtaskButton.hide()
-
-        # Кнопка комментариев
-        comment_count = self.task_data.get('comment_count', 0)
-        self.commentButton.setText(f"💬 {comment_count}")
-        self.commentButton.clicked.connect(lambda: self.on_show_comments())
-
-        # Кнопка вложений
-        attachment_count = self.task_data.get('attachment_count', 0)
-        self.attachmentButton.setText(f"📎 {attachment_count}")
-        self.attachmentButton.clicked.connect(lambda: self.on_show_attachments())
-
-    def update_card_style(self):
-        """Обновление стиля карточки"""
-        priority_color = {
-            "high": "#D22730",
-            "medium": "#FFA726",
-            "low": "#4CAF50"
-        }.get(self.task_data.get("priority", "medium"), "#FFA726")
-
-        if self.task_data.get("completed"):
-            self.setStyleSheet(f"""
-                QFrame#taskCard {{
-                    background-color: #F8F9FA;
-                    border-radius: 10px;
-                    border: 1px dashed #C8E6C9;
-                    padding: 15px;
-                    border-left: 4px solid #4CAF50;
-                    opacity: 0.9;
-                    min-height: 180px;
-                    max-height: 220px;
-                }}
-                QFrame#taskCard:hover {{
-                    border: 2px solid #4CAF50;
-                    box-shadow: 0 4px 12px rgba(76, 175, 80, 0.2);
-                    cursor: move;
-                }}
-            """)
-        else:
-            self.setStyleSheet(f"""
-                QFrame#taskCard {{
-                    background-color: #FFFFFF;
-                    border-radius: 10px;
-                    border: 1px solid #E0E0E0;
-                    padding: 15px;
-                    border-left: 4px solid {priority_color};
-                    min-height: 180px;
-                    max-height: 220px;
-                }}
-                QFrame#taskCard:hover {{
-                    border: 2px solid #ccab6e;
-                    box-shadow: 0 4px 12px rgba(204, 171, 110, 0.2);
-                    cursor: move;
-                }}
-            """)
-
-    def on_checkbox_changed(self, state):
-        """Обработка изменения чекбокса"""
-        if state == Qt.CheckState.Checked.value:
-            self.task_data["completed"] = True
-            self.setStyleSheet(f"""
-                QFrame#taskCard {{
-                    background-color: #F8F9FA;
-                    border-radius: 10px;
-                    border: 1px dashed #C8E6C9;
-                    padding: 15px;
-                    border-left: 4px solid #4CAF50;
-                    opacity: 0.9;
-                    min-height: 180px;
-                    max-height: 220px;
-                }}
-                QFrame#taskCard:hover {{
-                    border: 2px solid #4CAF50;
-                    box-shadow: 0 4px 12px rgba(76, 175, 80, 0.2);
-                    cursor: move;
-                }}
-            """)
-
-    def show_context_menu(self):
-        """Показать контекстное меню"""
-        menu = QMenu(self)
-
-        edit_action = menu.addAction("✏️ Редактировать")
-        delete_action = menu.addAction("🗑️ Удалить")
-        move_action = menu.addAction("📤 Переместить в...")
-        duplicate_action = menu.addAction("📋 Дублировать")
-
-        action = menu.exec(self.menuButton.mapToGlobal(QPoint(0, self.menuButton.height())))
-
-        if action == edit_action:
-            self.on_edit_task()
-        elif action == delete_action:
-            self.on_delete_task()
-        elif action == move_action:
-            self.on_move_task()
-        elif action == duplicate_action:
-            self.on_duplicate_task()
-
-    def on_add_subtask(self):
-        """Добавить подзадачу"""
-        print(f"Добавить подзадачу для: {self.task_data['title']}")
-
-    def on_show_comments(self):
-        """Показать комментарии"""
-        print(f"Показать комментарии для: {self.task_data['title']}")
-
-    def on_show_attachments(self):
-        """Показать вложения"""
-        print(f"Показать вложения для: {self.task_data['title']}")
-
-    def on_edit_task(self):
-        """Редактировать задачу"""
-        print(f"Редактировать: {self.task_data['title']}")
-
-    def on_delete_task(self):
-        """Удалить задачу"""
-        print(f"Удалить: {self.task_data['title']}")
-
-    def on_move_task(self):
-        """Переместить задачу"""
-        print(f"Переместить: {self.task_data['title']}")
-
-    def on_duplicate_task(self):
-        """Дублировать задачу"""
-        print(f"Дублировать: {self.task_data['title']}")
-
-    def mousePressEvent(self, event):
-        """Начало перетаскивания"""
-        if event.button() == Qt.MouseButton.LeftButton:
-            self.drag_start_position = event.pos()
-        super().mousePressEvent(event)
-
-    def mouseMoveEvent(self, event):
-        """Обработка перемещения мыши для drag&drop"""
-        if not (event.buttons() & Qt.MouseButton.LeftButton):
-            return
-        if (event.pos() - self.drag_start_position).manhattanLength() < QApplication.startDragDistance():
-            return
-
-        drag = QDrag(self)
-        mime_data = QMimeData()
-
-        # Сохраняем данные задачи
-        task_json = json.dumps(self.task_data)
-        mime_data.setText(task_json)
-        drag.setMimeData(mime_data)
-
-        # Создаем изображение для перетаскивания
-        pixmap = QPixmap(self.size())
-        pixmap.fill(Qt.GlobalColor.transparent)
-        painter = QPainter(pixmap)
-        painter.setOpacity(0.7)
-        self.render(painter)
-        painter.end()
-        drag.setPixmap(pixmap)
-        drag.setHotSpot(event.pos())
-
-        drag.exec(Qt.DropAction.MoveAction)
-        self.hide()
+from task_card import TaskCard
 
 
 class MyTasksPage(QWidget):
-    """Страница Мои задачи"""
+    """Страница Мои задачи с улучшенным интерфейсом"""
 
-    # Остальной код MyTasksPage остается без изменений
     def __init__(self, parent=None):
         super().__init__(parent)
         # Устанавливаем стиль для всего виджета
         self.setStyleSheet("""
             QWidget {
                 background-color: #F5F5F7;
-                font-family: 'Segoe UI', Arial;
+                font-family: 'Segoe UI', Arial, sans-serif;
             }
         """)
 
-        loadUi("my_tasks_page.ui", self)
+        # Основной layout
+        self.main_layout = QVBoxLayout()
+        self.main_layout.setSpacing(15)
+        self.main_layout.setContentsMargins(20, 20, 20, 20)
+        self.setLayout(self.main_layout)
+
+        # 1. ВЕРХНЯЯ ПАНЕЛЬ: Заголовок и кнопки
+        self.setup_header()
+
+        # 2. ПАНЕЛЬ СТАТИСТИКИ
+        self.setup_statistics()
+
+        # 3. ПАНЕЛЬ ФИЛЬТРОВ
+        self.setup_filters()
+
+        # 4. КАНБАН ДОСКА
+        self.setup_kanban()
+
+        # Настраиваем задачи
         self.setup_tasks()
-        self.connect_signals()
-        self.update_statistics()
 
-        # Настройка адаптивного отображения
-        self.setup_responsive_layout()
+    def setup_header(self):
+        """Настройка верхней панели"""
+        header_layout = QHBoxLayout()
 
-    def setup_responsive_layout(self):
-        """Настройка адаптивного расположения колонок"""
-        # Устанавливаем гибкую политику размера для контейнера канбана
-        self.kanbanContainer.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        # Заголовок
+        title_label = QLabel("Мои задачи")
+        title_label.setStyleSheet("""font-size: 28px;
+    font-weight: bold;
+    color: #1B232A;""")
+        title_font = QFont()
+        title_font.setBold(True)
+        title_label.setFont(title_font)
+        header_layout.addWidget(title_label)
 
-        # Настройка скролла с отступами
-        self.setup_scroll_areas()
+        header_layout.addStretch()
 
-        # Настройка динамического изменения размера колонок
-        self.columnTodo.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
-        self.columnInProgress.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
-        self.columnReview.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
-        self.columnDone.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
 
-        # Устанавливаем стили для колонок
-        column_style = """
+
+
+
+        self.main_layout.addLayout(header_layout)
+
+    def setup_statistics(self):
+        """Настройка панели статистики"""
+        stats_layout = QHBoxLayout()
+        stats_layout.setSpacing(15)
+
+        # Статистика задач
+        stats_widget = QFrame()
+        stats_widget.setStyleSheet("""
             QFrame {
-                background-color: #FFFFFF;
-                border-radius: 12px;
+                background-color: white;
+                border-radius: 8px;
+                padding: 15px;
                 border: 1px solid #E0E0E0;
-                min-width: 280px;
-                margin: 5px;
             }
-            QFrame:hover {
-                border: 2px solid #E8E8E8;
+        """)
+
+        stats_grid = QGridLayout()
+        stats_grid.setSpacing(10)
+
+        # Всего задач
+        total_label = QLabel("📊 Всего задач:")
+        total_label.setStyleSheet("font-size: 12px; color: #666;")
+        self.total_tasks_label = QLabel("0")
+        self.total_tasks_label.setStyleSheet("font-size: 16px; font-weight: bold; color: #2196F3;")
+        stats_grid.addWidget(total_label, 0, 0)
+        stats_grid.addWidget(self.total_tasks_label, 0, 1)
+
+        # Выполнено
+        done_label = QLabel("✅ Выполнено:")
+        done_label.setStyleSheet("font-size: 12px; color: #666;")
+        self.done_tasks_label = QLabel("0")
+        self.done_tasks_label.setStyleSheet("font-size: 16px; font-weight: bold; color: #4CAF50;")
+        stats_grid.addWidget(done_label, 0, 2)
+        stats_grid.addWidget(self.done_tasks_label, 0, 3)
+
+        # В работе
+        progress_label = QLabel("🔧 В работе:")
+        progress_label.setStyleSheet("font-size: 12px; color: #666;")
+        self.progress_tasks_label = QLabel("0")
+        self.progress_tasks_label.setStyleSheet("font-size: 16px; font-weight: bold; color: #FF9800;")
+        stats_grid.addWidget(progress_label, 1, 0)
+        stats_grid.addWidget(self.progress_tasks_label, 1, 1)
+
+        # Просрочено
+        overdue_label = QLabel("❗ Просрочено:")
+        overdue_label.setStyleSheet("font-size: 12px; color: #666;")
+        self.overdue_tasks_label = QLabel("0")
+        self.overdue_tasks_label.setStyleSheet("font-size: 16px; font-weight: bold; color: #F44336;")
+        stats_grid.addWidget(overdue_label, 1, 2)
+        stats_grid.addWidget(self.overdue_tasks_label, 1, 3)
+
+        stats_widget.setLayout(stats_grid)
+        stats_layout.addWidget(stats_widget)
+
+        # Прогресс-бар
+        progress_widget = QFrame()
+        progress_widget.setStyleSheet("""
+            QFrame {
+                background-color: white;
+                border-radius: 8px;
+                padding: 15px;
+                border: 1px solid #E0E0E0;
             }
-        """
+        """)
 
-        self.columnTodo.setStyleSheet(column_style)
-        self.columnInProgress.setStyleSheet(column_style)
-        self.columnReview.setStyleSheet(column_style)
-        self.columnDone.setStyleSheet(column_style)
 
-    def setup_scroll_areas(self):
-        """Настройка скролл-областей с отступами"""
-        scroll_areas = [
-            (self.todoScrollArea, self.todoTasksContainer),
-            (self.inProgressScrollArea, self.inProgressTasksContainer),
-            (self.reviewScrollArea, self.reviewTasksContainer),
-            (self.doneScrollArea, self.doneTasksContainer)
-        ]
 
-        for scroll_area, container in scroll_areas:
-            # Устанавливаем отступы для скролла от надписей
-            scroll_bar = scroll_area.verticalScrollBar()
-            scroll_bar.setStyleSheet("""
-                QScrollBar:vertical {
-                    background: #F5F5F7;
-                    width: 12px;
-                    margin: 15px 3px 15px 3px;
-                    border-radius: 6px;
-                }
-                QScrollBar::handle:vertical {
-                    background: #C1C1C1;
-                    min-height: 20px;
-                    border-radius: 6px;
-                }
-                QScrollBar::handle:vertical:hover {
-                    background: #A8A8A8;
-                }
-                QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
-                    height: 0px;
-                }
-            """)
+    def setup_filters(self):
+        """Настройка панели фильтров"""
+        filters_layout = QHBoxLayout()
+        filters_layout.setSpacing(10)
 
-            # Устанавливаем отступы для контейнера задач
-            container.layout().setContentsMargins(10, 15, 10, 15)
-            container.layout().setSpacing(10)
+        # Поле поиска
+        search_container = QFrame()
+        search_container.setStyleSheet("""
+            QFrame {
+                background-color: white;
+                border-radius: 8px;
+                border: 1px solid #E0E0E0;
+            }
+        """)
+        search_layout = QHBoxLayout()
+        search_layout.setContentsMargins(10, 5, 10, 5)
 
-    def connect_signals(self):
-        """Подключение сигналов"""
-        self.btnAddTask.clicked.connect(self.create_new_task)
-        self.btnShowArchived.clicked.connect(self.show_archive)
-        self.btnArchiveDone.clicked.connect(self.archive_completed_tasks)
-        self.searchTasksInput.textChanged.connect(self.search_tasks)
-        self.priorityFilter.currentTextChanged.connect(self.filter_tasks)
-        self.projectFilter.currentTextChanged.connect(self.filter_tasks)
 
-        # Подключаем кнопки добавления задач в колонки
-        self.btnAddToTodo.clicked.connect(lambda: self.add_task_to_column("todo"))
-        self.btnAddToInProgress.clicked.connect(lambda: self.add_task_to_column("in_progress"))
-        self.btnAddToReview.clicked.connect(lambda: self.add_task_to_column("review"))
+
+        # Фильтр по приоритету
+        self.priority_filter = QComboBox()
+        self.priority_filter.addItems(["Все приоритеты", "Критический", "Высокий", "Средний", "Низкий"])
+        self.priority_filter.setStyleSheet("""
+            QComboBox {
+                background-color: white;
+                border: 1px solid #E0E0E0;
+                border-radius: 6px;
+                padding: 6px;
+                font-size: 12px;
+                min-width: 140px;
+            }
+        """)
+        self.priority_filter.currentTextChanged.connect(self.filter_tasks)
+        filters_layout.addWidget(self.priority_filter)
+
+        # Фильтр по проекту
+        self.project_filter = QComboBox()
+        self.project_filter.addItems(["Все проекты"])
+        self.project_filter.setStyleSheet("""
+            QComboBox {
+                background-color: white;
+                border: 1px solid #E0E0E0;
+                border-radius: 6px;
+                padding: 6px;
+                font-size: 12px;
+                min-width: 160px;
+            }
+        """)
+        self.project_filter.currentTextChanged.connect(self.filter_tasks)
+        filters_layout.addWidget(self.project_filter)
+
+        # Кнопка сброса фильтров
+        btn_reset = QPushButton("Сбросить")
+        btn_reset.setStyleSheet("""
+            QPushButton {
+                background-color: #F5F5F5;
+                color: #666;
+                border: 1px solid #E0E0E0;
+                border-radius: 6px;
+                padding: 6px 12px;
+                font-size: 12px;
+            }
+            QPushButton:hover {
+                background-color: #E0E0E0;
+            }
+        """)
+        btn_reset.clicked.connect(self.reset_filters)
+        filters_layout.addWidget(btn_reset)
+
+        self.main_layout.addLayout(filters_layout)
+
+    def setup_kanban(self):
+        """Настройка канбан-доски"""
+        self.kanban_layout = QHBoxLayout()
+        self.kanban_layout.setSpacing(15)
+
+        # Создаем 4 колонки
+        self.columns = {
+            "todo": self.create_column("📝 К ВЫПОЛНЕНИЮ", "#2196F3"),
+            "progress": self.create_column("🔧 В РАБОТЕ", "#FF9800"),
+            "review": self.create_column("👀 НА ПРОВЕРКЕ", "#9C27B0"),
+            "done": self.create_column("✅ ВЫПОЛНЕНО", "#4CAF50")
+        }
+
+        for column in self.columns.values():
+            self.kanban_layout.addWidget(column)
+
+        self.main_layout.addLayout(self.kanban_layout, 1)
+
+    def create_column(self, title, color):
+        """Создание одной колонки канбан-доски"""
+        column = QFrame()
+        column.setStyleSheet(f"""
+            QFrame {{
+                background-color: white;
+                border-radius: 10px;
+                border: 1px solid #E0E0E0;
+            }}
+        """)
+
+        layout = QVBoxLayout()
+        layout.setSpacing(10)
+        layout.setContentsMargins(12, 12, 12, 12)
+
+        # Заголовок колонки
+        header = QHBoxLayout()
+
+        title_label = QLabel(title)
+        title_font = QFont()
+        title_font.setBold(True)
+        title_font.setPointSize(12)
+        title_label.setFont(title_font)
+        title_label.setStyleSheet(f"color: {color};")
+        header.addWidget(title_label)
+
+        count_label = QLabel("0")
+        count_label.setStyleSheet("""
+            QLabel {
+                font-size: 12px;
+                color: white;
+                background-color: #666;
+                border-radius: 10px;
+                padding: 2px 8px;
+                font-weight: bold;
+            }
+        """)
+        header.addWidget(count_label)
+
+        header.addStretch()
+
+        layout.addLayout(header)
+
+        # Скроллируемая область для задач
+        scroll_area = QScrollArea()
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        scroll_area.setStyleSheet("""
+            QScrollArea {
+                border: none;
+                background-color: transparent;
+            }
+            QScrollBar:vertical {
+                background: #F5F5F5;
+                width: 8px;
+                border-radius: 4px;
+            }
+            QScrollBar::handle:vertical {
+                background: #C1C1C1;
+                border-radius: 4px;
+                min-height: 20px;
+            }
+        """)
+
+        # Контейнер для задач
+        tasks_container = QWidget()
+        tasks_container.setStyleSheet("background-color: transparent;")
+        self.tasks_layout = QVBoxLayout()
+        self.tasks_layout.setSpacing(8)
+        self.tasks_layout.setContentsMargins(2, 2, 2, 2)
+        self.tasks_layout.addStretch()  # Добавляем спейсер в конец
+        tasks_container.setLayout(self.tasks_layout)
+
+        scroll_area.setWidget(tasks_container)
+        layout.addWidget(scroll_area)
+
+        column.setLayout(layout)
+
+        # Сохраняем ссылки на важные элементы
+        column.tasks_container = tasks_container
+        column.tasks_layout = self.tasks_layout
+        column.count_label = count_label
+
+        return column
 
     def setup_tasks(self):
-        """Настройка начальных задач"""
-        # Тестовые данные задач
+        """Настройка начальных задач с понятными данными"""
+        # Тестовые данные с четкой структурой
         self.sample_tasks = [
             {
                 "id": 1,
-                "title": "Разработать макет интерфейса",
-                "description": "Создать 3D-модель новой кабины водителя с учетом эргономики",
-                "project": "Разработка новой кабины",
+                "title": "Разработать дизайн главной страницы",
+                "description": "Создать современный дизайн главной страницы сайта с адаптивной версткой",
+                "project": "Разработка сайта компании",
+                "creator": "Алексей Петров",
                 "priority": "high",
-                "deadline": "До 10.12.2024",
+                "deadline": "20.12.2024",
                 "status": "todo",
+                "created_at": "15.11.2024",
+                "updated_at": "18.11.2024",
                 "tags": [
-                    {"text": "Дизайн", "type": "Дизайн"},
-                    {"text": "Срочно", "type": "Срочно"}
+                    {"text": "Дизайн", "type": "design"},
+                    {"text": "СРОЧНО", "type": "urgent"}
                 ],
-                "assignee_initials": "ИИ",
-                "comment_count": 2,
-                "attachment_count": 1,
-                "has_subtasks": True,
-                "subtask_count": 3,
                 "completed": False
             },
             {
                 "id": 2,
-                "title": "Написание ТЗ для модуля А",
-                "description": "Подготовить техническое задание для модуля бухгалтерии",
-                "project": "Внедрение ERP-системы",
-                "priority": "medium",
-                "deadline": "До 20.12.2024",
-                "status": "in_progress",
+                "title": "Исправить баг в модуле авторизации",
+                "description": "Пользователи не могут войти в систему после обновления",
+                "project": "Внутренний портал",
+                "creator": "Мария Сидорова",
+                "priority": "critical",
+                "deadline": "10.12.2024",
+                "status": "progress",
+                "created_at": "10.11.2024",
+                "updated_at": "19.11.2024",
                 "tags": [
-                    {"text": "ERP", "type": "ERP"}
+                    {"text": "Баг", "type": "bug"},
+                    {"text": "Безопасность", "type": "security"}
                 ],
-                "assignee_initials": "ПА",
-                "comment_count": 0,
-                "attachment_count": 0,
                 "completed": False
             },
             {
                 "id": 3,
-                "title": "Исправить баг в отчете",
-                "description": "Исправить расчет себестоимости в еженедельном отчете",
-                "project": "Разработка сайта",
-                "priority": "high",
-                "deadline": "Просрочено 2 дня",
-                "status": "in_progress",
+                "title": "Написать документацию для API",
+                "description": "Подготовить подробную документацию для REST API",
+                "project": "Мобильное приложение",
+                "creator": "Иван Иванов",
+                "priority": "medium",
+                "deadline": "25.12.2024",
+                "status": "review",
+                "created_at": "05.11.2024",
+                "updated_at": "17.11.2024",
                 "tags": [
-                    {"text": "Баг", "type": "Баг"}
+                    {"text": "Документация", "type": "docs"},
+                    {"text": "Разработка", "type": "development"}
                 ],
-                "assignee_initials": "СК",
-                "comment_count": 5,
-                "attachment_count": 2,
                 "completed": False
             },
             {
                 "id": 4,
-                "title": "Согласование бюджета",
-                "description": "Согласовать бюджет на следующий квартал с финансовым отделом",
-                "project": "Модернизация конвейера",
+                "title": "Провести тестирование новой функции",
+                "description": "Протестировать функцию импорта данных из Excel",
+                "project": "ERP система",
+                "creator": "Ольга Ковалева",
                 "priority": "low",
-                "deadline": "✅ 05.12.2024",
+                "deadline": "05.12.2024",
                 "status": "done",
-                "assignee_initials": "ЕП",
-                "comment_count": 3,
-                "attachment_count": 4,
+                "created_at": "01.11.2024",
+                "updated_at": "05.11.2024",
+                "tags": [
+                    {"text": "Тестирование", "type": "testing"}
+                ],
                 "completed": True
             },
             {
                 "id": 5,
-                "title": "Провести тестирование API",
-                "description": "Протестировать новые endpoints API для интеграции",
-                "project": "Разработка новой кабины",
+                "title": "Обновить контакты клиентов",
+                "description": "Обновить базу данных контактов ключевых клиентов",
+                "project": "CRM система",
+                "creator": "Сергей Васильев",
                 "priority": "medium",
-                "deadline": "До 15.12.2024",
-                "status": "review",
+                "deadline": "15.12.2024",
+                "status": "todo",
+                "created_at": "12.11.2024",
+                "updated_at": "12.11.2024",
                 "tags": [
-                    {"text": "Тестирование", "type": "Тестирование"}
+                    {"text": "Данные", "type": "data"},
+                    {"text": "Обновление", "type": "update"}
                 ],
-                "assignee_initials": "МК",
-                "comment_count": 1,
-                "attachment_count": 0,
                 "completed": False
             }
         ]
 
-        # Получаем контейнеры для задач
-        self.todo_container = self.findChild(QWidget, "todoTasksContainer")
-        self.in_progress_container = self.findChild(QWidget, "inProgressTasksContainer")
-        self.review_container = self.findChild(QWidget, "reviewTasksContainer")
-        self.done_container = self.findChild(QWidget, "doneTasksContainer")
-
-        # Устанавливаем отступы для контейнеров задач
-        for container in [self.todo_container, self.in_progress_container,
-                          self.review_container, self.done_container]:
-            if container and container.layout():
-                container.layout().setContentsMargins(10, 15, 10, 15)
-
         # Распределяем задачи по колонкам
-        self.todo_tasks = []
-        self.in_progress_tasks = []
-        self.review_tasks = []
-        self.done_tasks = []
+        self.all_tasks = []
+        for task_data in self.sample_tasks:
+            task_card = TaskCard(task_data)
+            self.all_tasks.append(task_card)
 
-        for task in self.sample_tasks:
-            task_card = TaskCard(task)
-            if task["status"] == "todo":
-                self.todo_tasks.append(task_card)
-                self.todo_container.layout().addWidget(task_card)
-            elif task["status"] == "in_progress":
-                self.in_progress_tasks.append(task_card)
-                self.in_progress_container.layout().addWidget(task_card)
-            elif task["status"] == "review":
-                self.review_tasks.append(task_card)
-                self.review_container.layout().addWidget(task_card)
-            elif task["status"] == "done":
-                self.done_tasks.append(task_card)
-                self.done_container.layout().addWidget(task_card)
+            # Добавляем в соответствующую колонку
+            status = task_data["status"]
+            if status == "todo":
+                self.columns["todo"].tasks_layout.insertWidget(
+                    self.columns["todo"].tasks_layout.count() - 1, task_card
+                )
+            elif status == "progress":
+                self.columns["progress"].tasks_layout.insertWidget(
+                    self.columns["progress"].tasks_layout.count() - 1, task_card
+                )
+            elif status == "review":
+                self.columns["review"].tasks_layout.insertWidget(
+                    self.columns["review"].tasks_layout.count() - 1, task_card
+                )
+            elif status == "done":
+                self.columns["done"].tasks_layout.insertWidget(
+                    self.columns["done"].tasks_layout.count() - 1, task_card
+                )
 
-        # Обновляем заголовки колонок
-        self.update_column_titles()
+        # Обновляем статистику
+        self.update_statistics()
 
         # Заполняем фильтр проектов
         projects = set(task["project"] for task in self.sample_tasks)
-        self.projectFilter.clear()
-        self.projectFilter.addItems(["Все проекты"] + sorted(list(projects)))
-
-    def update_column_titles(self):
-        """Обновить заголовки колонок с количеством задач"""
-        self.columnTitleTodo.setText(f"📝 К выполнению ({len(self.todo_tasks)})")
-        self.columnTitleInProgress.setText(f"🔧 В работе ({len(self.in_progress_tasks)})")
-        self.columnTitleReview.setText(f"👀 На проверке ({len(self.review_tasks)})")
-        self.columnTitleDone.setText(f"✅ Выполнено ({len(self.done_tasks)})")
+        self.project_filter.addItems(sorted(list(projects)))
 
     def update_statistics(self):
         """Обновление статистики"""
-        total_tasks = (len(self.todo_tasks) + len(self.in_progress_tasks) +
-                       len(self.review_tasks) + len(self.done_tasks))
+        # Подсчет задач по статусам
+        todo_count = len([t for t in self.sample_tasks if t["status"] == "todo"])
+        progress_count = len([t for t in self.sample_tasks if t["status"] == "progress"])
+        review_count = len([t for t in self.sample_tasks if t["status"] == "review"])
+        done_count = len([t for t in self.sample_tasks if t["status"] == "done"])
 
-        completed_tasks = len(self.done_tasks)
+        total_count = len(self.sample_tasks)
 
-        # Расчет процента выполнения
-        progress = int((completed_tasks / total_tasks * 100)) if total_tasks > 0 else 0
+        # Обновляем заголовки колонок
+        self.columns["todo"].count_label.setText(str(todo_count))
+        self.columns["progress"].count_label.setText(str(progress_count))
+        self.columns["review"].count_label.setText(str(review_count))
+        self.columns["done"].count_label.setText(str(done_count))
 
-        # Обновляем метки
-        self.totalTasksLabel.setText(f"📊 Всего задач: {total_tasks}")
-        self.completedTasksLabel.setText(f"✅ Выполнено: {completed_tasks}")
+        # Обновляем статистику
+        self.total_tasks_label.setText(str(total_count))
+        self.done_tasks_label.setText(str(done_count))
+        self.progress_tasks_label.setText(str(progress_count))
 
         # Подсчет просроченных задач
         overdue_count = 0
+        current_date = QDate.currentDate()
         for task in self.sample_tasks:
-            if "Просрочено" in task.get("deadline", ""):
-                overdue_count += 1
+            deadline = task.get("deadline", "")
+            if deadline:
+                deadline_date = self.parse_date(deadline)
+                if deadline_date and deadline_date < current_date and not task.get("completed", False):
+                    overdue_count += 1
 
-        self.overdueTasksLabel.setText(f"⏰ Просрочено: {overdue_count}")
-        self.overallProgress.setValue(progress)
+        self.overdue_tasks_label.setText(str(overdue_count))
 
-        # Устанавливаем цвет прогресс-бара
-        if progress < 30:
-            color = "#D22730"
-        elif progress < 70:
-            color = "#FFA726"
-        else:
-            color = "#4CAF50"
+        # Расчет прогресса
+        progress = int((done_count / total_count * 100)) if total_count > 0 else 0
 
-        self.overallProgress.setStyleSheet(f"""
-            QProgressBar {{
-                border: 1px solid #E0E0E0;
-                border-radius: 6px;
-                text-align: center;
-                background-color: #F5F5F5;
-                height: 12px;
-            }}
-            QProgressBar::chunk {{
-                background-color: {color};
-                border-radius: 6px;
-            }}
-        """)
+    def parse_date(self, date_str):
+        """Парсинг даты из строки"""
+        try:
+            return QDate.fromString(date_str, "dd.MM.yyyy")
+        except:
+            return None
 
     def create_new_task(self):
         """Создать новую задачу"""
         print("Создание новой задачи...")
+        # Здесь будет логика создания новой задачи
 
     def show_archive(self):
         """Показать архив задач"""
         print("Показать архив...")
-
-    def archive_completed_tasks(self):
-        """Архивировать выполненные задачи"""
-        print("Архивирование выполненных задач...")
 
     def search_tasks(self, text):
         """Поиск задач"""
@@ -616,47 +488,12 @@ class MyTasksPage(QWidget):
 
     def filter_tasks(self):
         """Фильтрация задач"""
-        priority_filter = self.priorityFilter.currentText()
-        project_filter = self.projectFilter.currentText()
+        priority_filter = self.priority_filter.currentText()
+        project_filter = self.project_filter.currentText()
         print(f"Фильтр: приоритет={priority_filter}, проект={project_filter}")
 
-    def add_task_to_column(self, column_id):
-        """Добавить задачу в колонку"""
-        print(f"Добавить задачу в колонку: {column_id}")
-
-    def resizeEvent(self, event):
-        """Обработка изменения размера окна для адаптивности"""
-        super().resizeEvent(event)
-        self.adjust_columns_layout()
-
-    def adjust_columns_layout(self):
-        """Адаптивное изменение расположения колонок"""
-        width = self.kanbanContainer.width()
-
-        # Определяем количество колонок в зависимости от ширины
-        if width < 1200:
-            # Для узких экранов - 2 колонки
-            cols = 2
-        elif width < 1600:
-            # Для средних экранов - 3 колонки
-            cols = 3
-        else:
-            # Для широких экранов - 4 колонки
-            cols = 4
-
-        # Рассчитываем оптимальную ширину колонок
-        margin = 20  # отступ между колонками
-        column_width = (width - (margin * (cols - 1))) // cols
-
-        # Устанавливаем минимальную ширину для колонок
-        min_width = 280
-        if column_width < min_width:
-            column_width = min_width
-            # Пересчитываем количество колонок
-            cols = max(1, width // (min_width + margin))
-
-        # Устанавливаем фиксированную ширину для колонок
-        for column in [self.columnTodo, self.columnInProgress,
-                       self.columnReview, self.columnDone]:
-            column.setMinimumWidth(column_width)
-            column.setMaximumWidth(column_width)
+    def reset_filters(self):
+        """Сброс фильтров"""
+        self.priority_filter.setCurrentIndex(0)
+        self.project_filter.setCurrentIndex(0)
+        print("Фильтры сброшены")
