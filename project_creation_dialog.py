@@ -77,7 +77,7 @@ class ProjectCreationDialog(QDialog):
             "template": self.templateCombo.currentText()
         }
 
-        # Закрываем диалог с результатом Accepted
+        # Закрываем диалог others_tasks_page.ui результатом Accepted
         self.accept()
 
     def get_project_data(self):

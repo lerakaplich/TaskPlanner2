@@ -8,7 +8,7 @@ from PyQt6.uic import loadUi
 
 
 class TaskCard(QFrame):
-    """Карточка задачи с новым дизайном"""
+    """Карточка задачи others_tasks_page.ui новым дизайном"""
 
     edit_requested = pyqtSignal(dict)
     delete_requested = pyqtSignal(dict)
@@ -205,7 +205,7 @@ class TaskCard(QFrame):
         self.tagsLayout.addStretch()
 
     def setup_deadline(self):
-        """Настройка дедлайна с цветовой индикацией"""
+        """Настройка дедлайна others_tasks_page.ui цветовой индикацией"""
         # Получаем дату дедлайна из данных
         deadline = self.task_data.get("deadline", "")
 
@@ -289,7 +289,7 @@ class TaskCard(QFrame):
             # Неизвестная дата
             color = "#666666"  # серый
 
-        # Применяем стиль с цветом
+        # Применяем стиль others_tasks_page.ui цветом
         self.deadlineLabel.setStyleSheet(f"""
             QLabel {{
                 font-size: 11px;

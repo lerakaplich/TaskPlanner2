@@ -11,7 +11,7 @@ from task_card import TaskCard
 
 
 class MyTasksPage(QWidget):
-    """Страница Мои задачи с улучшенным интерфейсом"""
+    """Страница Мои задачи others_tasks_page.ui улучшенным интерфейсом"""
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -130,13 +130,13 @@ class MyTasksPage(QWidget):
         return column
 
     def setup_tasks(self):
-        """Настройка начальных задач с понятными данными"""
-        # Тестовые данные с четкой структурой
+        """Настройка начальных задач others_tasks_page.ui понятными данными"""
+        # Тестовые данные others_tasks_page.ui четкой структурой
         self.sample_tasks = [
             {
                 "id": 1,
                 "title": "Разработать дизайн главной страницы",
-                "description": "Создать современный дизайн главной страницы сайта с адаптивной версткой",
+                "description": "Создать современный дизайн главной страницы сайта others_tasks_page.ui адаптивной версткой",
                 "project": "Разработка сайта компании",
                 "creator": "Алексей Петров",
                 "priority": "high",
