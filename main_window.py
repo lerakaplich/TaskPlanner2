@@ -3,6 +3,7 @@ from PyQt6.QtWidgets import QApplication, QMainWindow, QFrame, QSizePolicy, QSpa
 from PyQt6.QtCore import Qt
 from PyQt6.uic import loadUi
 from my_tasks_page import MyTasksPage  # Импортируем класс MyTasksPage
+from others_tasks_page import OthersTasksPage
 from overtime_page import OvertimePage
 
 
@@ -34,6 +35,18 @@ class MainWindow(QMainWindow):
             self.contentStack.insertWidget(index, self.my_tasks_page_instance)
             self.myTasksPage = self.my_tasks_page_instance
 
+        # Страница Чужие задачи - ДОБАВЛЕНО
+        self.other_tasks_page_instance = OthersTasksPage()  # Используем правильное имя класса
+        other_tasks_page = self.findChild(QWidget, "otherTasksPage")
+        if other_tasks_page:
+            index = self.contentStack.indexOf(other_tasks_page)
+            other_tasks_page.deleteLater()
+            self.contentStack.insertWidget(index, self.other_tasks_page_instance)
+            self.otherTasksPage = self.other_tasks_page_instance
+        else:
+            # Если нет готовой страницы в UI, добавляем в конец
+            self.contentStack.addWidget(self.other_tasks_page_instance)
+            self.otherTasksPage = self.other_tasks_page_instance
         # Страница Переработки
         self.overtime_page_instance = OvertimePage()
         # Ищем или создаем страницу для переработок
