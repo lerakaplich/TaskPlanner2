@@ -44,7 +44,7 @@ QPushButton:checked {
 }</string>
      </property>
      <property name="text">
-      <string>📊  Доски/Главная</string>
+      <string>🚚  Проекты</string>
      </property>
      <property name="checkable">
       <bool>true</bool>
@@ -193,6 +193,35 @@ QPushButton:checked {
      </property>
      <property name="text">
       <string>💬  Чат</string>
+     </property>
+     <property name="checkable">
+      <bool>true</bool>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <widget class="QPushButton" name="btnRecycling">
+     <property name="styleSheet">
+      <string notr="true">QPushButton {
+    color: white;
+    font-size: 16px;
+    font-weight: bold;
+    padding: 15px 20px;
+    text-align: left;
+    border: none;
+    background-color: transparent;
+}
+QPushButton:hover {
+    background-color: #2C3640;
+    border-left: 4px solid #D22730;
+}
+QPushButton:checked {
+    background-color: #2C3640;
+    border-left: 4px solid #ccab6e;
+}</string>
+     </property>
+     <property name="text">
+      <string>♻️  Переработки</string>
      </property>
      <property name="checkable">
       <bool>true</bool>

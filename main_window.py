@@ -3,6 +3,7 @@ from PyQt6.QtWidgets import QApplication, QMainWindow, QFrame, QSizePolicy, QSpa
 from PyQt6.QtCore import Qt
 from PyQt6.uic import loadUi
 from my_tasks_page import MyTasksPage  # Импортируем класс MyTasksPage
+from overtime_page import OvertimePage
 
 
 class MainWindow(QMainWindow):
@@ -13,14 +14,136 @@ class MainWindow(QMainWindow):
         loadUi("main_window.ui", self)
         loadUi("left_panel.ui", self.leftPanel)
 
-        # Инициализация страницы Мои задачи
-        self.init_my_tasks_page()
+        # Инициализация страниц
+        self.init_pages()
 
         # Подключаем сигналы к слотам
         self.connect_signals()
 
         # Инициализация
         self.setup_initial_state()
+
+    def init_pages(self):
+        """Инициализация всех страниц"""
+        # Страница Мои задачи
+        self.my_tasks_page_instance = MyTasksPage()
+        old_page = self.findChild(QWidget, "myTasksPage")
+        if old_page:
+            index = self.contentStack.indexOf(old_page)
+            old_page.deleteLater()
+            self.contentStack.insertWidget(index, self.my_tasks_page_instance)
+            self.myTasksPage = self.my_tasks_page_instance
+
+        # Страница Переработки
+        self.overtime_page_instance = OvertimePage()
+        # Ищем или создаем страницу для переработок
+        recycling_page = self.findChild(QWidget, "recyclingPage")
+        if recycling_page:
+            index = self.contentStack.indexOf(recycling_page)
+            recycling_page.deleteLater()
+            self.contentStack.insertWidget(index, self.overtime_page_instance)
+        else:
+            # Если нет готовой страницы в UI, добавляем в конец
+            self.contentStack.addWidget(self.overtime_page_instance)
+            # Создаем ссылку на страницу
+            self.recyclingPage = self.overtime_page_instance
+
+    def connect_signals(self):
+        """Подключение всех сигналов к слотам"""
+        # Навигационные кнопки
+        self.leftPanel.btnMain.clicked.connect(lambda: self.switch_page(0))
+        self.leftPanel.btnMyTasks.clicked.connect(lambda: self.switch_page(1))
+        self.leftPanel.btnOtherTasks.clicked.connect(lambda: self.switch_page(2))
+        self.leftPanel.btnGantt.clicked.connect(lambda: self.switch_page(3))
+        self.leftPanel.btnAnalytics.clicked.connect(lambda: self.switch_page(4))
+        self.leftPanel.btnChat.clicked.connect(lambda: self.switch_page(5))
+        self.leftPanel.btnRecycling.clicked.connect(lambda: self.switch_page(6))
+        self.leftPanel.btnSettings.clicked.connect(lambda: self.switch_page(7))
+
+        # Кнопки действий
+        self.btnCreateProject.clicked.connect(self.create_project)
+        self.leftPanel.btnCollapse.clicked.connect(self.toggle_left_panel)
+
+        # Поиск
+        self.searchInput.textChanged.connect(self.search_projects)
+
+        # Фильтр
+        self.filterCombo.currentTextChanged.connect(self.filter_projects)
+
+        # Уведомления
+        self.btnNotifications.clicked.connect(self.show_notifications)
+
+        # Профиль
+        self.btnProfile.clicked.connect(self.show_profile)
+
+    def switch_page(self, page_index):
+        """Переключение между страницами"""
+        # Определяем индексы страниц
+        page_map = {
+            'main': 0,
+            'my_tasks': 1,
+            'other_tasks': 2,
+            'gantt': 3,
+            'analytics': 4,
+            'chat': 5,
+            'recycling': 6,
+            'settings': 7
+        }
+
+        # Если передан строковый идентификатор
+        if isinstance(page_index, str):
+            page_index = page_map.get(page_index, 0)
+
+        self.contentStack.setCurrentIndex(page_index)
+
+        # Обновляем состояние кнопок навигации
+        for i, btn in enumerate(self.nav_buttons):
+            btn.setChecked(i == page_index)
+
+    def setup_initial_state(self):
+        """Начальная настройка интерфейса"""
+        # Устанавливаем первую страницу активной
+        self.contentStack.setCurrentIndex(0)
+
+        # Создаем группу для навигационных кнопок
+        self.nav_buttons = [
+            self.leftPanel.btnMain,
+            self.leftPanel.btnMyTasks,
+            self.leftPanel.btnOtherTasks,
+            self.leftPanel.btnGantt,
+            self.leftPanel.btnAnalytics,
+            self.leftPanel.btnChat,
+            self.leftPanel.btnRecycling,
+            self.leftPanel.btnSettings
+        ]
+
+        # Сохраняем оригинальные тексты кнопок
+        self.button_texts = {
+            self.leftPanel.btnMain: "🚚  Проекты",
+            self.leftPanel.btnMyTasks: "✅  Мои задачи",
+            self.leftPanel.btnOtherTasks: "👥  Чужие задачи",
+            self.leftPanel.btnGantt: "📈  Диаграмма Ганта",
+            self.leftPanel.btnAnalytics: "📊  Аналитика/Навыки",
+            self.leftPanel.btnChat: "💬  Чат",
+            self.leftPanel.btnRecycling: "♻️  Переработки",
+            self.leftPanel.btnSettings: "⚙️  Настройки"
+        }
+
+        # Сохраняем оригинальные иконки
+        self.button_icons = {
+            self.leftPanel.btnMain: "🚚",
+            self.leftPanel.btnMyTasks: "✅",
+            self.leftPanel.btnOtherTasks: "👥",
+            self.leftPanel.btnGantt: "📈",
+            self.leftPanel.btnAnalytics: "📊",
+            self.leftPanel.btnChat: "💬",
+            self.leftPanel.btnRecycling: "♻️",
+            self.leftPanel.btnSettings: "⚙️"
+        }
+
+        # Настройка адаптивности карточек
+        self.setup_responsive_cards()
+
 
     def init_my_tasks_page(self):
         """Инициализация страницы Мои задачи"""
@@ -40,73 +163,24 @@ class MainWindow(QMainWindow):
             # Обновляем ссылку на страницу
             self.myTasksPage = self.my_tasks_page_instance
 
-    def connect_signals(self):
-        """Подключение всех сигналов к слотам"""
-        # Навигационные кнопки
-        self.leftPanel.btnMain.clicked.connect(lambda: self.switch_page(0))
-        self.leftPanel.btnMyTasks.clicked.connect(lambda: self.switch_page(1))
-        self.leftPanel.btnOtherTasks.clicked.connect(lambda: self.switch_page(2))
-        self.leftPanel.btnGantt.clicked.connect(lambda: self.switch_page(3))
-        self.leftPanel.btnAnalytics.clicked.connect(lambda: self.switch_page(4))
-        self.leftPanel.btnChat.clicked.connect(lambda: self.switch_page(5))
-        self.leftPanel.btnSettings.clicked.connect(lambda: self.switch_page(6))
+    def init_overtime_page(self):
+        """Инициализация страницы Переработки"""
+        # Создаем страницу Переработки
+        self.overtime_page_instance = OvertimePage()  # Передайте connection к БД если есть
 
-        # Кнопки действий
-        self.btnCreateProject.clicked.connect(self.create_project)
-        self.leftPanel.btnCollapse.clicked.connect(self.toggle_left_panel)
+        # Заменяем пустую страницу recyclingPage на нашу кастомную страницу
+        old_page = self.findChild(QWidget, "recyclingPage")
+        if old_page:
+            # Получаем индекс страницы в contentStack
+            index = self.contentStack.indexOf(old_page)
+            # Удаляем старую страницу
+            old_page.deleteLater()
+            # Добавляем новую страницу на тот же индекс
+            self.contentStack.insertWidget(index, self.overtime_page_instance)
 
-        # Поиск
-        self.searchInput.textChanged.connect(self.search_projects)
+            # Обновляем ссылку на страницу
+            self.recyclingPage = self.overtime_page_instance
 
-        # Фильтр
-        self.filterCombo.currentTextChanged.connect(self.filter_projects)
-
-        # Уведомления
-        self.btnNotifications.clicked.connect(self.show_notifications)
-
-        # Профиль
-        self.btnProfile.clicked.connect(self.show_profile)
-
-    def setup_initial_state(self):
-        """Начальная настройка интерфейса"""
-        # Устанавливаем первую страницу активной
-        self.contentStack.setCurrentIndex(0)
-
-        # Создаем группу для навигационных кнопок
-        self.nav_buttons = [
-            self.leftPanel.btnMain,
-            self.leftPanel.btnMyTasks,
-            self.leftPanel.btnOtherTasks,
-            self.leftPanel.btnGantt,
-            self.leftPanel.btnAnalytics,
-            self.leftPanel.btnChat,
-            self.leftPanel.btnSettings
-        ]
-
-        # Сохраняем оригинальные тексты кнопок
-        self.button_texts = {
-            self.leftPanel.btnMain: "📊  Доски/Главная",
-            self.leftPanel.btnMyTasks: "✅  Мои задачи",
-            self.leftPanel.btnOtherTasks: "👥  Чужие задачи",
-            self.leftPanel.btnGantt: "📈  Диаграмма Ганта",
-            self.leftPanel.btnAnalytics: "📊  Аналитика/Навыки",
-            self.leftPanel.btnChat: "💬  Чат",
-            self.leftPanel.btnSettings: "⚙️  Настройки"
-        }
-
-        # Сохраняем оригинальные иконки (первые символы текста)
-        self.button_icons = {
-            self.leftPanel.btnMain: "📊",
-            self.leftPanel.btnMyTasks: "✅",
-            self.leftPanel.btnOtherTasks: "👥",
-            self.leftPanel.btnGantt: "📈",
-            self.leftPanel.btnAnalytics: "📊",
-            self.leftPanel.btnChat: "💬",
-            self.leftPanel.btnSettings: "⚙️"
-        }
-
-        # Настройка адаптивности карточек
-        self.setup_responsive_cards()
 
     def setup_responsive_cards(self):
         """Настройка адаптивности карточек проектов"""
@@ -213,13 +287,6 @@ class MainWindow(QMainWindow):
 
             self.current_columns = columns
 
-    def switch_page(self, page_index):
-        """Переключение между страницами"""
-        self.contentStack.setCurrentIndex(page_index)
-
-        # Обновляем состояние кнопок навигации
-        for i, btn in enumerate(self.nav_buttons):
-            btn.setChecked(i == page_index)
 
     def create_project(self):
         from project_creation_dialog import ProjectCreationDialog

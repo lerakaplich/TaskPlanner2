@@ -3,7 +3,7 @@ import json
 
 from PyQt6.QtCore import Qt, QMimeData, pyqtSignal, QPoint
 from PyQt6.QtGui import QDrag, QPixmap, QPainter
-from PyQt6.QtWidgets import (QFrame, QPushButton, QMenu, QApplication, QSizePolicy)
+from PyQt6.QtWidgets import (QFrame, QPushButton, QMenu, QApplication, QSizePolicy, QLabel)
 from PyQt6.uic import loadUi
 
 
@@ -37,6 +37,8 @@ class TaskCard(QFrame):
 
         # Обновляем стиль карточки
         self.update_card_style()
+
+        # ... (остальной код без изменений до setup_ui)
 
     def setup_ui(self):
         """Настройка UI карточки на основе данных"""
@@ -123,6 +125,28 @@ class TaskCard(QFrame):
 
         self.authorLabel.setText(f"Автор: {author_text}")
 
+        # === НОВАЯ ЧАСТЬ: Исполнитель ===
+        assignee = self.task_data.get("assignee", {})
+        if assignee and isinstance(assignee, dict):
+            last_name = assignee.get("last_name", "")
+            first_name = assignee.get("first_name", "")
+            middle_name = assignee.get("middle_name", "")
+
+            if first_name and middle_name:
+                initials = f"{first_name[0]}.{middle_name[0]}."
+            elif first_name:
+                initials = f"{first_name[0]}."
+            else:
+                initials = ""
+
+            assignee_text = f"{last_name} {initials}".strip()
+            if not assignee_text:
+                assignee_text = "Неизвестен"
+            self.executorLabel.setText(f"Исполнитель: {assignee_text}")
+            self.executorLabel.show()
+        else:
+            self.executorLabel.hide()
+
         # Дедлайн
         self.setup_deadline()
 
@@ -132,11 +156,14 @@ class TaskCard(QFrame):
             if isinstance(updated_at, str):
                 updated_str = updated_at
             else:
-                updated_str = updated_at.strftime("%d.%m.%Y %H:%M") if hasattr(updated_at, 'strftime') else "Неизвестно"
+                updated_str = updated_at.strftime("%d.%m.%Y %H:%M") if hasattr(updated_at,
+                                                                               'strftime') else "Неизвестно"
         else:
             updated_str = "Неизвестно"
 
         self.updatedLabel.setText(f"Обновление: {updated_str}")
+
+# ... (остальной код класса без изменений)
 
     def setup_tags(self):
         """Настройка тегов"""
@@ -179,53 +206,90 @@ class TaskCard(QFrame):
 
     def setup_deadline(self):
         """Настройка дедлайна с цветовой индикацией"""
-        due_date = self.task_data.get("due_date")
-        if not due_date:
+        # Получаем дату дедлайна из данных
+        deadline = self.task_data.get("deadline", "")
+
+        # Проверяем разные варианты названий поля
+        if not deadline:
+            deadline = self.task_data.get("due_date", "")
+
+        if not deadline:
             self.deadlineLabel.hide()
             return
 
         # Показываем метку
         self.deadlineLabel.show()
 
-        # Форматируем дату
-        if isinstance(due_date, str):
-            deadline_str = due_date
+        # Форматируем дату для отображения
+        if isinstance(deadline, str):
             try:
-                deadline_date = datetime.datetime.strptime(due_date, "%Y-%m-%d %H:%M:%S")
-            except:
+                # Пробуем разные форматы даты
                 try:
-                    deadline_date = datetime.datetime.strptime(due_date, "%Y-%m-%d")
-                except:
-                    deadline_date = None
-        elif hasattr(due_date, 'strftime'):
-            deadline_date = due_date
-            deadline_str = due_date.strftime("%d.%m.%Y")
+                    deadline_date = datetime.datetime.strptime(deadline, "%d.%m.%Y")
+                except ValueError:
+                    try:
+                        deadline_date = datetime.datetime.strptime(deadline, "%Y-%m-%d")
+                    except ValueError:
+                        try:
+                            deadline_date = datetime.datetime.strptime(deadline, "%Y-%m-%d %H:%M:%S")
+                        except ValueError:
+                            # Если не удалось распарсить, используем как есть
+                            deadline_date = None
+                            deadline_display = deadline
+                        else:
+                            deadline_display = deadline_date.strftime("%d.%m.%Y")
+                    else:
+                        deadline_display = deadline_date.strftime("%d.%m.%Y")
+                else:
+                    deadline_display = deadline
+            except Exception as e:
+                deadline_date = None
+                deadline_display = deadline
+        elif hasattr(deadline, 'strftime'):
+            deadline_date = deadline
+            deadline_display = deadline.strftime("%d.%m.%Y")
         else:
-            deadline_str = str(due_date)
             deadline_date = None
+            deadline_display = str(deadline)
 
-        self.deadlineLabel.setText(f"До: {deadline_str}")
+        # Устанавливаем текст
+        self.deadlineLabel.setText(f"До: {deadline_display}")
 
         # Определяем цвет дедлайна
         if deadline_date:
-            today = datetime.datetime.now()
+            today = datetime.datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+            deadline_date = deadline_date.replace(hour=0, minute=0, second=0, microsecond=0)
             days_diff = (deadline_date - today).days
 
             if days_diff < 0:
                 # Просрочено
                 color = "#D22730"  # красный
+                status_text = " (просрочено)"
+                if days_diff == -1:
+                    status_text = " (вчера)"
+                elif days_diff < -1:
+                    status_text = f" ({abs(days_diff)} дн. назад)"
+                self.deadlineLabel.setText(f"До: {deadline_display}{status_text}")
             elif days_diff == 0:
-                # Остался один день
+                # Сегодня
                 color = "#FF9800"  # оранжевый
-            elif days_diff <= 1:
-                # Остался один день
+                self.deadlineLabel.setText(f"До: {deadline_display} (сегодня)")
+            elif days_diff == 1:
+                # Завтра
                 color = "#FF9800"  # оранжевый
+                self.deadlineLabel.setText(f"До: {deadline_display} (завтра)")
+            elif days_diff <= 3:
+                # Осталось мало дней (2-3 дня)
+                color = "#FF9800"  # оранжевый
+                self.deadlineLabel.setText(f"До: {deadline_display} (через {days_diff} дн.)")
             else:
-                # Всё в порядке
+                # Есть время
                 color = "#4CAF50"  # зеленый
         else:
+            # Неизвестная дата
             color = "#666666"  # серый
 
+        # Применяем стиль с цветом
         self.deadlineLabel.setStyleSheet(f"""
             QLabel {{
                 font-size: 11px;
