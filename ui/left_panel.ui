@@ -200,7 +200,7 @@ QPushButton:checked {
     </widget>
    </item>
    <item>
-    <widget class="QPushButton" name="btnRecycling">
+    <widget class="QPushButton" name="btnOvertime">
      <property name="styleSheet">
       <string notr="true">QPushButton {
     color: white;

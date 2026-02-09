@@ -5,7 +5,7 @@ from PyQt6.QtCore import Qt
 from PyQt6.uic import loadUi
 from my_tasks_page import MyTasksPage  # Импортируем класс MyTasksPage
 from others_tasks_page import OthersTasksPage
-
+from overtime_page import OvertimePage  # <-- Добавьте эту строку
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -49,28 +49,18 @@ class MainWindow(QMainWindow):
             # Если нет готовой страницы в UI, добавляем в конец
             self.contentStack.addWidget(self.other_tasks_page_instance)
             self.otherTasksPage = self.other_tasks_page_instance
-
-        # Страница Переработки - ДОБАВЛЕНО
-        #from overtime_page import OvertimePage
-        # Здесь нужен user_id - предположим, он хранится в self.current_user_id
-        # Если нет, можно передать None или получить из настроек/БД
-        # user_id = getattr(self, 'current_user_id', 1)  # По умолчанию ID = 1
-        # self.overtime_page_instance = OvertimePage(user_id=user_id)
-        #
-        # # Ищем страницу переработок в UI (по имени recyclingPage)
-        # recycling_page = self.findChild(QWidget, "recyclingPage")
-        # if recycling_page:
-        #     index = self.contentStack.indexOf(recycling_page)
-        #     recycling_page.deleteLater()
-        #     self.contentStack.insertWidget(index, self.overtime_page_instance)
-        #     self.recyclingPage = self.overtime_page_instance
-        # else:
-        #     # Если страницы нет в UI, создаем новую
-        #     index = self.contentStack.count()
-        #     self.contentStack.addWidget(self.overtime_page_instance)
-        #     self.recyclingPage = self.overtime_page_instance
-
-
+        # === ДОБАВЬТЕ ЭТОТ БЛОК ===
+        # Страница Переработки
+        self.overtime_page_instance = OvertimePage()
+        overtime_old_page = self.findChild(QWidget, "overtimePage")
+        if overtime_old_page:
+            index = self.contentStack.indexOf(overtime_old_page)
+            overtime_old_page.deleteLater()
+            self.contentStack.insertWidget(index, self.overtime_page_instance)
+            self.overtimePage = self.overtime_page_instance
+        else:
+            self.contentStack.addWidget(self.overtime_page_instance)
+            self.overtimePage = self.overtime_page_instance
 
     def connect_signals(self):
         """Подключение всех сигналов к слотам"""
@@ -81,7 +71,7 @@ class MainWindow(QMainWindow):
         self.leftPanel.btnGantt.clicked.connect(lambda: self.switch_page(3))
         self.leftPanel.btnAnalytics.clicked.connect(lambda: self.switch_page(4))
         self.leftPanel.btnChat.clicked.connect(lambda: self.switch_page(5))
-        self.leftPanel.btnRecycling.clicked.connect(lambda: self.switch_page(6))
+        self.leftPanel.btnOvertime.clicked.connect(lambda: self.switch_page(6))
         self.leftPanel.btnSettings.clicked.connect(lambda: self.switch_page(7))
 
         # Кнопки действий
@@ -110,7 +100,7 @@ class MainWindow(QMainWindow):
             'gantt': 3,
             'analytics': 4,
             'chat': 5,
-            'recycling': 6,
+            'overtime': 6,
             'settings': 7
         }
 
@@ -137,7 +127,7 @@ class MainWindow(QMainWindow):
             self.leftPanel.btnGantt,
             self.leftPanel.btnAnalytics,
             self.leftPanel.btnChat,
-            self.leftPanel.btnRecycling,
+            self.leftPanel.btnOvertime,
             self.leftPanel.btnSettings
         ]
 
@@ -149,7 +139,7 @@ class MainWindow(QMainWindow):
             self.leftPanel.btnGantt: "📈  Диаграмма Ганта",
             self.leftPanel.btnAnalytics: "📊  Аналитика/Навыки",
             self.leftPanel.btnChat: "💬  Чат",
-            self.leftPanel.btnRecycling: "♻️  Переработки",
+            self.leftPanel.btnOvertime: "♻️  Переработки",
             self.leftPanel.btnSettings: "⚙️  Настройки"
         }
 
@@ -161,7 +151,7 @@ class MainWindow(QMainWindow):
             self.leftPanel.btnGantt: "📈",
             self.leftPanel.btnAnalytics: "📊",
             self.leftPanel.btnChat: "💬",
-            self.leftPanel.btnRecycling: "♻️",
+            self.leftPanel.btnOvertime: "♻️",
             self.leftPanel.btnSettings: "⚙️"
         }
 
@@ -192,8 +182,8 @@ class MainWindow(QMainWindow):
         # Создаем страницу Переработки
         #self.overtime_page_instance = OvertimePage()  # Передайте connection к БД если есть
 
-        # Заменяем пустую страницу recyclingPage на нашу кастомную страницу
-        old_page = self.findChild(QWidget, "recyclingPage")
+        # Заменяем пустую страницу overtimePage на нашу кастомную страницу
+        old_page = self.findChild(QWidget, "overtimePage")
         if old_page:
             # Получаем индекс страницы в contentStack
             index = self.contentStack.indexOf(old_page)
@@ -203,7 +193,7 @@ class MainWindow(QMainWindow):
             self.contentStack.insertWidget(index, self.overtime_page_instance)
 
             # Обновляем ссылку на страницу
-            self.recyclingPage = self.overtime_page_instance
+            self.overtimePage = self.overtime_page_instance
 
 
     def setup_responsive_cards(self):

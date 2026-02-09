@@ -1,0 +1,95 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>AddDialog</class>
+ <widget class="QDialog" name="AddDialog">
+  <property name="windowTitle">
+   <string>Добавить переработку</string>
+  </property>
+  <property name="minimumSize">
+   <size>
+    <width>420</width>
+    <height>350</height>
+   </size>
+  </property>
+
+  <property name="styleSheet">
+   <string>
+QPushButton[styleClass="gold"]{
+ background:#ccab6e; color:white;
+ border-radius:10px; font-size:14px; font-weight:bold;
+}
+QPushButton[styleClass="red"]{
+ background:#D22730; color:white;
+ border-radius:10px; font-size:14px; font-weight:bold;
+}
+   </string>
+  </property>
+
+  <layout class="QVBoxLayout">
+
+   <item>
+    <widget class="QComboBox" name="projectBox"/>
+   </item>
+
+   <item>
+    <widget class="QComboBox" name="taskBox"/>
+   </item>
+
+   <item>
+    <widget class="QDateEdit" name="dateEdit">
+     <property name="calendarPopup">
+      <bool>true</bool>
+     </property>
+    </widget>
+   </item>
+
+   <item>
+    <widget class="QTimeEdit" name="startTime"/>
+   </item>
+
+   <item>
+    <widget class="QTimeEdit" name="endTime"/>
+   </item>
+
+   <item>
+    <widget class="QLineEdit" name="descEdit">
+     <property name="placeholderText">
+      <string>Комментарий</string>
+     </property>
+    </widget>
+   </item>
+
+   <item>
+    <layout class="QHBoxLayout">
+     <item>
+      <spacer orientation="Horizontal"/>
+     </item>
+
+     <item>
+      <widget class="QPushButton" name="btnCancel">
+       <property name="styleClass">
+        <string>red</string>
+       </property>
+       <property name="text">
+        <string>Отмена</string>
+       </property>
+      </widget>
+     </item>
+
+     <item>
+      <widget class="QPushButton" name="btnSave">
+       <property name="styleClass">
+        <string>gold</string>
+       </property>
+       <property name="text">
+        <string>Сохранить</string>
+       </property>
+      </widget>
+     </item>
+
+    </layout>
+   </item>
+
+  </layout>
+ </widget>
+</ui>
