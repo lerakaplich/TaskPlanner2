@@ -1,19 +1,21 @@
+import os
 import sys
 from PyQt6.QtWidgets import QApplication, QMainWindow, QFrame, QSizePolicy, QSpacerItem, QWidget
 from PyQt6.QtCore import Qt
 from PyQt6.uic import loadUi
 from my_tasks_page import MyTasksPage  # Импортируем класс MyTasksPage
 from others_tasks_page import OthersTasksPage
-from overtime_page import OvertimePage
 
 
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
 
+        self.ui_path = os.path.join(os.path.dirname(__file__), "..", "ui")
+
         # Загружаем UI из файла
-        loadUi("main_window.ui", self)
-        loadUi("left_panel.ui", self.leftPanel)
+        loadUi(os.path.join(self.ui_path, "main_window.ui"), self)
+        loadUi(os.path.join(self.ui_path, "left_panel.ui"), self.leftPanel)
 
         # Инициализация страниц
         self.init_pages()
@@ -47,19 +49,28 @@ class MainWindow(QMainWindow):
             # Если нет готовой страницы в UI, добавляем в конец
             self.contentStack.addWidget(self.other_tasks_page_instance)
             self.otherTasksPage = self.other_tasks_page_instance
-        # Страница Переработки
-        self.overtime_page_instance = OvertimePage()
-        # Ищем или создаем страницу для переработок
-        recycling_page = self.findChild(QWidget, "recyclingPage")
-        if recycling_page:
-            index = self.contentStack.indexOf(recycling_page)
-            recycling_page.deleteLater()
-            self.contentStack.insertWidget(index, self.overtime_page_instance)
-        else:
-            # Если нет готовой страницы в UI, добавляем в конец
-            self.contentStack.addWidget(self.overtime_page_instance)
-            # Создаем ссылку на страницу
-            self.recyclingPage = self.overtime_page_instance
+
+        # Страница Переработки - ДОБАВЛЕНО
+        #from overtime_page import OvertimePage
+        # Здесь нужен user_id - предположим, он хранится в self.current_user_id
+        # Если нет, можно передать None или получить из настроек/БД
+        # user_id = getattr(self, 'current_user_id', 1)  # По умолчанию ID = 1
+        # self.overtime_page_instance = OvertimePage(user_id=user_id)
+        #
+        # # Ищем страницу переработок в UI (по имени recyclingPage)
+        # recycling_page = self.findChild(QWidget, "recyclingPage")
+        # if recycling_page:
+        #     index = self.contentStack.indexOf(recycling_page)
+        #     recycling_page.deleteLater()
+        #     self.contentStack.insertWidget(index, self.overtime_page_instance)
+        #     self.recyclingPage = self.overtime_page_instance
+        # else:
+        #     # Если страницы нет в UI, создаем новую
+        #     index = self.contentStack.count()
+        #     self.contentStack.addWidget(self.overtime_page_instance)
+        #     self.recyclingPage = self.overtime_page_instance
+
+
 
     def connect_signals(self):
         """Подключение всех сигналов к слотам"""
@@ -179,7 +190,7 @@ class MainWindow(QMainWindow):
     def init_overtime_page(self):
         """Инициализация страницы Переработки"""
         # Создаем страницу Переработки
-        self.overtime_page_instance = OvertimePage()  # Передайте connection к БД если есть
+        #self.overtime_page_instance = OvertimePage()  # Передайте connection к БД если есть
 
         # Заменяем пустую страницу recyclingPage на нашу кастомную страницу
         old_page = self.findChild(QWidget, "recyclingPage")
@@ -239,7 +250,9 @@ class MainWindow(QMainWindow):
         self.project_cards = []
         for i, proj in enumerate(projects):
             card = QFrame(self.scrollAreaWidgetContents)
-            loadUi("project_card.ui", card)
+            self.ui_path = os.path.join(os.path.dirname(__file__), "..", "ui")
+
+            loadUi(os.path.join(self.ui_path, "project_card.ui"), card)
 
             card.projectTitle.setText(proj["title"])
             card.progressBar.setValue(proj["progress"])

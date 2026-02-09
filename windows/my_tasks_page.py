@@ -1,3 +1,5 @@
+import os
+
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QFrame, QLabel,
                              QPushButton, QScrollArea, QComboBox,
                              QLineEdit, QProgressBar, QSpacerItem, QSizePolicy)
@@ -15,9 +17,10 @@ class MyTasksPage(QWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent)
+        self.ui_path = os.path.join(os.path.dirname(__file__), "..", "ui")
 
         # Загружаем UI из файла
-        loadUi('my_tasks_page.ui', self)
+        loadUi(os.path.join(self.ui_path, "my_tasks_page.ui"), self)
 
         # Настраиваем канбан-доску
         self.setup_kanban()

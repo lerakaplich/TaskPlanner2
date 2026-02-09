@@ -1,3 +1,5 @@
+import os
+
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QFrame, QLabel,
                              QPushButton, QMenu, QSizePolicy)
 from PyQt6.QtCore import Qt, pyqtSignal
@@ -18,9 +20,10 @@ class OthersTaskCard(QFrame):
         super().__init__(parent)
         self.task_data = task_data
         self.is_creator = is_creator
+        self.ui_path = os.path.join(os.path.dirname(__file__), "..", "ui")
 
-        # Загружаем UI из файла (можно использовать тот же task_card.ui)
-        loadUi("task_card.ui", self)
+        # Загружаем UI из файла
+        loadUi(os.path.join(self.ui_path, "task_card.ui"), self)
         self.setObjectName("TaskCard")
 
         self.setup_ui()

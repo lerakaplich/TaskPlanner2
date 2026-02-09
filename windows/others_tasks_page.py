@@ -1,3 +1,4 @@
+import os
 import sys
 from datetime import datetime
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QFrame, QLabel,
@@ -22,8 +23,10 @@ class OthersTasksPage(QWidget):
         super().__init__(parent)
 
         # Загружаем UI из файла
-        loadUi('others_tasks_page.ui', self)
+        self.ui_path = os.path.join(os.path.dirname(__file__), "..", "ui")
 
+        # Загружаем UI из файла
+        loadUi(os.path.join(self.ui_path, "others_tasks_page.ui"), self)
         # Настраиваем канбан-доску
         self.setup_kanban()
 
