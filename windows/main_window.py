@@ -177,24 +177,6 @@ class MainWindow(QMainWindow):
             # Обновляем ссылку на страницу
             self.myTasksPage = self.my_tasks_page_instance
 
-    def init_overtime_page(self):
-        """Инициализация страницы Переработки"""
-        # Создаем страницу Переработки
-        #self.overtime_page_instance = OvertimePage()  # Передайте connection к БД если есть
-
-        # Заменяем пустую страницу overtimePage на нашу кастомную страницу
-        old_page = self.findChild(QWidget, "overtimePage")
-        if old_page:
-            # Получаем индекс страницы в contentStack
-            index = self.contentStack.indexOf(old_page)
-            # Удаляем старую страницу
-            old_page.deleteLater()
-            # Добавляем новую страницу на тот же индекс
-            self.contentStack.insertWidget(index, self.overtime_page_instance)
-
-            # Обновляем ссылку на страницу
-            self.overtimePage = self.overtime_page_instance
-
 
     def setup_responsive_cards(self):
         """Настройка адаптивности карточек проектов"""

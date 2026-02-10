@@ -1,0 +1,171 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>OvertimeCard</class>
+ <widget class="QFrame" name="OvertimeCard">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>720</width>
+    <height>180</height>
+   </rect>
+  </property>
+  <property name="minimumSize">
+   <size>
+    <width>700</width>
+    <height>180</height>
+   </size>
+  </property>
+  <property name="maximumSize">
+   <size>
+    <width>720</width>
+    <height>200</height>
+   </size>
+  </property>
+
+  <property name="styleSheet">
+   <string notr="true">
+QFrame#OvertimeCard {
+    background-color: #ffffff;
+    border-radius: 14px;
+    border: 1px solid #E0E0E0;
+}
+QFrame#OvertimeCard:hover {
+    border: 2px solid #ccab6e;
+    background-color: #FFFDF6;
+}
+
+/* Кнопка удаления — аккуратная */
+QPushButton#btnDelete {
+    background-color: transparent;
+    color: #D22730;
+    border-radius: 15px;
+    font-weight: bold;
+    font-size: 16px;
+}
+QPushButton#btnDelete:hover {
+    background-color: #FBEAEA;
+}
+   </string>
+  </property>
+
+  <layout class="QVBoxLayout" spacing="10">
+   <property name="leftMargin"><number>16</number></property>
+   <property name="topMargin"><number>14</number></property>
+   <property name="rightMargin"><number>16</number></property>
+   <property name="bottomMargin"><number>14</number></property>
+
+   <!-- Заголовок -->
+   <item>
+    <layout class="QHBoxLayout">
+     <item>
+      <widget class="QLabel" name="descriptionLabel">
+       <property name="wordWrap"><bool>true</bool></property>
+       <property name="styleSheet">
+        <string notr="true">
+font-size: 17px;
+font-weight: 600;
+color: #1B232A;
+        </string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QPushButton" name="btnDelete">
+       <property name="text"><string>✕</string></property>
+       <property name="fixedSize">
+        <size>
+         <width>30</width>
+         <height>30</height>
+        </size>
+       </property>
+      </widget>
+     </item>
+    </layout>
+   </item>
+
+   <!-- Контент -->
+   <item>
+    <layout class="QHBoxLayout" spacing="30">
+
+     <!-- Дата и время -->
+     <item>
+      <layout class="QVBoxLayout" spacing="4">
+       <item>
+        <widget class="QLabel" name="dateLabel">
+         <property name="styleSheet">
+          <string notr="true">
+font-size: 13px;
+color: #555;
+          </string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QLabel" name="timeLabel">
+         <property name="styleSheet">
+          <string notr="true">
+font-size: 13px;
+color: #555;
+          </string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QLabel" name="durationLabel">
+         <property name="styleSheet">
+          <string notr="true">
+font-size: 15px;
+font-weight: bold;
+color: #D22730;
+          </string>
+         </property>
+        </widget>
+       </item>
+      </layout>
+     </item>
+
+     <!-- Проектная информация -->
+     <item>
+      <layout class="QVBoxLayout" spacing="4">
+       <item>
+        <widget class="QLabel" name="projectLabel">
+         <property name="styleSheet">
+          <string notr="true">
+font-size: 13px;
+color: #1B232A;
+          </string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QLabel" name="taskLabel">
+         <property name="styleSheet">
+          <string notr="true">
+font-size: 13px;
+color: #1B232A;
+          </string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QLabel" name="userLabel">
+         <property name="styleSheet">
+          <string notr="true">
+font-size: 12px;
+color: #777;
+          </string>
+         </property>
+        </widget>
+       </item>
+      </layout>
+     </item>
+
+    </layout>
+   </item>
+
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>

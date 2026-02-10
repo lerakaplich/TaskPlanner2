@@ -1,0 +1,160 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>AddOvertimeDialog</class>
+ <widget class="QDialog" name="AddOvertimeDialog">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>520</width>
+    <height>408</height>
+   </rect>
+  </property>
+  <property name="minimumSize">
+   <size>
+    <width>520</width>
+    <height>0</height>
+   </size>
+  </property>
+  <property name="maximumSize">
+   <size>
+    <width>16777215</width>
+    <height>408</height>
+   </size>
+  </property>
+  <property name="windowTitle">
+   <string>Добавление переработки</string>
+  </property>
+  <property name="styleSheet">
+   <string>
+QDialog {
+    background-color: #FFFFFF;
+}
+QLabel {
+    color: #333333;
+    font-size: 13px;
+}
+QLabel#titleLabel {
+    font-size: 22px;
+    font-weight: bold;
+    color: #000000;
+}
+QComboBox, QDateEdit, QTimeEdit, QTextEdit {
+    background-color: #FFFFFF;
+    color: #333333;
+    border-radius: 8px;
+    padding: 6px;
+    border: 1px solid #E0E0E0;
+}
+QComboBox::drop-down {
+    border: none;
+}
+QTextEdit {
+    min-height: 80px;
+}
+QPushButton#btnSave {
+    background-color: #D22730;
+    color: white;
+    border-radius: 10px;
+    font-weight: bold;
+    font-size: 16px;
+    padding: 10px;
+}
+QPushButton#btnSave:hover {
+    background-color: #862633;
+}
+QPushButton#btnCancel {
+    background-color: #FFFFFF;
+    border: 1px solid #CCAB6E;
+    color: #CCAB6E;
+    border-radius: 10px;
+    font-weight: bold;
+    font-size: 16px;
+    padding: 10px;
+}
+QPushButton#btnCancel:hover {
+    background-color: #CCAB6E;
+    color: black;
+}
+   </string>
+  </property>
+  <layout class="QVBoxLayout">
+   <property name="spacing">
+    <number>14</number>
+   </property>
+   <property name="leftMargin">
+    <number>20</number>
+   </property>
+   <property name="topMargin">
+    <number>20</number>
+   </property>
+   <property name="rightMargin">
+    <number>20</number>
+   </property>
+   <item>
+    <widget class="QLabel" name="titleLabel">
+     <property name="maximumSize">
+      <size>
+       <width>16777215</width>
+       <height>40</height>
+      </size>
+     </property>
+     <property name="text">
+      <string>Добавление переработки</string>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <widget class="QComboBox" name="comboProject"/>
+   </item>
+   <item>
+    <widget class="QComboBox" name="comboTask"/>
+   </item>
+   <item>
+    <widget class="QDateEdit" name="dateEdit">
+     <property name="calendarPopup">
+      <bool>true</bool>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <layout class="QHBoxLayout">
+     <property name="minimumHeight" stdset="0">
+      <number>32</number>
+     </property>
+     <property name="maximumHeight" stdset="0">
+      <number>32</number>
+     </property>
+     <item>
+      <widget class="QTimeEdit" name="timeStart"/>
+     </item>
+     <item>
+      <widget class="QTimeEdit" name="timeEnd"/>
+     </item>
+    </layout>
+   </item>
+   <item>
+    <widget class="QTextEdit" name="textDescription">
+     <property name="maximumSize">
+      <size>
+       <width>16777215</width>
+       <height>100</height>
+      </size>
+     </property>
+     <property name="placeholderText">
+      <string>Описание переработки (если нет проекта)</string>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <widget class="QPushButton" name="btnSave">
+     <property name="text">
+      <string>Сохранить</string>
+     </property>
+    </widget>
+   </item>
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>

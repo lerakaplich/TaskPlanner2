@@ -1,0 +1,239 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>PeriodDialog</class>
+ <widget class="QDialog" name="PeriodDialog">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>413</width>
+    <height>257</height>
+   </rect>
+  </property>
+  <property name="windowTitle">
+   <string>Выбор периода</string>
+  </property>
+  <property name="styleSheet">
+   <string notr="true">QDialog {
+    background-color: white;
+    font-family: 'Segoe UI', Arial;
+    border-radius: 10px;
+}
+QCalendarWidget QWidget {
+    color: black;
+    background-color: white;
+}
+
+QCalendarWidget QAbstractItemView {
+    color: black;
+    selection-background-color: #ccab6e;
+    selection-color: white;
+}
+
+QCalendarWidget QToolButton {
+    color: black;
+    font-weight: bold;
+    background: transparent;
+}
+
+QCalendarWidget QToolButton:hover {
+    background-color: #e6e6e6;
+}
+
+QCalendarWidget QSpinBox {
+    color: black;
+    background: white;
+}
+
+QCalendarWidget QHeaderView::section {
+    color: black;
+    background-color: #f2f2f2;
+    font-weight: bold;
+}
+/* Кнопки */
+QPushButton {
+    min-height: 41px;
+    max-height: 41px;
+    border: none;
+    border-radius: 10px;
+    font-weight: bold;
+    padding: 0px 16px;
+}
+
+QPushButton#btnOk {
+    background-color: #ccab6e;
+    color: white;
+    font-size: 16px;
+    min-width: 100px;
+}
+QPushButton#btnOk:hover {
+    background-color: #998664;
+}
+QPushButton#btnOk:pressed {
+    background-color: #7a6a50;
+}
+
+QPushButton#btnCancel {
+    background-color: #1B232A;
+    color: white;
+    font-size: 14px;
+    min-width: 100px;
+}
+QPushButton#btnCancel:hover {
+    background-color: #D9D9D6;
+    color: black;
+}
+QPushButton#btnCancel:pressed {
+    background-color: #B8B8B5;
+}
+
+/* Заголовки */
+QLabel#titleLabel {
+    font-size: 18px;
+    font-weight: bold;
+    color: #1B232A;
+    padding: 10px 0;
+}
+
+QLabel {
+    font-size: 14px;
+    font-weight: bold;
+    color: #1B232A;
+    padding: 5px 0;
+}
+
+/* Поля ввода */
+QDateEdit {
+    min-height: 41px;
+    max-height: 41px;
+    height: 41px;
+
+    border-radius: 10px;
+    border: 1px solid #ccab6e;
+
+    padding-left: 10px;
+    padding-right: 30px; /* место под стрелку */
+    padding-top: 0px;
+    padding-bottom: 0px;
+}
+
+QDateEdit:focus {
+    border: 2px solid #ccab6e;
+}
+QDateEdit::drop-down {
+    border: none;
+    padding-right: 10px;
+}
+
+/* Группа */
+QGroupBox {
+    font-weight: bold;
+    border: 1px solid #E0E0E0;
+    border-radius: 8px;
+    margin-top: 10px;
+    padding-top: 10px;
+    background-color: #F8F9FA;
+}
+QGroupBox::title {
+    subcontrol-origin: margin;
+    left: 10px;
+    padding: 0 5px 0 5px;
+    color: #1B232A;
+    font-weight: bold;
+}</string>
+  </property>
+  <layout class="QVBoxLayout" name="verticalLayout">
+   <item>
+    <widget class="QGroupBox" name="groupBox">
+     <property name="title">
+      <string>Период переработок</string>
+     </property>
+     <layout class="QVBoxLayout" name="verticalLayout_2">
+      <property name="spacing">
+       <number>4</number>
+      </property>
+      <item>
+       <widget class="QLabel" name="label">
+        <property name="text">
+         <string>Начало периода:</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QDateEdit" name="dateStart">
+        <property name="sizePolicy">
+         <sizepolicy hsizetype="Minimum" vsizetype="Fixed">
+          <horstretch>0</horstretch>
+          <verstretch>0</verstretch>
+         </sizepolicy>
+        </property>
+        <property name="minimumSize">
+         <size>
+          <width>0</width>
+          <height>41</height>
+         </size>
+        </property>
+        <property name="maximumSize">
+         <size>
+          <width>16777215</width>
+          <height>41</height>
+         </size>
+        </property>
+        <property name="calendarPopup">
+         <bool>true</bool>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QLabel" name="label_2">
+        <property name="text">
+         <string>Конец периода:</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QDateEdit" name="dateEnd">
+        <property name="sizePolicy">
+         <sizepolicy hsizetype="Minimum" vsizetype="Fixed">
+          <horstretch>0</horstretch>
+          <verstretch>0</verstretch>
+         </sizepolicy>
+        </property>
+        <property name="minimumSize">
+         <size>
+          <width>0</width>
+          <height>41</height>
+         </size>
+        </property>
+        <property name="maximumSize">
+         <size>
+          <width>16777215</width>
+          <height>41</height>
+         </size>
+        </property>
+        <property name="calendarPopup">
+         <bool>true</bool>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <item>
+    <widget class="QPushButton" name="btnOk">
+     <property name="sizePolicy">
+      <sizepolicy hsizetype="Minimum" vsizetype="Fixed">
+       <horstretch>0</horstretch>
+       <verstretch>0</verstretch>
+      </sizepolicy>
+     </property>
+     <property name="text">
+      <string>OK</string>
+     </property>
+    </widget>
+   </item>
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>

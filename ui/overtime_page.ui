@@ -1,72 +1,255 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <ui version="4.0">
- <class>overtimePage</class>
- <widget class="QWidget" name="overtimePage">
+ <class>OvertimePage</class>
+ <widget class="QWidget" name="OvertimePage">
   <property name="geometry">
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>603</width>
-    <height>463</height>
+    <width>1487</width>
+    <height>800</height>
    </rect>
   </property>
-  <layout class="QVBoxLayout">
+  <property name="windowTitle">
+   <string>Переработки</string>
+  </property>
+  <property name="styleSheet">
+   <string notr="true">QWidget {
+    background-color: #F5F5F7;
+    font-family: 'Segoe UI', Arial;
+}
+
+/* Вкладки */
+QTabBar::tab {
+    background-color: white;
+    color: #666;
+    padding: 12px 20px;
+    margin-right: 2px;
+    border-top-left-radius: 8px;
+    border-top-right-radius: 8px;
+    border: 1px solid #E0E0E0;
+    border-bottom: none;
+    font-weight: bold;
+    font-size: 14px;
+}
+
+QTabBar::tab:selected {
+    background-color: #1B232A;
+    color: white;
+    border-color: #1B232A;
+}
+
+QTabBar::tab:hover:!selected {
+    background-color: #F0F0F0;
+    border-color: #ccab6e;
+}
+
+QTabWidget::pane {
+    background-color: white;
+    border: 1px solid #E0E0E0;
+    border-radius: 0px 8px 8px 8px;
+    margin-top: -1px;
+}
+
+QTabWidget::tab-bar {
+    alignment: left;
+}
+
+/* Кнопки */
+QPushButton {
+    min-height: 41px;
+    max-height: 41px;
+    border: none;
+    border-radius: 10px;
+    font-weight: bold;
+    padding: 0px 16px;
+}
+
+QPushButton#btnAddOvertime {
+    background-color: #ccab6e;
+    color: white;
+    font-size: 16px;
+}
+QPushButton#btnAddOvertime:hover {
+    background-color: #998664;
+}
+QPushButton#btnAddOvertime:pressed {
+    background-color: #7a6a50;
+}
+
+QPushButton#btnExport {
+    background-color: #1B232A;
+    color: white;
+    font-size: 14px;
+}
+QPushButton#btnExport:hover {
+    background-color: #D9D9D6;
+    color: black;
+}
+QPushButton#btnExport:pressed {
+    background-color: #B8B8B5;
+}
+
+QPushButton#btnApplyFilters {
+    background-color: #1B232A;
+    color: white;
+    font-size: 14px;
+}
+QPushButton#btnApplyFilters:hover {
+    background-color: #D9D9D6;
+    color: black;
+}
+QPushButton#btnApplyFilters:pressed {
+    background-color: #B8B8B5;
+}
+
+QPushButton#btnClearFilters {
+    background-color: #1B232A;
+    color: white;
+    font-size: 14px;
+}
+QPushButton#btnClearFilters:hover {
+    background-color: #D9D9D6;
+    color: black;
+}
+QPushButton#btnClearFilters:pressed {
+    background-color: #B8B8B5;
+}
+
+QPushButton#btnSelectPeriod {
+    background-color: #1B232A;
+    color: white;
+    font-size: 14px;
+}
+QPushButton#btnSelectPeriod:hover {
+    background-color: #D9D9D6;
+    color: black;
+}
+QPushButton#btnSelectPeriod:pressed {
+    background-color: #B8B8B5;
+}
+QComboBox {
+    border: 2px solid #E0E0E0;
+    border-radius: 8px;
+    padding: 6px 12px 6px 12px;  /* уменьшили сверху/снизу с 8px → 6px */
+    font-size: 14px;
+    background-color: white;
+    height: 41px;               /* явно фиксируем */
+}
+QComboBox:focus {
+    border: 2px solid #ccab6e;
+}
+QComboBox::drop-down {
+    border: none;
+    padding-right: 10px;
+}
+/* Поля ввода */
+QDateEdit {
+    border: 2px solid #E0E0E0;
+    border-radius: 8px;
+    padding: 8px 12px;
+    font-size: 14px;
+    background-color: white;
+    min-height: 41px;
+    max-height: 41px;
+}
+QComboBox:focus, QDateEdit:focus {
+    border: 2px solid #ccab6e;
+}
+QComboBox::drop-down {
+    border: none;
+    padding-right: 10px;
+}
+
+/* Чекбокс */
+QCheckBox {
+    spacing: 8px;
+    font-size: 14px;
+    min-height: 41px;
+}
+QCheckBox::indicator {
+    width: 16px;
+    height: 16px;
+}
+QCheckBox::indicator:unchecked {
+    border: 2px solid #E0E0E0;
+    border-radius: 4px;
+    background-color: white;
+}
+QCheckBox::indicator:checked {
+    border: 2px solid #ccab6e;
+    border-radius: 4px;
+    background-color: #ccab6e;
+}
+
+/* Фрейм фильтров */
+QFrame#filtersFrame {
+    background-color: white;
+    border-radius: 10px;
+    border: 1px solid #E0E0E0;
+    padding: 15px;
+}
+
+/* Заголовки */
+QLabel#titleLabel {
+    font-size: 24px;
+    font-weight: bold;
+    color: #1B232A;
+    padding: 10px 0;
+}
+
+QLabel {
+    font-size: 14px;
+    font-weight: normal;
+    color: #333;
+}
+
+/* Скроллбары */
+QScrollArea {
+    border: none;
+    background-color: transparent;
+}
+QScrollBar:vertical {
+    background: #F5F5F5;
+    width: 8px;
+    border-radius: 4px;
+}
+QScrollBar::handle:vertical {
+    background: #C1C1C1;
+    border-radius: 4px;
+    min-height: 20px;
+}
+            QScrollBar:horizontal {
+                border: none;
+                background: #F5F5F5;
+                height: 8px;
+                margin: 0px;
+                border-radius: 4px;
+            }
+            QScrollBar::handle:horizontal {
+                background: #c1c1c1;
+                border-radius: 4px;
+                min-width: 20px;
+            }
+QScrollBar::add-line, QScrollBar::sub-line {
+    border: none;
+    background: none;
+}</string>
+  </property>
+  <layout class="QVBoxLayout" name="verticalLayout">
    <item>
-    <layout class="QHBoxLayout">
-     <item>
-      <widget class="QLabel" name="label">
-       <property name="styleSheet">
-        <string>font-size:28px;font-weight:bold;</string>
-       </property>
-       <property name="text">
-        <string>Переработки</string>
-       </property>
-      </widget>
-     </item>
-     <item>
-      <spacer name="horizontalSpacer">
-       <property name="orientation">
-        <enum>Qt::Orientation::Horizontal</enum>
-       </property>
-       <property name="sizeHint" stdset="0">
-        <size>
-         <width>40</width>
-         <height>20</height>
-        </size>
-       </property>
-      </spacer>
-     </item>
-     <item>
-      <widget class="QPushButton" name="btnAdd">
-       <property name="styleSheet">
-        <string>qproperty-styleClass: gold;</string>
-       </property>
-       <property name="text">
-        <string>+ Добавить</string>
-       </property>
-      </widget>
-     </item>
-    </layout>
-   </item>
-   <item>
-    <widget class="QFrame" name="frame">
-     <layout class="QHBoxLayout">
+    <widget class="QFrame" name="headerFrame">
+     <property name="maximumSize">
+      <size>
+       <width>16777215</width>
+       <height>70</height>
+      </size>
+     </property>
+     <layout class="QHBoxLayout" name="horizontalLayout">
       <item>
-       <widget class="QComboBox" name="projectFilter"/>
-      </item>
-      <item>
-       <widget class="QComboBox" name="taskFilter"/>
-      </item>
-      <item>
-       <widget class="QDateEdit" name="dateFrom"/>
-      </item>
-      <item>
-       <widget class="QDateEdit" name="dateTo"/>
-      </item>
-      <item>
-       <widget class="QCheckBox" name="checkAllUsers">
+       <widget class="QLabel" name="titleLabel">
         <property name="text">
-         <string>Все сотрудники</string>
+         <string>Переработки</string>
         </property>
        </widget>
       </item>
@@ -83,11 +266,144 @@
         </property>
        </spacer>
       </item>
+     </layout>
+    </widget>
+   </item>
+   <item>
+    <widget class="QFrame" name="filtersFrame">
+     <layout class="QHBoxLayout" name="horizontalLayout_2">
       <item>
-       <widget class="QPushButton" name="btnExportExcel">
-        <property name="styleSheet">
-         <string>qproperty-styleClass: red;</string>
+       <widget class="QComboBox" name="comboProject">
+        <property name="sizePolicy">
+         <sizepolicy hsizetype="Preferred" vsizetype="Minimum">
+          <horstretch>0</horstretch>
+          <verstretch>0</verstretch>
+         </sizepolicy>
         </property>
+        <property name="minimumSize">
+         <size>
+          <width>250</width>
+          <height>41</height>
+         </size>
+        </property>
+        <property name="maximumSize">
+         <size>
+          <width>16777215</width>
+          <height>41</height>
+         </size>
+        </property>
+        <property name="placeholderText">
+         <string>Выберите проект</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QComboBox" name="comboTask">
+        <property name="enabled">
+         <bool>false</bool>
+        </property>
+        <property name="sizePolicy">
+         <sizepolicy hsizetype="Preferred" vsizetype="Minimum">
+          <horstretch>0</horstretch>
+          <verstretch>0</verstretch>
+         </sizepolicy>
+        </property>
+        <property name="minimumSize">
+         <size>
+          <width>250</width>
+          <height>41</height>
+         </size>
+        </property>
+        <property name="maximumSize">
+         <size>
+          <width>16777215</width>
+          <height>41</height>
+         </size>
+        </property>
+        <property name="placeholderText">
+         <string>Выберите задачу</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QPushButton" name="btnSelectPeriod">
+        <property name="minimumSize">
+         <size>
+          <width>120</width>
+          <height>41</height>
+         </size>
+        </property>
+        <property name="maximumSize">
+         <size>
+          <width>16777215</width>
+          <height>41</height>
+         </size>
+        </property>
+        <property name="text">
+         <string>Выбрать период</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QPushButton" name="btnApplyFilters">
+        <property name="minimumSize">
+         <size>
+          <width>100</width>
+          <height>41</height>
+         </size>
+        </property>
+        <property name="maximumSize">
+         <size>
+          <width>16777215</width>
+          <height>41</height>
+         </size>
+        </property>
+        <property name="text">
+         <string>Применить</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QPushButton" name="btnClearFilters">
+        <property name="minimumSize">
+         <size>
+          <width>0</width>
+          <height>41</height>
+         </size>
+        </property>
+        <property name="maximumSize">
+         <size>
+          <width>16777215</width>
+          <height>41</height>
+         </size>
+        </property>
+        <property name="text">
+         <string>Сбросить</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <spacer name="horizontalSpacer_2">
+        <property name="orientation">
+         <enum>Qt::Orientation::Horizontal</enum>
+        </property>
+        <property name="sizeHint" stdset="0">
+         <size>
+          <width>40</width>
+          <height>20</height>
+         </size>
+        </property>
+       </spacer>
+      </item>
+      <item>
+       <widget class="QPushButton" name="btnAddOvertime">
+        <property name="text">
+         <string>+ Добавить переработку</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QPushButton" name="btnExport">
         <property name="text">
          <string>Экспорт в Excel</string>
         </property>
@@ -97,136 +413,92 @@
     </widget>
    </item>
    <item>
-    <widget class="QTableWidget" name="overtimeTable">
-     <property name="columnCount">
-      <number>8</number>
+    <widget class="QTabWidget" name="tabWidget">
+     <property name="currentIndex">
+      <number>0</number>
      </property>
-     <column>
-      <property name="text">
-       <string>Сотрудник</string>
-      </property>
-     </column>
-     <column>
-      <property name="text">
-       <string>Проект</string>
-      </property>
-     </column>
-     <column>
-      <property name="text">
-       <string>Задача</string>
-      </property>
-     </column>
-     <column>
-      <property name="text">
-       <string>Дата</string>
-      </property>
-     </column>
-     <column>
-      <property name="text">
-       <string>Начало</string>
-      </property>
-     </column>
-     <column>
-      <property name="text">
-       <string>Конец</string>
-      </property>
-     </column>
-     <column>
-      <property name="text">
-       <string>Часы</string>
-      </property>
-     </column>
-     <column>
-      <property name="text">
-       <string>Описание</string>
-      </property>
-     </column>
-    </widget>
-   </item>
-   <item>
-    <widget class="QFrame" name="frame">
-     <layout class="QGridLayout">
-      <item row="0" column="0">
-       <widget class="QLabel" name="label">
-        <property name="text">
-         <string>Дата</string>
-        </property>
-       </widget>
-      </item>
-      <item row="0" column="1">
-       <widget class="QDateEdit" name="editDate"/>
-      </item>
-      <item row="1" column="0">
-       <widget class="QLabel" name="label">
-        <property name="text">
-         <string>Начало</string>
-        </property>
-       </widget>
-      </item>
-      <item row="1" column="1">
-       <widget class="QTimeEdit" name="startTime"/>
-      </item>
-      <item row="1" column="2">
-       <widget class="QLabel" name="label">
-        <property name="text">
-         <string>Конец</string>
-        </property>
-       </widget>
-      </item>
-      <item row="1" column="3">
-       <widget class="QTimeEdit" name="endTime"/>
-      </item>
-      <item row="2" column="0">
-       <widget class="QLabel" name="label">
-        <property name="text">
-         <string>Проект</string>
-        </property>
-       </widget>
-      </item>
-      <item row="2" column="1">
-       <widget class="QComboBox" name="editProject"/>
-      </item>
-      <item row="2" column="2">
-       <widget class="QLabel" name="label">
-        <property name="text">
-         <string>Задача</string>
-        </property>
-       </widget>
-      </item>
-      <item row="2" column="3">
-       <widget class="QComboBox" name="editTask"/>
-      </item>
-      <item row="3" column="0">
-       <widget class="QLabel" name="label">
-        <property name="text">
-         <string>Описание</string>
-        </property>
-       </widget>
-      </item>
-      <item row="3" column="1" colspan="3">
-       <widget class="QLineEdit" name="editDescription"/>
-      </item>
-      <item row="4" column="2">
-       <widget class="QPushButton" name="btnSave">
-        <property name="styleSheet">
-         <string>qproperty-styleClass: gold;</string>
-        </property>
-        <property name="text">
-         <string>Сохранить</string>
-        </property>
-       </widget>
-      </item>
-      <item row="4" column="3">
-       <widget class="QPushButton" name="btnClear">
-        <property name="styleSheet">
-         <string>qproperty-styleClass: gray;</string>
-        </property>
-        <property name="text">
-         <string>Очистить</string>
-        </property>
-       </widget>
-      </item>
-     </layout>
+     <widget class="QWidget" name="tabMy">
+      <attribute name="title">
+       <string>Мои переработки</string>
+      </attribute>
+      <layout class="QVBoxLayout" name="verticalLayout_3">
+       <item>
+        <widget class="QScrollArea" name="scrollAreaMy">
+         <property name="widgetResizable">
+          <bool>true</bool>
+         </property>
+         <widget class="QWidget" name="scrollAreaWidgetContentsMy">
+          <property name="geometry">
+           <rect>
+            <x>0</x>
+            <y>0</y>
+            <width>1449</width>
+            <height>546</height>
+           </rect>
+          </property>
+          <layout class="QGridLayout" name="gridLayoutMy">
+           <property name="leftMargin">
+            <number>15</number>
+           </property>
+           <property name="topMargin">
+            <number>15</number>
+           </property>
+           <property name="rightMargin">
+            <number>15</number>
+           </property>
+           <property name="bottomMargin">
+            <number>15</number>
+           </property>
+           <property name="spacing">
+            <number>15</number>
+           </property>
+          </layout>
+         </widget>
+        </widget>
+       </item>
+      </layout>
+     </widget>
+     <widget class="QWidget" name="tabAll">
+      <attribute name="title">
+       <string>Все переработки</string>
+      </attribute>
+      <layout class="QVBoxLayout" name="verticalLayout_4">
+       <item>
+        <widget class="QScrollArea" name="scrollAreaAll">
+         <property name="widgetResizable">
+          <bool>true</bool>
+         </property>
+         <widget class="QWidget" name="scrollAreaWidgetContentsAll">
+          <property name="geometry">
+           <rect>
+            <x>0</x>
+            <y>0</y>
+            <width>1449</width>
+            <height>546</height>
+           </rect>
+          </property>
+          <layout class="QGridLayout" name="gridLayoutAll">
+           <property name="leftMargin">
+            <number>15</number>
+           </property>
+           <property name="topMargin">
+            <number>15</number>
+           </property>
+           <property name="rightMargin">
+            <number>15</number>
+           </property>
+           <property name="bottomMargin">
+            <number>15</number>
+           </property>
+           <property name="spacing">
+            <number>15</number>
+           </property>
+          </layout>
+         </widget>
+        </widget>
+       </item>
+      </layout>
+     </widget>
     </widget>
    </item>
   </layout>
