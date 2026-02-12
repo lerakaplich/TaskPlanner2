@@ -60,7 +60,6 @@ class OthersTasksPage(QWidget):
             QFrame {{
                 background-color: white;
                 border-radius: 10px;
-                border: 1px solid #E0E0E0;
             }}
         """)
 

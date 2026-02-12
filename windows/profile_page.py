@@ -11,7 +11,6 @@ from PyQt6.uic import loadUi
 try:
     from chart_widget import ChartWidget
 except ImportError:
-    # Если файл в той же папке
     import sys
 
     sys.path.append(os.path.dirname(__file__))
@@ -20,6 +19,13 @@ except ImportError:
     except ImportError:
         ChartWidget = None
         print("ВНИМАНИЕ: Не удалось импортировать ChartWidget")
+
+# Импортируем страницу выполненных проектов
+try:
+    from completed_projects_page import CompletedProjectsPage
+except ImportError:
+    CompletedProjectsPage = None
+    print("ВНИМАНИЕ: Не удалось импортировать CompletedProjectsPage")
 
 
 class ProfilePage(QWidget):
@@ -36,10 +42,16 @@ class ProfilePage(QWidget):
         # ID сотрудника (если передан)
         self.employee_id = employee_id
 
+        # Ссылка на родительское окно/виджет для навигации
+        self.main_window = parent
+
+        # Создаем страницу выполненных проектов (но не показываем)
+        self.completed_projects_page = None
+
         # Загружаем UI
         ui_path = os.path.join(os.path.dirname(__file__), "..", "ui")
         if not os.path.exists(ui_path):
-            ui_path = os.path.dirname(__file__)  # Если папки ui нет, ищем в текущей папке
+            ui_path = os.path.dirname(__file__)
 
         ui_file = os.path.join(ui_path, "profile_page.ui")
 
@@ -85,37 +97,28 @@ class ProfilePage(QWidget):
 
         try:
             if hasattr(self, 'frameChart'):
-                # Создаем виджет графика
                 self.chart_widget = ChartWidget()
-
-                # Устанавливаем фиксированную высоту для виджета графика
                 self.chart_widget.setMinimumHeight(350)
                 self.chart_widget.setMaximumHeight(400)
 
-                # Получаем layout frameChart
                 layout = self.frameChart.layout()
                 if layout is None:
                     layout = QVBoxLayout()
                     self.frameChart.setLayout(layout)
 
-                # Устанавливаем отступы в 0 для frameChart
                 layout.setContentsMargins(0, 0, 0, 0)
                 layout.setSpacing(0)
 
-                # Удаляем placeholder если есть
                 if hasattr(self, 'labelChartPlaceholder'):
                     self.labelChartPlaceholder.hide()
 
-                # Очищаем layout
                 while layout.count():
                     item = layout.takeAt(0)
                     if item.widget():
                         item.widget().deleteLater()
 
-                # Добавляем виджет графика
                 layout.addWidget(self.chart_widget)
 
-                # Подключаем сигналы
                 if hasattr(self.chart_widget, 'refresh_clicked'):
                     self.chart_widget.refresh_clicked.connect(self.on_chart_refresh)
                 if hasattr(self.chart_widget, 'export_clicked'):
@@ -143,7 +146,52 @@ class ProfilePage(QWidget):
         if hasattr(self, 'btnEditProfile'):
             self.btnEditProfile.clicked.connect(self.edit_profile_requested.emit)
         if hasattr(self, 'btnCompletedProjects'):
-            self.btnCompletedProjects.clicked.connect(self.show_completed_projects_requested.emit)
+            # Подключаем кнопку к методу открытия окна
+            self.btnCompletedProjects.clicked.connect(self.show_completed_projects)
+
+    # Добавьте этот метод в класс ProfilePage
+
+    def show_completed_projects(self):
+        """Показать окно выполненных проектов"""
+        if CompletedProjectsPage is None:
+            print("Ошибка: CompletedProjectsPage не импортирован")
+            return
+
+        try:
+            # Если окно уже создано, просто показываем его
+            if self.completed_projects_page is None:
+                # Создаем новое окно
+                self.completed_projects_page = CompletedProjectsPage(
+                    employee_id=self.employee_id
+                )
+                # Подключаем сигнал возврата
+                self.completed_projects_page.back_requested.connect(self.hide_completed_projects)
+
+            # Устанавливаем ID сотрудника
+            self.completed_projects_page.set_employee_id(self.employee_id)
+
+            # Обновляем данные
+            self.completed_projects_page.refresh_data()
+
+            # Показываем окно
+            self.completed_projects_page.show()
+            self.completed_projects_page.raise_()
+            self.completed_projects_page.activateWindow()
+
+            # Если это отдельное окно, можно скрыть текущее
+            # self.hide()
+
+        except Exception as e:
+            print(f"Ошибка при открытии окна выполненных проектов: {e}")
+            import traceback
+            traceback.print_exc()
+
+    def hide_completed_projects(self):
+        """Скрыть окно выполненных проектов"""
+        if self.completed_projects_page:
+            self.completed_projects_page.hide()
+            # Если скрывали текущее окно, показываем его снова
+            # self.show()
 
     def load_test_data(self):
         """Загрузка тестовых данных"""
@@ -212,34 +260,23 @@ class ProfilePage(QWidget):
             ]
 
             table = self.tableSkills
-
-            # === РЕШЕНИЕ ПРОБЛЕМЫ: Настройка растягивания ===
-            # Устанавливаем политику размера для растягивания по горизонтали
             table.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.MinimumExpanding)
-
-            # Растягиваем последнюю колонку на всё свободное место
             header = table.horizontalHeader()
             header.setSectionResizeMode(header.ResizeMode.Stretch)
-
-            # Устанавливаем минимальную ширину
             table.setMinimumWidth(400)
-
             table.setRowCount(len(skills_data))
             table.setColumnCount(3)
             table.setHorizontalHeaderLabels(['Тема', 'КПД по теме', 'Задач выполнено'])
 
             for row, skill in enumerate(skills_data):
-                # Тема
                 topic_item = QTableWidgetItem(skill['topic'])
                 topic_item.setTextAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
                 table.setItem(row, 0, topic_item)
 
-                # КПД
                 kpd = skill['kpd']
                 kpd_item = QTableWidgetItem(f"{kpd:.2f}")
                 kpd_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignVCenter)
 
-                # Раскрашиваем КПД
                 if kpd >= 2.0:
                     kpd_item.setForeground(QColor(0, 128, 0))
                 elif kpd >= 1.5:
@@ -251,17 +288,13 @@ class ProfilePage(QWidget):
 
                 table.setItem(row, 1, kpd_item)
 
-                # Количество задач
                 tasks_item = QTableWidgetItem(str(skill['tasks_completed']))
                 tasks_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignVCenter)
                 table.setItem(row, 2, tasks_item)
 
-            # После заполнения таблицы
-            table.resizeColumnsToContents()  # Подгоняем колонки по содержимому
-            # Но потом снова применяем растягивание для последней колонки
+            table.resizeColumnsToContents()
             header.setSectionResizeMode(2, header.ResizeMode.Stretch)
 
-            # Устанавливаем минимальную высоту таблицы
             total_height = table.horizontalHeader().height() + 2
             for row in range(table.rowCount()):
                 total_height += table.rowHeight(row)
@@ -270,15 +303,12 @@ class ProfilePage(QWidget):
         except Exception as e:
             print(f"Ошибка настройки таблицы навыков: {e}")
 
-
     def update_rating(self, kpd_value):
         """Обновление рейтинга сотрудника"""
         try:
             if hasattr(self, 'labelKPD'):
                 self.labelKPD.setText(f"КПД: {kpd_value:.2f}")
-
             self.update_rating_stars(kpd_value)
-
         except Exception as e:
             print(f"Ошибка обновления рейтинга: {e}")
 
@@ -354,12 +384,18 @@ class ProfilePage(QWidget):
         """Установка ID сотрудника"""
         self.employee_id = employee_id
         self.load_test_data()
+        # Обновляем ID в окне выполненных проектов, если оно создано
+        if self.completed_projects_page:
+            self.completed_projects_page.set_employee_id(employee_id)
 
     def refresh_data(self):
         """Обновление всех данных"""
         self.load_test_data()
         if hasattr(self, 'chart_widget'):
             self.chart_widget.refresh_data()
+        # Обновляем данные в окне выполненных проектов, если оно открыто
+        if self.completed_projects_page and self.completed_projects_page.isVisible():
+            self.completed_projects_page.refresh_data()
 
 
 if __name__ == "__main__":

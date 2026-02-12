@@ -164,6 +164,8 @@ class OthersTaskCard(QFrame):
                         background-color: #E8F5E9;
                         color: #2E7D32;
                         border: 1px solid #C8E6C9;
+                        
+                        
                     }
                     QPushButton:hover {
                         background-color: #C8E6C9;
