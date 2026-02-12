@@ -1,0 +1,1024 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>ProfilePage</class>
+ <widget class="QWidget" name="ProfilePage">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>1200</width>
+    <height>800</height>
+   </rect>
+  </property>
+  <property name="styleSheet">
+   <string notr="true">/* Основные цвета */
+QWidget#ProfilePage {
+    background-color: #F5F5F7;
+    font-family: 'Segoe UI', Arial;
+}
+
+/* Карточки */
+QFrame[objectName^="frameBasicInfo"],
+QFrame[objectName^="frameSkills"],
+QFrame[objectName^="frameProjects"],
+QFrame[objectName^="frameChart"] {
+    background-color: white;
+    border-radius: 12px;
+    border: 1px solid #E0E0E0;
+    padding: 20px;
+}
+
+QFrame[objectName^="skillCard"] {
+    background-color: white;
+    border-radius: 10px;
+    border: 1px solid #E0E0E0;
+    padding: 15px;
+}
+
+QFrame[objectName^="projectCard"] {
+    background-color: white;
+    border-radius: 10px;
+    border: 1px solid #E0E0E0;
+    padding: 15px;
+}
+
+QFrame[objectName^="projectCard"]:hover {
+    border: 2px solid #ccab6e;
+    background-color: #FFFDF6;
+}
+
+/* Заголовки */
+QLabel[objectName^="header"] {
+    font-size: 24px;
+    font-weight: bold;
+    color: #1B232A;
+    padding-bottom: 10px;
+    border-bottom: 2px solid #ccab6e;
+}
+
+QLabel[objectName^="subheader"] {
+    font-size: 18px;
+    font-weight: bold;
+    color: #1B232A;
+    padding-bottom: 5px;
+}
+
+/* Прогресс-бары */
+QProgressBar {
+    border: 1px solid #E0E0E0;
+    border-radius: 6px;
+    text-align: center;
+    background-color: #F5F5F7;
+    height: 12px;
+}
+
+QProgressBar::chunk {
+    background-color: #D22730;
+    border-radius: 6px;
+}
+
+QProgressBar.gold::chunk {
+    background-color: #ccab6e;
+}
+
+/* Звезды рейтинга */
+QLabel[objectName^="star"] {
+    font-size: 24px;
+}
+
+/* Статистика */
+QLabel[objectName^="statValue"] {
+    font-size: 32px;
+    font-weight: bold;
+    color: #D22730;
+}
+
+QLabel[objectName^="statLabel"] {
+    font-size: 14px;
+    color: #666;
+}
+
+/* Информационные поля */
+QLabel[objectName^="infoLabel"] {
+    font-size: 14px;
+    font-weight: bold;
+    color: #666;
+    padding: 2px 0px;
+}
+
+QLabel[objectName^="infoValue"] {
+    font-size: 16px;
+    color: #1B232A;
+    padding: 2px 0px;
+    padding-bottom: 8px;
+}
+
+/* Таблицы */
+QTableWidget {
+    background-color: white;
+    border: 1px solid #E0E0E0;
+    border-radius: 8px;
+    gridline-color: #E0E0E0;
+    selection-background-color: #FFF8E1;
+}
+
+QTableWidget::item {
+    padding: 8px;
+    border-bottom: 1px solid #F0F0F0;
+}
+
+QTableWidget::item:selected {
+    background-color: #FFF8E1;
+}
+
+QHeaderView::section {
+    background-color: #F5F5F7;
+    padding: 10px;
+    border: none;
+    border-bottom: 2px solid #E0E0E0;
+    font-weight: bold;
+    color: #1B232A;
+}
+
+/* Графики */
+QFrame[objectName^="chartFrame"] {
+    background-color: white;
+    border-radius: 10px;
+    border: 1px solid #E0E0E0;
+}</string>
+  </property>
+  <layout class="QVBoxLayout" name="verticalLayout">
+   <item>
+    <layout class="QHBoxLayout" name="horizontalLayout_2">
+     <item>
+      <widget class="QLabel" name="label_3">
+       <property name="styleSheet">
+        <string notr="true">QLabel {
+    font-size: 28px;
+    font-weight: bold;
+    color: #1B232A;
+}</string>
+       </property>
+       <property name="text">
+        <string>👤 Профиль сотрудника</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <spacer name="horizontalSpacer_3">
+       <property name="orientation">
+        <enum>Qt::Orientation::Horizontal</enum>
+       </property>
+       <property name="sizeHint" stdset="0">
+        <size>
+         <width>40</width>
+         <height>20</height>
+        </size>
+       </property>
+      </spacer>
+     </item>
+     <item>
+      <widget class="QPushButton" name="btnEditProfile">
+       <property name="minimumSize">
+        <size>
+         <width>0</width>
+         <height>35</height>
+        </size>
+       </property>
+       <property name="styleSheet">
+        <string notr="true">QPushButton {
+    background-color: #1B232A;
+    color: white;
+    border: none;
+    border-radius: 10px;
+    padding: 8px 20px;
+    font-size: 14px;
+    font-weight: bold;
+}
+QPushButton:hover {
+    background-color: #D9D9D6;
+    color: black;
+}
+QPushButton:pressed {
+    background-color: #B8B8B5;
+}</string>
+       </property>
+       <property name="text">
+        <string>✏️ Редактировать профиль</string>
+       </property>
+      </widget>
+     </item>
+    </layout>
+   </item>
+   <item>
+    <widget class="QScrollArea" name="scrollArea">
+     <property name="widgetResizable">
+      <bool>true</bool>
+     </property>
+     <widget class="QWidget" name="scrollAreaWidgetContents">
+      <property name="geometry">
+       <rect>
+        <x>0</x>
+        <y>0</y>
+        <width>1180</width>
+        <height>720</height>
+       </rect>
+      </property>
+      <layout class="QVBoxLayout" name="verticalLayout_2">
+       <item>
+        <widget class="QFrame" name="frameBasicInfo">
+         <property name="frameShape">
+          <enum>QFrame::Shape::StyledPanel</enum>
+         </property>
+         <property name="frameShadow">
+          <enum>QFrame::Shadow::Raised</enum>
+         </property>
+         <layout class="QHBoxLayout" name="horizontalLayout_3">
+          <item>
+           <widget class="QFrame" name="frameAvatar">
+            <property name="minimumSize">
+             <size>
+              <width>150</width>
+              <height>150</height>
+             </size>
+            </property>
+            <property name="maximumSize">
+             <size>
+              <width>150</width>
+              <height>150</height>
+             </size>
+            </property>
+            <property name="styleSheet">
+             <string notr="true">QFrame {
+    background-color: #E0E0E0;
+    border-radius: 75px;
+    border: 4px solid #ccab6e;
+}</string>
+            </property>
+            <layout class="QVBoxLayout" name="verticalLayout_3">
+             <item>
+              <spacer name="verticalSpacer">
+               <property name="orientation">
+                <enum>Qt::Orientation::Vertical</enum>
+               </property>
+               <property name="sizeHint" stdset="0">
+                <size>
+                 <width>20</width>
+                 <height>40</height>
+                </size>
+               </property>
+              </spacer>
+             </item>
+             <item>
+              <widget class="QLabel" name="labelAvatar">
+               <property name="styleSheet">
+                <string notr="true">QLabel {
+    font-size: 48px;
+    text-align: center;
+    color: #666;
+}</string>
+               </property>
+               <property name="text">
+                <string>👨‍💼</string>
+               </property>
+               <property name="alignment">
+                <set>Qt::AlignmentFlag::AlignCenter</set>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <spacer name="verticalSpacer_2">
+               <property name="orientation">
+                <enum>Qt::Orientation::Vertical</enum>
+               </property>
+               <property name="sizeHint" stdset="0">
+                <size>
+                 <width>20</width>
+                 <height>40</height>
+                </size>
+               </property>
+              </spacer>
+             </item>
+            </layout>
+           </widget>
+          </item>
+          <item>
+           <layout class="QGridLayout" name="gridLayout">
+            <item row="0" column="0" colspan="2">
+             <widget class="QLabel" name="labelFullName">
+              <property name="styleSheet">
+               <string notr="true">QLabel {
+    font-size: 32px;
+    font-weight: bold;
+    color: #1B232A;
+}</string>
+              </property>
+              <property name="text">
+               <string>Иванов Иван Иванович</string>
+              </property>
+             </widget>
+            </item>
+            <item row="1" column="0">
+             <widget class="QLabel" name="labelPosition">
+              <property name="styleSheet">
+               <string notr="true">QLabel {
+    font-size: 16px;
+    color: #1B232A;
+    padding: 2px 0px;
+    padding-bottom: 8px;
+}</string>
+              </property>
+              <property name="text">
+               <string>Старший инженер-программист</string>
+              </property>
+             </widget>
+            </item>
+            <item row="1" column="1">
+             <widget class="QLabel" name="labelDepartment">
+              <property name="styleSheet">
+               <string notr="true">QLabel {
+    font-size: 16px;
+    color: #1B232A;
+    padding: 2px 0px;
+    padding-bottom: 8px;
+}</string>
+              </property>
+              <property name="text">
+               <string>Отдел разработки ПО</string>
+              </property>
+             </widget>
+            </item>
+            <item row="2" column="0">
+             <widget class="QLabel" name="labelPhone">
+              <property name="styleSheet">
+               <string notr="true">QLabel {
+    font-size: 16px;
+    color: #1B232A;
+    padding: 2px 0px;
+    padding-bottom: 8px;
+}</string>
+              </property>
+              <property name="text">
+               <string>+7 (123) 456-78-90</string>
+              </property>
+             </widget>
+            </item>
+            <item row="2" column="1">
+             <widget class="QLabel" name="labelEmail">
+              <property name="styleSheet">
+               <string notr="true">QLabel {
+    font-size: 16px;
+    color: #1B232A;
+    padding: 2px 0px;
+    padding-bottom: 8px;
+}</string>
+              </property>
+              <property name="text">
+               <string>ivanov@maz.by</string>
+              </property>
+             </widget>
+            </item>
+            <item row="3" column="0" colspan="2">
+             <layout class="QHBoxLayout" name="horizontalLayout_4">
+              <item>
+               <widget class="QLabel" name="labelRating">
+                <property name="text">
+                 <string>Рейтинг эффективности:</string>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <widget class="QLabel" name="star1">
+                <property name="styleSheet">
+                 <string notr="true">QLabel {
+    font-size: 24px;
+    color: #FFD700;
+}</string>
+                </property>
+                <property name="text">
+                 <string>★</string>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <widget class="QLabel" name="star2">
+                <property name="styleSheet">
+                 <string notr="true">QLabel {
+    font-size: 24px;
+    color: #FFD700;
+}</string>
+                </property>
+                <property name="text">
+                 <string>★</string>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <widget class="QLabel" name="star3">
+                <property name="styleSheet">
+                 <string notr="true">QLabel {
+    font-size: 24px;
+    color: #FFD700;
+}</string>
+                </property>
+                <property name="text">
+                 <string>★</string>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <widget class="QLabel" name="star4">
+                <property name="styleSheet">
+                 <string notr="true">QLabel {
+    font-size: 24px;
+    color: #E0E0E0;
+}</string>
+                </property>
+                <property name="text">
+                 <string>★</string>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <widget class="QLabel" name="star5">
+                <property name="styleSheet">
+                 <string notr="true">QLabel {
+    font-size: 24px;
+    color: #E0E0E0;
+}</string>
+                </property>
+                <property name="text">
+                 <string>★</string>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <widget class="QLabel" name="labelKPD">
+                <property name="styleSheet">
+                 <string notr="true">QLabel {
+    font-size: 16px;
+    font-weight: bold;
+    color: #D22730;
+    margin-left: 10px;
+}</string>
+                </property>
+                <property name="text">
+                 <string>КПД: 0.75</string>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <spacer name="horizontalSpacer_4">
+                <property name="orientation">
+                 <enum>Qt::Orientation::Horizontal</enum>
+                </property>
+                <property name="sizeHint" stdset="0">
+                 <size>
+                  <width>40</width>
+                  <height>20</height>
+                 </size>
+                </property>
+               </spacer>
+              </item>
+             </layout>
+            </item>
+           </layout>
+          </item>
+          <item>
+           <layout class="QVBoxLayout" name="verticalLayout_4">
+            <item>
+             <widget class="QLabel" name="label_4">
+              <property name="styleSheet">
+               <string notr="true">QLabel {
+    font-size: 18px;
+    font-weight: bold;
+    color: #1B232A;
+    padding-bottom: 5px;
+}</string>
+              </property>
+              <property name="text">
+               <string>Статистика</string>
+              </property>
+              <property name="alignment">
+               <set>Qt::AlignmentFlag::AlignCenter</set>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QLabel" name="labelCompletedTasks">
+              <property name="styleSheet">
+               <string notr="true">QLabel {
+    font-size: 32px;
+    font-weight: bold;
+    color: #D22730;
+}</string>
+              </property>
+              <property name="text">
+               <string>156</string>
+              </property>
+              <property name="alignment">
+               <set>Qt::AlignmentFlag::AlignCenter</set>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QLabel" name="label_6">
+              <property name="styleSheet">
+               <string notr="true">QLabel {
+    font-size: 14px;
+    color: #666;
+}</string>
+              </property>
+              <property name="text">
+               <string>Задач выполнено</string>
+              </property>
+              <property name="alignment">
+               <set>Qt::AlignmentFlag::AlignCenter</set>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QLabel" name="labelActiveProjects">
+              <property name="styleSheet">
+               <string notr="true">QLabel {
+    font-size: 32px;
+    font-weight: bold;
+    color: #D22730;
+}</string>
+              </property>
+              <property name="text">
+               <string>5</string>
+              </property>
+              <property name="alignment">
+               <set>Qt::AlignmentFlag::AlignCenter</set>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QLabel" name="label_8">
+              <property name="styleSheet">
+               <string notr="true">QLabel {
+    font-size: 14px;
+    color: #666;
+}</string>
+              </property>
+              <property name="text">
+               <string>Активных проектов</string>
+              </property>
+              <property name="alignment">
+               <set>Qt::AlignmentFlag::AlignCenter</set>
+              </property>
+             </widget>
+            </item>
+           </layout>
+          </item>
+         </layout>
+        </widget>
+       </item>
+       <item>
+        <layout class="QHBoxLayout" name="horizontalLayout">
+         <item>
+          <layout class="QVBoxLayout" name="verticalLayout_6">
+           <item>
+            <widget class="QLabel" name="label_9">
+             <property name="styleSheet">
+              <string notr="true">QLabel {
+    font-size: 24px;
+    font-weight: bold;
+    color: #1B232A;
+    padding-bottom: 10px;
+    border-bottom: 2px solid #ccab6e;
+}</string>
+             </property>
+             <property name="text">
+              <string>📊 Анализ по темам</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QFrame" name="frameSkills">
+             <property name="frameShape">
+              <enum>QFrame::Shape::StyledPanel</enum>
+             </property>
+             <property name="frameShadow">
+              <enum>QFrame::Shadow::Raised</enum>
+             </property>
+             <layout class="QVBoxLayout" name="verticalLayout_5">
+              <item>
+               <widget class="QTableWidget" name="tableSkills">
+                <property name="columnCount">
+                 <number>3</number>
+                </property>
+                <row/>
+                <column>
+                 <property name="text">
+                  <string>Тема</string>
+                 </property>
+                </column>
+                <column>
+                 <property name="text">
+                  <string>КПД по теме</string>
+                 </property>
+                </column>
+                <column>
+                 <property name="text">
+                  <string>Задач выполнено</string>
+                 </property>
+                </column>
+               </widget>
+              </item>
+              <item>
+               <layout class="QHBoxLayout" name="horizontalLayout_6">
+                <item>
+                 <spacer name="horizontalSpacer_2">
+                  <property name="orientation">
+                   <enum>Qt::Orientation::Horizontal</enum>
+                  </property>
+                  <property name="sizeHint" stdset="0">
+                   <size>
+                    <width>40</width>
+                    <height>20</height>
+                   </size>
+                  </property>
+                 </spacer>
+                </item>
+                <item>
+                 <widget class="QPushButton" name="btnShowAllSkills">
+                  <property name="styleSheet">
+                   <string notr="true">QPushButton {
+    background-color: #1B232A;
+    color: white;
+    border: none;
+    border-radius: 10px;
+    padding: 8px 12px;
+    font-size: 13px;
+    font-weight: bold;
+}
+QPushButton:hover {
+    background-color: #D9D9D6;
+    color: black;
+}
+QPushButton:pressed {
+    background-color: #B8B8B5;
+}</string>
+                  </property>
+                  <property name="text">
+                   <string>Показать все навыки</string>
+                  </property>
+                 </widget>
+                </item>
+               </layout>
+              </item>
+             </layout>
+            </widget>
+           </item>
+          </layout>
+         </item>
+         <item>
+          <layout class="QVBoxLayout" name="verticalLayout_7">
+           <item>
+            <widget class="QLabel" name="label_10">
+             <property name="styleSheet">
+              <string notr="true">QLabel {
+    font-size: 24px;
+    font-weight: bold;
+    color: #1B232A;
+    padding-bottom: 10px;
+    border-bottom: 2px solid #ccab6e;
+}</string>
+             </property>
+             <property name="text">
+              <string>🚀 Активные проекты</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QFrame" name="frameProjects">
+             <property name="frameShape">
+              <enum>QFrame::Shape::StyledPanel</enum>
+             </property>
+             <property name="frameShadow">
+              <enum>QFrame::Shadow::Raised</enum>
+             </property>
+             <layout class="QVBoxLayout" name="verticalLayout_8">
+              <item>
+               <widget class="QFrame" name="project1">
+                <layout class="QVBoxLayout" name="verticalLayout_9">
+                 <item>
+                  <layout class="QHBoxLayout" name="horizontalLayout_5">
+                   <item>
+                    <widget class="QLabel" name="labelProject1">
+                     <property name="styleSheet">
+                      <string notr="true">QLabel {
+    font-size: 16px;
+    font-weight: bold;
+    color: #1B232A;
+}</string>
+                     </property>
+                     <property name="text">
+                      <string>Разработка новой кабины</string>
+                     </property>
+                    </widget>
+                   </item>
+                   <item>
+                    <spacer name="horizontalSpacer_5">
+                     <property name="orientation">
+                      <enum>Qt::Orientation::Horizontal</enum>
+                     </property>
+                     <property name="sizeHint" stdset="0">
+                      <size>
+                       <width>40</width>
+                       <height>20</height>
+                      </size>
+                     </property>
+                    </spacer>
+                   </item>
+                   <item>
+                    <widget class="QLabel" name="labelProgress1">
+                     <property name="styleSheet">
+                      <string notr="true">QLabel {
+    font-size: 14px;
+    font-weight: bold;
+    color: #D22730;
+}</string>
+                     </property>
+                     <property name="text">
+                      <string>75%</string>
+                     </property>
+                    </widget>
+                   </item>
+                  </layout>
+                 </item>
+                 <item>
+                  <widget class="QProgressBar" name="progressBar1">
+                   <property name="value">
+                    <number>75</number>
+                   </property>
+                  </widget>
+                 </item>
+                 <item>
+                  <widget class="QLabel" name="labelTasks1">
+                   <property name="styleSheet">
+                    <string notr="true">QLabel {
+    font-size: 12px;
+    color: #666;
+}</string>
+                   </property>
+                   <property name="text">
+                    <string>Задачи: 12/16 выполнено</string>
+                   </property>
+                  </widget>
+                 </item>
+                </layout>
+               </widget>
+              </item>
+              <item>
+               <widget class="QFrame" name="project2">
+                <layout class="QVBoxLayout" name="verticalLayout_10">
+                 <item>
+                  <layout class="QHBoxLayout" name="horizontalLayout_7">
+                   <item>
+                    <widget class="QLabel" name="labelProject2">
+                     <property name="styleSheet">
+                      <string notr="true">QLabel {
+    font-size: 16px;
+    font-weight: bold;
+    color: #1B232A;
+}</string>
+                     </property>
+                     <property name="text">
+                      <string>Модернизация конвейера</string>
+                     </property>
+                    </widget>
+                   </item>
+                   <item>
+                    <spacer name="horizontalSpacer_6">
+                     <property name="orientation">
+                      <enum>Qt::Orientation::Horizontal</enum>
+                     </property>
+                     <property name="sizeHint" stdset="0">
+                      <size>
+                       <width>40</width>
+                       <height>20</height>
+                      </size>
+                     </property>
+                    </spacer>
+                   </item>
+                   <item>
+                    <widget class="QLabel" name="labelProgress2">
+                     <property name="styleSheet">
+                      <string notr="true">QLabel {
+    font-size: 14px;
+    font-weight: bold;
+    color: #D22730;
+}</string>
+                     </property>
+                     <property name="text">
+                      <string>90%</string>
+                     </property>
+                    </widget>
+                   </item>
+                  </layout>
+                 </item>
+                 <item>
+                  <widget class="QProgressBar" name="progressBar2">
+                   <property name="value">
+                    <number>90</number>
+                   </property>
+                  </widget>
+                 </item>
+                 <item>
+                  <widget class="QLabel" name="labelTasks2">
+                   <property name="styleSheet">
+                    <string notr="true">QLabel {
+    font-size: 12px;
+    color: #666;
+}</string>
+                   </property>
+                   <property name="text">
+                    <string>Задачи: 9/10 выполнено</string>
+                   </property>
+                  </widget>
+                 </item>
+                </layout>
+               </widget>
+              </item>
+              <item>
+               <widget class="QFrame" name="project3">
+                <layout class="QVBoxLayout" name="verticalLayout_11">
+                 <item>
+                  <layout class="QHBoxLayout" name="horizontalLayout_8">
+                   <item>
+                    <widget class="QLabel" name="labelProject3">
+                     <property name="styleSheet">
+                      <string notr="true">QLabel {
+    font-size: 16px;
+    font-weight: bold;
+    color: #1B232A;
+}</string>
+                     </property>
+                     <property name="text">
+                      <string>Внедрение ERP-системы</string>
+                     </property>
+                    </widget>
+                   </item>
+                   <item>
+                    <spacer name="horizontalSpacer_7">
+                     <property name="orientation">
+                      <enum>Qt::Orientation::Horizontal</enum>
+                     </property>
+                     <property name="sizeHint" stdset="0">
+                      <size>
+                       <width>40</width>
+                       <height>20</height>
+                      </size>
+                     </property>
+                    </spacer>
+                   </item>
+                   <item>
+                    <widget class="QLabel" name="labelProgress3">
+                     <property name="styleSheet">
+                      <string notr="true">QLabel {
+    font-size: 14px;
+    font-weight: bold;
+    color: #D22730;
+}</string>
+                     </property>
+                     <property name="text">
+                      <string>45%</string>
+                     </property>
+                    </widget>
+                   </item>
+                  </layout>
+                 </item>
+                 <item>
+                  <widget class="QProgressBar" name="progressBar3">
+                   <property name="value">
+                    <number>45</number>
+                   </property>
+                  </widget>
+                 </item>
+                 <item>
+                  <widget class="QLabel" name="labelTasks3">
+                   <property name="styleSheet">
+                    <string notr="true">QLabel {
+    font-size: 12px;
+    color: #666;
+}</string>
+                   </property>
+                   <property name="text">
+                    <string>Задачи: 18/40 выполнено</string>
+                   </property>
+                  </widget>
+                 </item>
+                </layout>
+               </widget>
+              </item>
+              <item>
+               <layout class="QHBoxLayout" name="horizontalLayout_9">
+                <item>
+                 <spacer name="horizontalSpacer_8">
+                  <property name="orientation">
+                   <enum>Qt::Orientation::Horizontal</enum>
+                  </property>
+                  <property name="sizeHint" stdset="0">
+                   <size>
+                    <width>40</width>
+                    <height>20</height>
+                   </size>
+                  </property>
+                 </spacer>
+                </item>
+                <item>
+                 <widget class="QPushButton" name="btnCompletedProjects">
+                  <property name="styleSheet">
+                   <string notr="true">QPushButton {
+    background-color: #D22730;
+    color: white;
+    border-radius: 10px;
+    font-weight: bold;
+    font-size: 14px;
+    border: none;
+    padding: 10px 20px;
+}
+QPushButton:hover {
+    background-color: #862633;
+}
+QPushButton:pressed {
+    background-color: #6a1e29;
+}</string>
+                  </property>
+                  <property name="text">
+                   <string>Показать выполненные проекты</string>
+                  </property>
+                 </widget>
+                </item>
+               </layout>
+              </item>
+             </layout>
+            </widget>
+           </item>
+          </layout>
+         </item>
+        </layout>
+       </item>
+       <item>
+        <widget class="QLabel" name="label_11">
+         <property name="styleSheet">
+          <string notr="true">QLabel {
+    font-size: 24px;
+    font-weight: bold;
+    color: #1B232A;
+    padding-bottom: 10px;
+    border-bottom: 2px solid #ccab6e;
+}</string>
+         </property>
+         <property name="text">
+          <string>📈 График эффективности по темам</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QFrame" name="frameChart">
+         <property name="frameShape">
+          <enum>QFrame::Shape::StyledPanel</enum>
+         </property>
+         <property name="frameShadow">
+          <enum>QFrame::Shadow::Raised</enum>
+         </property>
+         <property name="minimumSize">
+          <size>
+           <width>0</width>
+           <height>200</height>
+          </size>
+         </property>
+         <layout class="QVBoxLayout" name="verticalLayout_12">
+          <item>
+           <widget class="QLabel" name="labelChartPlaceholder">
+            <property name="styleSheet">
+             <string notr="true">QLabel {
+    font-size: 16px;
+    color: #666;
+    text-align: center;
+}</string>
+            </property>
+            <property name="text">
+             <string>[Здесь будет график эффективности по темам]</string>
+            </property>
+            <property name="alignment">
+             <set>Qt::AlignmentFlag::AlignCenter</set>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </widget>
+       </item>
+      </layout>
+     </widget>
+    </widget>
+   </item>
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>

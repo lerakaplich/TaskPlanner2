@@ -6,8 +6,11 @@ from PyQt6.uic import loadUi
 from my_tasks_page import MyTasksPage  # Импортируем класс MyTasksPage
 from others_tasks_page import OthersTasksPage
 from overtime_page import OvertimePage  # <-- Добавьте эту строку
+from windows.profile_page import ProfilePage
+
 
 class MainWindow(QMainWindow):
+
     def __init__(self):
         super().__init__()
 
@@ -25,6 +28,7 @@ class MainWindow(QMainWindow):
 
         # Инициализация
         self.setup_initial_state()
+        self.showMaximized()
 
     def init_pages(self):
         """Инициализация всех страниц"""
@@ -37,8 +41,8 @@ class MainWindow(QMainWindow):
             self.contentStack.insertWidget(index, self.my_tasks_page_instance)
             self.myTasksPage = self.my_tasks_page_instance
 
-        # Страница Чужие задачи - ДОБАВЛЕНО
-        self.other_tasks_page_instance = OthersTasksPage()  # Используем правильное имя класса
+        # Страница Чужие задачи
+        self.other_tasks_page_instance = OthersTasksPage()
         other_tasks_page = self.findChild(QWidget, "otherTasksPage")
         if other_tasks_page:
             index = self.contentStack.indexOf(other_tasks_page)
@@ -46,10 +50,9 @@ class MainWindow(QMainWindow):
             self.contentStack.insertWidget(index, self.other_tasks_page_instance)
             self.otherTasksPage = self.other_tasks_page_instance
         else:
-            # Если нет готовой страницы в UI, добавляем в конец
             self.contentStack.addWidget(self.other_tasks_page_instance)
             self.otherTasksPage = self.other_tasks_page_instance
-        # === ДОБАВЬТЕ ЭТОТ БЛОК ===
+
         # Страница Переработки
         self.overtime_page_instance = OvertimePage()
         overtime_old_page = self.findChild(QWidget, "overtimePage")
@@ -62,9 +65,13 @@ class MainWindow(QMainWindow):
             self.contentStack.addWidget(self.overtime_page_instance)
             self.overtimePage = self.overtime_page_instance
 
+        # === НОВАЯ СТРАНИЦА ПРОФИЛЯ (добавляем в конец, не трогаем существующие) ===
+        self.profile_page_instance = ProfilePage()  # Можно передать employee_id, если нужно
+        self.contentStack.addWidget(self.profile_page_instance)
+
     def connect_signals(self):
         """Подключение всех сигналов к слотам"""
-        # Навигационные кнопки
+        # Навигационные кнопки (остаются без изменений)
         self.leftPanel.btnMain.clicked.connect(lambda: self.switch_page(0))
         self.leftPanel.btnMyTasks.clicked.connect(lambda: self.switch_page(1))
         self.leftPanel.btnOtherTasks.clicked.connect(lambda: self.switch_page(2))
@@ -87,12 +94,11 @@ class MainWindow(QMainWindow):
         # Уведомления
         self.btnNotifications.clicked.connect(self.show_notifications)
 
-        # Профиль
+        # Профиль — теперь показывает отдельную страницу профиля
         self.btnProfile.clicked.connect(self.show_profile)
 
     def switch_page(self, page_index):
-        """Переключение между страницами"""
-        # Определяем индексы страниц
+        """Переключение между основными страницами (0–7)"""
         page_map = {
             'main': 0,
             'my_tasks': 1,
@@ -104,7 +110,6 @@ class MainWindow(QMainWindow):
             'settings': 7
         }
 
-        # Если передан строковый идентификатор
         if isinstance(page_index, str):
             page_index = page_map.get(page_index, 0)
 
@@ -114,12 +119,14 @@ class MainWindow(QMainWindow):
         for i, btn in enumerate(self.nav_buttons):
             btn.setChecked(i == page_index)
 
+    def show_profile(self):
+        """Показать страницу профиля (не трогает навигационные кнопки)"""
+        self.contentStack.setCurrentWidget(self.profile_page_instance)
+
+    # Остальной код полностью без изменений
     def setup_initial_state(self):
         """Начальная настройка интерфейса"""
-        # Устанавливаем первую страницу активной
         self.contentStack.setCurrentIndex(0)
-
-        # Создаем группу для навигационных кнопок
         self.nav_buttons = [
             self.leftPanel.btnMain,
             self.leftPanel.btnMyTasks,
@@ -130,20 +137,16 @@ class MainWindow(QMainWindow):
             self.leftPanel.btnOvertime,
             self.leftPanel.btnSettings
         ]
-
-        # Сохраняем оригинальные тексты кнопок
         self.button_texts = {
-            self.leftPanel.btnMain: "🚚  Проекты",
-            self.leftPanel.btnMyTasks: "✅  Мои задачи",
-            self.leftPanel.btnOtherTasks: "👥  Чужие задачи",
-            self.leftPanel.btnGantt: "📈  Диаграмма Ганта",
-            self.leftPanel.btnAnalytics: "📊  Аналитика/Навыки",
-            self.leftPanel.btnChat: "💬  Чат",
-            self.leftPanel.btnOvertime: "♻️  Переработки",
-            self.leftPanel.btnSettings: "⚙️  Настройки"
+            self.leftPanel.btnMain: "🚚 Проекты",
+            self.leftPanel.btnMyTasks: "✅ Мои задачи",
+            self.leftPanel.btnOtherTasks: "👥 Чужие задачи",
+            self.leftPanel.btnGantt: "📈 Диаграмма Ганта",
+            self.leftPanel.btnAnalytics: "📊 Аналитика/Навыки",
+            self.leftPanel.btnChat: "💬 Чат",
+            self.leftPanel.btnOvertime: "♻️ Переработки",
+            self.leftPanel.btnSettings: "⚙️ Настройки"
         }
-
-        # Сохраняем оригинальные иконки
         self.button_icons = {
             self.leftPanel.btnMain: "🚚",
             self.leftPanel.btnMyTasks: "✅",
@@ -154,10 +157,7 @@ class MainWindow(QMainWindow):
             self.leftPanel.btnOvertime: "♻️",
             self.leftPanel.btnSettings: "⚙️"
         }
-
-        # Настройка адаптивности карточек
         self.setup_responsive_cards()
-
 
     def init_my_tasks_page(self):
         """Инициализация страницы Мои задачи"""
@@ -372,10 +372,6 @@ class MainWindow(QMainWindow):
         """Показать уведомления"""
         print("Показать уведомления...")
 
-    def show_profile(self):
-        """Показать профиль"""
-        print("Показать профиль...")
-
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
@@ -384,6 +380,6 @@ if __name__ == "__main__":
     app.setStyle("Fusion")
 
     window = MainWindow()
-    window.show()
+          # ← Вот это изменение
 
     sys.exit(app.exec())

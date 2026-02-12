@@ -7,19 +7,13 @@
     <x>0</x>
     <y>0</y>
     <width>520</width>
-    <height>408</height>
+    <height>450</height>
    </rect>
   </property>
   <property name="minimumSize">
    <size>
     <width>520</width>
     <height>0</height>
-   </size>
-  </property>
-  <property name="maximumSize">
-   <size>
-    <width>16777215</width>
-    <height>408</height>
    </size>
   </property>
   <property name="windowTitle">
@@ -30,51 +24,122 @@
 QDialog {
     background-color: #FFFFFF;
 }
-QLabel {
-    color: #333333;
-    font-size: 13px;
-}
-QLabel#titleLabel {
-    font-size: 22px;
-    font-weight: bold;
-    color: #000000;
-}
-QComboBox, QDateEdit, QTimeEdit, QTextEdit {
-    background-color: #FFFFFF;
-    color: #333333;
+
+/* Все поля ввода — строго 32 px */
+QComboBox, QDateEdit, QTimeEdit {
+    min-height: 32px;
+    max-height: 32px;
+    height: 32px;
+    padding: 2px 8px 2px 8px;
+    border: 1px solid #E0E0E0;
     border-radius: 8px;
+    background-color: #FFFFFF;
+    font-size: 14px;
+}
+
+QCalendarWidget QWidget {
+    color: black;
+    background-color: white;
+}
+
+QCalendarWidget QAbstractItemView {
+    color: black;
+    selection-background-color: #ccab6e;   /* ваш золотистый для дней */
+    selection-color: white;
+}
+
+/* Кнопки навигации (предыдущий/следующий месяц) */
+QCalendarWidget QToolButton {
+    color: black;
+    font-weight: bold;
+    background: transparent;
+    border: none;
+    padding: 4px;
+    min-width: 20px;
+}
+QCalendarWidget QToolButton:hover {
+    background-color: #e6e6e6;
+    border-radius: 4px;
+}
+QCalendarWidget QToolButton:pressed {
+    background-color: #ccab6e;
+    color: white;
+}
+
+/* Заголовок (дни недели) */
+QCalendarWidget QHeaderView::section {
+    color: black;
+    background-color: #f2f2f2;
+    font-weight: bold;
     padding: 6px;
+}
+
+/* Основное: меню выбора месяца и года — инверсия при наведении/выборе */
+QCalendarWidget QMenu {
+    background-color: white;
+    color: black;
     border: 1px solid #E0E0E0;
 }
-QComboBox::drop-down {
-    border: none;
+
+QCalendarWidget QMenu::item {
+    padding: 8px 24px;            /* удобный отступ */
+    margin: 2px;
 }
+
+QCalendarWidget QMenu::item:selected {
+    background-color: black;      /* инверсный фон */
+    color: white;                 /* инверсный текст */
+    border-radius: 4px;
+}
+
+/* Дополнительно — для года тоже инверсия */
+QCalendarWidget #qt_calendar_yearbutton,
+QCalendarWidget #qt_calendar_monthbutton {
+    color: black;
+    font-weight: bold;
+}
+QCalendarWidget #qt_calendar_yearbutton:hover,
+QCalendarWidget #qt_calendar_monthbutton:hover {
+    background-color: #e6e6e6;
+}
+
+/* QTimeEdit — стрелки вверх/вниз видимы */
+QTimeEdit::up-button {
+    width: 18px;
+    height: 19px;
+    padding: 0px;
+}
+QTimeEdit::down-button {
+    width: 18px;
+    height: 16px;
+    padding: 0px;
+}
+QTimeEdit::up-arrow, QTimeEdit::down-arrow {
+    width: 10px;
+    height: 10px;
+}
+
+/* Текстовое поле */
 QTextEdit {
     min-height: 80px;
+    border: 1px solid #E0E0E0;
+    border-radius: 8px;
+    padding: 8px;
 }
+
+/* Кнопка Сохранить */
 QPushButton#btnSave {
+    min-height: 32px;
+    max-height: 32px;
     background-color: #D22730;
     color: white;
     border-radius: 10px;
     font-weight: bold;
-    font-size: 16px;
-    padding: 10px;
+    font-size: 14px;
+    padding: 4px 16px;
 }
 QPushButton#btnSave:hover {
     background-color: #862633;
-}
-QPushButton#btnCancel {
-    background-color: #FFFFFF;
-    border: 1px solid #CCAB6E;
-    color: #CCAB6E;
-    border-radius: 10px;
-    font-weight: bold;
-    font-size: 16px;
-    padding: 10px;
-}
-QPushButton#btnCancel:hover {
-    background-color: #CCAB6E;
-    color: black;
 }
    </string>
   </property>
@@ -91,14 +156,11 @@ QPushButton#btnCancel:hover {
    <property name="rightMargin">
     <number>20</number>
    </property>
+   <property name="bottomMargin">
+    <number>20</number>
+   </property>
    <item>
     <widget class="QLabel" name="titleLabel">
-     <property name="maximumSize">
-      <size>
-       <width>16777215</width>
-       <height>40</height>
-      </size>
-     </property>
      <property name="text">
       <string>Добавление переработки</string>
      </property>
@@ -119,11 +181,8 @@ QPushButton#btnCancel:hover {
    </item>
    <item>
     <layout class="QHBoxLayout">
-     <property name="minimumHeight" stdset="0">
-      <number>32</number>
-     </property>
-     <property name="maximumHeight" stdset="0">
-      <number>32</number>
+     <property name="spacing">
+      <number>10</number>
      </property>
      <item>
       <widget class="QTimeEdit" name="timeStart"/>
@@ -135,12 +194,6 @@ QPushButton#btnCancel:hover {
    </item>
    <item>
     <widget class="QTextEdit" name="textDescription">
-     <property name="maximumSize">
-      <size>
-       <width>16777215</width>
-       <height>100</height>
-      </size>
-     </property>
      <property name="placeholderText">
       <string>Описание переработки (если нет проекта)</string>
      </property>
