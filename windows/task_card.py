@@ -41,7 +41,6 @@ class TaskCard(QFrame):
         # Обновляем стиль карточки
         self.update_card_style()
 
-        # ... (остальной код без изменений до setup_ui)
 
     def setup_ui(self):
         """Настройка UI карточки на основе данных"""

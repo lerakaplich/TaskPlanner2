@@ -1,4 +1,3 @@
-
 import os
 import sys
 from PyQt6.QtWidgets import (QApplication, QWidget, QVBoxLayout, QHBoxLayout,
@@ -7,6 +6,20 @@ from PyQt6.QtWidgets import (QApplication, QWidget, QVBoxLayout, QHBoxLayout,
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QColor
 from PyQt6.uic import loadUi
+
+# Импортируем виджет графика
+try:
+    from chart_widget import ChartWidget
+except ImportError:
+    # Если файл в той же папке
+    import sys
+
+    sys.path.append(os.path.dirname(__file__))
+    try:
+        from chart_widget import ChartWidget
+    except ImportError:
+        ChartWidget = None
+        print("ВНИМАНИЕ: Не удалось импортировать ChartWidget")
 
 
 class ProfilePage(QWidget):
@@ -24,14 +37,25 @@ class ProfilePage(QWidget):
         self.employee_id = employee_id
 
         # Загружаем UI
-        self.ui_path = os.path.join(os.path.dirname(__file__), "..", "ui")
-        ui_file = os.path.join(self.ui_path, "profile_page.ui")
+        ui_path = os.path.join(os.path.dirname(__file__), "..", "ui")
+        if not os.path.exists(ui_path):
+            ui_path = os.path.dirname(__file__)  # Если папки ui нет, ищем в текущей папке
+
+        ui_file = os.path.join(ui_path, "profile_page.ui")
 
         if os.path.exists(ui_file):
             loadUi(ui_file, self)
         else:
-            # Создаем простой интерфейс если файл не найден
             self.setup_basic_ui()
+
+        # Устанавливаем политику размера для scrollArea
+        if hasattr(self, 'scrollArea'):
+            self.scrollArea.setWidgetResizable(True)
+            self.scrollArea.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+            self.scrollArea.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+
+        # Инициализация графика
+        self.init_chart_widget()
 
         # Инициализация
         self.connect_signals()
@@ -53,12 +77,71 @@ class ProfilePage(QWidget):
         layout.addWidget(QLabel("Профиль сотрудника (UI файл не найден)"))
         self.setLayout(layout)
 
+    def init_chart_widget(self):
+        """Инициализация виджета графика"""
+        if ChartWidget is None:
+            print("ChartWidget не доступен, пропускаем инициализацию")
+            return
+
+        try:
+            if hasattr(self, 'frameChart'):
+                # Создаем виджет графика
+                self.chart_widget = ChartWidget()
+
+                # Устанавливаем фиксированную высоту для виджета графика
+                self.chart_widget.setMinimumHeight(350)
+                self.chart_widget.setMaximumHeight(400)
+
+                # Получаем layout frameChart
+                layout = self.frameChart.layout()
+                if layout is None:
+                    layout = QVBoxLayout()
+                    self.frameChart.setLayout(layout)
+
+                # Устанавливаем отступы в 0 для frameChart
+                layout.setContentsMargins(0, 0, 0, 0)
+                layout.setSpacing(0)
+
+                # Удаляем placeholder если есть
+                if hasattr(self, 'labelChartPlaceholder'):
+                    self.labelChartPlaceholder.hide()
+
+                # Очищаем layout
+                while layout.count():
+                    item = layout.takeAt(0)
+                    if item.widget():
+                        item.widget().deleteLater()
+
+                # Добавляем виджет графика
+                layout.addWidget(self.chart_widget)
+
+                # Подключаем сигналы
+                if hasattr(self.chart_widget, 'refresh_clicked'):
+                    self.chart_widget.refresh_clicked.connect(self.on_chart_refresh)
+                if hasattr(self.chart_widget, 'export_clicked'):
+                    self.chart_widget.export_clicked.connect(self.on_chart_export)
+
+        except Exception as e:
+            print(f"Ошибка инициализации графика: {e}")
+            import traceback
+            traceback.print_exc()
+
+    def on_chart_refresh(self):
+        """Обработчик обновления графика"""
+        print("График обновлен")
+        if hasattr(self, 'chart_widget'):
+            self.chart_widget.refresh_data()
+
+    def on_chart_export(self):
+        """Обработчик экспорта графика"""
+        print("Экспорт графика")
+        if hasattr(self, 'chart_widget'):
+            self.chart_widget.export_chart()
+
     def connect_signals(self):
         """Подключение сигналов"""
         if hasattr(self, 'btnEditProfile'):
             self.btnEditProfile.clicked.connect(self.edit_profile_requested.emit)
-        if hasattr(self, 'btnShowAllSkills'):
-            self.btnShowAllSkills.clicked.connect(self.show_all_skills_requested.emit)
         if hasattr(self, 'btnCompletedProjects'):
             self.btnCompletedProjects.clicked.connect(self.show_completed_projects_requested.emit)
 
@@ -77,10 +160,10 @@ class ProfilePage(QWidget):
                 'email': 'ivanov@maz.by',
                 'completed_tasks': 156,
                 'active_projects': 5,
-                'rating': 0.75  # Средний КПД
+                'rating': 0.75
             }
 
-            # Устанавливаем данные в UI если элементы существуют
+            # Устанавливаем данные в UI
             if hasattr(self, 'labelFullName'):
                 self.labelFullName.setText(
                     f"{employee_data['last_name']} {employee_data['first_name']} {employee_data['middle_name']}"
@@ -101,11 +184,6 @@ class ProfilePage(QWidget):
             # Обновляем рейтинг
             self.update_rating(employee_data['rating'])
 
-            # Устанавливаем аватар (первая буква фамилии)
-            if hasattr(self, 'labelAvatar'):
-                first_letter = employee_data['last_name'][0].upper()
-                self.labelAvatar.setText(f"{first_letter}")
-
             # Настраиваем таблицу навыков
             if hasattr(self, 'tableSkills'):
                 self.setup_skills_table()
@@ -118,9 +196,8 @@ class ProfilePage(QWidget):
             print(f"Ошибка загрузки тестовых данных: {e}")
 
     def setup_skills_table(self):
-        """Настройка таблицы с навыками (тестовые данные)"""
+        """Настройка таблицы с навыками"""
         try:
-            # Тестовые данные по навыкам
             skills_data = [
                 {'topic': 'Программирование', 'kpd': 0.8, 'tasks_completed': 45},
                 {'topic': 'Дизайн', 'kpd': 0.2, 'tasks_completed': 18},
@@ -129,17 +206,28 @@ class ProfilePage(QWidget):
                 {'topic': 'Документация', 'kpd': 0.9, 'tasks_completed': 12},
                 {'topic': 'Координация', 'kpd': 0.3, 'tasks_completed': 15},
                 {'topic': 'Оптимизация', 'kpd': 0.7, 'tasks_completed': 8},
-                {'topic': 'Документация', 'kpd': 0.9, 'tasks_completed': 12},
-                {'topic': 'Координация', 'kpd': 0.3, 'tasks_completed': 15},
-                {'topic': 'Оптимизация', 'kpd': 0.7, 'tasks_completed': 8},
+                {'topic': 'Управление', 'kpd': 0.6, 'tasks_completed': 20},
+                {'topic': 'Исследование', 'kpd': 0.4, 'tasks_completed': 10},
+                {'topic': 'Внедрение', 'kpd': 0.55, 'tasks_completed': 14},
             ]
 
             table = self.tableSkills
+
+            # === РЕШЕНИЕ ПРОБЛЕМЫ: Настройка растягивания ===
+            # Устанавливаем политику размера для растягивания по горизонтали
+            table.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.MinimumExpanding)
+
+            # Растягиваем последнюю колонку на всё свободное место
+            header = table.horizontalHeader()
+            header.setSectionResizeMode(header.ResizeMode.Stretch)
+
+            # Устанавливаем минимальную ширину
+            table.setMinimumWidth(400)
+
             table.setRowCount(len(skills_data))
             table.setColumnCount(3)
             table.setHorizontalHeaderLabels(['Тема', 'КПД по теме', 'Задач выполнено'])
 
-            # Заполняем данными
             for row, skill in enumerate(skills_data):
                 # Тема
                 topic_item = QTableWidgetItem(skill['topic'])
@@ -151,15 +239,15 @@ class ProfilePage(QWidget):
                 kpd_item = QTableWidgetItem(f"{kpd:.2f}")
                 kpd_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignVCenter)
 
-                # Раскрашиваем КПД в зависимости от значения
+                # Раскрашиваем КПД
                 if kpd >= 2.0:
-                    kpd_item.setForeground(QColor(0, 128, 0))  # Зеленый
+                    kpd_item.setForeground(QColor(0, 128, 0))
                 elif kpd >= 1.5:
-                    kpd_item.setForeground(QColor(0, 100, 0))  # Темно-зеленый
+                    kpd_item.setForeground(QColor(0, 100, 0))
                 elif kpd >= 1.0:
-                    kpd_item.setForeground(QColor(218, 165, 32))  # Золотой
+                    kpd_item.setForeground(QColor(218, 165, 32))
                 else:
-                    kpd_item.setForeground(QColor(220, 39, 48))  # Красный
+                    kpd_item.setForeground(QColor(220, 39, 48))
 
                 table.setItem(row, 1, kpd_item)
 
@@ -168,27 +256,27 @@ class ProfilePage(QWidget):
                 tasks_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignVCenter)
                 table.setItem(row, 2, tasks_item)
 
-            # Настройка внешнего вида таблицы
-            table.horizontalHeader().setStretchLastSection(True)
-            table.verticalHeader().setVisible(False)
-            table.setAlternatingRowColors(True)
-            table.resizeColumnsToContents()
+            # После заполнения таблицы
+            table.resizeColumnsToContents()  # Подгоняем колонки по содержимому
+            # Но потом снова применяем растягивание для последней колонки
+            header.setSectionResizeMode(2, header.ResizeMode.Stretch)
 
-            # Рассчитываем и обновляем средний рейтинг
-            avg_kpd = sum(s['kpd'] for s in skills_data) / len(skills_data)
-            self.update_rating(avg_kpd)
+            # Устанавливаем минимальную высоту таблицы
+            total_height = table.horizontalHeader().height() + 2
+            for row in range(table.rowCount()):
+                total_height += table.rowHeight(row)
+            table.setMinimumHeight(min(total_height + 10, 300))
 
         except Exception as e:
             print(f"Ошибка настройки таблицы навыков: {e}")
 
+
     def update_rating(self, kpd_value):
         """Обновление рейтинга сотрудника"""
         try:
-            # Обновляем значение КПД
             if hasattr(self, 'labelKPD'):
                 self.labelKPD.setText(f"КПД: {kpd_value:.2f}")
 
-            # Обновляем звезды
             self.update_rating_stars(kpd_value)
 
         except Exception as e:
@@ -197,14 +285,11 @@ class ProfilePage(QWidget):
     def update_rating_stars(self, kpd_value):
         """Обновление отображения звезд рейтинга"""
         try:
-            # Рассчитываем количество заполненных звезд
             if kpd_value >= 1.0:
                 filled_stars = 5
             else:
-                # Линейная интерполяция для значений < 1.0
                 filled_stars = int(kpd_value * 5)
 
-            # Обновляем стили звезд если они существуют
             stars = []
             for i in range(1, 6):
                 star_attr = f'star{i}'
@@ -221,54 +306,29 @@ class ProfilePage(QWidget):
             print(f"Ошибка обновления звезд рейтинга: {e}")
 
     def load_projects_data(self):
-        """Загрузка данных по проектам (тестовые данные)"""
+        """Загрузка данных по проектам"""
         try:
             projects_data = [
                 {
                     'name': 'Разработка новой кабины',
                     'progress': 75,
                     'tasks_completed': 12,
-                    'tasks_total': 16,
-                    'is_critical': True
+                    'tasks_total': 16
                 },
                 {
                     'name': 'Модернизация конвейера',
                     'progress': 90,
                     'tasks_completed': 9,
-                    'tasks_total': 10,
-                    'is_critical': True
+                    'tasks_total': 10
                 },
                 {
                     'name': 'Внедрение ERP-системы',
                     'progress': 45,
                     'tasks_completed': 18,
-                    'tasks_total': 40,
-                    'is_critical': False
-                },
-                {
-                    'name': 'аррррр новой кабины',
-                    'progress': 75,
-                    'tasks_completed': 12,
-                    'tasks_total': 16,
-                    'is_critical': True
-                },
-                {
-                    'name': 'Модернизация конвейера',
-                    'progress': 90,
-                    'tasks_completed': 9,
-                    'tasks_total': 10,
-                    'is_critical': True
-                },
-                {
-                    'name': 'Внедрение ERP-системы',
-                    'progress': 45,
-                    'tasks_completed': 18,
-                    'tasks_total': 40,
-                    'is_critical': False
+                    'tasks_total': 40
                 }
             ]
 
-            # Обновляем прогресс-бары если они существуют
             for i in range(1, 4):
                 progress_attr = f'progressBar{i}'
                 tasks_label_attr = f'labelTasks{i}'
@@ -291,41 +351,22 @@ class ProfilePage(QWidget):
             print(f"Ошибка загрузки данных проектов: {e}")
 
     def set_employee_id(self, employee_id):
-        """Установка ID сотрудника для загрузки данных"""
+        """Установка ID сотрудника"""
         self.employee_id = employee_id
         self.load_test_data()
 
     def refresh_data(self):
-        """Обновление всех данных на странице"""
+        """Обновление всех данных"""
         self.load_test_data()
-
-
-# Простая версия интеграции для main_window.py
-def integrate_profile_page():
-    """Простая функция для интеграции страницы профиля"""
-    # 1. Сохраните файл profile_page.ui в папку ui
-    # 2. Сохраните файл profile_page.py в папку windows
-    # 3. В main_window.py добавьте импорт:
-    #    from profile_page import ProfilePage
-    # 4. В методе init_pages добавьте:
-    #    self.profile_page_instance = ProfilePage()
-    #    old_page = self.findChild(QWidget, "analyticsPage")
-    #    if old_page:
-    #        index = self.contentStack.indexOf(old_page)
-    #        old_page.deleteLater()
-    #        self.contentStack.insertWidget(index, self.profile_page_instance)
-    #        self.analyticsPage = self.profile_page_instance
-    pass
+        if hasattr(self, 'chart_widget'):
+            self.chart_widget.refresh_data()
 
 
 if __name__ == "__main__":
-    # Тестовый запуск страницы профиля
+    # Тестовый запуск
     app = QApplication(sys.argv)
-
-    # Устанавливаем глобальные стили
     app.setStyle("Fusion")
 
-    # Создаем и показываем страницу профиля
     window = ProfilePage(employee_id=1)
     window.setWindowTitle("Профиль сотрудника - МАЗ")
     window.resize(1200, 800)
