@@ -2,10 +2,12 @@ import os
 import sys
 from PyQt6.QtWidgets import (QApplication, QWidget, QVBoxLayout, QHBoxLayout,
                              QLabel, QPushButton, QFrame, QTableWidget, QTableWidgetItem,
-                             QProgressBar, QScrollArea, QSizePolicy)
-from PyQt6.QtCore import Qt, pyqtSignal
-from PyQt6.QtGui import QColor
+                             QProgressBar, QScrollArea, QSizePolicy, QMessageBox)
+from PyQt6.QtCore import Qt, pyqtSignal, QDate
+from PyQt6.QtGui import QColor, QPixmap
 from PyQt6.uic import loadUi
+
+from windows.edit_profile import EditProfileDialog
 
 # Импортируем виджет графика
 try:
@@ -45,6 +47,9 @@ class ProfilePage(QWidget):
         # Ссылка на родительское окно/виджет для навигации
         self.main_window = parent
 
+        # Данные сотрудника (будут заполняться в load_test_data или из БД)
+        self.employee_data = {}
+
         # Создаем страницу выполненных проектов (но не показываем)
         self.completed_projects_page = None
 
@@ -60,6 +65,20 @@ class ProfilePage(QWidget):
         else:
             self.setup_basic_ui()
 
+        # Стилизация фото профиля (круглое с красной рамкой)
+        if hasattr(self, 'labelPhoto'):
+            self.labelPhoto.setMinimumSize(150, 150)
+            self.labelPhoto.setMaximumSize(150, 150)
+            self.labelPhoto.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            self.labelPhoto.setScaledContents(True)
+            self.labelPhoto.setStyleSheet("""
+                QLabel {
+                    border-radius: 75px;
+                    border: 4px solid #D22730;
+                    background-color: #dddddd;
+                }
+            """)
+
         # Устанавливаем политику размера для scrollArea
         if hasattr(self, 'scrollArea'):
             self.scrollArea.setWidgetResizable(True)
@@ -72,22 +91,6 @@ class ProfilePage(QWidget):
         # Инициализация
         self.connect_signals()
         self.load_test_data()
-
-    def setup_basic_ui(self):
-        """Создание простого интерфейса если файл UI не найден"""
-        self.setStyleSheet("""
-            QWidget {
-                background-color: #F5F5F7;
-                font-family: 'Segoe UI', Arial;
-            }
-            QLabel {
-                color: #1B232A;
-            }
-        """)
-
-        layout = QVBoxLayout()
-        layout.addWidget(QLabel("Профиль сотрудника (UI файл не найден)"))
-        self.setLayout(layout)
 
     def init_chart_widget(self):
         """Инициализация виджета графика"""
@@ -129,6 +132,55 @@ class ProfilePage(QWidget):
             import traceback
             traceback.print_exc()
 
+    def refresh_profile_display(self):
+        """Обновляет все поля профиля из self.employee_data"""
+        data = self.employee_data
+
+        if hasattr(self, 'labelFullName'):
+            middle = data.get('middle_name', '')
+            if middle:
+                middle = f" {middle}"
+            self.labelFullName.setText(f"{data.get('last_name', '')} {data.get('first_name', '')}{middle}")
+
+        if hasattr(self, 'labelPosition'):
+            self.labelPosition.setText(data.get('position', ''))
+
+        if hasattr(self, 'labelDepartment'):
+            self.labelDepartment.setText(data.get('department', ''))
+
+        if hasattr(self, 'labelPhone'):
+            self.labelPhone.setText(data.get('phone_number', ''))
+
+        if hasattr(self, 'labelEmail'):
+            self.labelEmail.setText(data.get('email', ''))
+
+        # Дата рождения
+        if hasattr(self, 'labelBirthDate'):
+            birth = data.get('birth_date')
+            if birth:
+                date = QDate.fromString(birth, "yyyy-MM-dd")
+                if date.isValid():
+                    self.labelBirthDate.setText(date.toString("dd.MM.yyyy"))
+                else:
+                    self.labelBirthDate.setText("Не указана")
+            else:
+                self.labelBirthDate.setText("Не указана")
+
+        # Фото профиля
+        if hasattr(self, 'labelPhoto'):
+            photo_path = data.get('photo_path')
+            if photo_path and os.path.exists(photo_path):
+                pixmap = QPixmap(photo_path).scaled(
+                    150, 150,
+                    Qt.AspectRatioMode.KeepAspectRatioByExpanding,
+                    Qt.TransformationMode.SmoothTransformation
+                )
+                self.labelPhoto.setPixmap(pixmap)
+            else:
+                self.labelPhoto.clear()
+                self.labelPhoto.setText("Нет\nфото")
+                self.labelPhoto.setStyleSheet(self.labelPhoto.styleSheet() + " color: #666666; font-size: 14px;")
+
     def on_chart_refresh(self):
         """Обработчик обновления графика"""
         print("График обновлен")
@@ -144,12 +196,18 @@ class ProfilePage(QWidget):
     def connect_signals(self):
         """Подключение сигналов"""
         if hasattr(self, 'btnEditProfile'):
-            self.btnEditProfile.clicked.connect(self.edit_profile_requested.emit)
+            self.btnEditProfile.clicked.connect(self.open_edit_profile)
         if hasattr(self, 'btnCompletedProjects'):
             # Подключаем кнопку к методу открытия окна
             self.btnCompletedProjects.clicked.connect(self.show_completed_projects)
 
     # Добавьте этот метод в класс ProfilePage
+    def open_edit_profile(self):
+        if EditProfileDialog is None:
+            QMessageBox.warning(self, "Ошибка", "Модуль редактирования профиля не найден")
+            return
+        dialog = EditProfileDialog(self, self.employee_data)
+        dialog.exec()
 
     def show_completed_projects(self):
         """Показать окно выполненных проектов"""
@@ -206,10 +264,13 @@ class ProfilePage(QWidget):
                 'department': 'Отдел разработки ПО',
                 'phone_number': '+7 (123) 456-78-90',
                 'email': 'ivanov@maz.by',
+                'birth_date': '1990-05-15',  # добавлено
+                'photo_path': None,  # добавлено (или путь к фото)
                 'completed_tasks': 156,
                 'active_projects': 5,
                 'rating': 0.75
             }
+            self.employee_data = employee_data  # сохраняем для передачи в диалог
 
             # Устанавливаем данные в UI
             if hasattr(self, 'labelFullName'):
