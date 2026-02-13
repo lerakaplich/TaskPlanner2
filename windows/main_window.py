@@ -30,6 +30,31 @@ class MainWindow(QMainWindow):
         self.setup_initial_state()
         self.showMaximized()
 
+    def get_test_gantt_tasks(self):
+        return [
+            {
+                "id": 1,
+                "title": "Проектирование UI",
+                "start": "2026-02-01",
+                "end": "2026-02-05",
+                "progress": 100
+            },
+            {
+                "id": 2,
+                "title": "Верстка экранов",
+                "start": "2026-02-06",
+                "end": "2026-02-12",
+                "progress": 60
+            },
+            {
+                "id": 3,
+                "title": "Логика приложения",
+                "start": "2026-02-10",
+                "end": "2026-02-18",
+                "progress": 20
+            }
+        ]
+
     def init_pages(self):
         """Инициализация всех страниц"""
         # Страница Мои задачи
@@ -68,6 +93,23 @@ class MainWindow(QMainWindow):
         # === НОВАЯ СТРАНИЦА ПРОФИЛЯ (добавляем в конец, не трогаем существующие) ===
         self.profile_page_instance = ProfilePage()  # Можно передать employee_id, если нужно
         self.contentStack.addWidget(self.profile_page_instance)
+
+        # ================== СТРАНИЦА ГАНТА ==================
+        self.gantt_page_instance = GanttPage(
+            project_id=1,  # пока фиксированный
+            tasks=self.get_test_gantt_tasks()
+        )
+
+        old_gantt_page = self.findChild(QWidget, "ganttPage")
+
+        if old_gantt_page:
+            index = self.contentStack.indexOf(old_gantt_page)
+            old_gantt_page.deleteLater()
+            self.contentStack.insertWidget(index, self.gantt_page_instance)
+        else:
+            self.contentStack.addWidget(self.gantt_page_instance)
+
+        self.ganttPage = self.gantt_page_instance
 
     def connect_signals(self):
         """Подключение всех сигналов к слотам"""

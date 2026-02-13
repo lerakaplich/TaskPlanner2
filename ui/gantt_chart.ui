@@ -1,0 +1,1353 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>GanttChartWidget</class>
+ <widget class="QWidget" name="GanttChartWidget">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>1400</width>
+    <height>900</height>
+   </rect>
+  </property>
+  <property name="windowTitle">
+   <string>Диаграмма Ганта</string>
+  </property>
+  <property name="styleSheet">
+   <string notr="true">
+    /* Основные цвета */
+    QWidget {
+        background-color: #0F1A24;
+        color: #FFFFFF;
+        font-family: 'Segoe UI', Arial, sans-serif;
+    }
+
+    /* Красные кнопки (основные действия) */
+    QPushButton#primaryButton, QPushButton.btn-primary {
+        background-color: #D22730;
+        color: white;
+        border-radius: 10px;
+        font-weight: bold;
+        font-size: 16px;
+        border: none;
+        padding: 10px 20px;
+    }
+    QPushButton#primaryButton:hover, QPushButton.btn-primary:hover {
+        background-color: #862633;
+    }
+    QPushButton#primaryButton:pressed, QPushButton.btn-primary:pressed {
+        background-color: #6a1e29;
+    }
+
+    /* Золотые кнопки (второстепенные действия) */
+    QPushButton#goldButton, QPushButton.btn-gold {
+        background-color: #ccab6e;
+        color: white;
+        border-radius: 10px;
+        font-weight: bold;
+        font-size: 16px;
+        border: none;
+        padding: 10px 20px;
+    }
+    QPushButton#goldButton:hover, QPushButton.btn-gold:hover {
+        background-color: #998664;
+    }
+    QPushButton#goldButton:pressed, QPushButton.btn-gold:pressed {
+        background-color: #7a6a50;
+    }
+
+    /* Серые кнопки (навигация, фильтры) */
+    QPushButton#grayButton, QPushButton.btn-gray {
+        background-color: #1B232A;
+        color: white;
+        border: none;
+        border-radius: 10px;
+        padding: 8px 16px;
+        font-size: 14px;
+        font-weight: bold;
+    }
+    QPushButton#grayButton:hover, QPushButton.btn-gray:hover {
+        background-color: #D9D9D6;
+        color: black;
+    }
+    QPushButton#grayButton:pressed, QPushButton.btn-gray:pressed {
+        background-color: #B8B8B5;
+    }
+
+    /* Панели и контейнеры */
+    QFrame {
+        background-color: #1E2A36;
+        border-radius: 12px;
+        border: 1px solid #334756;
+    }
+
+    QFrame#sidebarFrame {
+        background-color: #17212B;
+        border-right: 2px solid #D22730;
+    }
+
+    /* Заголовки */
+    QLabel.header-label {
+        font-size: 24px;
+        font-weight: bold;
+        color: #ccab6e;
+        padding: 10px;
+    }
+
+    QLabel.section-title {
+        font-size: 18px;
+        font-weight: bold;
+        color: #FFFFFF;
+        padding: 5px;
+    }
+
+    /* Список задач в сайдбаре */
+    QListWidget {
+        background-color: #1E2A36;
+        border: none;
+        border-radius: 8px;
+        padding: 5px;
+        outline: none;
+    }
+
+    QListWidget::item {
+        background-color: #2A3743;
+        border-radius: 8px;
+        padding: 12px;
+        margin: 4px;
+        border-left: 4px solid #ccab6e;
+    }
+
+    QListWidget::item:selected {
+        background-color: #D22730;
+        border-left: 4px solid #FFFFFF;
+    }
+
+    QListWidget::item:hover {
+        background-color: #3E4E5D;
+    }
+
+    /* Таблица для диаграммы Ганта */
+    QTableWidget {
+        background-color: #1E2A36;
+        border: none;
+        gridline-color: #334756;
+    }
+
+    QTableWidget::item {
+        padding: 5px;
+        border-bottom: 1px solid #334756;
+    }
+
+    QHeaderView::section {
+        background-color: #17212B;
+        color: #ccab6e;
+        font-weight: bold;
+        padding: 8px;
+        border: none;
+        border-right: 1px solid #334756;
+        border-bottom: 2px solid #D22730;
+    }
+
+    /* Комбобоксы и спинбоксы */
+    QComboBox, QDateEdit, QSpinBox {
+        background-color: #1B232A;
+        color: white;
+        border: 1px solid #ccab6e;
+        border-radius: 6px;
+        padding: 8px;
+        min-height: 20px;
+    }
+
+    QComboBox:hover, QDateEdit:hover, QSpinBox:hover {
+        border: 1px solid #D22730;
+    }
+
+    QComboBox::drop-down {
+        border: none;
+    }
+
+    QComboBox::down-arrow {
+        image: url(:/icons/down_arrow.png);
+        width: 12px;
+        height: 12px;
+    }
+
+    /* Скроллбары */
+    QScrollBar:vertical {
+        background-color: #1E2A36;
+        width: 12px;
+        border-radius: 6px;
+    }
+
+    QScrollBar::handle:vertical {
+        background-color: #ccab6e;
+        border-radius: 6px;
+        min-height: 30px;
+    }
+
+    QScrollBar::handle:vertical:hover {
+        background-color: #D22730;
+    }
+
+    QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+        height: 0px;
+    }
+
+    /* Линии связи на диаграмме */
+    .dependency-line {
+        color: #ccab6e;
+        border: 2px dashed #ccab6e;
+    }
+
+    /* Полосы задач */
+    .task-bar {
+        border-radius: 6px;
+        font-weight: bold;
+    }
+
+    .task-bar-critical {
+        background-color: #D22730;
+        border-left: 4px solid #FFFFFF;
+    }
+
+    .task-bar-high {
+        background-color: #ccab6e;
+        border-left: 4px solid #FFFFFF;
+    }
+
+    .task-bar-medium {
+        background-color: #3498db;
+        border-left: 4px solid #FFFFFF;
+    }
+
+    .task-bar-low {
+        background-color: #2ecc71;
+        border-left: 4px solid #FFFFFF;
+    }
+
+    /* Прогресс бар */
+    QProgressBar {
+        border: 1px solid #334756;
+        border-radius: 5px;
+        text-align: center;
+        color: white;
+        font-weight: bold;
+    }
+
+    QProgressBar::chunk {
+        background-color: #D22730;
+        border-radius: 5px;
+    }
+   </string>
+  </property>
+  <layout class="QVBoxLayout" name="verticalLayout">
+   <property name="spacing">
+    <number>10</number>
+   </property>
+   <property name="leftMargin">
+    <number>10</number>
+   </property>
+   <property name="topMargin">
+    <number>10</number>
+   </property>
+   <property name="rightMargin">
+    <number>10</number>
+   </property>
+   <property name="bottomMargin">
+    <number>10</number>
+   </property>
+   <item>
+    <widget class="QFrame" name="mainFrame">
+     <property name="frameShape">
+      <enum>QFrame::StyledPanel</enum>
+     </property>
+     <property name="frameShadow">
+      <enum>QFrame::Raised</enum>
+     </property>
+     <layout class="QHBoxLayout" name="horizontalLayout_2">
+      <property name="spacing">
+       <number>10</number>
+      </property>
+      <property name="leftMargin">
+       <number>10</number>
+      </property>
+      <property name="topMargin">
+       <number>10</number>
+      </property>
+      <property name="rightMargin">
+       <number>10</number>
+      </property>
+      <property name="bottomMargin">
+       <number>10</number>
+      </property>
+      <item>
+       <widget class="QFrame" name="sidebarFrame">
+        <property name="minimumSize">
+         <size>
+          <width>350</width>
+          <height>0</height>
+         </size>
+        </property>
+        <property name="maximumSize">
+         <size>
+          <width>450</width>
+          <height>16777215</height>
+         </size>
+        </property>
+        <property name="frameShape">
+         <enum>QFrame::StyledPanel</enum>
+        </property>
+        <property name="frameShadow">
+         <enum>QFrame::Raised</enum>
+        </property>
+        <layout class="QVBoxLayout" name="verticalLayout_2">
+         <property name="spacing">
+          <number>15</number>
+         </property>
+         <property name="leftMargin">
+          <number>15</number>
+         </property>
+         <property name="topMargin">
+          <number>15</number>
+         </property>
+         <property name="rightMargin">
+          <number>15</number>
+         </property>
+         <property name="bottomMargin">
+          <number>15</number>
+         </property>
+         <item>
+          <widget class="QLabel" name="label_2">
+           <property name="text">
+            <string>📋 СПИСОК ЗАДАЧ ПРОЕКТА</string>
+           </property>
+           <property name="styleSheet">
+            <string notr="true">font-size: 20px; font-weight: bold; color: #ccab6e;</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QComboBox" name="projectComboBox">
+           <property name="minimumHeight">
+            <number>45</number>
+           </property>
+           <property name="styleSheet">
+            <string notr="true">font-size: 16px; font-weight: bold;</string>
+           </property>
+           <item>
+            <property name="text">
+             <string>Task Planner (Текущий проект)</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>Маркетинговый сайт</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>Мобильное приложение</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>CRM система</string>
+            </property>
+           </item>
+          </widget>
+         </item>
+         <item>
+          <widget class="QFrame" name="filterFrame">
+           <property name="minimumHeight">
+            <size>
+             <width>0</width>
+             <height>120</height>
+            </size>
+           </property>
+           <property name="frameShape">
+            <enum>QFrame::StyledPanel</enum>
+           </property>
+           <layout class="QGridLayout" name="gridLayout">
+            <property name="leftMargin">
+             <number>10</number>
+            </property>
+            <property name="topMargin">
+             <number>10</number>
+            </property>
+            <property name="rightMargin">
+             <number>10</number>
+            </property>
+            <property name="bottomMargin">
+             <number>10</number>
+            </property>
+            <property name="spacing">
+             <number>10</number>
+            </property>
+            <item row="0" column="0">
+             <widget class="QLabel" name="label_3">
+              <property name="text">
+               <string>Исполнитель:</string>
+              </property>
+              <property name="styleSheet">
+               <string notr="true">font-size: 14px; color: #ccab6e;</string>
+              </property>
+             </widget>
+            </item>
+            <item row="0" column="1">
+             <widget class="QComboBox" name="assigneeFilterCombo">
+              <property name="minimumHeight">
+               <number>35</number>
+              </property>
+              <item>
+               <property name="text">
+                <string>Все исполнители</string>
+               </property>
+              </item>
+              <item>
+               <property name="text">
+                <string>Иванов Иван</string>
+               </property>
+              </item>
+              <item>
+               <property name="text">
+                <string>Петрова Анна</string>
+               </property>
+              </item>
+              <item>
+               <property name="text">
+                <string>Сидоров Петр</string>
+               </property>
+              </item>
+             </widget>
+            </item>
+            <item row="1" column="0">
+             <widget class="QLabel" name="label_4">
+              <property name="text">
+               <string>Приоритет:</string>
+              </property>
+              <property name="styleSheet">
+               <string notr="true">font-size: 14px; color: #ccab6e;</string>
+              </property>
+             </widget>
+            </item>
+            <item row="1" column="1">
+             <widget class="QComboBox" name="priorityFilterCombo">
+              <property name="minimumHeight">
+               <number>35</number>
+              </property>
+              <item>
+               <property name="text">
+                <string>Все приоритеты</string>
+               </property>
+              </item>
+              <item>
+               <property name="text">
+                <string>Critical</string>
+               </property>
+              </item>
+              <item>
+               <property name="text">
+                <string>High</string>
+               </property>
+              </item>
+              <item>
+               <property name="text">
+                <string>Medium</string>
+               </property>
+              </item>
+              <item>
+               <property name="text">
+                <string>Low</string>
+               </property>
+              </item>
+             </widget>
+            </item>
+            <item row="2" column="0" colspan="2">
+             <widget class="QPushButton" name="applyFilterBtn">
+              <property name="text">
+               <string>Применить фильтры</string>
+              </property>
+              <property name="styleSheet">
+               <string notr="true">background-color: #1B232A; color: white; border: 2px solid #ccab6e; border-radius: 8px; font-size: 14px; padding: 8px;</string>
+              </property>
+              <property name="cursor">
+               <cursorShape>PointingHandCursor</cursorShape>
+              </property>
+             </widget>
+            </item>
+           </layout>
+          </widget>
+         </item>
+         <item>
+          <widget class="QLabel" name="label_5">
+           <property name="text">
+            <string>⚡ ЗАДАЧИ НА ДИАГРАММЕ</string>
+           </property>
+           <property name="styleSheet">
+            <string notr="true">font-size: 16px; font-weight: bold; color: #D22730; margin-top: 10px;</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QListWidget" name="taskListWidget">
+           <property name="minimumHeight">
+            <number>350</number>
+           </property>
+           <property name="dragEnabled">
+            <bool>true</bool>
+           </property>
+           <property name="dragDropMode">
+            <enum>QAbstractItemView::InternalMove</enum>
+           </property>
+           <property name="defaultDropAction">
+            <enum>Qt::MoveAction</enum>
+           </property>
+           <property name="alternatingRowColors">
+            <bool>true</bool>
+           </property>
+           <property name="selectionBehavior">
+            <enum>QAbstractItemView::SelectRows</enum>
+           </property>
+           <property name="iconSize">
+            <size>
+             <width>24</width>
+             <height>24</height>
+            </size>
+           </property>
+           <property name="textElideMode">
+            <enum>Qt::ElideRight</enum>
+           </property>
+           <item>
+            <property name="text">
+             <string>🔴 Сверстать экран задач - Анна Петрова (high)
+Дедлайн: 10.02.2026 | Прогресс: 60%</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>🟡 Разработать бэкенд API - Иван Иванов (critical)
+Дедлайн: 15.02.2026 | Прогресс: 30%</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>🟢 Написать тесты - Петр Сидоров (medium)
+Дедлайн: 20.02.2026 | Прогресс: 0%</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>🔵 Документация - Анна Петрова (low)
+Дедлайн: 25.02.2026 | Прогресс: 90%</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>🔴 Рефакторинг кода - Иван Иванов (high)
+Дедлайн: 05.03.2026 | Прогресс: 20%</string>
+            </property>
+           </item>
+          </widget>
+         </item>
+         <item>
+          <widget class="QFrame" name="actionsFrame">
+           <property name="minimumHeight">
+            <size>
+             <width>0</width>
+             <height>100</height>
+            </size>
+           </property>
+           <layout class="QVBoxLayout" name="verticalLayout_3">
+            <property name="spacing">
+             <number>10</number>
+            </property>
+            <property name="leftMargin">
+             <number>10</number>
+            </property>
+            <property name="topMargin">
+             <number>10</number>
+            </property>
+            <property name="rightMargin">
+             <number>10</number>
+            </property>
+            <property name="bottomMargin">
+             <number>10</number>
+            </property>
+            <item>
+             <widget class="QPushButton" name="addTaskBtn">
+              <property name="text">
+               <string>➕ Добавить задачу на Гант</string>
+              </property>
+              <property name="styleSheet">
+               <string notr="true">background-color: #ccab6e; color: white; font-size: 15px; font-weight: bold; padding: 12px; border-radius: 10px;</string>
+              </property>
+              <property name="cursor">
+               <cursorShape>PointingHandCursor</cursorShape>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QPushButton" name="editTaskBtn">
+              <property name="text">
+               <string>✏️ Редактировать сроки</string>
+              </property>
+              <property name="styleSheet">
+               <string notr="true">background-color: #1B232A; color: white; border: 1px solid #D22730; font-size: 15px; padding: 12px; border-radius: 10px;</string>
+              </property>
+              <property name="cursor">
+               <cursorShape>PointingHandCursor</cursorShape>
+              </property>
+             </widget>
+            </item>
+           </layout>
+          </widget>
+         </item>
+        </layout>
+       </widget>
+      </item>
+      <item>
+       <widget class="QFrame" name="ganttFrame">
+        <property name="frameShape">
+         <enum>QFrame::StyledPanel</enum>
+        </property>
+        <property name="frameShadow">
+         <enum>QFrame::Raised</enum>
+        </property>
+        <layout class="QVBoxLayout" name="verticalLayout_4">
+         <property name="spacing">
+          <number>10</number>
+         </property>
+         <property name="leftMargin">
+          <number>15</number>
+         </property>
+         <property name="topMargin">
+          <number>15</number>
+         </property>
+         <property name="rightMargin">
+          <number>15</number>
+         </property>
+         <property name="bottomMargin">
+          <number>15</number>
+         </property>
+         <item>
+          <layout class="QHBoxLayout" name="horizontalLayout">
+           <item>
+            <widget class="QLabel" name="label">
+             <property name="text">
+              <string>📊 ДИАГРАММА ГАНТА</string>
+             </property>
+             <property name="styleSheet">
+              <string notr="true">font-size: 24px; font-weight: bold; color: #ccab6e;</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <spacer name="horizontalSpacer">
+             <property name="orientation">
+              <enum>Qt::Horizontal</enum>
+             </property>
+             <property name="sizeHint" stdset="0">
+              <size>
+               <width>40</width>
+               <height>20</height>
+              </size>
+             </property>
+            </spacer>
+           </item>
+           <item>
+            <widget class="QPushButton" name="zoomInBtn">
+             <property name="minimumSize">
+              <size>
+               <width>50</width>
+               <height>50</height>
+              </size>
+             </property>
+             <property name="maximumSize">
+              <size>
+               <width>50</width>
+               <height>50</height>
+              </size>
+             </property>
+             <property name="text">
+              <string>+</string>
+             </property>
+             <property name="styleSheet">
+              <string notr="true">background-color: #1B232A; color: white; font-size: 24px; font-weight: bold; border-radius: 25px; border: 2px solid #ccab6e;</string>
+             </property>
+             <property name="cursor">
+              <cursorShape>PointingHandCursor</cursorShape>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QPushButton" name="zoomOutBtn">
+             <property name="minimumSize">
+              <size>
+               <width>50</width>
+               <height>50</height>
+              </size>
+             </property>
+             <property name="maximumSize">
+              <size>
+               <width>50</width>
+               <height>50</height>
+              </size>
+             </property>
+             <property name="text">
+              <string>-</string>
+             </property>
+             <property name="styleSheet">
+              <string notr="true">background-color: #1B232A; color: white; font-size: 24px; font-weight: bold; border-radius: 25px; border: 2px solid #ccab6e;</string>
+             </property>
+             <property name="cursor">
+              <cursorShape>PointingHandCursor</cursorShape>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QComboBox" name="scaleCombo">
+             <property name="minimumWidth">
+              <number>120</number>
+             </property>
+             <property name="minimumHeight">
+              <number>40</number>
+             </property>
+             <item>
+              <property name="text">
+               <string>День</string>
+              </property>
+             </item>
+             <item>
+              <property name="text">
+               <string>Неделя</string>
+              </property>
+             </item>
+             <item>
+              <property name="text">
+               <string>Месяц</string>
+              </property>
+             </item>
+            </widget>
+           </item>
+           <item>
+            <widget class="QPushButton" name="exportBtn">
+             <property name="text">
+              <string>📥 Экспорт</string>
+             </property>
+             <property name="styleSheet">
+              <string notr="true">background-color: #D22730; color: white; font-size: 15px; font-weight: bold; padding: 10px 20px; border-radius: 10px;</string>
+             </property>
+             <property name="cursor">
+              <cursorShape>PointingHandCursor</cursorShape>
+             </property>
+            </widget>
+           </item>
+          </layout>
+         </item>
+         <item>
+          <widget class="QFrame" name="timelineFrame">
+           <property name="minimumHeight">
+            <size>
+             <width>0</width>
+             <height>80</height>
+            </size>
+           </property>
+           <property name="styleSheet">
+            <string notr="true">background-color: #17212B; border-radius: 8px;</string>
+           </property>
+           <layout class="QHBoxLayout" name="horizontalLayout_3">
+            <property name="spacing">
+             <number>20</number>
+            </property>
+            <item>
+             <widget class="QLabel" name="label_6">
+              <property name="text">
+               <string>🗓️ Февраль 2026</string>
+              </property>
+              <property name="styleSheet">
+               <string notr="true">font-size: 18px; font-weight: bold; color: #ccab6e;</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QPushButton" name="prevPeriodBtn">
+              <property name="text">
+               <string>◀</string>
+              </property>
+              <property name="styleSheet">
+               <string notr="true">background-color: #1B232A; border-radius: 5px; padding: 5px 10px; font-size: 16px;</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QPushButton" name="nextPeriodBtn">
+              <property name="text">
+               <string>▶</string>
+              </property>
+              <property name="styleSheet">
+               <string notr="true">background-color: #1B232A; border-radius: 5px; padding: 5px 10px; font-size: 16px;</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QPushButton" name="todayBtn">
+              <property name="text">
+               <string>Сегодня</string>
+              </property>
+              <property name="styleSheet">
+               <string notr="true">background-color: #ccab6e; border-radius: 5px; padding: 5px 15px;</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <spacer name="horizontalSpacer_2">
+              <property name="orientation">
+               <enum>Qt::Horizontal</enum>
+              </property>
+              <property name="sizeHint" stdset="0">
+               <size>
+                <width>40</width>
+                <height>20</height>
+               </size>
+              </property>
+             </spacer>
+            </item>
+            <item>
+             <widget class="QLabel" name="label_7">
+              <property name="text">
+               <string>Легенда:</string>
+              </property>
+              <property name="styleSheet">
+               <string notr="true">font-size: 14px; color: white;</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QFrame" name="legendCritical">
+              <property name="minimumSize">
+               <size>
+                <width>20</width>
+                <height>20</height>
+               </size>
+              </property>
+              <property name="maximumSize">
+               <size>
+                <width>20</width>
+                <height>20</height>
+               </size>
+              </property>
+              <property name="styleSheet">
+               <string notr="true">background-color: #D22730; border-radius: 4px;</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QLabel" name="label_8">
+              <property name="text">
+               <string>Critical</string>
+              </property>
+              <property name="styleSheet">
+               <string notr="true">font-size: 14px; color: white;</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QFrame" name="legendHigh">
+              <property name="minimumSize">
+               <size>
+                <width>20</width>
+                <height>20</height>
+               </size>
+              </property>
+              <property name="maximumSize">
+               <size>
+                <width>20</width>
+                <height>20</height>
+               </size>
+              </property>
+              <property name="styleSheet">
+               <string notr="true">background-color: #ccab6e; border-radius: 4px;</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QLabel" name="label_9">
+              <property name="text">
+               <string>High</string>
+              </property>
+              <property name="styleSheet">
+               <string notr="true">font-size: 14px; color: white;</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QFrame" name="legendMedium">
+              <property name="minimumSize">
+               <size>
+                <width>20</width>
+                <height>20</height>
+               </size>
+              </property>
+              <property name="maximumSize">
+               <size>
+                <width>20</width>
+                <height>20</height>
+               </size>
+              </property>
+              <property name="styleSheet">
+               <string notr="true">background-color: #3498db; border-radius: 4px;</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QLabel" name="label_10">
+              <property name="text">
+               <string>Medium</string>
+              </property>
+              <property name="styleSheet">
+               <string notr="true">font-size: 14px; color: white;</string>
+              </property>
+             </widget>
+            </item>
+           </layout>
+          </widget>
+         </item>
+         <item>
+          <widget class="QScrollArea" name="ganttScrollArea">
+           <property name="frameShape">
+            <enum>QFrame::NoFrame</enum>
+           </property>
+           <property name="widgetResizable">
+            <bool>true</bool>
+           </property>
+           <widget class="QWidget" name="ganttContent">
+            <property name="geometry">
+             <rect>
+              <x>0</x>
+              <y>0</y>
+              <width>798</width>
+              <height>450</height>
+             </rect>
+            </property>
+            <layout class="QVBoxLayout" name="verticalLayout_5">
+             <item>
+              <widget class="QTableWidget" name="ganttTable">
+               <property name="minimumHeight">
+                <number>400</number>
+               </property>
+               <property name="styleSheet">
+                <string notr="true">QTableWidget { gridline-color: #334756; }</string>
+               </property>
+               <property name="rowCount">
+                <number>5</number>
+               </property>
+               <property name="columnCount">
+                <number>30</number>
+               </property>
+               <attribute name="horizontalHeaderVisible">
+                <bool>true</bool>
+               </attribute>
+               <attribute name="verticalHeaderVisible">
+                <bool>true</bool>
+               </attribute>
+               <row>
+                <property name="text">
+                 <string>Сверстать экран задач</string>
+                </property>
+               </row>
+               <row>
+                <property name="text">
+                 <string>Разработать бэкенд API</string>
+                </property>
+               </row>
+               <row>
+                <property name="text">
+                 <string>Написать тесты</string>
+                </property>
+               </row>
+               <row>
+                <property name="text">
+                 <string>Документация</string>
+                </property>
+               </row>
+               <row>
+                <property name="text">
+                 <string>Рефакторинг кода</string>
+                </property>
+               </row>
+               <column>
+                <property name="text">
+                 <string>1</string>
+                </property>
+               </column>
+               <column>
+                <property name="text">
+                 <string>2</string>
+                </property>
+               </column>
+               <column>
+                <property name="text">
+                 <string>3</string>
+                </property>
+               </column>
+               <column>
+                <property name="text">
+                 <string>4</string>
+                </property>
+               </column>
+               <column>
+                <property name="text">
+                 <string>5</string>
+                </property>
+               </column>
+               <column>
+                <property name="text">
+                 <string>6</string>
+                </property>
+               </column>
+               <column>
+                <property name="text">
+                 <string>7</string>
+                </property>
+               </column>
+               <column>
+                <property name="text">
+                 <string>8</string>
+                </property>
+               </column>
+               <column>
+                <property name="text">
+                 <string>9</string>
+                </property>
+               </column>
+               <column>
+                <property name="text">
+                 <string>10</string>
+                </property>
+               </column>
+               <column>
+                <property name="text">
+                 <string>11</string>
+                </property>
+               </column>
+               <column>
+                <property name="text">
+                 <string>12</string>
+                </property>
+               </column>
+               <column>
+                <property name="text">
+                 <string>13</string>
+                </property>
+               </column>
+               <column>
+                <property name="text">
+                 <string>14</string>
+                </property>
+               </column>
+               <column>
+                <property name="text">
+                 <string>15</string>
+                </property>
+               </column>
+               <column>
+                <property name="text">
+                 <string>16</string>
+                </property>
+               </column>
+               <column>
+                <property name="text">
+                 <string>17</string>
+                </property>
+               </column>
+               <column>
+                <property name="text">
+                 <string>18</string>
+                </property>
+               </column>
+               <column>
+                <property name="text">
+                 <string>19</string>
+                </property>
+               </column>
+               <column>
+                <property name="text">
+                 <string>20</string>
+                </property>
+               </column>
+               <column>
+                <property name="text">
+                 <string>21</string>
+                </property>
+               </column>
+               <column>
+                <property name="text">
+                 <string>22</string>
+                </property>
+               </column>
+               <column>
+                <property name="text">
+                 <string>23</string>
+                </property>
+               </column>
+               <column>
+                <property name="text">
+                 <string>24</string>
+                </property>
+               </column>
+               <column>
+                <property name="text">
+                 <string>25</string>
+                </property>
+               </column>
+               <column>
+                <property name="text">
+                 <string>26</string>
+                </property>
+               </column>
+               <column>
+                <property name="text">
+                 <string>27</string>
+                </property>
+               </column>
+               <column>
+                <property name="text">
+                 <string>28</string>
+                </property>
+               </column>
+               <column>
+                <property name="text">
+                 <string>29</string>
+                </property>
+               </column>
+               <column>
+                <property name="text">
+                 <string>30</string>
+                </property>
+               </column>
+               <column>
+                <property name="text">
+                 <string>31</string>
+                </property>
+               </column>
+               <item row="0" column="5" colspan="8">
+                <property name="text">
+                 <string>Сверстать экран задач</string>
+                </property>
+                <property name="background">
+                 <color>
+                  <red>210</red>
+                  <green>39</green>
+                  <blue>48</blue>
+                 </color>
+                </property>
+                <property name="foreground">
+                 <color>
+                  <red>255</red>
+                  <green>255</green>
+                  <blue>255</blue>
+                 </color>
+                </property>
+                <property name="textAlignment">
+                 <set>AlignCenter</set>
+                </property>
+                <property name="font">
+                 <font>
+                  <pointsize>10</pointsize>
+                  <weight>75</weight>
+                  <bold>true</bold>
+                 </font>
+                </property>
+               </item>
+               <item row="1" column="7" colspan="10">
+                <property name="text">
+                 <string>Разработать бэкенд API</string>
+                </property>
+                <property name="background">
+                 <color>
+                  <red>204</red>
+                  <green>171</green>
+                  <blue>110</blue>
+                 </color>
+                </property>
+                <property name="foreground">
+                 <color>
+                  <red>255</red>
+                  <green>255</green>
+                  <blue>255</blue>
+                 </color>
+                </property>
+                <property name="textAlignment">
+                 <set>AlignCenter</set>
+                </property>
+                <property name="font">
+                 <font>
+                  <pointsize>10</pointsize>
+                  <weight>75</weight>
+                  <bold>true</bold>
+                 </font>
+                </property>
+               </item>
+               <item row="2" column="15" colspan="8">
+                <property name="text">
+                 <string>Написать тесты</string>
+                </property>
+                <property name="background">
+                 <color>
+                  <red>52</red>
+                  <green>152</green>
+                  <blue>219</blue>
+                 </color>
+                </property>
+                <property name="foreground">
+                 <color>
+                  <red>255</red>
+                  <green>255</green>
+                  <blue>255</blue>
+                 </color>
+                </property>
+                <property name="textAlignment">
+                 <set>AlignCenter</set>
+                </property>
+                <property name="font">
+                 <font>
+                  <pointsize>10</pointsize>
+                  <weight>75</weight>
+                  <bold>true</bold>
+                 </font>
+                </property>
+               </item>
+               <item row="3" column="20" colspan="6">
+                <property name="text">
+                 <string>Документация</string>
+                </property>
+                <property name="background">
+                 <color>
+                  <red>46</red>
+                  <green>204</green>
+                  <blue>113</blue>
+                 </color>
+                </property>
+                <property name="foreground">
+                 <color>
+                  <red>255</red>
+                  <green>255</green>
+                  <blue>255</blue>
+                 </color>
+                </property>
+                <property name="textAlignment">
+                 <set>AlignCenter</set>
+                </property>
+                <property name="font">
+                 <font>
+                  <pointsize>10</pointsize>
+                  <weight>75</weight>
+                  <bold>true</bold>
+                 </font>
+                </property>
+               </item>
+               <item row="4" column="25" colspan="5">
+                <property name="text">
+                 <string>Рефакторинг кода</string>
+                </property>
+                <property name="background">
+                 <color>
+                  <red>210</red>
+                  <green>39</green>
+                  <blue>48</blue>
+                 </color>
+                </property>
+                <property name="foreground">
+                 <color>
+                  <red>255</red>
+                  <green>255</green>
+                  <blue>255</blue>
+                 </color>
+                </property>
+                <property name="textAlignment">
+                 <set>AlignCenter</set>
+                </property>
+                <property name="font">
+                 <font>
+                  <pointsize>10</pointsize>
+                  <weight>75</weight>
+                  <bold>true</bold>
+                 </font>
+                </property>
+               </item>
+              </widget>
+             </item>
+             <item>
+              <widget class="QFrame" name="dependencyFrame">
+               <property name="minimumHeight">
+                <size>
+                 <width>0</width>
+                 <height>80</height>
+                </size>
+               </property>
+               <property name="styleSheet">
+                <string notr="true">background-color: #17212B; border-radius: 8px; border-left: 4px solid #ccab6e;</string>
+               </property>
+               <layout class="QHBoxLayout" name="horizontalLayout_4">
+                <item>
+                 <widget class="QLabel" name="label_11">
+                  <property name="text">
+                   <string>🔗 ЛОГИЧЕСКИЕ СВЯЗИ</string>
+                  </property>
+                  <property name="styleSheet">
+                   <string notr="true">font-size: 16px; font-weight: bold; color: #ccab6e;</string>
+                  </property>
+                 </widget>
+                </item>
+                <item>
+                 <widget class="QPushButton" name="addDependencyBtn">
+                  <property name="text">
+                   <string>➕ Добавить связь</string>
+                  </property>
+                  <property name="styleSheet">
+                   <string notr="true">background-color: #1B232A; border: 1px solid #D22730; border-radius: 6px; padding: 8px 15px;</string>
+                  </property>
+                 </widget>
+                </item>
+                <item>
+                 <spacer name="horizontalSpacer_3">
+                  <property name="orientation">
+                   <enum>Qt::Horizontal</enum>
+                  </property>
+                  <property name="sizeHint" stdset="0">
+                   <size>
+                    <width>40</width>
+                    <height>20</height>
+                   </size>
+                  </property>
+                 </spacer>
+                </item>
+                <item>
+                 <widget class="QLabel" name="label_12">
+                  <property name="text">
+                   <string>Задача 1 → Задача 2 (Финиш-Старт)</string>
+                  </property>
+                  <property name="styleSheet">
+                   <string notr="true">font-size: 14px; color: white; padding: 5px; background-color: #1E2A36; border-radius: 4px;</string>
+                  </property>
+                 </widget>
+                </item>
+               </layout>
+              </widget>
+             </item>
+            </layout>
+           </widget>
+          </widget>
+         </item>
+        </layout>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>
