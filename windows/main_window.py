@@ -6,6 +6,7 @@ from PyQt6.uic import loadUi
 from my_tasks_page import MyTasksPage  # Импортируем класс MyTasksPage
 from others_tasks_page import OthersTasksPage
 from overtime_page import OvertimePage  # <-- Добавьте эту строку
+from windows.gantt_chart import GanttChartWidget
 from windows.profile_page import ProfilePage
 
 
@@ -94,22 +95,21 @@ class MainWindow(QMainWindow):
         self.profile_page_instance = ProfilePage()  # Можно передать employee_id, если нужно
         self.contentStack.addWidget(self.profile_page_instance)
 
-        # ================== СТРАНИЦА ГАНТА ==================
-        self.gantt_page_instance = GanttPage(
-            project_id=1,  # пока фиксированный
-            tasks=self.get_test_gantt_tasks()
-        )
-
-        old_gantt_page = self.findChild(QWidget, "ganttPage")
-
-        if old_gantt_page:
-            index = self.contentStack.indexOf(old_gantt_page)
-            old_gantt_page.deleteLater()
+        self.gantt_page_instance = GanttChartWidget()
+        old_gantt = self.findChild(QWidget, "ganttPage")
+        if old_gantt:
+            index = self.contentStack.indexOf(old_gantt)
+            old_gantt.deleteLater()
             self.contentStack.insertWidget(index, self.gantt_page_instance)
+            self.ganttPage = self.gantt_page_instance
         else:
             self.contentStack.addWidget(self.gantt_page_instance)
+            self.ganttPage = self.gantt_page_instance
 
-        self.ganttPage = self.gantt_page_instance
+        # === ПРОФИЛЬ ===
+        self.profile_page_instance = ProfilePage()
+        self.contentStack.addWidget(self.profile_page_instance)
+
 
     def connect_signals(self):
         """Подключение всех сигналов к слотам"""
