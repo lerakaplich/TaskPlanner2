@@ -1,0 +1,174 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>AnalyticsPage</class>
+ <widget class="QWidget" name="AnalyticsPage">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>800</width>
+    <height>600</height>
+   </rect>
+  </property>
+  <property name="styleSheet">
+   <string notr="true">QWidget {
+    background-color: #F5F5F7;
+    font-family: 'Segoe UI', Arial, sans-serif;
+}</string>
+  </property>
+  <layout class="QVBoxLayout" name="verticalLayout">
+   <property name="leftMargin">
+    <number>20</number>
+   </property>
+   <property name="topMargin">
+    <number>20</number>
+   </property>
+   <property name="rightMargin">
+    <number>20</number>
+   </property>
+   <property name="bottomMargin">
+    <number>20</number>
+   </property>
+   <item>
+    <widget class="QLabel" name="titleLabel">
+     <property name="text">
+      <string>Аналитика / Навыки</string>
+     </property>
+     <property name="styleSheet">
+      <string notr="true">font-size: 24px;
+font-weight: bold;
+color: #1B232A;
+padding: 10px 0;</string>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <widget class="QTabWidget" name="tabWidget">
+     <property name="styleSheet">
+      <string notr="true">QTabBar::tab {
+    background-color: white;
+    color: #666;
+    padding: 12px 20px;
+    margin-right: 2px;
+    border-top-left-radius: 8px;
+    border-top-right-radius: 8px;
+    border: 1px solid #E0E0E0;
+    border-bottom: none;
+    font-weight: bold;
+    font-size: 14px;
+}
+QTabBar::tab:selected {
+    background-color: #1B232A;
+    color: white;
+    border-color: #1B232A;
+}
+QTabBar::tab:hover:!selected {
+    background-color: #F0F0F0;
+}
+QTabWidget::pane {
+    background-color: white;
+    border: 1px solid #E0E0E0;
+    border-radius: 0px 8px 8px 8px;
+    margin-top: -1px;
+}</string>
+     </property>
+     <property name="currentIndex">
+      <number>0</number>
+     </property>
+     <widget class="QWidget" name="employeesTab">
+      <attribute name="title">
+       <string>Сотрудники</string>
+      </attribute>
+      <layout class="QVBoxLayout" name="verticalLayout_2">
+       <property name="leftMargin">
+        <number>15</number>
+       </property>
+       <property name="topMargin">
+        <number>15</number>
+       </property>
+       <property name="rightMargin">
+        <number>15</number>
+       </property>
+       <property name="bottomMargin">
+        <number>15</number>
+       </property>
+       <item>
+        <widget class="QScrollArea" name="employeesScroll">
+         <property name="styleSheet">
+          <string notr="true">border: none; background-color: transparent;</string>
+         </property>
+         <property name="widgetResizable">
+          <bool>true</bool>
+         </property>
+         <widget class="QWidget" name="employeesContainer">
+          <property name="geometry">
+           <rect>
+            <x>0</x>
+            <y>0</y>
+            <width>724</width>
+            <height>486</height>
+           </rect>
+          </property>
+          <property name="styleSheet">
+           <string notr="true">background-color: transparent;</string>
+          </property>
+          <layout class="QGridLayout" name="employeesGrid">
+           <property name="horizontalSpacing">
+            <number>15</number>
+           </property>
+           <property name="verticalSpacing">
+            <number>15</number>
+           </property>
+          </layout>
+         </widget>
+        </widget>
+       </item>
+      </layout>
+     </widget>
+     <widget class="QWidget" name="themesTab">
+      <attribute name="title">
+       <string>Темы</string>
+      </attribute>
+      <layout class="QVBoxLayout" name="verticalLayout_3">
+       <item>
+        <widget class="QLabel" name="themesPlaceholder">
+         <property name="text">
+          <string>Здесь будет аналитика по темам</string>
+         </property>
+         <property name="alignment">
+          <set>Qt::AlignCenter</set>
+         </property>
+         <property name="styleSheet">
+          <string notr="true">font-size: 18px; color: #666;</string>
+         </property>
+        </widget>
+       </item>
+      </layout>
+     </widget>
+     <widget class="QWidget" name="projectsTab">
+      <attribute name="title">
+       <string>Проекты</string>
+      </attribute>
+      <layout class="QVBoxLayout" name="verticalLayout_4">
+       <item>
+        <widget class="QLabel" name="projectsPlaceholder">
+         <property name="text">
+          <string>Здесь будет аналитика по проектам</string>
+         </property>
+         <property name="alignment">
+          <set>Qt::AlignCenter</set>
+         </property>
+         <property name="styleSheet">
+          <string notr="true">font-size: 18px; color: #666;</string>
+         </property>
+        </widget>
+       </item>
+      </layout>
+     </widget>
+    </widget>
+   </item>
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>

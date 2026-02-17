@@ -7,27 +7,11 @@ from PyQt6.QtCore import Qt, pyqtSignal, QDate
 from PyQt6.QtGui import QColor, QPixmap
 from PyQt6.uic import loadUi
 
+from windows.chart_widget import ChartWidget
+from windows.projects_page import ProjectsPage
 from windows.edit_profile import EditProfileDialog
 
-# Импортируем виджет графика
-try:
-    from chart_widget import ChartWidget
-except ImportError:
-    import sys
 
-    sys.path.append(os.path.dirname(__file__))
-    try:
-        from chart_widget import ChartWidget
-    except ImportError:
-        ChartWidget = None
-        print("ВНИМАНИЕ: Не удалось импортировать ChartWidget")
-
-# Импортируем страницу выполненных проектов
-try:
-    from completed_projects_page import CompletedProjectsPage
-except ImportError:
-    CompletedProjectsPage = None
-    print("ВНИМАНИЕ: Не удалось импортировать CompletedProjectsPage")
 
 
 class ProfilePage(QWidget):
@@ -51,7 +35,7 @@ class ProfilePage(QWidget):
         self.employee_data = {}
 
         # Создаем страницу выполненных проектов (но не показываем)
-        self.completed_projects_page = None
+        self.projects_page = None
 
         # Загружаем UI
         ui_path = os.path.join(os.path.dirname(__file__), "..", "ui")
@@ -211,30 +195,30 @@ class ProfilePage(QWidget):
 
     def show_completed_projects(self):
         """Показать окно выполненных проектов"""
-        if CompletedProjectsPage is None:
-            print("Ошибка: CompletedProjectsPage не импортирован")
+        if ProjectsPage is None:
+            print("Ошибка: ProjectsPage не импортирован")
             return
 
         try:
             # Если окно уже создано, просто показываем его
-            if self.completed_projects_page is None:
+            if self.projects_page is None:
                 # Создаем новое окно
-                self.completed_projects_page = CompletedProjectsPage(
+                self.projects_page = ProjectsPage(
                     employee_id=self.employee_id
                 )
                 # Подключаем сигнал возврата
-                self.completed_projects_page.back_requested.connect(self.hide_completed_projects)
+                self.projects_page.back_requested.connect(self.hide_completed_projects)
 
             # Устанавливаем ID сотрудника
-            self.completed_projects_page.set_employee_id(self.employee_id)
+            self.projects_page.set_employee_id(self.employee_id)
 
             # Обновляем данные
-            self.completed_projects_page.refresh_data()
+            self.projects_page.refresh_data()
 
             # Показываем окно
-            self.completed_projects_page.show()
-            self.completed_projects_page.raise_()
-            self.completed_projects_page.activateWindow()
+            self.projects_page.show()
+            self.projects_page.raise_()
+            self.projects_page.activateWindow()
 
             # Если это отдельное окно, можно скрыть текущее
             # self.hide()
@@ -246,8 +230,8 @@ class ProfilePage(QWidget):
 
     def hide_completed_projects(self):
         """Скрыть окно выполненных проектов"""
-        if self.completed_projects_page:
-            self.completed_projects_page.hide()
+        if self.projects_page:
+            self.projects_page.hide()
             # Если скрывали текущее окно, показываем его снова
             # self.show()
 
@@ -446,8 +430,8 @@ class ProfilePage(QWidget):
         self.employee_id = employee_id
         self.load_test_data()
         # Обновляем ID в окне выполненных проектов, если оно создано
-        if self.completed_projects_page:
-            self.completed_projects_page.set_employee_id(employee_id)
+        if self.projects_page:
+            self.projects_page.set_employee_id(employee_id)
 
     def refresh_data(self):
         """Обновление всех данных"""
@@ -455,8 +439,8 @@ class ProfilePage(QWidget):
         if hasattr(self, 'chart_widget'):
             self.chart_widget.refresh_data()
         # Обновляем данные в окне выполненных проектов, если оно открыто
-        if self.completed_projects_page and self.completed_projects_page.isVisible():
-            self.completed_projects_page.refresh_data()
+        if self.projects_page and self.projects_page.isVisible():
+            self.projects_page.refresh_data()
 
 
 if __name__ == "__main__":

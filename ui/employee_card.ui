@@ -1,0 +1,210 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>EmployeeCard</class>
+ <widget class="QFrame" name="EmployeeCard">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>400</width>
+    <height>300</height>
+   </rect>
+  </property>
+  <property name="styleSheet">
+   <string notr="true">EmployeeCard {
+    background-color: white;
+    border-radius: 10px;
+    border: 1px solid #E0E0E0;
+}
+EmployeeCard QPushButton {
+    border: none;
+    border-radius: 6px;
+    padding: 8px 12px;
+    font-weight: bold;
+    font-size: 13px;
+    text-align: left;
+}
+EmployeeCard QPushButton:hover {
+    background-color: #F0F0F0;
+}
+EmployeeCard QPushButton:pressed {
+    background-color: #E0E0E0;
+}</string>
+  </property>
+  <property name="frameShape">
+   <enum>QFrame::StyledPanel</enum>
+  </property>
+  <layout class="QVBoxLayout" name="verticalLayout">
+   <property name="spacing">
+    <number>10</number>
+   </property>
+   <property name="leftMargin">
+    <number>12</number>
+   </property>
+   <property name="topMargin">
+    <number>12</number>
+   </property>
+   <property name="rightMargin">
+    <number>12</number>
+   </property>
+   <property name="bottomMargin">
+    <number>12</number>
+   </property>
+   <item>
+    <widget class="QPushButton" name="name_btn">
+     <property name="text">
+      <string>Имя Фамилия</string>
+     </property>
+     <property name="styleSheet">
+      <string notr="true">font-size: 16px; font-weight: bold; color: #1B232A; background-color: transparent; padding: 0;</string>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <widget class="QLabel" name="info_label">
+     <property name="text">
+      <string>должность · отдел · подразделение</string>
+     </property>
+     <property name="styleSheet">
+      <string notr="true">color: #666; font-size: 12px; padding: 0 8px;</string>
+     </property>
+     <property name="wordWrap">
+      <bool>true</bool>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <widget class="QPushButton" name="projects_btn">
+     <property name="text">
+      <string>▶ Активные проекты</string>
+     </property>
+     <property name="checkable">
+      <bool>true</bool>
+     </property>
+     <property name="styleSheet">
+      <string notr="true">background-color: #F0F0F0; color: #1B232A;</string>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <widget class="QFrame" name="projects_panel">
+     <property name="visible">
+      <bool>false</bool>
+     </property>
+     <property name="styleSheet">
+      <string notr="true">background-color: #FAFAFA; border-radius: 6px;</string>
+     </property>
+     <property name="frameShape">
+      <enum>QFrame::NoFrame</enum>
+     </property>
+     <layout class="QVBoxLayout" name="verticalLayout_3">
+      <property name="spacing">
+       <number>0</number>
+      </property>
+      <property name="leftMargin">
+       <number>0</number>
+      </property>
+      <property name="topMargin">
+       <number>0</number>
+      </property>
+      <property name="rightMargin">
+       <number>0</number>
+      </property>
+      <property name="bottomMargin">
+       <number>0</number>
+      </property>
+     </layout>
+    </widget>
+   </item>
+   <item>
+    <widget class="QPushButton" name="completed_projects_btn">
+     <property name="text">
+      <string>▶ Выполненные проекты</string>
+     </property>
+     <property name="checkable">
+      <bool>true</bool>
+     </property>
+     <property name="styleSheet">
+      <string notr="true">background-color: #F0F0F0; color: #1B232A;</string>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <widget class="QFrame" name="completed_projects_panel">
+     <property name="visible">
+      <bool>false</bool>
+     </property>
+     <property name="styleSheet">
+      <string notr="true">background-color: #FAFAFA; border-radius: 6px;</string>
+     </property>
+     <property name="frameShape">
+      <enum>QFrame::NoFrame</enum>
+     </property>
+     <layout class="QVBoxLayout" name="verticalLayout_4">
+      <property name="spacing">
+       <number>0</number>
+      </property>
+      <property name="leftMargin">
+       <number>0</number>
+      </property>
+      <property name="topMargin">
+       <number>0</number>
+      </property>
+      <property name="rightMargin">
+       <number>0</number>
+      </property>
+      <property name="bottomMargin">
+       <number>0</number>
+      </property>
+     </layout>
+    </widget>
+   </item>
+   <!-- Новая кнопка и панель для аналитики по темам -->
+   <item>
+    <widget class="QPushButton" name="analytics_btn">
+     <property name="text">
+      <string>▶ Аналитика по темам</string>
+     </property>
+     <property name="checkable">
+      <bool>true</bool>
+     </property>
+     <property name="styleSheet">
+      <string notr="true">background-color: #F0F0F0; color: #1B232A;</string>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <widget class="QFrame" name="analytics_panel">
+     <property name="visible">
+      <bool>false</bool>
+     </property>
+     <property name="styleSheet">
+      <string notr="true">background-color: #FAFAFA; border-radius: 6px;</string>
+     </property>
+     <property name="frameShape">
+      <enum>QFrame::NoFrame</enum>
+     </property>
+     <layout class="QVBoxLayout" name="verticalLayout_5">
+      <property name="spacing">
+       <number>4</number>
+      </property>
+      <property name="leftMargin">
+       <number>12</number>
+      </property>
+      <property name="topMargin">
+       <number>4</number>
+      </property>
+      <property name="rightMargin">
+       <number>12</number>
+      </property>
+      <property name="bottomMargin">
+       <number>4</number>
+      </property>
+     </layout>
+    </widget>
+   </item>
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>

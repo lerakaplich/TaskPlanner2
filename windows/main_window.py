@@ -6,6 +6,7 @@ from PyQt6.uic import loadUi
 from my_tasks_page import MyTasksPage  # Импортируем класс MyTasksPage
 from others_tasks_page import OthersTasksPage
 from overtime_page import OvertimePage  # <-- Добавьте эту строку
+from windows.analytics_page import AnalyticsPage
 from windows.gantt_chart import GanttChartWidget
 from windows.profile_page import ProfilePage
 
@@ -58,58 +59,58 @@ class MainWindow(QMainWindow):
 
     def init_pages(self):
         """Инициализация всех страниц"""
-        # Страница Мои задачи
+
+        # 0 — Главная (уже есть в UI)
+        # Ничего не трогаем
+
+        # 1 — Мои задачи
         self.my_tasks_page_instance = MyTasksPage()
         old_page = self.findChild(QWidget, "myTasksPage")
         if old_page:
             index = self.contentStack.indexOf(old_page)
             old_page.deleteLater()
             self.contentStack.insertWidget(index, self.my_tasks_page_instance)
-            self.myTasksPage = self.my_tasks_page_instance
 
-        # Страница Чужие задачи
+        # 2 — Чужие задачи
         self.other_tasks_page_instance = OthersTasksPage()
-        other_tasks_page = self.findChild(QWidget, "otherTasksPage")
-        if other_tasks_page:
-            index = self.contentStack.indexOf(other_tasks_page)
-            other_tasks_page.deleteLater()
+        other_old = self.findChild(QWidget, "otherTasksPage")
+        if other_old:
+            index = self.contentStack.indexOf(other_old)
+            other_old.deleteLater()
             self.contentStack.insertWidget(index, self.other_tasks_page_instance)
-            self.otherTasksPage = self.other_tasks_page_instance
-        else:
-            self.contentStack.addWidget(self.other_tasks_page_instance)
-            self.otherTasksPage = self.other_tasks_page_instance
 
-        # Страница Переработки
-        self.overtime_page_instance = OvertimePage()
-        overtime_old_page = self.findChild(QWidget, "overtimePage")
-        if overtime_old_page:
-            index = self.contentStack.indexOf(overtime_old_page)
-            overtime_old_page.deleteLater()
-            self.contentStack.insertWidget(index, self.overtime_page_instance)
-            self.overtimePage = self.overtime_page_instance
-        else:
-            self.contentStack.addWidget(self.overtime_page_instance)
-            self.overtimePage = self.overtime_page_instance
-
-        # === НОВАЯ СТРАНИЦА ПРОФИЛЯ (добавляем в конец, не трогаем существующие) ===
-        self.profile_page_instance = ProfilePage()  # Можно передать employee_id, если нужно
-        self.contentStack.addWidget(self.profile_page_instance)
-
+        # 3 — Диаграмма Ганта
         self.gantt_page_instance = GanttChartWidget()
-        old_gantt = self.findChild(QWidget, "ganttPage")
-        if old_gantt:
-            index = self.contentStack.indexOf(old_gantt)
-            old_gantt.deleteLater()
+        gantt_old = self.findChild(QWidget, "ganttPage")
+        if gantt_old:
+            index = self.contentStack.indexOf(gantt_old)
+            gantt_old.deleteLater()
             self.contentStack.insertWidget(index, self.gantt_page_instance)
-            self.ganttPage = self.gantt_page_instance
-        else:
-            self.contentStack.addWidget(self.gantt_page_instance)
-            self.ganttPage = self.gantt_page_instance
 
-        # === ПРОФИЛЬ ===
+        # 4 — Аналитика / Навыки  🔥 НОВАЯ
+        self.analytics_page_instance = AnalyticsPage()
+
+        analytics_old = self.findChild(QWidget, "analyticsPage")
+        if analytics_old:
+            index = self.contentStack.indexOf(analytics_old)
+            analytics_old.deleteLater()
+            self.contentStack.insertWidget(index, self.analytics_page_instance)
+
+        # 5 — Чат (если у тебя есть страница в UI — не трогаем)
+
+        # 6 — Переработки
+        self.overtime_page_instance = OvertimePage()
+        overtime_old = self.findChild(QWidget, "overtimePage")
+        if overtime_old:
+            index = self.contentStack.indexOf(overtime_old)
+            overtime_old.deleteLater()
+            self.contentStack.insertWidget(index, self.overtime_page_instance)
+
+        # 7 — Настройки (если есть в UI — не трогаем)
+
+        # Отдельная страница профиля (вне навигации)
         self.profile_page_instance = ProfilePage()
         self.contentStack.addWidget(self.profile_page_instance)
-
 
     def connect_signals(self):
         """Подключение всех сигналов к слотам"""
