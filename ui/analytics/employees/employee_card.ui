@@ -159,7 +159,6 @@ EmployeeCard QPushButton:pressed {
      </layout>
     </widget>
    </item>
-   <!-- Новая кнопка и панель для аналитики по темам -->
    <item>
     <widget class="QPushButton" name="analytics_btn">
      <property name="text">
@@ -186,19 +185,19 @@ EmployeeCard QPushButton:pressed {
      </property>
      <layout class="QVBoxLayout" name="verticalLayout_5">
       <property name="spacing">
-       <number>4</number>
+       <number>0</number>
       </property>
       <property name="leftMargin">
-       <number>12</number>
+       <number>0</number>
       </property>
       <property name="topMargin">
-       <number>4</number>
+       <number>0</number>
       </property>
       <property name="rightMargin">
-       <number>12</number>
+       <number>0</number>
       </property>
       <property name="bottomMargin">
-       <number>4</number>
+       <number>0</number>
       </property>
      </layout>
     </widget>

@@ -1,4 +1,6 @@
 import os
+
+from PyQt6 import uic
 from PyQt6.QtWidgets import QDialog
 from PyQt6.uic import loadUi
 from PyQt6.QtCore import QDate
@@ -10,11 +12,13 @@ class EditProfileDialog(QDialog):
 
         self.employee_data = employee_data or {}
 
-        # Путь к папке ui (как ты просила)
-        self.ui_path = os.path.join(os.path.dirname(__file__), "..", "ui")
+        ui_path = os.path.join(
+            os.path.dirname(__file__),  # windows/analytics/employees/
+            "..", "..",   # поднимаемся до корня проекта
+            "ui", "profile"  # спускаемся в нужную подпапку ui
+        )
+        uic.loadUi(os.path.join(ui_path, "edit_profile.ui"), self)
 
-        # Загружаем UI из файла
-        loadUi(os.path.join(self.ui_path, "edit_profile.ui"), self)
 
         # Если есть данные — заполняем поля
         self.fill_fields()

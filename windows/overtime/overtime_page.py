@@ -1,24 +1,28 @@
 import os
 import sys
-from PyQt6.QtWidgets import *
-from PyQt6.QtCore import *
-from PyQt6.QtGui import *
+
 from PyQt6 import uic
+from PyQt6.QtWidgets import *
 from datetime import datetime, timedelta
 import random
 
 from PyQt6.uic import loadUi
 
-from windows.add_overtime_dialog import AddOvertimeDialog
-from windows.overtime_card import OvertimeCard
-from windows.period_dialog import PeriodDialog
+from windows.overtime.add_overtime_dialog import AddOvertimeDialog
+from windows.overtime.overtime_card import OvertimeCard
+from windows.overtime.period_dialog import PeriodDialog
 
 
 class OvertimePage(QWidget):
     def __init__(self):
         super().__init__()
-        self.ui_path = os.path.join(os.path.dirname(__file__), "..", "ui")
-        loadUi(os.path.join(self.ui_path, "overtime_page.ui"), self)
+
+        ui_path = os.path.join(
+            os.path.dirname(__file__),  # windows/analytics/employees/
+            "..", "..",  # поднимаемся до корня проекта
+            "ui", "overtime"  # спускаемся в нужную подпапку ui
+        )
+        uic.loadUi(os.path.join(ui_path, "overtime_page.ui"), self)
 
         # Заголовок
         self.titleLabel.setText("Переработки")

@@ -1,3 +1,6 @@
+import os
+
+from PyQt6 import uic
 from PyQt6.QtWidgets import QDialog, QMessageBox, QListWidgetItem
 from PyQt6.QtCore import QDate
 from PyQt6.uic import loadUi
@@ -7,8 +10,12 @@ class ProjectCreationDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
 
-        # Загружаем UI
-        loadUi("project_creation_dialog.ui", self)
+        ui_path = os.path.join(
+            os.path.dirname(__file__),  # windows/analytics/employees/
+            "..", "..",  # поднимаемся до корня проекта
+            "ui", "projects"  # спускаемся в нужную подпапку ui
+        )
+        uic.loadUi(os.path.join(ui_path, "project_creation_dialog.ui"), self)
 
         # Начальные значения
         self.startDateEdit.setDate(QDate.currentDate())

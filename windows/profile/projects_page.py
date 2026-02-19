@@ -1,6 +1,7 @@
 import os
 from datetime import datetime
 
+from PyQt6 import uic
 from PyQt6.QtWidgets import (
     QWidget, QPushButton, QFrame, QLabel, QVBoxLayout
 )
@@ -21,8 +22,12 @@ class ProjectsPage(QWidget):
 
         if not self.compact:
             # Полноэкранный режим — загружаем .ui файл
-            ui_path = os.path.join(os.path.dirname(__file__), "..", "ui", "projects_page.ui")
-            loadUi(ui_path, self)
+            ui_path = os.path.join(
+                os.path.dirname(__file__),  # windows/analytics/employees/
+                "..", "..",   # поднимаемся до корня проекта
+                "ui", "profile" # спускаемся в нужную подпапку ui
+            )
+            uic.loadUi(os.path.join(ui_path, "projects_page.ui"), self)
             self.projects_layout = self.findChild(QVBoxLayout, "projectsLayout")
         else:
             # Компактный режим — создаём layout программно (без лишних элементов UI)

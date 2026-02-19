@@ -1,15 +1,13 @@
 import os
 
+from PyQt6 import uic
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QFrame, QLabel,
-                             QPushButton, QScrollArea, QComboBox,
-                             QLineEdit, QProgressBar, QSpacerItem, QSizePolicy)
+                             QScrollArea)
 from PyQt6.QtCore import Qt, QDate
 from PyQt6.QtGui import QFont
 from PyQt6.uic import loadUi
-import json
-from datetime import datetime
 
-from task_card import TaskCard
+from windows.other_tasks.task_card import TaskCard
 
 
 class MyTasksPage(QWidget):
@@ -17,10 +15,14 @@ class MyTasksPage(QWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.ui_path = os.path.join(os.path.dirname(__file__), "..", "ui")
 
-        # Загружаем UI из файла
-        loadUi(os.path.join(self.ui_path, "my_tasks_page.ui"), self)
+        ui_path = os.path.join(
+            os.path.dirname(__file__),  # windows/analytics/employees/
+            "..", "..",  # поднимаемся до корня проекта
+            "ui", "my_tasks"  # спускаемся в нужную подпапку ui
+        )
+        uic.loadUi(os.path.join(ui_path, "my_tasks_page.ui"), self)
+
 
         # Настраиваем канбан-доску
         self.setup_kanban()

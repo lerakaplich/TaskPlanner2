@@ -2,6 +2,7 @@ import datetime
 import json
 import os
 
+from PyQt6 import uic
 from PyQt6.QtCore import Qt, QMimeData, pyqtSignal, QPoint
 from PyQt6.QtGui import QDrag, QPixmap, QPainter
 from PyQt6.QtWidgets import (QFrame, QPushButton, QMenu, QApplication, QSizePolicy, QLabel)
@@ -21,10 +22,12 @@ class TaskCard(QFrame):
         self.task_data = task_data
         self.drag_start_position = None
         # Загружаем UI из файла
-        self.ui_path = os.path.join(os.path.dirname(__file__), "..", "ui")
-
-        # Загружаем UI из файла
-        loadUi(os.path.join(self.ui_path, "task_card.ui"), self)
+        ui_path = os.path.join(
+            os.path.dirname(__file__),  # windows/analytics/employees/
+            "..", "..",  # поднимаемся до корня проекта
+            "ui", "other_tasks"  # спускаемся в нужную подпапку ui
+        )
+        uic.loadUi(os.path.join(ui_path, "task_card.ui"), self)
         self.setObjectName("TaskCard")
 
         self.setup_ui()

@@ -1,14 +1,15 @@
 import os
 import sys
+
+from PyQt6 import uic
 from PyQt6.QtWidgets import QApplication, QMainWindow, QFrame, QSizePolicy, QSpacerItem, QWidget
-from PyQt6.QtCore import Qt
-from PyQt6.uic import loadUi
-from my_tasks_page import MyTasksPage  # Импортируем класс MyTasksPage
-from others_tasks_page import OthersTasksPage
-from overtime_page import OvertimePage  # <-- Добавьте эту строку
-from windows.analytics_page import AnalyticsPage
-from windows.gantt_chart import GanttChartWidget
-from windows.profile_page import ProfilePage
+from PyQt6.uic import loadUi  # <-- Добавьте эту строку
+from windows.analytics.analytics_page import AnalyticsPage
+from windows.gantt.gantt_chart import GanttChartWidget
+from windows.my_tasks.my_tasks_page import MyTasksPage
+from windows.other_tasks.others_tasks_page import OthersTasksPage
+from windows.overtime.overtime_page import OvertimePage
+from windows.profile.profile_page import ProfilePage
 
 
 class MainWindow(QMainWindow):
@@ -16,11 +17,20 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
 
-        self.ui_path = os.path.join(os.path.dirname(__file__), "..", "ui")
+        ui_path = os.path.join(
+            os.path.dirname(__file__),  # windows/analytics/employees/
+            "..", "..",  # поднимаемся до корня проекта
+            "ui", "projects"  # спускаемся в нужную подпапку ui
+        )
+        uic.loadUi(os.path.join(ui_path, "main_window.ui"), self)
 
-        # Загружаем UI из файла
-        loadUi(os.path.join(self.ui_path, "main_window.ui"), self)
-        loadUi(os.path.join(self.ui_path, "left_panel.ui"), self.leftPanel)
+        ui_path = os.path.join(
+            os.path.dirname(__file__),  # windows/analytics/employees/
+            "..", "..",  # поднимаемся до корня проекта
+            "ui"  # спускаемся в нужную подпапку ui
+        )
+        uic.loadUi(os.path.join(ui_path, "left_panel.ui"), self.leftPanel)
+
 
         # Инициализация страниц
         self.init_pages()
@@ -265,9 +275,15 @@ class MainWindow(QMainWindow):
         self.project_cards = []
         for i, proj in enumerate(projects):
             card = QFrame(self.scrollAreaWidgetContents)
-            self.ui_path = os.path.join(os.path.dirname(__file__), "..", "ui")
 
-            loadUi(os.path.join(self.ui_path, "project_card.ui"), card)
+            ui_path = os.path.join(
+                os.path.dirname(__file__),  # windows/analytics/employees/
+                "..", "..",  # поднимаемся до корня проекта
+                "ui", "projects"  # спускаемся в нужную подпапку ui
+            )
+            uic.loadUi(os.path.join(ui_path, "project_card.ui"), card)
+
+
 
             card.projectTitle.setText(proj["title"])
             card.progressBar.setValue(proj["progress"])

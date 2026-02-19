@@ -13,8 +13,15 @@ from PyQt6.uic import loadUi
 class OvertimeCard(QFrame):
     def __init__(self, overtime_data, parent=None):
         super().__init__(parent)
-        self.ui_path = os.path.join(os.path.dirname(__file__), "..", "ui")
-        loadUi(os.path.join(self.ui_path, "overtime_card.ui"), self)
+
+        ui_path = os.path.join(
+            os.path.dirname(__file__),  # windows/analytics/employees/
+            "..", "..",   # поднимаемся до корня проекта
+            "ui", "overtime"  # спускаемся в нужную подпапку ui
+        )
+        uic.loadUi(os.path.join(ui_path, "overtime_card.ui"), self)
+
+
         self.overtime_data = overtime_data
         self.setObjectName("OvertimeCard")
         self.setup_data()

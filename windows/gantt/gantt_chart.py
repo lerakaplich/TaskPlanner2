@@ -4,6 +4,7 @@ from datetime import datetime, timedelta
 from typing import List, Dict
 from collections import defaultdict
 
+from PyQt6 import uic
 from PyQt6.QtWidgets import (
     QWidget, QGraphicsView, QGraphicsScene, QGraphicsRectItem,
     QGraphicsItem, QGraphicsLineItem, QGraphicsSimpleTextItem,
@@ -407,15 +408,15 @@ class GanttScene(QGraphicsScene):
 class GanttChartWidget(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.ui_path = os.path.join(os.path.dirname(__file__), "..", "ui")
-        loadUi(os.path.join(self.ui_path, "gantt_chart.ui"), self)
-        ui_file_path = os.path.join(self.ui_path, "gantt_chart.ui")
-        print("Пытаюсь загрузить UI из:", os.path.abspath(ui_file_path))
-        if not os.path.exists(ui_file_path):
-            print("ОШИБКА: Файл не найден по этому пути!")
-            QMessageBox.critical(None, "Ошибка", f"Не найден файл {ui_file_path}")
-            sys.exit(1)
-        print("Файл найден по этому пути!")
+
+        ui_path = os.path.join(
+            os.path.dirname(__file__),  # windows/analytics/employees/
+            "..", "..",   # поднимаемся до корня проекта
+            "ui", "gantt"  # спускаемся в нужную подпапку ui
+        )
+        uic.loadUi(os.path.join(ui_path, "gantt_chart.ui"), self)
+
+
         self.scene = GanttScene(self)
         self.ganttView.setScene(self.scene)
         self.ganttView.setDragMode(QGraphicsView.DragMode.ScrollHandDrag)

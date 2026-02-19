@@ -1,0 +1,163 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>ThemeCard</class>
+ <widget class="QFrame" name="ThemeCard">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>400</width>
+    <height>300</height>
+   </rect>
+  </property>
+  <property name="styleSheet">
+   <string notr="true">ThemeCard {
+    background-color: white;
+    border-radius: 10px;
+    border: 1px solid #E0E0E0;
+}
+ThemeCard QPushButton {
+    border: none;
+    border-radius: 6px;
+    padding: 8px 12px;
+    font-weight: bold;
+    font-size: 13px;
+    text-align: left;
+}
+ThemeCard QPushButton:hover {
+    background-color: #F0F0F0;
+}
+ThemeCard QPushButton:pressed {
+    background-color: #E0E0E0;
+}</string>
+  </property>
+  <property name="frameShape">
+   <enum>QFrame::StyledPanel</enum>
+  </property>
+  <layout class="QVBoxLayout" name="verticalLayout">
+   <property name="spacing">
+    <number>10</number>
+   </property>
+   <property name="leftMargin">
+    <number>12</number>
+   </property>
+   <property name="topMargin">
+    <number>12</number>
+   </property>
+   <property name="rightMargin">
+    <number>12</number>
+   </property>
+   <property name="bottomMargin">
+    <number>12</number>
+   </property>
+   <item>
+    <widget class="QPushButton" name="name_btn">
+     <property name="text">
+      <string>Название темы</string>
+     </property>
+     <property name="styleSheet">
+      <string notr="true">font-size: 16px; font-weight: bold; color: #1B232A; background-color: transparent; padding: 0;</string>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <widget class="QLabel" name="count_label">
+     <property name="text">
+      <string>Задач: 0</string>
+     </property>
+     <property name="styleSheet">
+      <string notr="true">color: #666; font-size: 12px; background-color: transparent; padding: 0 8px;</string>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <widget class="QPushButton" name="employees_btn">
+     <property name="text">
+      <string>▶ Сотрудники</string>
+     </property>
+     <property name="checkable">
+      <bool>true</bool>
+     </property>
+     <property name="styleSheet">
+      <string notr="true">background-color: #F0F0F0; color: #1B232A;</string>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <widget class="QFrame" name="employees_panel">
+     <property name="visible">
+      <bool>false</bool>
+     </property>
+     <property name="styleSheet">
+      <string notr="true">background-color: #FAFAFA; border-radius: 6px;</string>
+     </property>
+     <property name="frameShape">
+      <enum>QFrame::NoFrame</enum>
+     </property>
+     <layout class="QVBoxLayout" name="employees_panel_layout">
+      <property name="spacing">
+       <number>0</number>
+      </property>
+      <property name="leftMargin">
+       <number>0</number>
+      </property>
+      <property name="topMargin">
+       <number>0</number>
+      </property>
+      <property name="rightMargin">
+       <number>0</number>
+      </property>
+      <property name="bottomMargin">
+       <number>0</number>
+      </property>
+     </layout>
+    </widget>
+   </item>
+   <item>
+    <widget class="QPushButton" name="projects_btn">
+     <property name="text">
+      <string>▶ Проекты</string>
+     </property>
+     <property name="checkable">
+      <bool>true</bool>
+     </property>
+     <property name="styleSheet">
+      <string notr="true">background-color: #F0F0F0; color: #1B232A;</string>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <widget class="QFrame" name="projects_panel">
+     <property name="visible">
+      <bool>false</bool>
+     </property>
+     <property name="styleSheet">
+      <string notr="true">background-color: #FAFAFA; border-radius: 6px;</string>
+     </property>
+     <property name="frameShape">
+      <enum>QFrame::NoFrame</enum>
+     </property>
+     <layout class="QVBoxLayout" name="projects_panel_layout">
+      <property name="spacing">
+       <number>0</number>
+      </property>
+      <property name="leftMargin">
+       <number>0</number>
+      </property>
+      <property name="topMargin">
+       <number>0</number>
+      </property>
+      <property name="rightMargin">
+       <number>0</number>
+      </property>
+      <property name="bottomMargin">
+       <number>0</number>
+      </property>
+     </layout>
+    </widget>
+   </item>
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>

@@ -1,17 +1,14 @@
 import os
-import sys
-from datetime import datetime
+
+from PyQt6 import uic
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QFrame, QLabel,
-                             QPushButton, QScrollArea, QComboBox,
-                             QLineEdit, QProgressBar, QSpacerItem,
-                             QSizePolicy, QMenu, QMessageBox, QDialog,
-                             QTextEdit, QDateEdit, QFormLayout, QDialogButtonBox)
+                             QScrollArea, QMessageBox)
 from PyQt6.QtCore import Qt, QDate, pyqtSignal
-from PyQt6.QtGui import QFont, QAction
+from PyQt6.QtGui import QFont
 from PyQt6.uic import loadUi
 
-from others_task_card import OthersTaskCard
-from task_dialog import TaskDialog  # Импортируем новый диалог
+from windows.other_tasks.others_task_card import OthersTaskCard
+from windows.other_tasks.task_dialog import TaskDialog
 
 
 class OthersTasksPage(QWidget):
@@ -22,11 +19,15 @@ class OthersTasksPage(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
 
-        # Загружаем UI из файла
-        self.ui_path = os.path.join(os.path.dirname(__file__), "..", "ui")
 
-        # Загружаем UI из файла
-        loadUi(os.path.join(self.ui_path, "others_tasks_page.ui"), self)
+        ui_path = os.path.join(
+            os.path.dirname(__file__),  # windows/analytics/employees/
+            "..", "..",  # поднимаемся до корня проекта
+            "ui", "other_tasks"  # спускаемся в нужную подпапку ui
+        )
+        uic.loadUi(os.path.join(ui_path, "others_tasks_page.ui"), self)
+
+
         # Настраиваем канбан-доску
         self.setup_kanban()
 

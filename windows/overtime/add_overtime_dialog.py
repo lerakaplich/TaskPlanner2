@@ -1,6 +1,8 @@
 import os
 import sys
 from datetime import datetime
+
+from PyQt6 import uic
 from PyQt6.QtWidgets import QApplication, QDialog
 from PyQt6.QtCore import QDate, QTime
 from PyQt6.uic import loadUi
@@ -10,8 +12,13 @@ class AddOvertimeDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
 
-        self.ui_path = os.path.join(os.path.dirname(__file__), "..", "ui")
-        loadUi(os.path.join(self.ui_path, "add_overtime_dialog.ui"), self)
+        ui_path = os.path.join(
+            os.path.dirname(__file__),  # windows/analytics/employees/
+            "..", "..",  # поднимаемся до корня проекта
+            "ui", "overtime"  # спускаемся в нужную подпапку ui
+        )
+        uic.loadUi(os.path.join(ui_path, "add_overtime_dialog.ui"), self)
+
 
         # Фиксируем высоту 32 px
         self.comboProject.setFixedHeight(32)

@@ -1,17 +1,15 @@
 import os
 import sys
-from PyQt6.QtWidgets import (QApplication, QWidget, QVBoxLayout, QHBoxLayout,
-                             QLabel, QPushButton, QFrame, QTableWidget, QTableWidgetItem,
-                             QProgressBar, QScrollArea, QSizePolicy, QMessageBox)
+
+from PyQt6 import uic
+from PyQt6.QtWidgets import (QApplication, QWidget, QVBoxLayout, QTableWidgetItem,
+                             QSizePolicy, QMessageBox)
 from PyQt6.QtCore import Qt, pyqtSignal, QDate
 from PyQt6.QtGui import QColor, QPixmap
-from PyQt6.uic import loadUi
 
-from windows.chart_widget import ChartWidget
-from windows.projects_page import ProjectsPage
-from windows.edit_profile import EditProfileDialog
-
-
+from windows.profile.chart_widget import ChartWidget
+from windows.profile.edit_profile import EditProfileDialog
+from windows.profile.projects_page import ProjectsPage
 
 
 class ProfilePage(QWidget):
@@ -36,20 +34,14 @@ class ProfilePage(QWidget):
 
         # Создаем страницу выполненных проектов (но не показываем)
         self.projects_page = None
+        ui_path = os.path.join(
+            os.path.dirname(__file__),  # windows/analytics/employees/
+            "..", "..",   # поднимаемся до корня проекта
+            "ui", "profile"  # спускаемся в нужную подпапку ui
+        )
+        uic.loadUi(os.path.join(ui_path, "profile_page.ui"), self)
 
-        # Загружаем UI
-        ui_path = os.path.join(os.path.dirname(__file__), "..", "ui")
-        if not os.path.exists(ui_path):
-            ui_path = os.path.dirname(__file__)
-
-        ui_file = os.path.join(ui_path, "profile_page.ui")
-
-        if os.path.exists(ui_file):
-            loadUi(ui_file, self)
-        else:
-            self.setup_basic_ui()
-
-        # Стилизация фото профиля (круглое с красной рамкой)
+              # Стилизация фото профиля (круглое с красной рамкой)
         if hasattr(self, 'labelPhoto'):
             self.labelPhoto.setMinimumSize(150, 150)
             self.labelPhoto.setMaximumSize(150, 150)

@@ -1,5 +1,6 @@
 import os
 
+from PyQt6 import uic
 from PyQt6.QtWidgets import QDialog, QMessageBox
 from PyQt6.QtCore import QDate, Qt
 from PyQt6.uic import loadUi
@@ -18,10 +19,13 @@ class TaskDialog(QDialog):
             mode: 'create' для создания, 'edit' для редактирования
         """
         super().__init__(parent)
-        self.ui_path = os.path.join(os.path.dirname(__file__), "..", "ui")
 
-        # Загружаем UI из файла
-        loadUi(os.path.join(self.ui_path, "task_dialog.ui"), self)
+        ui_path = os.path.join(
+            os.path.dirname(__file__),  # windows/analytics/employees/
+            "..", "..",   # поднимаемся до корня проекта
+            "ui", "other_tasks"  # спускаемся в нужную подпапку ui
+        )
+        uic.loadUi(os.path.join(ui_path, "task_dialog.ui"), self)
 
         self.mode = mode
         self.task_data = task_data or {}

@@ -1,6 +1,8 @@
 import os
 import sys
 import random
+
+from PyQt6 import uic
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout,
                              QLabel, QPushButton, QFrame, QMessageBox, QApplication)
 from PyQt6.QtCore import Qt, pyqtSignal, QTimer, QRect
@@ -141,14 +143,13 @@ class ChartWidget(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
 
-        # Загружаем UI
-        ui_path = os.path.join(os.path.dirname(__file__), "..", "ui")
-        ui_file = os.path.join(ui_path, "chart_widget.ui")
 
-        if os.path.exists(ui_file):
-            loadUi(ui_file, self)
-        else:
-            self.setup_basic_ui()
+        ui_path = os.path.join(
+            os.path.dirname(__file__),  # windows/analytics/employees/
+            "..", "..",   # поднимаемся до корня проекта
+            "ui", "profile"  # спускаемся в нужную подпапку ui
+        )
+        uic.loadUi(os.path.join(ui_path, "chart_widget.ui"), self)
 
         # Инициализация
         self.init_chart()

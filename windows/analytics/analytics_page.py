@@ -1,33 +1,39 @@
 import os
 import sys
-from datetime import datetime
 
 from PyQt6 import uic
-from PyQt6.QtWidgets import QApplication, QWidget
 from PyQt6.QtCore import Qt
+from PyQt6.QtWidgets import (
+    QApplication, QWidget, QTabWidget, QGridLayout,
+    QScrollArea, QVBoxLayout
+)
 from PyQt6.uic import loadUi
 
-# Импорт универсального компонента (путь может отличаться)
-from windows.employee_card import EmployeeCard
+from windows.analytics.employees.employee_card import EmployeeCard
+from windows.analytics.projects.project_card_analytics import ProjectCard
+from windows.analytics.theme.theme_card import ThemeCard# новый импорт
 
 
 class AnalyticsPage(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.ui_path = os.path.join(os.path.dirname(__file__), "..", "ui")
 
-        # Загружаем UI из файла
-        loadUi(os.path.join(self.ui_path, "analytics_page.ui"), self)
+        ui_path = os.path.join(
+            os.path.dirname(__file__),  # windows/analytics/employees/
+            "..", "..",   # поднимаемся до корня проекта
+            "ui", "analytics"  # спускаемся в нужную подпапку ui
+        )
+        uic.loadUi(os.path.join(ui_path, "analytics_page.ui"), self)
 
 
-        # Создаём тестовые данные
         self.test_employees = self.create_test_employees()
-
-        # Заполняем вкладку сотрудников карточками
+        self.test_tasks = self.create_test_tasks()
         self.populate_employees_tab()
+        self.populate_themes_tab()
+        self.populate_projects_tab()   # новая вкладка
 
     def create_test_employees(self):
-        """Создаёт список сотрудников с их данными (темы, проекты, задачи)."""
+        """Создаёт список сотрудников (без изменений)."""
         employees = [
             {
                 "id": 1,
@@ -183,13 +189,77 @@ class AnalyticsPage(QWidget):
             })
         return result
 
+    def create_test_tasks(self):
+        """Создаёт общий список задач (без изменений)."""
+        tasks = []
+        employee_names = {
+            1: "Иван Иванов",
+            2: "Анна Петрова",
+            3: "Алексей Сидоров"
+        }
+        for emp in self.test_employees:
+            emp_id = emp["id"]
+            for proj in emp.get("projects", []):
+                proj_name = proj["name"]
+                for task in proj.get("tasks", []):
+                    task_copy = task.copy()
+                    task_copy["project"] = proj_name
+                    if "assigned_to" not in task_copy:
+                        task_copy["assigned_to"] = emp_id
+                    if "creator_id" in task_copy and "creator" not in task_copy:
+                        task_copy["creator"] = employee_names.get(task_copy["creator_id"], str(task_copy["creator_id"]))
+                    tasks.append(task_copy)
+        return tasks
+
+    def get_all_tags(self):
+        """Собирает все уникальные теги из задач (без изменений)."""
+        tags = set()
+        for task in self.test_tasks:
+            for tag in task.get("tags", []):
+                tags.add(tag)
+        return sorted(tags)
+
+    def populate_themes_tab(self):
+        """Заполняет вкладку 'Темы' (без изменений)."""
+        tab_widget = self.findChild(QTabWidget, "tabWidget")
+        if tab_widget is None:
+            return
+
+        themes_tab = None
+        for i in range(tab_widget.count()):
+            if tab_widget.tabText(i) == "Темы":
+                themes_tab = tab_widget.widget(i)
+                break
+
+        if themes_tab is None:
+            return
+
+        old_layout = themes_tab.layout()
+        if old_layout:
+            QWidget().setLayout(old_layout)
+
+        grid = QGridLayout()
+        themes_tab.setLayout(grid)
+
+        tags = self.get_all_tags()
+        row = col = 0
+        max_cols = 3
+        for tag in tags:
+            tag_tasks = [t for t in self.test_tasks if tag in t.get("tags", [])]
+            card = ThemeCard(tag, tag_tasks)
+            grid.addWidget(card, row, col)
+            col += 1
+            if col >= max_cols:
+                col = 0
+                row += 1
+        grid.setRowStretch(row + 1, 1)
+
     def populate_employees_tab(self):
-        """Заполняет сетку на вкладке сотрудников карточками."""
-        grid = self.employeesContainer.layout()  # QGridLayout
+        """Заполняет вкладку 'Сотрудники' (без изменений)."""
+        grid = self.employeesContainer.layout()
         if grid is None:
             return
 
-        # Очищаем сетку (если ранее были добавлены карточки)
         while grid.count():
             item = grid.takeAt(0)
             widget = item.widget()
@@ -200,15 +270,108 @@ class AnalyticsPage(QWidget):
         max_cols = 3
         for emp_data in self.test_employees:
             card = EmployeeCard(emp_data)
-            grid.addWidget(card, row, col)
             grid.addWidget(card, row, col, alignment=Qt.AlignmentFlag.AlignTop)
             col += 1
             if col >= max_cols:
                 col = 0
                 row += 1
-
-        # Растяжение последней строки (чтобы карточки не разъезжались)
         grid.setRowStretch(row + 1, 1)
+
+    def create_test_projects(self):
+        """Создаёт список проектов с полным набором полей."""
+        projects = []
+        emp_dict = {e["id"]: e for e in self.test_employees}
+        proj_map = {}
+
+        for emp in self.test_employees:
+            emp_id = emp["id"]
+            for proj in emp.get("projects", []):
+                proj_name = proj["name"]
+                if proj_name not in proj_map:
+                    proj_map[proj_name] = {
+                        "name": proj_name,
+                        "start_date": "2026-01-15",
+                        "status": "in_progress",
+                        "tasks": [],
+                        "employees": {}
+                    }
+                for task in proj.get("tasks", []):
+                    task_copy = task.copy()
+                    task_copy["assigned_to"] = emp_id
+                    task_copy["project"] = proj_name
+                    proj_map[proj_name]["tasks"].append(task_copy)
+                    if emp_id not in proj_map[proj_name]["employees"]:
+                        proj_map[proj_name]["employees"][emp_id] = []
+                    proj_map[proj_name]["employees"][emp_id].append(task_copy)
+
+        for proj_name, data in proj_map.items():
+            employees_list = []
+            for emp_id, tasks in data["employees"].items():
+                emp = emp_dict.get(emp_id, {})
+                active = sum(1 for t in tasks if t.get("status") not in ("completed", "archived"))
+                completed = sum(1 for t in tasks if t.get("status") in ("completed", "archived"))
+                employees_list.append({
+                    "id": emp_id,
+                    "name": emp.get("name", f"Сотрудник {emp_id}"),
+                    "active_tasks": active,
+                    "completed_tasks": completed
+                })
+            projects.append({
+                "id": proj_name,
+                "name": proj_name,
+                "start_date": data["start_date"],
+                "status": data["status"],
+                "tasks": data["tasks"],
+                "employees": employees_list
+            })
+        return projects
+
+    def populate_projects_tab(self):
+        """Заполняет вкладку Проекты карточками проектов."""
+        tab_widget = self.findChild(QTabWidget, "tabWidget")
+        if tab_widget is None:
+            return
+
+        projects_tab = None
+        for i in range(tab_widget.count()):
+            if tab_widget.tabText(i) == "Проекты":
+                projects_tab = tab_widget.widget(i)
+                break
+
+        if projects_tab is None:
+            return
+
+        # Очищаем содержимое вкладки
+        old_layout = projects_tab.layout()
+        if old_layout:
+            QWidget().setLayout(old_layout)
+
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setStyleSheet("border: none; background-color: transparent;")
+
+        container = QWidget()
+        grid = QGridLayout(container)
+        grid.setHorizontalSpacing(15)
+        grid.setVerticalSpacing(15)
+
+        projects = self.create_test_projects()
+        row = col = 0
+        max_cols = 3
+        for proj in projects:
+            card = ProjectCard(proj)
+            grid.addWidget(card, row, col, alignment=Qt.AlignmentFlag.AlignTop)
+            col += 1
+            if col >= max_cols:
+                col = 0
+                row += 1
+        grid.setRowStretch(row + 1, 1)
+
+        scroll.setWidget(container)
+
+        layout = QVBoxLayout(projects_tab)
+        layout.setContentsMargins(15, 15, 15, 15)
+        layout.addWidget(scroll)
 
 
 if __name__ == "__main__":
