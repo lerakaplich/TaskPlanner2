@@ -220,11 +220,8 @@ class AnalyticsPage(QWidget):
         return sorted(tags)
 
     def populate_themes_tab(self):
-        """Заполняет вкладку 'Темы' (без изменений)."""
+        """Заполняет вкладку 'Темы'."""
         tab_widget = self.findChild(QTabWidget, "tabWidget")
-        if tab_widget is None:
-            return
-
         themes_tab = None
         for i in range(tab_widget.count()):
             if tab_widget.tabText(i) == "Темы":
@@ -238,8 +235,14 @@ class AnalyticsPage(QWidget):
         if old_layout:
             QWidget().setLayout(old_layout)
 
-        grid = QGridLayout()
-        themes_tab.setLayout(grid)
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setStyleSheet("border: none; background-color: transparent;")
+
+        container = QWidget()
+        grid = QGridLayout(container)
+        grid.setHorizontalSpacing(15)
+        grid.setVerticalSpacing(15)
 
         tags = self.get_all_tags()
         row = col = 0
@@ -247,25 +250,47 @@ class AnalyticsPage(QWidget):
         for tag in tags:
             tag_tasks = [t for t in self.test_tasks if tag in t.get("tags", [])]
             card = ThemeCard(tag, tag_tasks)
-            grid.addWidget(card, row, col)
+            grid.addWidget(card, row, col, alignment=Qt.AlignmentFlag.AlignTop)
             col += 1
             if col >= max_cols:
                 col = 0
                 row += 1
         grid.setRowStretch(row + 1, 1)
 
+        scroll.setWidget(container)
+
+        layout = QVBoxLayout(themes_tab)
+        layout.setContentsMargins(15, 15, 15, 15)  # единые отступы
+        layout.addWidget(scroll)
+
     def populate_employees_tab(self):
-        """Заполняет вкладку 'Сотрудники' (без изменений)."""
-        grid = self.employeesContainer.layout()
-        if grid is None:
+        """Заполняет вкладку 'Сотрудники'."""
+        # Получаем вкладку Сотрудники
+        tab_widget = self.findChild(QTabWidget, "tabWidget")
+        employees_tab = None
+        for i in range(tab_widget.count()):
+            if tab_widget.tabText(i) == "Сотрудники":
+                employees_tab = tab_widget.widget(i)
+                break
+
+        if employees_tab is None:
             return
 
-        while grid.count():
-            item = grid.takeAt(0)
-            widget = item.widget()
-            if widget:
-                widget.deleteLater()
+        # Очищаем и создаем скролл с отступами (как в проектах)
+        old_layout = employees_tab.layout()
+        if old_layout:
+            QWidget().setLayout(old_layout)
 
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setStyleSheet("border: none; background-color: transparent;")
+
+        container = QWidget()
+        grid = QGridLayout(container)
+        grid.setHorizontalSpacing(15)
+        grid.setVerticalSpacing(15)
+
+        # Добавляем карточки
         row = col = 0
         max_cols = 3
         for emp_data in self.test_employees:
@@ -276,6 +301,12 @@ class AnalyticsPage(QWidget):
                 col = 0
                 row += 1
         grid.setRowStretch(row + 1, 1)
+
+        scroll.setWidget(container)
+
+        layout = QVBoxLayout(employees_tab)
+        layout.setContentsMargins(15, 15, 15, 15)  # единые отступы
+        layout.addWidget(scroll)
 
     def create_test_projects(self):
         """Создаёт список проектов с полным набором полей."""
@@ -339,40 +370,67 @@ class AnalyticsPage(QWidget):
                 break
 
         if projects_tab is None:
-            return
+            # Если вкладки нет, создаём её
+            projects_tab = QWidget()
+            tab_widget.addTab(projects_tab, "Проекты")
 
         # Очищаем содержимое вкладки
         old_layout = projects_tab.layout()
         if old_layout:
+            while old_layout.count():
+                item = old_layout.takeAt(0)
+                if item.widget():
+                    item.widget().deleteLater()
             QWidget().setLayout(old_layout)
 
+        # Создаём скролл область
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
-        scroll.setStyleSheet("border: none; background-color: transparent;")
+        scroll.setStyleSheet("""
+            QScrollArea {
+                border: none;
+                background-color: transparent;
+            }
+            QScrollArea > QWidget > QWidget {
+                background-color: transparent;
+            }
+        """)
 
+        # Контейнер для карточек
         container = QWidget()
+        container.setStyleSheet("background-color: transparent;")
+
+        # Сетка для карточек
         grid = QGridLayout(container)
         grid.setHorizontalSpacing(15)
         grid.setVerticalSpacing(15)
+        grid.setContentsMargins(0, 0, 0, 0)
 
+        # Получаем данные проектов
         projects = self.create_test_projects()
+
+        # Добавляем карточки в сетку
         row = col = 0
         max_cols = 3
+
         for proj in projects:
+            from windows.analytics.projects.project_card_analytics import ProjectCard
             card = ProjectCard(proj)
             grid.addWidget(card, row, col, alignment=Qt.AlignmentFlag.AlignTop)
+
             col += 1
             if col >= max_cols:
                 col = 0
                 row += 1
+
         grid.setRowStretch(row + 1, 1)
 
         scroll.setWidget(container)
 
+        # Основной layout вкладки с отступами
         layout = QVBoxLayout(projects_tab)
         layout.setContentsMargins(15, 15, 15, 15)
         layout.addWidget(scroll)
-
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)

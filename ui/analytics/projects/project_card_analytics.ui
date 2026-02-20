@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>400</width>
-    <height>250</height>
+    <height>300</height>
    </rect>
   </property>
   <property name="styleSheet">
@@ -30,6 +30,7 @@ ProjectCard QPushButton:hover {
 ProjectCard QPushButton:pressed {
     background-color: #E0E0E0;
 }</string>
+
   </property>
   <property name="frameShape">
    <enum>QFrame::StyledPanel</enum>
@@ -63,7 +64,7 @@ ProjectCard QPushButton:pressed {
    <item>
     <widget class="QLabel" name="info_label">
      <property name="text">
-      <string>Старт: 01.01.2026 · Статус: в работе</string>
+      <string>Старт: 2026-01-15 · Статус: в работе</string>
      </property>
      <property name="styleSheet">
       <string notr="true">color: #666; font-size: 12px; padding: 0 8px;</string>
@@ -97,21 +98,21 @@ ProjectCard QPushButton:pressed {
      <property name="frameShape">
       <enum>QFrame::NoFrame</enum>
      </property>
-     <layout class="QVBoxLayout" name="tasks_layout">
+     <layout class="QVBoxLayout" name="tasks_panel_layout">
       <property name="spacing">
-       <number>8</number>
+       <number>0</number>
       </property>
       <property name="leftMargin">
-       <number>8</number>
+       <number>0</number>
       </property>
       <property name="topMargin">
-       <number>8</number>
+       <number>0</number>
       </property>
       <property name="rightMargin">
-       <number>8</number>
+       <number>0</number>
       </property>
       <property name="bottomMargin">
-       <number>8</number>
+       <number>0</number>
       </property>
      </layout>
     </widget>
@@ -119,7 +120,7 @@ ProjectCard QPushButton:pressed {
    <item>
     <widget class="QPushButton" name="employees_btn">
      <property name="text">
-      <string>▶ Сотрудники (всего: 0)</string>
+      <string>▶ Сотрудники</string>
      </property>
      <property name="checkable">
       <bool>true</bool>
@@ -140,21 +141,21 @@ ProjectCard QPushButton:pressed {
      <property name="frameShape">
       <enum>QFrame::NoFrame</enum>
      </property>
-     <layout class="QVBoxLayout" name="employees_layout">
+     <layout class="QVBoxLayout" name="employees_panel_layout">
       <property name="spacing">
-       <number>8</number>
+       <number>0</number>
       </property>
       <property name="leftMargin">
-       <number>8</number>
+       <number>0</number>
       </property>
       <property name="topMargin">
-       <number>8</number>
+       <number>0</number>
       </property>
       <property name="rightMargin">
-       <number>8</number>
+       <number>0</number>
       </property>
       <property name="bottomMargin">
-       <number>8</number>
+       <number>0</number>
       </property>
      </layout>
     </widget>

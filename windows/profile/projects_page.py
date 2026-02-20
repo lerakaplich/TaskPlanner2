@@ -1,12 +1,10 @@
 import os
-from datetime import datetime
 
 from PyQt6 import uic
 from PyQt6.QtWidgets import (
     QWidget, QPushButton, QFrame, QLabel, QVBoxLayout
 )
 from PyQt6.QtCore import Qt, pyqtSignal
-from PyQt6.uic import loadUi
 
 
 class ProjectsPage(QWidget):
@@ -16,21 +14,17 @@ class ProjectsPage(QWidget):
         super().__init__(parent)
 
         self.employee_id = employee_id
-        self.mode = mode                # "completed" или "active"
+        self.mode = mode
         self.compact = compact
         self.projects_data = projects_data
 
         if not self.compact:
-            # Полноэкранный режим — загружаем .ui файл
             ui_path = os.path.join(
-                os.path.dirname(__file__),  # windows/analytics/employees/
-                "..", "..",   # поднимаемся до корня проекта
-                "ui", "profile" # спускаемся в нужную подпапку ui
+                os.path.dirname(__file__), "..", "..", "ui", "profile"
             )
             uic.loadUi(os.path.join(ui_path, "projects_page.ui"), self)
             self.projects_layout = self.findChild(QVBoxLayout, "projectsLayout")
         else:
-            # Компактный режим — создаём layout программно (без лишних элементов UI)
             self.setLayout(QVBoxLayout())
             self.projects_layout = self.layout()
             self.projects_layout.setContentsMargins(10, 10, 10, 10)
@@ -38,31 +32,7 @@ class ProjectsPage(QWidget):
 
         self.refresh_data()
 
-    def parse_date(self, date_str):
-        if not date_str:
-            return None
-        for fmt in ("%d.%m.%Y", "%Y-%m-%d"):
-            try:
-                return datetime.strptime(date_str, fmt).date()
-            except ValueError:
-                pass
-        return None
-
-    def format_date(self, date_str):
-        date = self.parse_date(date_str)
-        return date.strftime("%d.%m.%Y") if date else (date_str or "—")
-
-    def calculate_kpi(self, created_str, completed_str, due_str):
-        created = self.parse_date(created_str)
-        completed = self.parse_date(completed_str)
-        due = self.parse_date(due_str)
-        if not all([created, completed, due]):
-            return None
-        planned = (due - created).days
-        actual = (completed - created).days
-        if actual <= 0:
-            return float('inf')
-        return planned / actual
+    # ... (parse_date, format_date, calculate_kpi удалены — они теперь в TaskCard)
 
     def _get_default_projects(self):
         # Тестовые данные для режима "completed" (как было раньше)
@@ -110,32 +80,28 @@ class ProjectsPage(QWidget):
         ]
 
     def refresh_data(self):
-        # Очистка
         while self.projects_layout.count():
             item = self.projects_layout.takeAt(0)
             if item.widget():
                 item.widget().deleteLater()
 
-        # Данные
         if self.projects_data is None:
             self.projects_data = self._get_default_projects()
 
         projects = self.projects_data
 
-        # Фильтрация задач в зависимости от режима
         if self.mode == "completed":
             filtered_projects = []
             for project in projects:
                 filtered_tasks = [
-                    task for task in project["tasks"]
-                    if task.get("status", "").lower() in ("completed", "archived")
+                    t for t in project["tasks"]
+                    if t.get("status", "").lower() in ("completed", "archived")
                 ]
                 if filtered_tasks:
                     filtered_projects.append({"name": project["name"], "tasks": filtered_tasks})
             projects_to_show = filtered_projects
             no_data_text = "Нет выполненных проектов"
         else:
-            # В активном режиме показываем все проекты с задачами
             projects_to_show = [p for p in projects if p.get("tasks")]
             no_data_text = "Нет активных проектов"
 
@@ -154,15 +120,7 @@ class ProjectsPage(QWidget):
         self.projects_layout.addStretch()
 
     def add_project_section(self, project_name, tasks):
-        priority_map = {'low': 'Низкий', 'medium': 'Средний', 'high': 'Высокий', 'critical': 'Критический'}
-        priority_colors = {'low': '#2ecc71', 'medium': '#f1c40f', 'high': '#e67e22', 'critical': '#e74c3c'}
-        status_map = {
-            'to_do': 'К выполнению', 'in_progress': 'В работе', 'review': 'На проверке',
-            'completed': 'Выполнено', 'archived': 'Архивировано', 'overdue': 'Просрочена'
-        }
-        creator_names = {1: "Иван Иванов", 2: "Анна Петрова", 3: "Алексей Сидоров"}
-
-        # Стиль заголовка проекта
+        # Стиль заголовка проекта (как было ранее)
         if self.compact:
             header_style = """
                 QPushButton { background-color: #D22730; color: white; border-radius: 6px;
@@ -185,148 +143,118 @@ class ProjectsPage(QWidget):
         header_btn.setChecked(False)
         header_btn.setStyleSheet(header_style)
 
-        content_frame = QFrame()
-        content_frame.setVisible(False)
-        content_layout = QVBoxLayout(content_frame)
-        content_layout.setContentsMargins(
-            20 if not self.compact else 10, 15 if not self.compact else 10,
-            20 if not self.compact else 10, 15 if not self.compact else 10
-        )
-        content_layout.setSpacing(15 if not self.compact else 8)
-        content_frame.setStyleSheet("background-color: transparent;")
+        # Панель проекта (скрыта по умолчанию)
+        project_panel = QFrame()
+        project_panel.setVisible(False)
+        project_panel.setStyleSheet("background-color: #f5f5f5; border-radius: 4px;")
+        panel_layout = QVBoxLayout(project_panel)
+        panel_layout.setContentsMargins(10 if self.compact else 20, 10, 10, 10)
+        panel_layout.setSpacing(8)
 
-        show_theme = self.mode == "active"
-        check_overdue = self.mode == "active"
+        # Импортируем TaskCard, если ещё не импортирован в начале файла
+        from windows.analytics.task_card_analytics import TaskCard
 
+        # Статусы для группировки (в порядке отображения)
+        status_order = ["to_do", "in_progress", "review", "completed", "archived"]
+        status_groups = {s: [] for s in status_order}
+
+        for task in tasks:
+            status = task.get("status", "").lower()
+            if status in status_groups:
+                status_groups[status].append(task)
+            else:
+                # Неизвестный статус кладём в "to_do"
+                status_groups["to_do"].append(task)
+
+        # Определяем параметры для карточек
+        check_overdue = (self.mode == "active")  # проверять просрочку только в активном режиме
+        show_theme = (self.mode == "active")  # тему показывать только в активном
+        creator_names = TaskCard.DEFAULT_CREATOR_NAMES  # можно переопределить при необходимости
+
+        # Создаём сворачиваемые блоки для каждого статуса
+        for status_key in status_order:
+            status_tasks = status_groups.get(status_key, [])
+            if not status_tasks:
+                continue
+
+            # Человеческое название статуса
+            status_display = TaskCard.STATUS_MAP.get(status_key, status_key.capitalize())
+
+            # Кнопка статуса
+            status_btn = QPushButton(f"▶ {status_display} ({len(status_tasks)})")
+            status_btn.setCheckable(True)
+            status_btn.setStyleSheet("""
+
+                
+               QPushButton {
+                background-color: #1B232A;
+                color: white;
+                border: none;
+                border-radius: 6px;
+                padding: 8px 12px;
+                font-size: 13px;
+                font-weight: bold;
+                text-align: left;
+                margin-left: 5px;
+                 padding: 6px 10px;
+            }
+            QPushButton:hover {
+                background-color: #D9D9D6;
+                color: black;
+            }
+            QPushButton:pressed {
+                background-color: #B8B8B5;
+            } 
+                
+            """)
+            panel_layout.addWidget(status_btn)
+
+            # Панель задач статуса
+            tasks_panel = QFrame()
+            tasks_panel.setVisible(False)
+            tasks_panel.setStyleSheet("background-color: white; border-radius: 4px;")
+            tasks_layout = QVBoxLayout(tasks_panel)
+            tasks_layout.setContentsMargins(8, 8, 8, 8)
+            tasks_layout.setSpacing(6)
+
+            for task in status_tasks:
+                card = TaskCard(
+                    task_data=task,
+                    compact=self.compact,
+                    show_theme=show_theme,
+                    show_project=False,  # не показываем проект, т.к. уже в контексте
+                    check_overdue=check_overdue,
+                    creator_names=creator_names
+                )
+                tasks_layout.addWidget(card)
+
+            panel_layout.addWidget(tasks_panel)
+
+            # Связываем кнопку статуса с панелью
+            def make_toggle(panel):
+                return lambda checked: panel.setVisible(checked)
+
+            status_btn.toggled.connect(make_toggle(tasks_panel))
+            status_btn.toggled.connect(lambda checked, btn=status_btn:
+                                       btn.setText(("▼" if checked else "▶") + btn.text()[1:]))
+
+        # Если задач в проекте нет
         if not tasks:
             no_tasks = QLabel("Нет задач в этом проекте")
             no_tasks.setAlignment(Qt.AlignmentFlag.AlignCenter)
             no_tasks.setStyleSheet("color: #888888; padding: 30px; font-size: 16px;")
-            content_layout.addWidget(no_tasks)
-        else:
-            for task in tasks:
-                # === Карточка задачи (единая логика для обоих режимов) ===
-                card = QFrame()
+            panel_layout.addWidget(no_tasks)
 
-                # Просрочка
-                overdue = False
-                if check_overdue:
-                    due_str = task.get("due_date")
-                    status_lower = task.get("status", "").lower()
-                    if due_str and status_lower not in ("completed", "archived"):
-                        due_date = self.parse_date(due_str)
-                        if due_date and due_date < datetime.now().date():
-                            overdue = True
+        self.projects_layout.addWidget(header_btn)
+        self.projects_layout.addWidget(project_panel)
 
-                # Цвет границы и фон
-                if overdue:
-                    bg_color = "#ffeeee"
-                    border_color = "#e74c3c"
-                else:
-                    bg_color = "white"
-                    border_color = priority_colors.get(task.get("priority", "medium"), "#cccccc")
-
-                card.setStyleSheet(f"""
-                    QFrame {{
-                        background-color: {bg_color};
-                        border-radius: 8px;
-                        border-left: 6px solid {border_color};
-                        border: none;
-                    }}
-                """)
-
-                card_layout = QVBoxLayout(card)
-                card_layout.setContentsMargins(15 if not self.compact else 12, 15 if not self.compact else 12,
-                                               15 if not self.compact else 12, 15 if not self.compact else 12)
-                card_layout.setSpacing(8 if not self.compact else 5)
-
-                # Название
-                title_label = QLabel(task.get("title", "Без названия"))
-                title_label.setWordWrap(True)
-                title_label.setStyleSheet(f"font-size: {'16px' if not self.compact else '14px'}; font-weight: bold; color: #1B232A;")
-                card_layout.addWidget(title_label)
-
-                # Тема (только в active)
-                if show_theme:
-                    theme = task.get("theme", "нет")
-                    theme_label = QLabel(f"Тема: {theme}")
-                    theme_label.setStyleSheet("color: #555; font-size: 12px;")
-                    card_layout.addWidget(theme_label)
-
-                # Теги
-                tags = task.get("tags", [])
-                tags_str = ", ".join(tags) if tags else "нет"
-                tags_label = QLabel(f"Теги: {tags_str}")
-                tags_label.setStyleSheet("color: #555;")
-                card_layout.addWidget(tags_label)
-
-                # Приоритет
-                prio_text = priority_map.get(task.get("priority", "medium"), task.get("priority", "medium").capitalize())
-                prio_color = "#e74c3c" if overdue else priority_colors.get(task.get("priority", "medium"), "#000000")
-                prio_label = QLabel(f"Приоритет: {prio_text}")
-                prio_label.setStyleSheet(f"color: {prio_color}; font-weight: bold;")
-                card_layout.addWidget(prio_label)
-
-                # Даты
-                created_label = QLabel(f"Дата создания: {self.format_date(task.get('created_at'))}")
-                card_layout.addWidget(created_label)
-
-                due_display = self.format_date(task.get("due_date")) or "Нет"
-                due_text = f"Дедлайн: {due_display}"
-                if overdue:
-                    due_text += " (просрочена)"
-                    due_style = "color: #e74c3c; font-weight: bold;"
-                else:
-                    due_style = "color: #555;"
-                due_label = QLabel(due_text)
-                due_label.setStyleSheet(due_style)
-                card_layout.addWidget(due_label)
-
-                if task.get("completed_at"):
-                    completed_label = QLabel(f"Дата выполнения: {self.format_date(task.get('completed_at'))}")
-                    card_layout.addWidget(completed_label)
-
-                # Статус
-                status_text = status_map.get(task.get("status", "").lower(), task.get("status", "неизвестно").capitalize())
-                status_label = QLabel(f"Статус: {status_text}")
-                card_layout.addWidget(status_label)
-
-                # Создатель
-                creator_raw = task.get("creator") or task.get("creator_id")
-                if creator_raw is None:
-                    creator = "неизвестно"
-                elif isinstance(creator_raw, int):
-                    creator = creator_names.get(creator_raw, str(creator_raw))
-                else:
-                    creator = creator_raw
-                creator_label = QLabel(f"Создатель: {creator}")
-                card_layout.addWidget(creator_label)
-
-                # КПД
-                if task.get("status", "").lower() in ("completed", "archived", "выполнено"):
-                    kpi = self.calculate_kpi(
-                        task.get("created_at"),
-                        task.get("completed_at"),
-                        task.get("due_date")
-                    )
-                    if kpi is not None:
-                        kpi_text = "∞" if kpi == float('inf') else f"{kpi:.2f}"
-                        kpi_label = QLabel(f"КПД: {kpi_text}")
-                        kpi_label.setStyleSheet("font-weight: bold; color: #27ae60;")
-                        card_layout.addWidget(kpi_label)
-
-                content_layout.addWidget(card)
-
-        # Переключение видимости секции
-        def toggle(checked):
-            content_frame.setVisible(checked)
+        # Переключение видимости панели проекта
+        def toggle_project_panel(checked):
+            project_panel.setVisible(checked)
             arrow = " ▼" if checked else " ►"
             header_btn.setText(project_name + arrow)
 
-        header_btn.toggled.connect(toggle)
-
-        self.projects_layout.addWidget(header_btn)
-        self.projects_layout.addWidget(content_frame)
+        header_btn.toggled.connect(toggle_project_panel)
 
     def set_employee_id(self, employee_id):
         self.employee_id = employee_id

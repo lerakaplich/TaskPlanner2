@@ -29,7 +29,9 @@ ThemeCard QPushButton:hover {
 }
 ThemeCard QPushButton:pressed {
     background-color: #E0E0E0;
-}</string>
+}
+
+</string>
   </property>
   <property name="frameShape">
    <enum>QFrame::StyledPanel</enum>

@@ -1,7 +1,9 @@
 from datetime import datetime
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QPushButton, QFrame,
                              QLabel, QSizePolicy)
-from PyQt6.QtCore import Qt
+
+from windows.analytics.task_card_analytics import TaskCard
+
 
 class ThemeTaskCard(QFrame):
     """Карточка задачи для вкладки темы."""
@@ -171,12 +173,28 @@ class ThemeProjectsView(QWidget):
             status_btn = QPushButton(f"▶ {status_display} ({len(status_tasks)})")
             status_btn.setCheckable(True)
             status_btn.setStyleSheet("""
-                QPushButton {
-                    background-color: #3498db; color: white; border-radius: 4px;
-                    font-weight: bold; font-size: 13px; border: none; text-align: left;
-                    padding: 6px 10px; margin-left: 5px;
-                }
-                QPushButton:hover { background-color: #2980b9; }
+
+
+               QPushButton {
+                background-color: #1B232A;
+                color: white;
+                border: none;
+                border-radius: 6px;
+                padding: 8px 12px;
+                font-size: 13px;
+                font-weight: bold;
+                text-align: left;
+                margin-left: 5px;
+                 padding: 6px 10px;
+            }
+            QPushButton:hover {
+                background-color: #D9D9D6;
+                color: black;
+            }
+            QPushButton:pressed {
+                background-color: #B8B8B5;
+            } 
+
             """)
             panel_layout.addWidget(status_btn)
 
@@ -189,7 +207,7 @@ class ThemeProjectsView(QWidget):
             tasks_layout.setSpacing(6)
 
             for task in status_tasks:
-                card = ThemeTaskCard(task, project_name)
+                card = TaskCard(task, compact=True, show_project=True, check_overdue=True)
                 tasks_layout.addWidget(card)
 
             panel_layout.addWidget(tasks_panel)
