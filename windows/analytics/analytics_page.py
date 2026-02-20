@@ -370,7 +370,6 @@ class AnalyticsPage(QWidget):
                 break
 
         if projects_tab is None:
-            # Если вкладки нет, создаём её
             projects_tab = QWidget()
             tab_widget.addTab(projects_tab, "Проекты")
 
@@ -404,7 +403,7 @@ class AnalyticsPage(QWidget):
         grid = QGridLayout(container)
         grid.setHorizontalSpacing(15)
         grid.setVerticalSpacing(15)
-        grid.setContentsMargins(0, 0, 0, 0)
+        # grid.setContentsMargins(0, 0, 0, 0)  <-- УДАЛИТЕ ЭТУ СТРОКУ!
 
         # Получаем данные проектов
         projects = self.create_test_projects()
@@ -414,7 +413,6 @@ class AnalyticsPage(QWidget):
         max_cols = 3
 
         for proj in projects:
-            from windows.analytics.projects.project_card_analytics import ProjectCard
             card = ProjectCard(proj)
             grid.addWidget(card, row, col, alignment=Qt.AlignmentFlag.AlignTop)
 
@@ -431,6 +429,7 @@ class AnalyticsPage(QWidget):
         layout = QVBoxLayout(projects_tab)
         layout.setContentsMargins(15, 15, 15, 15)
         layout.addWidget(scroll)
+
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)

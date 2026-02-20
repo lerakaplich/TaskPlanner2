@@ -197,7 +197,6 @@ class ProjectCard(QFrame):
 
         # Добавляем растяжение в конце, чтобы всё прижималось к верху
         layout.addStretch()
-
     def _populate_employees(self):
         """Заполняет панель сотрудников."""
         employees = self.project_data.get("employees", [])

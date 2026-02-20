@@ -1,0 +1,201 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>EmployeeProjectCard</class>
+ <widget class="QFrame" name="EmployeeProjectCard">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>600</width>
+    <height>100</height>
+   </rect>
+  </property>
+  <property name="maximumSize">
+   <size>
+    <width>600</width>
+    <height>200</height>
+   </size>
+  </property>
+  <property name="styleSheet">
+   <string notr="true">EmployeeProjectCard {
+    background-color: white;
+    border-radius: 8px;
+    border: 1px solid #E0E0E0;
+}
+EmployeeProjectCard:hover {
+    background-color: #F5F5F5;
+    border-color: #CCCCCC;
+}</string>
+  </property>
+  <property name="frameShape">
+   <enum>QFrame::Shape::StyledPanel</enum>
+  </property>
+  <layout class="QHBoxLayout" name="horizontalLayout">
+   <property name="spacing">
+    <number>10</number>
+   </property>
+   <property name="leftMargin">
+    <number>12</number>
+   </property>
+   <property name="topMargin">
+    <number>12</number>
+   </property>
+   <property name="rightMargin">
+    <number>12</number>
+   </property>
+   <property name="bottomMargin">
+    <number>12</number>
+   </property>
+   <item>
+    <widget class="QFrame" name="avatar_frame">
+     <property name="minimumSize">
+      <size>
+       <width>40</width>
+       <height>40</height>
+      </size>
+     </property>
+     <property name="maximumSize">
+      <size>
+       <width>40</width>
+       <height>40</height>
+      </size>
+     </property>
+     <property name="styleSheet">
+      <string notr="true">background-color: #D22730;
+border-radius: 20px;
+color: white;
+font-weight: bold;
+font-size: 16px;
+</string>
+     </property>
+     <layout class="QVBoxLayout" name="avatar_layout">
+      <property name="spacing">
+       <number>0</number>
+      </property>
+      <property name="leftMargin">
+       <number>0</number>
+      </property>
+      <property name="topMargin">
+       <number>0</number>
+      </property>
+      <property name="rightMargin">
+       <number>0</number>
+      </property>
+      <property name="bottomMargin">
+       <number>0</number>
+      </property>
+      <item>
+       <widget class="QLabel" name="avatar_label">
+        <property name="styleSheet">
+         <string notr="true">background-color: transparent;
+color: white;
+font-size: 16px;
+font-weight: bold;
+border: none;</string>
+        </property>
+        <property name="text">
+         <string>ИФ</string>
+        </property>
+        <property name="alignment">
+         <set>Qt::AlignmentFlag::AlignCenter</set>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <item>
+    <layout class="QVBoxLayout" name="info_layout">
+     <property name="spacing">
+      <number>4</number>
+     </property>
+     <item>
+      <widget class="QLabel" name="name_label">
+       <property name="styleSheet">
+        <string notr="true">font-size: 14px;
+font-weight: bold;
+color: #1B232A;
+border: none;
+background-color: transparent;</string>
+       </property>
+       <property name="text">
+        <string>Иванов Иван Иванович</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <layout class="QHBoxLayout" name="stats_layout">
+       <property name="spacing">
+        <number>12</number>
+       </property>
+       <item>
+        <widget class="QLabel" name="total_label">
+         <property name="styleSheet">
+          <string notr="true">color: #666666;
+font-size: 12px;
+background-color: transparent;</string>
+         </property>
+         <property name="text">
+          <string>Всего: 0</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QLabel" name="active_label">
+         <property name="styleSheet">
+          <string notr="true">color: #2ecc71;
+font-size: 12px;
+background-color: transparent;</string>
+         </property>
+         <property name="text">
+          <string>Активные: 0</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QLabel" name="completed_label">
+         <property name="styleSheet">
+          <string notr="true">color: #3498db;
+font-size: 12px;
+background-color: transparent;</string>
+         </property>
+         <property name="text">
+          <string>Выполнено: 0</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QLabel" name="overdue_label">
+         <property name="styleSheet">
+          <string notr="true">color: #e74c3c;
+font-size: 12px;
+font-weight: bold;
+background-color: transparent;</string>
+         </property>
+         <property name="text">
+          <string>Просрочено: 0</string>
+         </property>
+        </widget>
+       </item>
+      </layout>
+     </item>
+    </layout>
+   </item>
+   <item>
+    <spacer name="horizontalSpacer">
+     <property name="orientation">
+      <enum>Qt::Orientation::Horizontal</enum>
+     </property>
+     <property name="sizeHint" stdset="0">
+      <size>
+       <width>40</width>
+       <height>20</height>
+      </size>
+     </property>
+    </spacer>
+   </item>
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>
