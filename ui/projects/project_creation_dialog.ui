@@ -6,262 +6,249 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>600</width>
-    <height>700</height>
+    <width>500</width>
+    <height>493</height>
    </rect>
   </property>
   <property name="windowTitle">
-   <string>Создание нового проекта</string>
+   <string>Создание проекта</string>
   </property>
   <property name="styleSheet">
    <string notr="true">QDialog {
     background-color: #F5F5F7;
     font-family: 'Segoe UI', Arial;
-}
-
-QLabel {
-    font-size: 14px;
-    font-weight: bold;
-    color: #1B232A;
-    margin-bottom: 5px;
-}
-
-QLineEdit, QTextEdit, QComboBox {
-    border: 2px solid #E0E0E0;
-    border-radius: 8px;
-    padding: 10px;
-    font-size: 14px;
-    background-color: white;
-}
-QLineEdit:focus, QTextEdit:focus, QComboBox:focus {
-    border: 2px solid #ccab6e;
-}
-
-QListWidget {
-    border: 2px solid #E0E0E0;
-    border-radius: 8px;
-    background-color: white;
-    font-size: 14px;
-}
-QListWidget::item {
-    padding: 8px;
-    border-bottom: 1px solid #F0F0F0;
-}
-QListWidget::item:selected {
-    background-color: #FFF2E0;
-    color: #1B232A;
-}
-
-QPushButton[styleClass="gold"] {
-    background-color: #ccab6e;
-    color: white;
-    border-radius: 10px;
-    font-weight: bold;
-    font-size: 16px;
-    border: none;
-    padding: 12px 24px;
-}
-QPushButton[styleClass="gold"]:hover {
-    background-color: #998664;
-}
-
-QPushButton[styleClass="gray"] {
-    background-color: #1B232A;
-    color: white;
-    border: none;
-    border-radius: 10px;
-    padding: 10px 20px;
-    font-size: 14px;
-    font-weight: bold;
-}
-QPushButton[styleClass="gray"]:hover {
-    background-color: #D9D9D6;
-    color: black;
 }</string>
   </property>
+  <property name="modal">
+   <bool>true</bool>
+  </property>
   <layout class="QVBoxLayout" name="verticalLayout">
+   <property name="spacing">
+    <number>15</number>
+   </property>
+   <property name="leftMargin">
+    <number>25</number>
+   </property>
+   <property name="topMargin">
+    <number>25</number>
+   </property>
+   <property name="rightMargin">
+    <number>25</number>
+   </property>
+   <property name="bottomMargin">
+    <number>25</number>
+   </property>
    <item>
-    <widget class="QLabel" name="labelTitle">
+    <widget class="QLabel" name="titleLabel">
      <property name="styleSheet">
       <string notr="true">QLabel {
     font-size: 24px;
     font-weight: bold;
     color: #1B232A;
-    padding-bottom: 10px;
-    border-bottom: 2px solid #ccab6e;
+    margin-bottom: 10px;
 }</string>
      </property>
      <property name="text">
-      <string>Новый проект</string>
+      <string>Создание проекта</string>
      </property>
      <property name="alignment">
-      <set>Qt::AlignCenter</set>
+      <set>Qt::AlignmentFlag::AlignCenter</set>
      </property>
     </widget>
    </item>
    <item>
-    <widget class="QLabel" name="labelName">
-     <property name="text">
-      <string>Название проекта *</string>
+    <widget class="QLineEdit" name="nameInput">
+     <property name="minimumSize">
+      <size>
+       <width>0</width>
+       <height>45</height>
+      </size>
      </property>
-    </widget>
-   </item>
-   <item>
-    <widget class="QLineEdit" name="projectNameInput">
+     <property name="maximumSize">
+      <size>
+       <width>16777215</width>
+       <height>45</height>
+      </size>
+     </property>
+     <property name="styleSheet">
+      <string notr="true">QLineEdit {
+    border: 2px solid #E0E0E0;
+    border-radius: 8px;
+    padding: 12px;
+    font-size: 14px;
+    background-color: white;
+}
+QLineEdit:focus {
+    border: 2px solid #D22730;
+}</string>
+     </property>
      <property name="placeholderText">
       <string>Введите название проекта</string>
      </property>
     </widget>
    </item>
    <item>
-    <widget class="QLabel" name="labelDescription">
-     <property name="text">
-      <string>Описание</string>
-     </property>
-    </widget>
-   </item>
-   <item>
-    <widget class="QTextEdit" name="projectDescriptionInput">
-     <property name="maximumHeight">
-      <number>100</number>
-     </property>
-     <property name="placeholderText">
-      <string>Опишите цели и задачи проекта...</string>
-     </property>
-    </widget>
-   </item>
-   <item>
-    <layout class="QHBoxLayout" name="horizontalLayout">
-     <item>
-      <widget class="QLabel" name="labelStartDate">
-       <property name="text">
-        <string>Дата начала</string>
-       </property>
-      </widget>
-     </item>
-     <item>
-      <widget class="QDateEdit" name="startDateEdit">
-       <property name="calendarPopup">
-        <bool>true</bool>
-       </property>
-      </widget>
-     </item>
-     <item>
-      <widget class="QLabel" name="labelEndDate">
-       <property name="text">
-        <string>Дата окончания</string>
-       </property>
-      </widget>
-     </item>
-     <item>
-      <widget class="QDateEdit" name="endDateEdit">
-       <property name="calendarPopup">
-        <bool>true</bool>
-       </property>
-      </widget>
-     </item>
-    </layout>
-   </item>
-   <item>
-    <widget class="QLabel" name="labelParticipants">
-     <property name="text">
-      <string>Участники проекта</string>
-     </property>
-    </widget>
-   </item>
-   <item>
-    <widget class="QListWidget" name="participantsList">
-     <property name="selectionMode">
-      <enum>QAbstractItemView::MultiSelection</enum>
-     </property>
-    </widget>
-   </item>
-   <item>
-    <layout class="QHBoxLayout" name="horizontalLayout_2">
-     <item>
-      <widget class="QComboBox" name="roleCombo">
-       <item>
-        <property name="text">
-         <string>Участник</string>
-        </property>
-       </item>
-       <item>
-        <property name="text">
-         <string>Редактор</string>
-        </property>
-       </item>
-       <item>
-        <property name="text">
-         <string>Наблюдатель</string>
-        </property>
-       </item>
-       <item>
-        <property name="text">
-         <string>Владелец</string>
-        </property>
-       </item>
-      </widget>
-     </item>
-     <item>
-      <widget class="QPushButton" name="btnAddParticipant">
-
-       <property name="text">
-        <string>+ Добавить участника</string>
-       </property>
-      </widget>
-     </item>
-    </layout>
-   </item>
-   <item>
-    <widget class="QLabel" name="labelTemplate">
-     <property name="text">
-      <string>Шаблон проекта (опционально)</string>
-     </property>
-    </widget>
-   </item>
-   <item>
-    <widget class="QComboBox" name="templateCombo">
-     <item>
-      <property name="text">
-       <string>Без шаблона</string>
-      </property>
-     </item>
-     <item>
-      <property name="text">
-       <string>Разработка продукта</string>
-      </property>
-     </item>
-     <item>
-      <property name="text">
-       <string>Внедрение системы</string>
-      </property>
-     </item>
-     <item>
-      <property name="text">
-       <string>Маркетинговый проект</string>
-      </property>
-     </item>
-    </widget>
-   </item>
-   <item>
-    <spacer name="verticalSpacer">
-     <property name="orientation">
-      <enum>Qt::Vertical</enum>
-     </property>
-     <property name="sizeHint" stdset="0">
+    <widget class="QTextEdit" name="descInput">
+     <property name="minimumSize">
       <size>
-       <width>20</width>
-       <height>40</height>
+       <width>0</width>
+       <height>120</height>
       </size>
      </property>
-    </spacer>
+     <property name="styleSheet">
+      <string notr="true">QTextEdit {
+    border: 2px solid #E0E0E0;
+    border-radius: 8px;
+    padding: 12px;
+    font-size: 14px;
+    background-color: white;
+}
+QTextEdit:focus {
+    border: 2px solid #D22730;
+}</string>
+     </property>
+     <property name="placeholderText">
+      <string>Введите описание для проекта</string>
+     </property>
+    </widget>
    </item>
    <item>
-    <layout class="QHBoxLayout" name="horizontalLayout_3">
+    <layout class="QHBoxLayout" name="buttonsLayout">
+     <property name="spacing">
+      <number>10</number>
+     </property>
+     <item>
+      <widget class="QPushButton" name="participantsBtn">
+       <property name="minimumSize">
+        <size>
+         <width>0</width>
+         <height>45</height>
+        </size>
+       </property>
+       <property name="maximumSize">
+        <size>
+         <width>16777215</width>
+         <height>45</height>
+        </size>
+       </property>
+       <property name="font">
+        <font>
+         <pointsize>-1</pointsize>
+         <bold>true</bold>
+        </font>
+       </property>
+       <property name="cursor">
+        <cursorShape>PointingHandCursor</cursorShape>
+       </property>
+       <property name="styleSheet">
+        <string notr="true">QPushButton {
+    background-color: #1B232A;
+    color: white;
+    border: none;
+    border-radius: 10px;
+    padding: 12px;
+    font-size: 14px;
+    font-weight: bold;
+}
+QPushButton:hover {
+    background-color: #D9D9D6;
+    color: black;
+}
+QPushButton:pressed {
+    background-color: #B8B8B5;
+}</string>
+       </property>
+       <property name="text">
+        <string>Участники</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QPushButton" name="adminsBtn">
+       <property name="minimumSize">
+        <size>
+         <width>0</width>
+         <height>45</height>
+        </size>
+       </property>
+       <property name="maximumSize">
+        <size>
+         <width>16777215</width>
+         <height>45</height>
+        </size>
+       </property>
+       <property name="font">
+        <font>
+         <pointsize>-1</pointsize>
+         <bold>true</bold>
+        </font>
+       </property>
+       <property name="cursor">
+        <cursorShape>PointingHandCursor</cursorShape>
+       </property>
+       <property name="styleSheet">
+        <string notr="true">QPushButton {
+    background-color: #1B232A;
+    color: white;
+    border: none;
+    border-radius: 10px;
+    padding: 12px;
+    font-size: 14px;
+    font-weight: bold;
+}
+QPushButton:hover {
+    background-color: #D9D9D6;
+    color: black;
+}
+QPushButton:pressed {
+    background-color: #B8B8B5;
+}</string>
+       </property>
+       <property name="text">
+        <string>Администраторы</string>
+       </property>
+      </widget>
+     </item>
+    </layout>
+   </item>
+   <item>
+    <layout class="QHBoxLayout" name="bottomLayout">
+     <property name="topMargin">
+      <number>10</number>
+     </property>
+     <property name="bottomMargin">
+      <number>10</number>
+     </property>
+     <item>
+      <widget class="QCheckBox" name="activeCheckbox">
+       <property name="styleSheet">
+        <string notr="true">QCheckBox {
+    font-size: 14px;
+    color: #1B232A;
+}
+QCheckBox::indicator {
+    width: 18px;
+    height: 18px;
+    border: 2px solid #1B232A;
+    border-radius: 4px;
+}
+QCheckBox::indicator:checked {
+    background-color: #D22730;
+    border: 2px solid #D22730;
+}</string>
+       </property>
+       <property name="text">
+        <string>Активный проект</string>
+       </property>
+       <property name="checked">
+        <bool>true</bool>
+       </property>
+      </widget>
+     </item>
      <item>
       <spacer name="horizontalSpacer">
        <property name="orientation">
-        <enum>Qt::Horizontal</enum>
+        <enum>Qt::Orientation::Horizontal</enum>
        </property>
        <property name="sizeHint" stdset="0">
         <size>
@@ -272,22 +259,78 @@ QPushButton[styleClass="gray"]:hover {
       </spacer>
      </item>
      <item>
-      <widget class="QPushButton" name="btnCancel">
-
-       <property name="text">
-        <string>Отмена</string>
+      <widget class="QLabel" name="dateLabel">
+       <property name="styleSheet">
+        <string notr="true">QLabel {
+    font-size: 14px;
+    color: #666;
+    padding: 5px;
+}</string>
        </property>
-      </widget>
-     </item>
-     <item>
-      <widget class="QPushButton" name="btnCreate">
-
        <property name="text">
-        <string>Создать проект</string>
+        <string>Создан: 23.02.2026</string>
        </property>
       </widget>
      </item>
     </layout>
+   </item>
+   <item>
+    <widget class="QPushButton" name="createBtn">
+     <property name="minimumSize">
+      <size>
+       <width>0</width>
+       <height>50</height>
+      </size>
+     </property>
+     <property name="maximumSize">
+      <size>
+       <width>16777215</width>
+       <height>50</height>
+      </size>
+     </property>
+     <property name="font">
+      <font>
+       <pointsize>-1</pointsize>
+       <bold>true</bold>
+      </font>
+     </property>
+     <property name="cursor">
+      <cursorShape>PointingHandCursor</cursorShape>
+     </property>
+     <property name="styleSheet">
+      <string notr="true">QPushButton {
+    background-color: #D22730;
+    color: white;
+    border-radius: 10px;
+    font-weight: bold;
+    font-size: 16px;
+    border: none;
+    padding: 12px;
+}
+QPushButton:hover {
+    background-color: #862633;
+}
+QPushButton:pressed {
+    background-color: #6a1e29;
+}</string>
+     </property>
+     <property name="text">
+      <string>Создать проект</string>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <spacer name="verticalSpacer">
+     <property name="orientation">
+      <enum>Qt::Orientation::Vertical</enum>
+     </property>
+     <property name="sizeHint" stdset="0">
+      <size>
+       <width>20</width>
+       <height>40</height>
+      </size>
+     </property>
+    </spacer>
    </item>
   </layout>
  </widget>

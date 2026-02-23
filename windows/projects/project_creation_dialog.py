@@ -1,14 +1,14 @@
 import os
-
+import sys
 from PyQt6 import uic
-from PyQt6.QtWidgets import QDialog, QMessageBox, QListWidgetItem
+from PyQt6.QtWidgets import QDialog, QApplication
 from PyQt6.QtCore import QDate
-from PyQt6.uic import loadUi
 
 
 class ProjectCreationDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
+
 
         ui_path = os.path.join(
             os.path.dirname(__file__),  # windows/analytics/employees/
@@ -17,78 +17,46 @@ class ProjectCreationDialog(QDialog):
         )
         uic.loadUi(os.path.join(ui_path, "project_creation_dialog.ui"), self)
 
-        # Начальные значения
-        self.startDateEdit.setDate(QDate.currentDate())
-        self.endDateEdit.setDate(QDate.currentDate().addMonths(1))
 
-        # Пример списка сотрудников (потом заменишь на БД)
-        self.available_users = [
-            "Иванов И.И.",
-            "Петров А.В.",
-            "Сидорова Е.П.",
-            "Кузнецов С.П."
-        ]
-        self.participantsList.addItems(self.available_users)
 
-        # Подключение кнопок
-        self.btnCancel.clicked.connect(self.reject)
-        self.btnCreate.clicked.connect(self.on_create_clicked)
-        self.btnAddParticipant.clicked.connect(self.add_participant)
+        # Устанавливаем текущую дату
+        current_date = QDate.currentDate().toString("dd.MM.yyyy")
+        self.dateLabel.setText(f"Создан: {current_date}")
 
-        # Здесь будут данные созданного проекта
-        self.project_data = None
+        # Подключаем сигналы
+        self.participantsBtn.clicked.connect(self.select_participants)
+        self.adminsBtn.clicked.connect(self.select_admins)
+        self.createBtn.clicked.connect(self.accept)
 
-    def add_participant(self):
-        """
-        Назначение роли выбранным участникам
-        (пока просто пример логики)
-        """
-        selected_items = self.participantsList.selectedItems()
-        role = self.roleCombo.currentText()
+    def select_participants(self):
+        """Открыть диалог выбора участников"""
+        # Здесь можно открыть диалог с выбором участников
+        print("Выбор участников проекта")
 
-        for item in selected_items:
-            item.setText(f"{item.text().split(' (')[0]} ({role})")
-
-    def on_create_clicked(self):
-        """
-        Проверка данных и создание проекта
-        """
-        name = self.projectNameInput.text().strip()
-
-        if not name:
-            QMessageBox.warning(
-                self,
-                "Ошибка",
-                "Название проекта обязательно для заполнения"
-            )
-            return
-
-        if self.endDateEdit.date() < self.startDateEdit.date():
-            QMessageBox.warning(
-                self,
-                "Ошибка",
-                "Дата окончания не может быть раньше даты начала"
-            )
-            return
-
-        # Сбор данных проекта
-        self.project_data = {
-            "name": name,
-            "description": self.projectDescriptionInput.toPlainText(),
-            "start_date": self.startDateEdit.date().toString("dd.MM.yyyy"),
-            "end_date": self.endDateEdit.date().toString("dd.MM.yyyy"),
-            "participants": [
-                self.participantsList.item(i).text()
-                for i in range(self.participantsList.count())
-            ],
-            "template": self.templateCombo.currentText()
-        }
-
-        # Закрываем диалог others_tasks_page.ui результатом Accepted
-        self.accept()
+    def select_admins(self):
+        """Открыть диалог выбора администраторов"""
+        # Здесь можно открыть диалог с выбором администраторов
+        print("Выбор администраторов проекта")
 
     def get_project_data(self):
-        """
-        Возвращает данные созданного проекта
-        """
-        return self.project_data
+        """Получить данные проекта"""
+        return {
+            'name': self.nameInput.text(),
+            'description': self.descInput.toPlainText(),
+            'is_active': self.activeCheckbox.isChecked(),
+            'created_date': QDate.currentDate().toString("dd.MM.yyyy")
+        }
+
+
+# Для тестирования
+if __name__ == "__main__":
+    app = QApplication(sys.argv)
+    app.setStyle("Fusion")
+
+    dialog = ProjectCreationDialog()
+
+    if dialog.exec() == QDialog.DialogCode.Accepted:
+        data = dialog.get_project_data()
+        print("Проект создан:", data)
+
+    sys.exit(app.exec())

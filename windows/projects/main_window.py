@@ -2,7 +2,7 @@ import os
 import sys
 
 from PyQt6 import uic
-from PyQt6.QtWidgets import QApplication, QMainWindow, QFrame, QSizePolicy, QSpacerItem, QWidget
+from PyQt6.QtWidgets import QApplication, QMainWindow, QFrame, QSizePolicy, QSpacerItem, QWidget, QDialog
 from PyQt6.uic import loadUi  # <-- Добавьте эту строку
 from windows.analytics.analytics_page import AnalyticsPage
 from windows.gantt.gantt_chart import GanttChartWidget
@@ -10,6 +10,7 @@ from windows.my_tasks.my_tasks_page import MyTasksPage
 from windows.other_tasks.others_tasks_page import OthersTasksPage
 from windows.overtime.overtime_page import OvertimePage
 from windows.profile.profile_page import ProfilePage
+from windows.projects.project_creation_dialog import ProjectCreationDialog
 
 
 class MainWindow(QMainWindow):
@@ -344,15 +345,38 @@ class MainWindow(QMainWindow):
 
             self.current_columns = columns
 
-
     def create_project(self):
-        from project_creation_dialog import ProjectCreationDialog
-
+        """Открыть диалог создания нового проекта"""
         dialog = ProjectCreationDialog(self)
 
-        if dialog.exec():
+        if dialog.exec() == QDialog.DialogCode.Accepted:
             project = dialog.get_project_data()
             print("Проект создан:", project)
+
+            # Здесь можно добавить:
+            # - Сохранение в БД
+            # - Обновление списка проектов
+            # - Показ уведомления
+            # - Открытие созданного проекта
+
+            from PyQt6.QtWidgets import QMessageBox
+            QMessageBox.information(
+                self,
+                "Проект создан",
+                f"Проект '{project['name']}' успешно создан!"
+            )
+
+
+    def refresh_projects_list(self, new_project=None):
+        """Обновление списка проектов после создания"""
+        if new_project:
+            # Добавление нового проекта в список
+            # Здесь должен быть код для динамического добавления карточки проекта
+            print(f"Добавление проекта '{new_project['name']}' в список")
+
+            # Можно вызвать метод для перезагрузки всех проектов
+            # self.load_projects()
+            pass
 
     def toggle_left_panel(self):
         """Свернуть/развернуть левую панель"""
