@@ -6,48 +6,102 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>550</width>
-    <height>600</height>
+    <width>500</width>
+    <height>650</height>
    </rect>
   </property>
   <property name="minimumSize">
    <size>
     <width>500</width>
-    <height>550</height>
+    <height>650</height>
    </size>
   </property>
   <property name="windowTitle">
-   <string>Создание/Редактирование задачи</string>
-  </property>
-  <property name="modal">
-   <bool>true</bool>
+   <string>Создание задачи</string>
   </property>
   <property name="styleSheet">
-   <string notr="true">QDialog {
-    background-color: white;
-    font-family: 'Segoe UI', Arial, sans-serif;
-}</string>
+   <string notr="true">
+    QDialog {
+        background-color: #f8f9fa;
+        font-family: 'Segoe UI', Arial, sans-serif;
+    }
+    QLabel {
+        color: #2c3e50;
+    }
+    QLineEdit, QTextEdit, QComboBox, QDateEdit {
+        background-color: white;
+        border: 2px solid #e9ecef;
+        border-radius: 8px;
+        padding: 10px 12px;
+        font-size: 14px;
+        color: #2c3e50;
+    }
+    QLineEdit:focus, QTextEdit:focus, QComboBox:focus, QDateEdit:focus {
+        border: 2px solid #D22730;
+        background-color: #fff5f5;
+    }
+    QLineEdit:hover, QTextEdit:hover, QComboBox:hover, QDateEdit:hover {
+        border: 2px solid #ccab6e;
+        background-color: #fffaf0;
+    }
+    QComboBox::drop-down {
+        border: none;
+        width: 30px;
+    }
+    QComboBox::down-arrow {
+        image: none;
+        border-left: 6px solid transparent;
+        border-right: 6px solid transparent;
+        border-top: 6px solid #D22730;
+        width: 0;
+        height: 0;
+    }
+    QComboBox QAbstractItemView {
+        border: 2px solid #D22730;
+        border-radius: 8px;
+        background-color: white;
+        selection-background-color: #D22730;
+        selection-color: white;
+        outline: none;
+        padding: 4px;
+    }
+    QDateEdit::drop-down {
+        border: none;
+        width: 30px;
+    }
+    QDateEdit::down-arrow {
+        image: none;
+        border-left: 6px solid transparent;
+        border-right: 6px solid transparent;
+        border-top: 6px solid #D22730;
+        width: 0;
+        height: 0;
+    }
+   </string>
   </property>
   <layout class="QVBoxLayout" name="verticalLayout">
    <property name="spacing">
-    <number>10</number>
+    <number>12</number>
    </property>
    <property name="leftMargin">
-    <number>20</number>
+    <number>25</number>
    </property>
    <property name="topMargin">
-    <number>20</number>
+    <number>25</number>
    </property>
    <property name="rightMargin">
-    <number>20</number>
+    <number>25</number>
    </property>
    <property name="bottomMargin">
-    <number>20</number>
+    <number>25</number>
    </property>
    <item>
     <widget class="QLabel" name="titleLabel">
+     <property name="styleSheet">
+      <string notr="true">font-size: 24px; font-weight: bold; color: black; margin-bottom: 15px;</string>
+     </property>
      <property name="text">
-      <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;&lt;span style=&quot; font-size:18pt; font-weight:700;&quot;&gt;📝 Создание задачи&lt;/span&gt;&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+      <string>Создание новой задачи</string>
      </property>
      <property name="alignment">
       <set>Qt::AlignmentFlag::AlignCenter</set>
@@ -55,318 +109,250 @@
     </widget>
    </item>
    <item>
-    <widget class="QFrame" name="frame">
-     <property name="frameShape">
-      <enum>QFrame::Shape::StyledPanel</enum>
+    <widget class="QLineEdit" name="lineEditTitle">
+     <property name="placeholderText">
+      <string>Введите название задачи *</string>
      </property>
-     <property name="frameShadow">
-      <enum>QFrame::Shadow::Raised</enum>
-     </property>
-     <layout class="QVBoxLayout" name="verticalLayout_2">
-      <property name="spacing">
-       <number>15</number>
-      </property>
-      <property name="leftMargin">
-       <number>15</number>
-      </property>
-      <property name="topMargin">
-       <number>15</number>
-      </property>
-      <property name="rightMargin">
-       <number>15</number>
-      </property>
-      <property name="bottomMargin">
-       <number>15</number>
-      </property>
-      <item>
-       <widget class="QLabel" name="labelTitle">
-        <property name="text">
-         <string>Название задачи:</string>
-        </property>
-        <property name="styleSheet">
-         <string notr="true">font-weight: bold; font-size: 14px;</string>
-        </property>
-       </widget>
-      </item>
-      <item>
-       <widget class="QLineEdit" name="lineEditTitle">
-        <property name="placeholderText">
-         <string>Введите название задачи</string>
-        </property>
-        <property name="styleSheet">
-         <string notr="true">QLineEdit {
-    border: 2px solid #E0E0E0;
-    border-radius: 8px;
-    padding: 10px 12px;
-    font-size: 14px;
-    background-color: white;
-}
-QLineEdit:focus {
-    border: 2px solid #ccab6e;
-}</string>
-        </property>
-       </widget>
-      </item>
-      <item>
-       <widget class="QLabel" name="labelDescription">
-        <property name="text">
-         <string>Описание:</string>
-        </property>
-        <property name="styleSheet">
-         <string notr="true">font-weight: bold; font-size: 14px;</string>
-        </property>
-       </widget>
-      </item>
-      <item>
-       <widget class="QTextEdit" name="textEditDescription">
-        <property name="maximumHeight">
-         <number>100</number>
-        </property>
-        <property name="placeholderText">
-         <string>Введите описание задачи</string>
-        </property>
-        <property name="styleSheet">
-         <string notr="true">QTextEdit {
-    border: 2px solid #E0E0E0;
-    border-radius: 8px;
-    padding: 10px 12px;
-    font-size: 14px;
-    background-color: white;
-}
-QTextEdit:focus {
-    border: 2px solid #ccab6e;
-}</string>
-        </property>
-       </widget>
-      </item>
-      <item>
-       <widget class="QLabel" name="labelAssignee">
-        <property name="text">
-         <string>Исполнитель:</string>
-        </property>
-        <property name="styleSheet">
-         <string notr="true">font-weight: bold; font-size: 14px;</string>
-        </property>
-       </widget>
-      </item>
-      <item>
-       <widget class="QLineEdit" name="lineEditAssignee">
-        <property name="placeholderText">
-         <string>ФИО исполнителя</string>
-        </property>
-        <property name="styleSheet">
-         <string notr="true">QLineEdit {
-    border: 2px solid #E0E0E0;
-    border-radius: 8px;
-    padding: 10px 12px;
-    font-size: 14px;
-    background-color: white;
-}
-QLineEdit:focus {
-    border: 2px solid #ccab6e;
-}</string>
-        </property>
-       </widget>
-      </item>
-      <item>
-       <widget class="QLabel" name="labelProject">
-        <property name="text">
-         <string>Проект:</string>
-        </property>
-        <property name="styleSheet">
-         <string notr="true">font-weight: bold; font-size: 14px;</string>
-        </property>
-       </widget>
-      </item>
-      <item>
-       <widget class="QLineEdit" name="lineEditProject">
-        <property name="placeholderText">
-         <string>Название проекта</string>
-        </property>
-        <property name="styleSheet">
-         <string notr="true">QLineEdit {
-    border: 2px solid #E0E0E0;
-    border-radius: 8px;
-    padding: 10px 12px;
-    font-size: 14px;
-    background-color: white;
-}
-QLineEdit:focus {
-    border: 2px solid #ccab6e;
-}</string>
-        </property>
-       </widget>
-      </item>
-      <item>
-       <layout class="QHBoxLayout" name="horizontalLayout">
-        <item>
-         <widget class="QLabel" name="labelPriority">
-          <property name="text">
-           <string>Приоритет:</string>
-          </property>
-          <property name="styleSheet">
-           <string notr="true">font-weight: bold; font-size: 14px;</string>
-          </property>
-         </widget>
-        </item>
-        <item>
-         <widget class="QComboBox" name="comboBoxPriority">
-          <property name="styleSheet">
-           <string notr="true">QComboBox {
-    border: 2px solid #E0E0E0;
-    border-radius: 8px;
-    padding: 8px 12px;
-    font-size: 14px;
-    background-color: white;
-}
-QComboBox:hover {
-    border: 2px solid #ccab6e;
-}
-QComboBox::drop-down {
-    border: none;
-}</string>
-          </property>
-          <item>
-           <property name="text">
-            <string>Низкий</string>
-           </property>
-          </item>
-          <item>
-           <property name="text">
-            <string>Средний</string>
-           </property>
-          </item>
-          <item>
-           <property name="text">
-            <string>Высокий</string>
-           </property>
-          </item>
-          <item>
-           <property name="text">
-            <string>Критический</string>
-           </property>
-          </item>
-         </widget>
-        </item>
-        <item>
-         <spacer name="horizontalSpacer">
-          <property name="orientation">
-           <enum>Qt::Orientation::Horizontal</enum>
-          </property>
-          <property name="sizeHint" stdset="0">
-           <size>
-            <width>40</width>
-            <height>20</height>
-           </size>
-          </property>
-         </spacer>
-        </item>
-        <item>
-         <widget class="QLabel" name="labelDeadline">
-          <property name="text">
-           <string>Срок выполнения:</string>
-          </property>
-          <property name="styleSheet">
-           <string notr="true">font-weight: bold; font-size: 14px;</string>
-          </property>
-         </widget>
-        </item>
-        <item>
-         <widget class="QDateEdit" name="dateEditDeadline">
-          <property name="calendarPopup">
-           <bool>true</bool>
-          </property>
-          <property name="styleSheet">
-           <string notr="true">QDateEdit {
-    border: 2px solid #E0E0E0;
-    border-radius: 8px;
-    padding: 8px 12px;
-    font-size: 14px;
-    background-color: white;
-}
-QDateEdit:hover {
-    border: 2px solid #ccab6e;
-}
-QDateEdit::drop-down {
-    border: none;
-}</string>
-          </property>
-         </widget>
-        </item>
-       </layout>
-      </item>
-      <item>
-       <widget class="QLabel" name="labelStatus">
-        <property name="text">
-         <string>Статус:</string>
-        </property>
-        <property name="styleSheet">
-         <string notr="true">font-weight: bold; font-size: 14px;</string>
-        </property>
-       </widget>
-      </item>
-      <item>
-       <widget class="QComboBox" name="comboBoxStatus">
-        <property name="styleSheet">
-         <string notr="true">QComboBox {
-    border: 2px solid #E0E0E0;
-    border-radius: 8px;
-    padding: 10px 12px;
-    font-size: 14px;
-    background-color: white;
-}
-QComboBox:hover {
-    border: 2px solid #ccab6e;
-}
-QComboBox::drop-down {
-    border: none;
-}</string>
-        </property>
-        <item>
-         <property name="text">
-          <string>К выполнению</string>
-         </property>
-        </item>
-        <item>
-         <property name="text">
-          <string>В работе</string>
-         </property>
-        </item>
-        <item>
-         <property name="text">
-          <string>На проверке</string>
-         </property>
-        </item>
-        <item>
-         <property name="text">
-          <string>Выполнено</string>
-         </property>
-        </item>
-       </widget>
-      </item>
-     </layout>
     </widget>
    </item>
    <item>
-    <spacer name="verticalSpacer">
-     <property name="orientation">
-      <enum>Qt::Orientation::Vertical</enum>
-     </property>
-     <property name="sizeHint" stdset="0">
+    <widget class="QTextEdit" name="textEditDescription">
+     <property name="minimumSize">
       <size>
-       <width>20</width>
-       <height>20</height>
+       <width>0</width>
+       <height>120</height>
       </size>
      </property>
-    </spacer>
+     <property name="maximumSize">
+      <size>
+       <width>16777215</width>
+       <height>150</height>
+      </size>
+     </property>
+     <property name="placeholderText">
+      <string>Введите описание задачи</string>
+     </property>
+    </widget>
    </item>
    <item>
-    <widget class="QDialogButtonBox" name="buttonBox">
-     <property name="orientation">
-      <enum>Qt::Orientation::Horizontal</enum>
+    <widget class="QComboBox" name="comboBoxProject">
+     <property name="placeholderText">
+      <string>Выберите проект</string>
      </property>
-     <property name="standardButtons">
-      <set>QDialogButtonBox::StandardButton::Cancel|QDialogButtonBox::StandardButton::Ok</set>
+    </widget>
+   </item>
+   <item>
+    <layout class="QVBoxLayout" name="assigneeLayout">
+     <property name="spacing">
+      <number>5</number>
+     </property>
+     <item>
+      <widget class="QComboBox" name="comboBoxAssignee">
+       <property name="placeholderText">
+        <string>Выберите исполнителя</string>
+       </property>
+      </widget>
+     </item>
+    </layout>
+   </item>
+   <item>
+    <layout class="QHBoxLayout" name="optionsLayout">
+     <property name="spacing">
+      <number>15</number>
+     </property>
+     <item>
+      <layout class="QVBoxLayout" name="priorityLayout">
+       <property name="spacing">
+        <number>5</number>
+       </property>
+       <item>
+        <widget class="QLabel" name="labelPriority">
+         <property name="styleSheet">
+          <string notr="true">font-weight: bold; font-size: 14px; color: #D22730; margin-left: 5px;</string>
+         </property>
+         <property name="text">
+          <string>Приоритет</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QComboBox" name="comboBoxPriority">
+         <item>
+          <property name="text">
+           <string>Низкий</string>
+          </property>
+         </item>
+         <item>
+          <property name="text">
+           <string>Средний</string>
+          </property>
+         </item>
+         <item>
+          <property name="text">
+           <string>Высокий</string>
+          </property>
+         </item>
+         <item>
+          <property name="text">
+           <string>Критический</string>
+          </property>
+         </item>
+        </widget>
+       </item>
+      </layout>
+     </item>
+     <item>
+      <layout class="QVBoxLayout" name="statusLayout">
+       <property name="spacing">
+        <number>5</number>
+       </property>
+       <item>
+        <widget class="QLabel" name="labelStatus">
+         <property name="styleSheet">
+          <string notr="true">font-weight: bold; font-size: 14px; color: #D22730; margin-left: 5px;</string>
+         </property>
+         <property name="text">
+          <string>Статус</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QComboBox" name="comboBoxStatus">
+         <item>
+          <property name="text">
+           <string>К выполнению</string>
+          </property>
+         </item>
+         <item>
+          <property name="text">
+           <string>В работе</string>
+          </property>
+         </item>
+         <item>
+          <property name="text">
+           <string>На проверке</string>
+          </property>
+         </item>
+         <item>
+          <property name="text">
+           <string>Выполнено</string>
+          </property>
+         </item>
+        </widget>
+       </item>
+      </layout>
+     </item>
+     <item>
+      <layout class="QVBoxLayout" name="deadlineLayout">
+       <property name="spacing">
+        <number>5</number>
+       </property>
+       <item>
+        <widget class="QLabel" name="labelDeadline">
+         <property name="styleSheet">
+          <string notr="true">font-weight: bold; font-size: 14px; color: #D22730; margin-left: 5px;</string>
+         </property>
+         <property name="text">
+          <string>Срок выполнения</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QDateEdit" name="dateEditDeadline">
+         <property name="calendarPopup">
+          <bool>true</bool>
+         </property>
+         <property name="date">
+          <date>
+           <year>2026</year>
+           <month>3</month>
+           <day>1</day>
+          </date>
+         </property>
+        </widget>
+       </item>
+      </layout>
+     </item>
+    </layout>
+   </item>
+   <item>
+    <layout class="QHBoxLayout" name="infoLayout">
+     <property name="spacing">
+      <number>20</number>
+     </property>
+     <item>
+      <widget class="QLabel" name="createdByLabel">
+       <property name="styleSheet">
+        <string notr="true">color: #2c3e50; font-size: 13px; font-style: italic; padding: 5px;</string>
+       </property>
+       <property name="text">
+        <string>Создатель: Иванов И.И.</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QLabel" name="createdAtLabel">
+       <property name="styleSheet">
+        <string notr="true">color: #2c3e50; font-size: 13px; font-style: italic; padding: 5px;</string>
+       </property>
+       <property name="text">
+        <string>Создано: 20.01.2026</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QLabel" name="updatedAtLabel">
+       <property name="styleSheet">
+        <string notr="true">color: #2c3e50; font-size: 13px; font-style: italic; padding: 5px;</string>
+       </property>
+       <property name="text">
+        <string>Изменено: 25.01.2026</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <spacer name="horizontalSpacer">
+       <property name="orientation">
+        <enum>Qt::Orientation::Horizontal</enum>
+       </property>
+       <property name="sizeHint" stdset="0">
+        <size>
+         <width>40</width>
+         <height>20</height>
+        </size>
+       </property>
+      </spacer>
+     </item>
+    </layout>
+   </item>
+   <item>
+    <widget class="QPushButton" name="createBtn">
+     <property name="cursor">
+      <cursorShape>PointingHandCursor</cursorShape>
+     </property>
+     <property name="styleSheet">
+      <string notr="true">
+       QPushButton {
+           background-color: #D22730;
+           color: white;
+           border-radius: 10px;
+           font-weight: bold;
+           font-size: 18px;
+           border: none;
+           padding: 15px 30px;
+           min-width: 200px;
+       }
+       QPushButton:hover {
+           background-color: #862633;
+           border: 2px solid #ccab6e;
+       }
+       QPushButton:pressed {
+           background-color: #6a1e29;
+       }
+      </string>
+     </property>
+     <property name="text">
+      <string>Создать задачу</string>
      </property>
     </widget>
    </item>

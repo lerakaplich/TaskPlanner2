@@ -108,7 +108,7 @@ class OthersTaskCard(QFrame):
         # Автор (создатель)
         creator = self.task_data.get("creator", "")
         if creator:
-            self.authorLabel.setText(f"Создатель: {creator}")
+            self.authorLabel.setText(f"Автор: {creator}")
 
         # Дедлайн
         deadline = self.task_data.get("deadline", "")
