@@ -54,6 +54,15 @@ class OthersTasksPage(QWidget):
         for column in self.columns.values():
             self.kanbanLayout.addWidget(column)
 
+    def clear_all_columns(self):
+        """Полная очистка всех колонок перед фильтрацией"""
+        for column in self.columns.values():
+            layout = column.tasks_layout
+            while layout.count() > 1:  # оставляем stretch
+                item = layout.takeAt(0)
+                if item and item.widget():
+                    item.widget().deleteLater()
+
     def create_column(self, title, color):
         """Создание одной колонки канбан-доски"""
         column = QFrame()
@@ -141,92 +150,86 @@ class OthersTasksPage(QWidget):
         """Настройка начальных задач (задачи, созданные текущим пользователем)"""
         # Тестовые данные - задачи, созданные текущим пользователем как Создателем
         self.sample_tasks = [
+            # === Разработка новой кабины ===
             {
-                "id": 1,
-                "title": "Разработать дизайн главной страницы",
-                "description": "Создать современный дизайн главной страницы сайта с адаптивной версткой",
-                "project": "Разработка сайта компании",
-                "creator": "Вы",  # Текущий пользователь - создатель
-                "assignee": "Алексей Петров",  # Исполнитель
+                "id": 101,
+                "title": "Согласовать эргономику кресла",
+                "description": "Провести экспертизу и внести правки",
+                "project": "Разработка новой кабины",
+                "creator": "Вы",
+                "assignee": "Иванов А.С.",
                 "priority": "high",
-                "deadline": "20.12.2024",
+                "deadline": "10.03.2026",
                 "status": "todo",
-                "created_at": "15.11.2024",
-                "updated_at": "18.11.2024",
-                "tags": [
-                    {"text": "Дизайн", "type": "design"},
-                    {"text": "СРОЧНО", "type": "urgent"}
-                ],
+                "created_at": "15.02.2026",
+                "updated_at": "20.02.2026",
+                "tags": [{"text": "Эргономика", "type": "design"}],
                 "completed": False
             },
             {
-                "id": 2,
-                "title": "Исправить баг в модуле авторизации",
-                "description": "Пользователи не могут войти в систему после обновления",
-                "project": "Внутренний портал",
+                "id": 102,
+                "title": "Разработать 3D-модель панели",
+                "description": "Создать модель в SolidWorks",
+                "project": "Разработка новой кабины",
                 "creator": "Вы",
-                "assignee": "Мария Сидорова",
-                "priority": "critical",
-                "deadline": "10.12.2024",
+                "assignee": "Петров В.И.",
+                "priority": "high",
+                "deadline": "25.03.2026",
                 "status": "progress",
-                "created_at": "10.11.2024",
-                "updated_at": "19.11.2024",
-                "tags": [
-                    {"text": "Баг", "type": "bug"},
-                    {"text": "Безопасность", "type": "security"}
-                ],
+                "created_at": "18.02.2026",
+                "updated_at": "22.02.2026",
+                "tags": [{"text": "3D", "type": "development"}],
                 "completed": False
             },
+
+            # === Внедрение ERP-системы ===
             {
-                "id": 3,
-                "title": "Написать документацию для API",
-                "description": "Подготовить подробную документацию для REST API",
-                "project": "Мобильное приложение",
+                "id": 201,
+                "title": "Настроить интеграцию с 1С",
+                "description": "Обмен данными между модулями",
+                "project": "Внедрение ERP-системы",
                 "creator": "Вы",
-                "assignee": "Иван Иванов",
-                "priority": "medium",
-                "deadline": "25.12.2024",
-                "status": "review",
-                "created_at": "05.11.2024",
-                "updated_at": "17.11.2024",
-                "tags": [
-                    {"text": "Документация", "type": "docs"},
-                    {"text": "Разработка", "type": "development"}
-                ],
-                "completed": False
-            },
-            {
-                "id": 4,
-                "title": "Провести тестирование новой функции",
-                "description": "Протестировать функцию импорта данных из Excel",
-                "project": "ERP система",
-                "creator": "Вы",
-                "assignee": "Ольга Ковалева",
-                "priority": "low",
-                "deadline": "05.12.2024",
-                "status": "done",
-                "created_at": "01.11.2024",
-                "updated_at": "05.11.2024",
-                "tags": [
-                    {"text": "Тестирование", "type": "testing"}
-                ],
-                "completed": True
-            },
-            {
-                "id": 5,
-                "title": "Обновить контакты клиентов",
-                "description": "Обновить базу данных контактов ключевых клиентов",
-                "project": "CRM система",
-                "creator": "Вы",
-                "assignee": "Сергей Васильев",
-                "priority": "medium",
-                "deadline": "15.12.2024",
+                "assignee": "Сидорова Е.П.",
+                "priority": "critical",
+                "deadline": "05.04.2026",
                 "status": "todo",
-                "created_at": "12.11.2024",
-                "updated_at": "12.11.2024",
-                "tags": [
-                    {"text": "Данные", "type": "data"}
-                ],
+                "created_at": "20.02.2026",
+                "updated_at": "21.02.2026",
+                "tags": [{"text": "Интеграция", "type": "dev"}],
+                "completed": False
+            },
+
+            # === Модернизация конвейера ===
+            {
+                "id": 301,
+                "title": "Замена гидравлики на участке №3",
+                "description": "Демонтаж + монтаж нового оборудования",
+                "project": "Модернизация конвейера",
+                "creator": "Вы",
+                "assignee": "Ковалёв Д.А.",
+                "priority": "high",
+                "deadline": "01.03.2026",
+                "status": "progress",
+                "created_at": "10.02.2026",
+                "updated_at": "23.02.2026",
+                "tags": [{"text": "Оборудование", "type": "production"}],
+                "completed": False
+            },
+
+            # === Разработка сайта ===
+            {
+                "id": 401,
+                "title": "Разработать дизайн главной страницы",
+                "description": "Макеты в Figma + адаптив",
+                "project": "Разработка сайта",
+                "creator": "Вы",
+                "assignee": "Морозова А.С.",
+                "priority": "medium",
+                "deadline": "15.03.2026",
+                "status": "todo",
+                "created_at": "12.02.2026",
+                "updated_at": "20.02.2026",
+                "tags": [{"text": "UI/UX", "type": "design"}],
                 "completed": False
             }
         ]

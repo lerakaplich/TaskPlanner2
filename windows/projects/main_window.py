@@ -231,80 +231,123 @@ class MainWindow(QMainWindow):
             # Обновляем ссылку на страницу
             self.myTasksPage = self.my_tasks_page_instance
 
-
     def setup_responsive_cards(self):
         """Настройка адаптивности карточек проектов"""
         projects = [
             {
+                "id": 1,
                 "title": "Разработка новой кабины",
+                "name": "Разработка новой кабины",
                 "progress": 75,
                 "owner": "Петров А.В.",
-                "start": "01.09.2024",
-                "participants": 8,
+                "start_date": "01.09.2024",
                 "deadline": "15.12.2024",
-                "is_critical": True
+                "is_critical": True,
+                "participants": [1, 2, 3, 4, 5, 6, 7, 8],
+                "admins": [1, 2],
+                "description": "Проект по разработке новой кабины для автомобиля",
+                "status": "Активен",
+                "end_date": "15.12.2024"
             },
             {
+                "id": 2,
                 "title": "Внедрение ERP-системы",
+                "name": "Внедрение ERP-системы",
                 "progress": 45,
                 "owner": "Сидорова Е.П.",
-                "start": "15.08.2024",
-                "participants": 15,
+                "start_date": "15.08.2024",
                 "deadline": "30.03.2025",
-                "is_critical": False
+                "is_critical": False,
+                "participants": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15],
+                "admins": [1, 3, 5],
+                "description": "Внедрение корпоративной ERP-системы",
+                "status": "Активен",
+                "end_date": "30.03.2025"
             },
             {
+                "id": 3,
                 "title": "Модернизация конвейера",
+                "name": "Модернизация конвейера",
                 "progress": 90,
                 "owner": "Иванов И.И.",
-                "start": "01.07.2024",
-                "participants": 12,
+                "start_date": "01.07.2024",
                 "deadline": "10.11.2024",
-                "is_critical": True
+                "is_critical": True,
+                "participants": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
+                "admins": [1, 4],
+                "description": "Модернизация производственного конвейера",
+                "status": "Активен",
+                "end_date": "10.11.2024"
             },
             {
+                "id": 4,
                 "title": "Разработка сайта",
+                "name": "Разработка сайта",
                 "progress": 30,
                 "owner": "Кузнецов С.П.",
-                "start": "01.10.2024",
-                "participants": 5,
+                "start_date": "01.10.2024",
                 "deadline": "15.02.2025",
-                "is_critical": False
+                "is_critical": False,
+                "participants": [1, 2, 3, 4, 5],
+                "admins": [1],
+                "description": "Разработка корпоративного сайта",
+                "status": "Активен",
+                "end_date": "15.02.2025"
             }
         ]
 
+        from windows.projects.project_card import ProjectCard
+
         self.project_cards = []
-        for i, proj in enumerate(projects):
-            card = QFrame(self.scrollAreaWidgetContents)
+        for proj in projects:
+            card = ProjectCard(proj["id"], proj, self.scrollAreaWidgetContents)
 
-            ui_path = os.path.join(
-                os.path.dirname(__file__),  # windows/analytics/employees/
-                "..", "..",  # поднимаемся до корня проекта
-                "ui", "projects"  # спускаемся в нужную подпапку ui
-            )
-            uic.loadUi(os.path.join(ui_path, "project_card.ui"), card)
+            # Подключаем сигналы
+            card.open_clicked.connect(self.open_project)
+            card.edit_clicked.connect(self.edit_project)
 
-
-
-            card.projectTitle.setText(proj["title"])
-            card.progressBar.setValue(proj["progress"])
-            card.projectInfo.setText(f"Владелец: {proj['owner']}")
-            card.startDate.setText(f"Старт: {proj['start']}")
-            card.participants.setText(f"Участники: {proj['participants']} чел.")
-            card.deadline.setText(f"До {proj['deadline']}")
-            if proj["is_critical"]:
-                card.deadline.setStyleSheet("font-size: 11px; color: #D22730; padding: 4px 8px; background-color: #FFEEEE; border-radius: 4px;")
-            else:
-                card.deadline.setStyleSheet("font-size: 11px; color: #666; padding: 4px 8px; background-color: #F0F0F0; border-radius: 4px;")
-
-            card.btnOpen.clicked.connect(lambda checked, pid=i+1: self.open_project(pid))
-
-            card.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
             self.project_cards.append(card)
 
         self.current_columns = 0
         self.adjust_card_columns()
 
+    def edit_project(self, project_id):
+        """Редактирование проекта"""
+        print(f"Редактирование проекта {project_id}...")
+
+        # Находим данные проекта
+        project_data = None
+        for card in self.project_cards:
+            if card.project_id == project_id:
+                project_data = card.project_data
+                break
+
+        if not project_data:
+            return
+
+        from windows.projects.project_edit_dialog import ProjectEditDialog
+
+        dialog = ProjectEditDialog(project_data, parent=self)
+
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            updated_data = dialog.get_project_data()
+            print("Проект обновлен:", updated_data)
+
+            # Обновляем данные в карточке
+            for card in self.project_cards:
+                if card.project_id == project_id:
+                    card.update_data(updated_data)
+                    break
+
+            # Здесь можно добавить сохранение в БД
+            from PyQt6.QtWidgets import QMessageBox
+            QMessageBox.information(
+                self,
+                "Проект обновлен",
+                f"Проект '{updated_data['name']}' успешно обновлен!\n\n"
+                f"Участников: {len(updated_data.get('participants', []))}\n"
+                f"Администраторов: {len(updated_data.get('admins', []))}"
+            )
     def resizeEvent(self, event):
         """Обработка изменения размера окна для адаптивности"""
         super().resizeEvent(event)
@@ -442,6 +485,43 @@ class MainWindow(QMainWindow):
     def open_project(self, project_id):
         """Открыть проект по ID"""
         print(f"Открытие проекта {project_id}...")
+
+        # Здесь можно загрузить данные проекта из базы данных
+        # Для примера создаем тестовые данные
+        project_data = {
+            'id': project_id,
+            'name': f'Проект #{project_id}: Разработка новой CRM системы',
+            'description': 'Проект по созданию современной CRM системы для отдела продаж с интеграцией существующих сервисов и аналитикой в реальном времени. Включает модули управления контактами, сделками, задачами и отчетами.',
+            'status': 'Активен',
+            'start_date': '01.02.2024',
+            'end_date': '30.06.2024',
+            'progress': 45,
+            'admins': [
+                'Иванов Иван Иванович (Руководитель проекта)',
+                'Петрова Анна Сергеевна (Технический директор)',
+                'Сидоров Алексей Владимирович (Ведущий разработчик)'
+            ],
+            'participants': [
+                'Кузнецова Елена Павловна (Аналитик)',
+                'Васильев Дмитрий Николаевич (Backend-разработчик)',
+                'Михайлова Ольга Андреевна (Frontend-разработчик)',
+                'Новиков Павел Игоревич (Тестировщик)',
+                'Соколова Татьяна Валерьевна (Дизайнер)',
+                'Морозов Артем Викторович (DevOps)',
+                'Волкова Наталья Сергеевна (Project Manager)',
+                'Козлов Максим Денисович (Аналитик данных)'
+            ]
+        }
+
+        # Создаем страницу проекта
+        from windows.projects.project_view_page import ProjectViewPage
+        self.project_view_page = ProjectViewPage(project_data)
+
+        # Добавляем в стек контента
+        self.contentStack.addWidget(self.project_view_page)
+
+        # Переключаемся на страницу проекта
+        self.contentStack.setCurrentWidget(self.project_view_page)
 
     def search_projects(self, text):
         """Поиск проектов"""

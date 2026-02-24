@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>450</width>
-    <height>450</height>
+    <height>462</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -172,10 +172,17 @@
      </property>
      <property name="styleSheet">
       <string notr="true">QPushButton {
- border-radius: 10px;
- background: #ccab6e;
- color: white;
-}</string>
+             background-color: #ccab6e;
+             color: white;
+             border-radius: 10px;
+             border: none;
+           }
+           QPushButton:hover {
+             background-color: #998664;
+           }
+           QPushButton:pressed {
+             background-color: #7a6a50;
+           }</string>
      </property>
      <property name="text">
       <string>Сохранить</string>
