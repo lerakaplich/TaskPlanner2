@@ -1,0 +1,315 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>EmployeeSelectorDialog</class>
+ <widget class="QDialog" name="EmployeeSelectorDialog">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>888</width>
+    <height>687</height>
+   </rect>
+  </property>
+  <property name="windowTitle">
+   <string>Выбор сотрудников</string>
+  </property>
+  <property name="styleSheet">
+   <string notr="true">
+    QDialog {
+        background-color: white;
+    }
+    QLabel {
+        font-size: 14px;
+        color: #1B232A;
+    }
+    QLineEdit {
+        border: 1px solid #D9D9D6;
+        border-radius: 8px;
+        padding: 8px 12px;
+        font-size: 13px;
+        background-color: white;
+    }
+    QLineEdit:focus {
+        border: 2px solid #D22730;
+    }
+    QComboBox {
+        border: 1px solid #D9D9D6;
+        border-radius: 8px;
+        padding: 8px 12px;
+        font-size: 13px;
+        background-color: white;
+        min-width: 200px;
+    }
+    QComboBox::drop-down {
+        border: none;
+        width: 20px;
+    }
+    QComboBox::down-arrow {
+        image: none;
+        border-left: 5px solid transparent;
+        border-right: 5px solid transparent;
+        border-top: 5px solid #1B232A;
+        width: 0;
+        height: 0;
+        margin-right: 5px;
+    }
+    QComboBox:hover {
+        border: 1px solid #ccab6e;
+    }
+    QComboBox QAbstractItemView {
+        border: 1px solid #D9D9D6;
+        border-radius: 4px;
+        background-color: white;
+        selection-background-color: #D22730;
+        selection-color: white;
+        outline: none;
+    }
+    QCheckBox {
+        font-size: 13px;
+        color: #1B232A;
+        spacing: 8px;
+    }
+    QCheckBox::indicator {
+        width: 18px;
+        height: 18px;
+        border: 2px solid #D9D9D6;
+        border-radius: 4px;
+        background-color: white;
+    }
+    QCheckBox::indicator:checked {
+        background-color: #D22730;
+        border-color: #D22730;
+        image: url(&quot;data:image/svg+xml;utf8,&lt;svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'&gt;&lt;polygon points='4.5,9.5 1,6 2,5 4.5,7.5 10,2 11,3' fill='white'/&gt;&lt;/svg&gt;&quot;);
+    }
+    QCheckBox::indicator:hover {
+        border-color: #D22730;
+    }
+    QCheckBox::indicator:pressed {
+        background-color: #862633;
+    }
+    QScrollArea {
+        border: 1px solid #D9D9D6;
+        border-radius: 8px;
+        background-color: white;
+    }
+    QScrollBar:vertical {
+        border: none;
+        background-color: #f0f0f0;
+        width: 10px;
+        border-radius: 5px;
+        margin: 0px;
+    }
+    QScrollBar::handle:vertical {
+        background-color: #B8B8B5;
+        border-radius: 5px;
+        min-height: 20px;
+    }
+    QScrollBar::handle:vertical:hover {
+        background-color: #998664;
+    }
+    QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+        height: 0px;
+    }
+    QScrollBar:horizontal {
+        border: none;
+        background-color: #f0f0f0;
+        height: 10px;
+        border-radius: 5px;
+        margin: 0px;
+    }
+    QScrollBar::handle:horizontal {
+        background-color: #B8B8B5;
+        border-radius: 5px;
+        min-width: 20px;
+    }
+    QScrollBar::handle:horizontal:hover {
+        background-color: #998664;
+    }
+    QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {
+        width: 0px;
+    }
+   </string>
+  </property>
+  <layout class="QVBoxLayout" name="verticalLayout">
+   <property name="spacing">
+    <number>15</number>
+   </property>
+   <property name="leftMargin">
+    <number>20</number>
+   </property>
+   <property name="topMargin">
+    <number>20</number>
+   </property>
+   <property name="rightMargin">
+    <number>20</number>
+   </property>
+   <property name="bottomMargin">
+    <number>20</number>
+   </property>
+   <item>
+    <layout class="QHBoxLayout" name="horizontalLayout">
+     <property name="spacing">
+      <number>10</number>
+     </property>
+     <item>
+      <widget class="QLineEdit" name="searchInput">
+       <property name="minimumSize">
+        <size>
+         <width>400</width>
+         <height>0</height>
+        </size>
+       </property>
+       <property name="placeholderText">
+        <string>🔍 Поиск по имени или фамилии...</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QComboBox" name="departmentFilter">
+       <property name="minimumSize">
+        <size>
+         <width>226</width>
+         <height>0</height>
+        </size>
+       </property>
+       <property name="maximumSize">
+        <size>
+         <width>200</width>
+         <height>16777215</height>
+        </size>
+       </property>
+       <property name="placeholderText">
+        <string>Все отделы</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QComboBox" name="subDepartmentFilter">
+       <property name="enabled">
+        <bool>false</bool>
+       </property>
+       <property name="minimumSize">
+        <size>
+         <width>0</width>
+         <height>0</height>
+        </size>
+       </property>
+       <property name="maximumSize">
+        <size>
+         <width>200</width>
+         <height>16777215</height>
+        </size>
+       </property>
+       <property name="placeholderText">
+        <string>Все подразделения</string>
+       </property>
+      </widget>
+     </item>
+    </layout>
+   </item>
+   <item>
+    <widget class="QCheckBox" name="selectAllCheckBox">
+     <property name="text">
+      <string>Выбрать всех</string>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <widget class="QScrollArea" name="scrollArea">
+     <property name="verticalScrollBarPolicy">
+      <enum>Qt::ScrollBarPolicy::ScrollBarAsNeeded</enum>
+     </property>
+     <property name="horizontalScrollBarPolicy">
+      <enum>Qt::ScrollBarPolicy::ScrollBarAsNeeded</enum>
+     </property>
+     <property name="widgetResizable">
+      <bool>true</bool>
+     </property>
+     <widget class="QWidget" name="scrollAreaWidgetContents">
+      <property name="geometry">
+       <rect>
+        <x>0</x>
+        <y>0</y>
+        <width>846</width>
+        <height>466</height>
+       </rect>
+      </property>
+      <layout class="QVBoxLayout" name="verticalLayout_2">
+       <property name="spacing">
+        <number>5</number>
+       </property>
+       <property name="leftMargin">
+        <number>10</number>
+       </property>
+       <property name="topMargin">
+        <number>10</number>
+       </property>
+       <property name="rightMargin">
+        <number>10</number>
+       </property>
+       <property name="bottomMargin">
+        <number>10</number>
+       </property>
+       <item>
+        <widget class="QLabel" name="placeholderLabel">
+         <property name="styleSheet">
+          <string notr="true">color: #B8B8B5; font-size: 14px; padding: 20px;</string>
+         </property>
+         <property name="text">
+          <string>Загрузка сотрудников...</string>
+         </property>
+         <property name="alignment">
+          <set>Qt::AlignmentFlag::AlignCenter</set>
+         </property>
+        </widget>
+       </item>
+      </layout>
+     </widget>
+    </widget>
+   </item>
+   <item>
+    <widget class="QLabel" name="selectedCountLabel">
+     <property name="styleSheet">
+      <string notr="true">color: #1B232A; font-size: 12px; font-weight: bold;</string>
+     </property>
+     <property name="text">
+      <string>Выбрано: 0</string>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <layout class="QHBoxLayout" name="buttonLayout">
+     <property name="spacing">
+      <number>10</number>
+     </property>
+     <item>
+      <widget class="QPushButton" name="selectBtn">
+       <property name="styleSheet">
+        <string notr="true">QPushButton {
+            background-color: #D22730;
+            color: white;
+            border-radius: 10px;
+            font-weight: bold;
+            font-size: 18px;
+            border: none;
+            padding: 8px 30px;
+        }
+        QPushButton:hover {
+            background-color: #862633;
+        }
+        QPushButton:pressed {
+            background-color: #6a1e29;
+        }</string>
+       </property>
+       <property name="text">
+        <string>Сохранить выбор</string>
+       </property>
+      </widget>
+     </item>
+    </layout>
+   </item>
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>
