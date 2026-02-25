@@ -74,6 +74,9 @@ QFrame#projectCard:hover {
    </item>
    <item>
     <widget class="QProgressBar" name="progressBar">
+     <property name="styleSheet">
+      <string notr="true">color: black;</string>
+     </property>
      <property name="value">
       <number>0</number>
      </property>

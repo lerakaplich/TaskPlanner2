@@ -6,7 +6,7 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>888</width>
+    <width>914</width>
     <height>687</height>
    </rect>
   </property>
@@ -190,7 +190,7 @@
        </property>
        <property name="minimumSize">
         <size>
-         <width>0</width>
+         <width>226</width>
          <height>0</height>
         </size>
        </property>
@@ -230,7 +230,7 @@
        <rect>
         <x>0</x>
         <y>0</y>
-        <width>846</width>
+        <width>872</width>
         <height>466</height>
        </rect>
       </property>
@@ -256,7 +256,7 @@
           <string notr="true">color: #B8B8B5; font-size: 14px; padding: 20px;</string>
          </property>
          <property name="text">
-          <string>Загрузка сотрудников...</string>
+          <string/>
          </property>
          <property name="alignment">
           <set>Qt::AlignmentFlag::AlignCenter</set>

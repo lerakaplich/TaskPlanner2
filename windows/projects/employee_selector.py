@@ -16,39 +16,60 @@ class EmployeeSelectorDialog(QDialog):
     employees_selected = pyqtSignal(list)
 
     def __init__(self, parent=None, mode="participants"):
-        """
-        :param parent: родительский виджет
-        :param mode: режим работы ("participants" - участники, "admins" - администраторы)
-        """
         super().__init__(parent)
         self.mode = mode
-        self.all_employees = []  # Все сотрудники из тестовых данных
-        self.filtered_employees = []  # Отфильтрованные сотрудники
-        self.checkboxes = []  # Список чекбоксов
-        self.selected_employees = set()  # Множество выбранных ID
-        self.employee_checkbox_map = {}  # Словарь для связи чекбокса с ID сотрудника
+        self.all_employees = []
+        self.filtered_employees = []
+        self.checkboxes = []
+        self.selected_employees = set()
+        self.employee_checkbox_map = {}
         self.search_timer = QTimer()
         self.search_timer.setSingleShot(True)
         self.search_timer.timeout.connect(self.apply_filters)
 
         # Загрузка UI
-        ui_path = os.path.join(
-            os.path.dirname(__file__),  # windows/projects/
-            "..", "..",  # поднимаемся до корня проекта
-            "ui", "projects"  # спускаемся в нужную подпапку ui
-        )
+        ui_path = os.path.join(os.path.dirname(__file__), "..", "..", "ui", "projects")
         uic.loadUi(os.path.join(ui_path, "employee_selector.ui"), self)
 
         # Подключение сигналов
         self.searchInput.textChanged.connect(self.on_search_text_changed)
         self.departmentFilter.currentTextChanged.connect(self.on_department_changed)
+        self.subDepartmentFilter.currentTextChanged.connect(self.apply_filters)
         self.selectAllCheckBox.stateChanged.connect(self.on_select_all_changed)
         self.selectBtn.clicked.connect(self.accept)
 
-        # Загрузка тестовых данных
+        # Инициализация
         self.load_test_data()
         self.load_departments()
-        self.display_employees()
+        self.selected_employees.clear()
+
+        # Принудительно показываем всех сотрудников сразу
+        QTimer.singleShot(0, self.apply_filters)
+
+    def load_departments(self):
+        """Загрузка отделов БЕЗ лишних сигналов"""
+        departments = {emp['department'] for emp in self.all_employees if emp['department']}
+
+        self.departmentFilter.blockSignals(True)
+        self.departmentFilter.clear()
+        self.departmentFilter.addItem("Все отделы", None)
+        for dept in sorted(departments):
+            self.departmentFilter.addItem(dept, dept)
+        self.departmentFilter.setCurrentIndex(0)
+        self.departmentFilter.blockSignals(False)
+
+        self.load_sub_departments(None)  # для "Все отделы"
+
+    def showEvent(self, event):
+        """Срабатывает каждый раз при открытии диалога"""
+        super().showEvent(event)
+        self.searchInput.clear()
+        # Сбрасываем фильтры без лишних сигналов
+        self.departmentFilter.blockSignals(True)
+        self.departmentFilter.setCurrentIndex(0)
+        self.departmentFilter.blockSignals(False)
+        self.selected_employees.clear()
+        QTimer.singleShot(0, self.apply_filters)
 
     def load_test_data(self):
         """Загрузка тестовых данных о сотрудниках"""
@@ -236,38 +257,24 @@ class EmployeeSelectorDialog(QDialog):
                 checkbox.setChecked(False)
         self.update_selected_count()
 
-    def load_departments(self):
-        """Загрузка списка отделов из тестовых данных"""
-        departments = set()
-        for emp in self.all_employees:
-            if emp['department']:
-                departments.add(emp['department'])
-
-        self.departmentFilter.clear()
-        self.departmentFilter.addItem("Все отделы", None)
-
-        for dept in sorted(departments):
-            self.departmentFilter.addItem(dept, dept)
-
     def load_sub_departments(self, department):
-        """Загрузка подразделений для выбранного отдела"""
+        """Загрузка подразделений"""
+        self.subDepartmentFilter.blockSignals(True)
+        self.subDepartmentFilter.clear()
+
         if not department or department == "Все отделы":
-            self.subDepartmentFilter.clear()
             self.subDepartmentFilter.addItem("Все подразделения", None)
             self.subDepartmentFilter.setEnabled(False)
-            return
+        else:
+            sub_departments = {emp['sub_department'] for emp in self.all_employees
+                               if emp['department'] == department and emp['sub_department']}
+            self.subDepartmentFilter.addItem("Все подразделения", None)
+            for sub in sorted(sub_departments):
+                self.subDepartmentFilter.addItem(sub, sub)
+            self.subDepartmentFilter.setEnabled(True)
+            self.subDepartmentFilter.setCurrentIndex(0)
 
-        sub_departments = set()
-        for emp in self.all_employees:
-            if emp['department'] == department and emp['sub_department']:
-                sub_departments.add(emp['sub_department'])
-
-        self.subDepartmentFilter.clear()
-        self.subDepartmentFilter.addItem("Все подразделения", None)
-        self.subDepartmentFilter.setEnabled(True)
-
-        for sub in sorted(sub_departments):
-            self.subDepartmentFilter.addItem(sub, sub)
+        self.subDepartmentFilter.blockSignals(False)
 
     def on_department_changed(self, department):
         """Обработка изменения выбранного отдела"""
@@ -311,62 +318,51 @@ class EmployeeSelectorDialog(QDialog):
 
     def display_employees(self):
         """Отображение отфильтрованных сотрудников с чекбоксами"""
-        # Очищаем старые чекбоксы
         layout = self.scrollAreaWidgetContents.layout()
+
+        # Полная очистка
         while layout.count():
             child = layout.takeAt(0)
             if child.widget():
                 child.widget().deleteLater()
 
-        self.checkboxes = []
+        self.checkboxes.clear()
         self.employee_checkbox_map.clear()
 
+        self.selectAllCheckBox.setChecked(False)
+        self.selectAllCheckBox.setEnabled(True)
+
         if not self.filtered_employees:
-            # Показываем сообщение, если нет результатов
             label = QLabel("Сотрудники не найдены")
             label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            label.setStyleSheet("color: #B8B8B5; font-size: 14px; padding: 20px;")
+            label.setStyleSheet("color: #B8B8B5; font-size: 14px; padding: 40px;")
             layout.addWidget(label)
-            self.selectAllCheckBox.setChecked(False)
             self.selectAllCheckBox.setEnabled(False)
             self.update_selected_count()
             return
 
-        self.selectAllCheckBox.setEnabled(True)
-
-        # Создаем чекбоксы для каждого сотрудника
+        # Создаём чекбоксы
         for emp in self.filtered_employees:
             full_name = f"{emp['last_name']} {emp['first_name']}"
-            if emp['middle_name']:
+            if emp.get('middle_name'):
                 full_name += f" {emp['middle_name']}"
 
-            # Формируем текст с должностью и отделом
-            info_parts = []
-            if emp['position']:
-                info_parts.append(emp['position'])
-            if emp['department']:
-                info_parts.append(f"({emp['department']})")
-
-            info_text = " ".join(info_parts)
-            if info_text:
-                display_text = f"{full_name} — {info_text}"
-            else:
-                display_text = full_name
+            info = []
+            if emp.get('position'):
+                info.append(emp['position'])
+            if emp.get('department'):
+                info.append(f"({emp['department']})")
+            display_text = f"{full_name} — {' '.join(info)}" if info else full_name
 
             checkbox = QCheckBox(display_text)
-
-            # Добавляем номер телефона в tooltip
-            if emp['phone']:
+            if emp.get('phone'):
                 checkbox.setToolTip(f"Телефон: {emp['phone']}")
 
-            # Сохраняем ID сотрудника для этого чекбокса
             self.employee_checkbox_map[checkbox] = emp['id']
 
-            # Устанавливаем состояние чекбокса
             if emp['id'] in self.selected_employees:
                 checkbox.setChecked(True)
 
-            # Подключаем сигнал - ИСПРАВЛЕНО: используем отдельный метод
             checkbox.stateChanged.connect(
                 lambda checked, eid=emp['id']: self._handle_checkbox(eid, checked)
             )
@@ -374,9 +370,7 @@ class EmployeeSelectorDialog(QDialog):
             layout.addWidget(checkbox)
             self.checkboxes.append(checkbox)
 
-        # Добавляем растяжку в конце
         layout.addStretch()
-
         self.update_selected_count()
 
     def _handle_checkbox(self, emp_id: int, state):
