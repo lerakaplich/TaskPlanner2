@@ -5,6 +5,7 @@ from PyQt6 import uic
 from PyQt6.QtWidgets import QApplication, QMainWindow, QFrame, QSizePolicy, QSpacerItem, QWidget, QDialog
 from PyQt6.uic import loadUi  # <-- Добавьте эту строку
 from windows.analytics.analytics_page import AnalyticsPage
+from windows.archive.archive_page import ArchivePage
 from windows.gantt.gantt_chart import GanttChartWidget
 from windows.my_tasks.my_tasks_page import MyTasksPage
 from windows.other_tasks.others_tasks_page import OthersTasksPage
@@ -68,11 +69,26 @@ class MainWindow(QMainWindow):
             }
         ]
 
+    def init_archive_page(self):
+        """Инициализация страницы архива"""
+        self.archive_page_instance = ArchivePage()
+
+        # Ищем существующую страницу архива в contentStack
+        archive_old = self.findChild(QWidget, "archivePage")
+        if archive_old:
+            index = self.contentStack.indexOf(archive_old)
+            archive_old.deleteLater()
+            self.contentStack.insertWidget(index, self.archive_page_instance)
+        else:
+            # Если страницы нет, добавляем в конец
+            self.contentStack.addWidget(self.archive_page_instance)
+            # Обновляем навигационные кнопки, если нужно добавить кнопку архива
+
+    # Обновляем метод init_pages в MainWindow
     def init_pages(self):
         """Инициализация всех страниц"""
 
         # 0 — Главная (уже есть в UI)
-        # Ничего не трогаем
 
         # 1 — Мои задачи
         self.my_tasks_page_instance = MyTasksPage()
@@ -98,16 +114,15 @@ class MainWindow(QMainWindow):
             gantt_old.deleteLater()
             self.contentStack.insertWidget(index, self.gantt_page_instance)
 
-        # 4 — Аналитика / Навыки  🔥 НОВАЯ
+        # 4 — Аналитика / Навыки
         self.analytics_page_instance = AnalyticsPage()
-
         analytics_old = self.findChild(QWidget, "analyticsPage")
         if analytics_old:
             index = self.contentStack.indexOf(analytics_old)
             analytics_old.deleteLater()
             self.contentStack.insertWidget(index, self.analytics_page_instance)
 
-        # 5 — Чат (если у тебя есть страница в UI — не трогаем)
+        # 5 — Чат (если есть в UI)
 
         # 6 — Переработки
         self.overtime_page_instance = OvertimePage()
@@ -117,15 +132,19 @@ class MainWindow(QMainWindow):
             overtime_old.deleteLater()
             self.contentStack.insertWidget(index, self.overtime_page_instance)
 
-        # 7 — Настройки (если есть в UI — не трогаем)
+        # 7 — Настройки (если есть в UI)
 
-        # Отдельная страница профиля (вне навигации)
+        # 8 — Архив (новая страница)
+        self.init_archive_page()
+
+        # Отдельная страница профиля
         self.profile_page_instance = ProfilePage()
         self.contentStack.addWidget(self.profile_page_instance)
 
+    # Обновляем метод connect_signals в MainWindow
     def connect_signals(self):
         """Подключение всех сигналов к слотам"""
-        # Навигационные кнопки (остаются без изменений)
+        # Навигационные кнопки
         self.leftPanel.btnMain.clicked.connect(lambda: self.switch_page(0))
         self.leftPanel.btnMyTasks.clicked.connect(lambda: self.switch_page(1))
         self.leftPanel.btnOtherTasks.clicked.connect(lambda: self.switch_page(2))
@@ -134,6 +153,10 @@ class MainWindow(QMainWindow):
         self.leftPanel.btnChat.clicked.connect(lambda: self.switch_page(5))
         self.leftPanel.btnOvertime.clicked.connect(lambda: self.switch_page(6))
         self.leftPanel.btnSettings.clicked.connect(lambda: self.switch_page(7))
+
+        # Добавляем кнопку для архива, если её нет в левой панели
+        if hasattr(self.leftPanel, 'btnArchive'):
+            self.leftPanel.btnArchive.clicked.connect(lambda: self.switch_page(8))
 
         # Кнопки действий
         self.btnCreateProject.clicked.connect(self.create_project)
@@ -148,7 +171,7 @@ class MainWindow(QMainWindow):
         # Уведомления
         self.btnNotifications.clicked.connect(self.show_notifications)
 
-        # Профиль — теперь показывает отдельную страницу профиля
+        # Профиль
         self.btnProfile.clicked.connect(self.show_profile)
 
     def switch_page(self, page_index):

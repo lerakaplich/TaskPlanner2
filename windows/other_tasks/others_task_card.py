@@ -35,10 +35,6 @@ class OthersTaskCard(QFrame):
         self.setup_ui()
         self.setup_context_menu()
 
-        # Устанавливаем фиксированные размеры
-        self.setMinimumHeight(280)
-        self.setMaximumHeight(350)
-        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
 
     def setup_ui(self):
         """Настройка UI карточки на основе данных"""

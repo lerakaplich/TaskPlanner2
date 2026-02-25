@@ -36,10 +36,6 @@ class TaskCard(QFrame):
         # Настраиваем контекстное меню
         self.menuButton.clicked.connect(self.show_context_menu)
 
-        # Устанавливаем фиксированные размеры
-        self.setMinimumHeight(280)
-        self.setMaximumHeight(350)
-        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
 
         # Обновляем стиль карточки
         self.update_card_style()
@@ -312,11 +308,32 @@ class TaskCard(QFrame):
         """Показать контекстное меню"""
         menu = QMenu(self)
 
-        edit_action = menu.addAction("✏️ Редактировать")
-        delete_action = menu.addAction("🗑️ Удалить")
-        archive_action = menu.addAction("📦 Архивировать")
-        duplicate_action = menu.addAction("📋 Дублировать")
-
+        edit_action = menu.addAction("Редактировать")
+        delete_action = menu.addAction("Удалить")
+        archive_action = menu.addAction("Архивировать")
+        duplicate_action = menu.addAction("Дублировать")
+        menu.setStyleSheet("""
+                QMenu {
+                    background-color: #ffffff;
+                    border: 1px solid #e0e0e0;
+                    border-radius: 10px;
+                    padding: 6px 0;
+                    font-size: 14px;
+                }
+                QMenu::item {
+                    padding: 10px 30px 10px 15px;
+                    color: #1B232A;
+                }
+                QMenu::item:selected {
+                    background-color: #ccab6e;   /* твой золотой акцент */
+                    color: white;
+                    border-radius: 6px;
+                    margin: 2px 6px;
+                }
+                QMenu::icon {
+                    padding-left: 10px;
+                }
+            """)
         # Показываем меню под кнопкой
         action = menu.exec(
             self.menuButton.mapToGlobal(
