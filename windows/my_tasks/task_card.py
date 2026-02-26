@@ -43,8 +43,12 @@ class TaskCard(QFrame):
 
     def setup_ui(self):
         """Настройка UI карточки на основе данных"""
-        # Заголовок задачи
+
         self.taskTitleLabel.setText(self.task_data.get("title", "Без названия"))
+        self.taskTitleLabel.setWordWrap(True)  # Явно включаем перенос слов
+
+        # Устанавливаем политику размера для карточки
+        self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred)
 
         # Проект
         project_name = self.task_data.get("project", "Без проекта")
