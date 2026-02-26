@@ -1,9 +1,7 @@
-import os
-from PyQt6 import uic
-from PyQt6.QtCore import Qt, pyqtSignal, QPoint
+from PyQt6.QtCore import pyqtSignal, QPoint
 from PyQt6.QtWidgets import QMenu
 
-from windows.other_tasks.task_card import TaskCard
+from windows.my_tasks.task_card import TaskCard
 
 
 class ArchivedTaskCard(TaskCard):

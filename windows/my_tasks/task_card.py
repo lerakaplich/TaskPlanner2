@@ -5,7 +5,7 @@ import os
 from PyQt6 import uic
 from PyQt6.QtCore import Qt, QMimeData, pyqtSignal, QPoint
 from PyQt6.QtGui import QDrag, QPixmap, QPainter
-from PyQt6.QtWidgets import (QFrame, QPushButton, QMenu, QApplication, QSizePolicy, QLabel)
+from PyQt6.QtWidgets import (QFrame, QPushButton, QMenu, QApplication, QSizePolicy, QLabel, QWidget)
 from PyQt6.uic import loadUi
 
 
@@ -25,7 +25,7 @@ class TaskCard(QFrame):
         ui_path = os.path.join(
             os.path.dirname(__file__),  # windows/analytics/employees/
             "..", "..",  # поднимаемся до корня проекта
-            "ui", "other_tasks"  # спускаемся в нужную подпапку ui
+            "ui", "my_tasks"  # спускаемся в нужную подпапку ui
         )
         uic.loadUi(os.path.join(ui_path, "task_card.ui"), self)
         self.setObjectName("TaskCard")
@@ -176,6 +176,8 @@ class TaskCard(QFrame):
 
         # Добавляем новые теги
         tags = self.task_data.get("tags", [])
+        has_tags = False
+
         for tag in tags:
             if isinstance(tag, dict):
                 tag_text = tag.get("text", tag.get("name", ""))
@@ -183,6 +185,7 @@ class TaskCard(QFrame):
                 tag_text = str(tag)
 
             if tag_text:
+                has_tags = True
                 tag_button = QPushButton(tag_text)
                 tag_button.setStyleSheet("""
                     QPushButton {
@@ -202,8 +205,14 @@ class TaskCard(QFrame):
                 tag_button.setCursor(Qt.CursorShape.PointingHandCursor)
                 self.tagsLayout.addWidget(tag_button)
 
-        # Добавляем растягивающийся спейсер
-        self.tagsLayout.addStretch()
+        # Добавляем растягивающийся спейсер ТОЛЬКО если есть теги
+        if has_tags:
+            self.tagsLayout.addStretch()
+        else:
+            # Если тегов нет, добавляем пустой виджет для сохранения высоты
+            empty_widget = QWidget()
+            empty_widget.setFixedHeight(20)
+            self.tagsLayout.addWidget(empty_widget)
 
     def setup_deadline(self):
         """Настройка дедлайна others_tasks_page.ui цветовой индикацией"""
@@ -385,3 +394,58 @@ class TaskCard(QFrame):
         drag.setHotSpot(event.pos())
 
         drag.exec(Qt.DropAction.MoveAction)
+
+        # Добавьте эти методы в класс TaskCard, остальной код оставьте без изменений
+
+        def mousePressEvent(self, event):
+            """Начало перетаскивания"""
+            if event.button() == Qt.MouseButton.LeftButton:
+                self.drag_start_position = event.pos()
+            super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event):
+        """Обработка перемещения мыши для drag&drop"""
+        if not (event.buttons() & Qt.MouseButton.LeftButton):
+            return
+        if self.drag_start_position is None:
+            return
+        if (event.pos() - self.drag_start_position).manhattanLength() < QApplication.startDragDistance():
+            return
+
+        # Создаем перетаскивание
+        drag = QDrag(self)
+        mime_data = QMimeData()
+
+        # Сохраняем данные задачи в JSON
+        task_json = json.dumps(self.task_data, ensure_ascii=False)
+        mime_data.setText(task_json)
+        mime_data.setData("application/x-task", task_json.encode('utf-8'))
+
+        drag.setMimeData(mime_data)
+
+        # Создаем полупрозрачное изображение для перетаскивания
+        pixmap = QPixmap(self.size())
+        pixmap.fill(Qt.GlobalColor.transparent)
+
+        painter = QPainter(pixmap)
+        painter.setOpacity(0.7)
+        self.render(painter)
+        painter.end()
+
+        drag.setPixmap(pixmap)
+        drag.setHotSpot(event.pos())
+
+        # Выполняем перетаскивание
+        drag.exec(Qt.DropAction.MoveAction)
+
+    def dragEnterEvent(self, event):
+        """Обработка входа перетаскивания (необходимо для принятия drop)"""
+        event.acceptProposedAction()
+
+    def dragMoveEvent(self, event):
+        """Обработка перемещения над карточкой"""
+        event.acceptProposedAction()
+
+    def dropEvent(self, event):
+        """Обработка сброса на карточку (не используется, но необходимо для принятия drop)"""
+        event.acceptProposedAction()

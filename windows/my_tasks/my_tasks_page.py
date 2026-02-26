@@ -1,28 +1,33 @@
 import os
+import json
 
 from PyQt6 import uic
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QFrame, QLabel,
-                             QScrollArea)
-from PyQt6.QtCore import Qt, QDate
-from PyQt6.QtGui import QFont
-from PyQt6.uic import loadUi
+                             QScrollArea, QApplication)
+from PyQt6.QtCore import Qt, QDate, pyqtSignal
+from PyQt6.QtGui import QFont, QDragEnterEvent, QDropEvent
 
-from windows.other_tasks.task_card import TaskCard
+from windows.my_tasks.task_card import TaskCard
 
 
 class MyTasksPage(QWidget):
-    """Страница Мои задачи others_tasks_page.ui улучшенным интерфейсом"""
+    """Страница Мои задачи с улучшенным интерфейсом и drag & drop"""
+
+    # Сигнал для обновления статистики после перемещения
+    task_moved = pyqtSignal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
 
         ui_path = os.path.join(
-            os.path.dirname(__file__),  # windows/analytics/employees/
-            "..", "..",  # поднимаемся до корня проекта
-            "ui", "my_tasks"  # спускаемся в нужную подпапку ui
+            os.path.dirname(__file__),
+            "..", "..",
+            "ui", "my_tasks"
         )
         uic.loadUi(os.path.join(ui_path, "my_tasks_page.ui"), self)
 
+        # Включаем прием drop для всей страницы
+        self.setAcceptDrops(True)
 
         # Настраиваем канбан-доску
         self.setup_kanban()
@@ -34,22 +39,25 @@ class MyTasksPage(QWidget):
         self.priorityFilter.currentTextChanged.connect(self.filter_tasks)
         self.projectFilter.currentTextChanged.connect(self.filter_tasks)
 
+        # Подключаем сигнал перемещения для обновления статистики
+        self.task_moved.connect(self.update_statistics)
+
     def setup_kanban(self):
         """Настройка канбан-доски"""
         self.kanbanLayout.setSpacing(15)
 
         # Создаем 4 колонки
         self.columns = {
-            "todo": self.create_column("📝 К ВЫПОЛНЕНИЮ", "#2196F3"),
-            "progress": self.create_column("🔧 В РАБОТЕ", "#FF9800"),
-            "review": self.create_column("👀 НА ПРОВЕРКЕ", "#9C27B0"),
-            "done": self.create_column("✅ ВЫПОЛНЕНО", "#4CAF50")
+            "todo": self.create_column("📝 К ВЫПОЛНЕНИЮ", "#2196F3", "todo"),
+            "progress": self.create_column("🔧 В РАБОТЕ", "#FF9800", "progress"),
+            "review": self.create_column("👀 НА ПРОВЕРКЕ", "#9C27B0", "review"),
+            "done": self.create_column("✅ ВЫПОЛНЕНО", "#4CAF50", "done")
         }
 
         for column in self.columns.values():
             self.kanbanLayout.addWidget(column)
 
-    def create_column(self, title, color):
+    def create_column(self, title, color, status):
         """Создание одной колонки канбан-доски"""
         column = QFrame()
         column.setStyleSheet(f"""
@@ -58,6 +66,10 @@ class MyTasksPage(QWidget):
                 border-radius: 10px;
             }}
         """)
+
+        # Устанавливаем свойство для идентификации колонки
+        column.setProperty("column_status", status)
+        column.setAcceptDrops(True)
 
         layout = QVBoxLayout()
         layout.setSpacing(10)
@@ -115,6 +127,8 @@ class MyTasksPage(QWidget):
         # Контейнер для задач
         tasks_container = QWidget()
         tasks_container.setStyleSheet("background-color: transparent;")
+        tasks_container.setAcceptDrops(True)
+
         tasks_layout = QVBoxLayout()
         tasks_layout.setSpacing(8)
         tasks_layout.setContentsMargins(2, 2, 2, 2)
@@ -130,17 +144,18 @@ class MyTasksPage(QWidget):
         column.tasks_container = tasks_container
         column.tasks_layout = tasks_layout
         column.count_label = count_label
+        column.column_status = status
 
         return column
 
     def setup_tasks(self):
-        """Настройка начальных задач others_tasks_page.ui понятными данными"""
-        # Тестовые данные others_tasks_page.ui четкой структурой
+        """Настройка начальных задач с понятными данными"""
+        # Тестовые данные с четкой структурой
         self.sample_tasks = [
             {
                 "id": 1,
                 "title": "Разработать дизайн главной страницы",
-                "description": "Создать современный дизайн главной страницы сайта others_tasks_page.ui адаптивной версткой",
+                "description": "Создать современный дизайн главной страницы сайта с адаптивной версткой",
                 "project": "Разработка сайта компании",
                 "creator": "Алексей Петров",
                 "priority": "high",
@@ -223,10 +238,14 @@ class MyTasksPage(QWidget):
             }
         ]
 
+        # Словарь для быстрого доступа к задачам по ID
+        self.tasks_dict = {task["id"]: task for task in self.sample_tasks}
+
         # Распределяем задачи по колонкам
         self.all_tasks = []
         for task_data in self.sample_tasks:
             task_card = TaskCard(task_data)
+            task_card.setParent(self)
             self.all_tasks.append(task_card)
 
             # Добавляем в соответствующую колонку
@@ -254,6 +273,82 @@ class MyTasksPage(QWidget):
         # Заполняем фильтр проектов
         projects = set(task["project"] for task in self.sample_tasks)
         self.projectFilter.addItems(sorted(list(projects)))
+
+    def dragEnterEvent(self, event: QDragEnterEvent):
+        """Обработка входа перетаскивания"""
+        if event.mimeData().hasFormat("application/x-task"):
+            event.acceptProposedAction()
+
+    def dragMoveEvent(self, event):
+        """Обработка перемещения над областью"""
+        if event.mimeData().hasFormat("application/x-task"):
+            event.acceptProposedAction()
+
+    def dropEvent(self, event: QDropEvent):
+        """Обработка сброса задачи"""
+        if not event.mimeData().hasFormat("application/x-task"):
+            return
+
+        # Получаем данные задачи
+        task_data = json.loads(event.mimeData().data("application/x-task").data().decode())
+
+        # Находим виджет карточки
+        source_card = self.find_task_card(task_data["id"])
+        if not source_card:
+            return
+
+        # Определяем целевую колонку
+        target_column = None
+        target_widget = event.source() if event.source() else event.widget()
+
+        # Ищем колонку, на которую сбросили
+        pos = event.position().toPoint()
+        for column in self.columns.values():
+            if column.geometry().contains(pos):
+                target_column = column
+                break
+
+        if not target_column:
+            return
+
+        # Получаем статус целевой колонки
+        new_status = target_column.column_status
+
+        # Получаем старый статус
+        old_status = task_data["status"]
+
+        # Если статус не изменился, ничего не делаем
+        if old_status == new_status:
+            event.acceptProposedAction()
+            return
+
+        # Удаляем карточку из старой колонки
+        source_card.parent().layout().removeWidget(source_card)
+
+        # Обновляем статус в данных
+        task_data["status"] = new_status
+        source_card.task_data["status"] = new_status
+
+        # Обновляем данные в словаре
+        self.tasks_dict[task_data["id"]] = task_data
+
+        # Добавляем в новую колонку
+        target_column.tasks_layout.insertWidget(
+            target_column.tasks_layout.count() - 1,
+            source_card
+        )
+
+        # Обновляем статистику
+        self.task_moved.emit()
+
+        event.acceptProposedAction()
+
+    def find_task_card(self, task_id):
+        """Поиск карточки задачи по ID"""
+        for task_card in self.all_tasks:
+            if task_card.task_data.get("id") == task_id:
+                return task_card
+        return None
 
     def update_statistics(self):
         """Обновление статистики"""
@@ -303,3 +398,8 @@ class MyTasksPage(QWidget):
         priority_filter = self.priorityFilter.currentText()
         project_filter = self.projectFilter.currentText()
         print(f"Фильтр: приоритет={priority_filter}, проект={project_filter}")
+
+        # Здесь можно добавить логику фильтрации
+        for task_card in self.all_tasks:
+            # Показываем все задачи (заглушка для фильтрации)
+            task_card.show()
