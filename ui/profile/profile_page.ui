@@ -28,25 +28,6 @@ QFrame[objectName^=&quot;frameChart&quot;] {
     padding: 20px;
 }
 
-QFrame[objectName^=&quot;skillCard&quot;] {
-    background-color: white;
-    border-radius: 10px;
-    border: 1px solid #E0E0E0;
-    padding: 15px;
-}
-
-QFrame[objectName^=&quot;projectCard&quot;] {
-    background-color: white;
-    border-radius: 10px;
-    border: 1px solid #E0E0E0;
-    padding: 15px;
-}
-
-QFrame[objectName^=&quot;projectCard&quot;]:hover {
-    border: 2px solid #ccab6e;
-    background-color: #FFFDF6;
-}
-
 /* Заголовки */
 QLabel[objectName^=&quot;header&quot;] {
     font-size: 24px;
@@ -75,10 +56,6 @@ QProgressBar {
 QProgressBar::chunk {
     background-color: #D22730;
     border-radius: 6px;
-}
-
-QProgressBar.gold::chunk {
-    background-color: #ccab6e;
 }
 
 /* Звезды рейтинга */
@@ -125,54 +102,22 @@ QTableWidget {
 QTableWidget::item {
     padding: 8px;
     border-bottom: 1px solid #F0F0F0;
+    min-height: 30px;  /* Добавлена минимальная высота для элементов таблицы */
 }
 
 QTableWidget::item:selected {
     background-color: #FFF8E1;
+    color: black;
 }
 
 QHeaderView::section {
     background-color: #F5F5F7;
-    padding: 10px;
+    padding: 4px;
     border: none;
     border-bottom: 2px solid #E0E0E0;
     font-weight: bold;
     color: #1B232A;
-}
-
-/* Графики */
-QFrame[objectName^=&quot;chartFrame&quot;] {
-    background-color: white;
-    border-radius: 10px;
-    border: 1px solid #E0E0E0;
-}
-
-/* Стили для загрузки фото */
-QPushButton#btnUploadPhoto {
-    background-color: rgba(204, 171, 110, 0.9);
-    color: white;
-    border: none;
-    border-radius: 15px;
-    padding: 8px 15px;
-    font-size: 12px;
-    font-weight: bold;
-}
-QPushButton#btnUploadPhoto:hover {
-    background-color: #ccab6e;
-}
-QPushButton#btnUploadPhoto:pressed {
-    background-color: #b59456;
-}
-
-QLabel#labelPhotoPreview {
-    border-radius: 71px;
-    background-color: #F5F5F7;
-}
-
-QFrame#frameAvatar {
-    background-color: #E0E0E0;
-    border-radius: 75px;
-    border: 4px solid #ccab6e;
+    min-height: 30px;  /* Добавлена минимальная высота для заголовков */
 }
 
 /* Скроллбары */
@@ -190,18 +135,18 @@ QScrollBar::handle:vertical {
     border-radius: 4px;
     min-height: 20px;
 }
-            QScrollBar:horizontal {
-                border: none;
-                background: #F5F5F5;
-                height: 8px;
-                margin: 0px;
-                border-radius: 4px;
-            }
-            QScrollBar::handle:horizontal {
-                background: #c1c1c1;
-                border-radius: 4px;
-                min-width: 20px;
-            }
+QScrollBar:horizontal {
+    border: none;
+    background: #F5F5F5;
+    height: 8px;
+    margin: 0px;
+    border-radius: 4px;
+}
+QScrollBar::handle:horizontal {
+    background: #c1c1c1;
+    border-radius: 4px;
+    min-width: 20px;
+}
 QScrollBar::add-line, QScrollBar::sub-line {
     border: none;
     background: none;
@@ -279,9 +224,9 @@ QPushButton:pressed {
       <property name="geometry">
        <rect>
         <x>0</x>
-        <y>-218</y>
+        <y>0</y>
         <width>1163</width>
-        <height>953</height>
+        <height>900</height>
        </rect>
       </property>
       <layout class="QVBoxLayout" name="verticalLayout_2">
@@ -332,7 +277,7 @@ QPushButton:pressed {
               <number>5</number>
              </property>
              <item>
-              <widget class="QLabel" name="btnUploadPhoto">
+              <widget class="QLabel" name="labelPhoto">
                <property name="minimumSize">
                 <size>
                  <width>142</width>
@@ -351,7 +296,7 @@ QPushButton:pressed {
                 </font>
                </property>
                <property name="styleSheet">
-                <string notr="true">QLabel#labelPhotoPreview {
+                <string notr="true">QLabel#labelPhoto {
     font-size: 36px;
     text-align: center;
     color: #666;
@@ -383,7 +328,7 @@ QPushButton:pressed {
 }</string>
               </property>
               <property name="text">
-               <string>Иванов Иван Иванович</string>
+               <string>ФИО сотрудника</string>
               </property>
              </widget>
             </item>
@@ -398,7 +343,7 @@ QPushButton:pressed {
 }</string>
               </property>
               <property name="text">
-               <string>Старший инженер-программист</string>
+               <string>Должность</string>
               </property>
              </widget>
             </item>
@@ -413,7 +358,7 @@ QPushButton:pressed {
 }</string>
               </property>
               <property name="text">
-               <string>Отдел разработки ПО</string>
+               <string>Отдел</string>
               </property>
              </widget>
             </item>
@@ -428,7 +373,7 @@ QPushButton:pressed {
 }</string>
               </property>
               <property name="text">
-               <string>+7 (123) 456-78-90</string>
+               <string>Телефон</string>
               </property>
              </widget>
             </item>
@@ -443,7 +388,7 @@ QPushButton:pressed {
 }</string>
               </property>
               <property name="text">
-               <string>ivanov@maz.by</string>
+               <string>Email</string>
               </property>
              </widget>
             </item>
@@ -500,7 +445,7 @@ QPushButton:pressed {
                 <property name="styleSheet">
                  <string notr="true">QLabel {
     font-size: 24px;
-    color: #E0E0E0;
+    color: #FFD700;
 }</string>
                 </property>
                 <property name="text">
@@ -513,7 +458,7 @@ QPushButton:pressed {
                 <property name="styleSheet">
                  <string notr="true">QLabel {
     font-size: 24px;
-    color: #E0E0E0;
+    color: #FFD700;
 }</string>
                 </property>
                 <property name="text">
@@ -532,7 +477,7 @@ QPushButton:pressed {
 }</string>
                 </property>
                 <property name="text">
-                 <string>КПД: 0.75</string>
+                 <string>КПД: 0.00</string>
                 </property>
                </widget>
               </item>
@@ -583,7 +528,7 @@ QPushButton:pressed {
 }</string>
               </property>
               <property name="text">
-               <string>156</string>
+               <string>0</string>
               </property>
               <property name="alignment">
                <set>Qt::AlignmentFlag::AlignCenter</set>
@@ -616,7 +561,7 @@ QPushButton:pressed {
 }</string>
               </property>
               <property name="text">
-               <string>5</string>
+               <string>0</string>
               </property>
               <property name="alignment">
                <set>Qt::AlignmentFlag::AlignCenter</set>
@@ -678,7 +623,9 @@ QPushButton:pressed {
                 <property name="columnCount">
                  <number>3</number>
                 </property>
-                <row/>
+                <attribute name="horizontalHeaderStretchLastSection">
+                 <bool>true</bool>
+                </attribute>
                 <column>
                  <property name="text">
                   <string>Тема</string>
@@ -695,9 +642,6 @@ QPushButton:pressed {
                  </property>
                 </column>
                </widget>
-              </item>
-              <item>
-               <layout class="QHBoxLayout" name="horizontalLayout_6"/>
               </item>
              </layout>
             </widget>
@@ -724,6 +668,18 @@ QPushButton:pressed {
            </item>
            <item>
             <widget class="QFrame" name="frameProjects">
+             <property name="minimumSize">
+              <size>
+               <width>0</width>
+               <height>478</height>
+              </size>
+             </property>
+             <property name="maximumSize">
+              <size>
+               <width>16777215</width>
+               <height>478</height>
+              </size>
+             </property>
              <property name="frameShape">
               <enum>QFrame::Shape::StyledPanel</enum>
              </property>
@@ -732,216 +688,58 @@ QPushButton:pressed {
              </property>
              <layout class="QVBoxLayout" name="verticalLayout_8">
               <item>
-               <widget class="QFrame" name="project1">
-                <layout class="QVBoxLayout" name="verticalLayout_9">
-                 <item>
-                  <layout class="QHBoxLayout" name="horizontalLayout_5">
-                   <item>
-                    <widget class="QLabel" name="labelProject1">
-                     <property name="styleSheet">
-                      <string notr="true">QLabel {
-    font-size: 16px;
-    font-weight: bold;
-    color: #1B232A;
-}</string>
+               <widget class="QScrollArea" name="scrollAreaProjects">
+                <property name="frameShape">
+                 <enum>QFrame::Shape::NoFrame</enum>
+                </property>
+                <property name="widgetResizable">
+                 <bool>true</bool>
+                </property>
+                <widget class="QWidget" name="scrollAreaProjectsContents">
+                 <property name="geometry">
+                  <rect>
+                   <x>0</x>
+                   <y>0</y>
+                   <width>524</width>
+                   <height>254</height>
+                  </rect>
+                 </property>
+                 <layout class="QVBoxLayout" name="verticalLayout_9">
+                  <property name="leftMargin">
+                   <number>0</number>
+                  </property>
+                  <property name="topMargin">
+                   <number>0</number>
+                  </property>
+                  <property name="rightMargin">
+                   <number>0</number>
+                  </property>
+                  <property name="bottomMargin">
+                   <number>0</number>
+                  </property>
+                  <item>
+                   <widget class="QWidget" name="projectsContainer" native="true">
+                    <layout class="QVBoxLayout" name="projectsLayout">
+                     <property name="spacing">
+                      <number>10</number>
                      </property>
-                     <property name="text">
-                      <string>Разработка новой кабины</string>
+                     <property name="leftMargin">
+                      <number>0</number>
                      </property>
-                    </widget>
-                   </item>
-                   <item>
-                    <spacer name="horizontalSpacer_5">
-                     <property name="orientation">
-                      <enum>Qt::Orientation::Horizontal</enum>
+                     <property name="topMargin">
+                      <number>0</number>
                      </property>
-                     <property name="sizeHint" stdset="0">
-                      <size>
-                       <width>40</width>
-                       <height>20</height>
-                      </size>
+                     <property name="rightMargin">
+                      <number>0</number>
                      </property>
-                    </spacer>
-                   </item>
-                   <item>
-                    <widget class="QLabel" name="labelProgress1">
-                     <property name="styleSheet">
-                      <string notr="true">QLabel {
-    font-size: 14px;
-    font-weight: bold;
-    color: #D22730;
-}</string>
+                     <property name="bottomMargin">
+                      <number>0</number>
                      </property>
-                     <property name="text">
-                      <string>75%</string>
-                     </property>
-                    </widget>
-                   </item>
-                  </layout>
-                 </item>
-                 <item>
-                  <widget class="QProgressBar" name="progressBar1">
-                   <property name="value">
-                    <number>75</number>
-                   </property>
-                  </widget>
-                 </item>
-                 <item>
-                  <widget class="QLabel" name="labelTasks1">
-                   <property name="styleSheet">
-                    <string notr="true">QLabel {
-    font-size: 12px;
-    color: #666;
-}</string>
-                   </property>
-                   <property name="text">
-                    <string>Задачи: 12/16 выполнено</string>
-                   </property>
-                  </widget>
-                 </item>
-                </layout>
-               </widget>
-              </item>
-              <item>
-               <widget class="QFrame" name="project2">
-                <layout class="QVBoxLayout" name="verticalLayout_10">
-                 <item>
-                  <layout class="QHBoxLayout" name="horizontalLayout_7">
-                   <item>
-                    <widget class="QLabel" name="labelProject2">
-                     <property name="styleSheet">
-                      <string notr="true">QLabel {
-    font-size: 16px;
-    font-weight: bold;
-    color: #1B232A;
-}</string>
-                     </property>
-                     <property name="text">
-                      <string>Модернизация конвейера</string>
-                     </property>
-                    </widget>
-                   </item>
-                   <item>
-                    <spacer name="horizontalSpacer_6">
-                     <property name="orientation">
-                      <enum>Qt::Orientation::Horizontal</enum>
-                     </property>
-                     <property name="sizeHint" stdset="0">
-                      <size>
-                       <width>40</width>
-                       <height>20</height>
-                      </size>
-                     </property>
-                    </spacer>
-                   </item>
-                   <item>
-                    <widget class="QLabel" name="labelProgress2">
-                     <property name="styleSheet">
-                      <string notr="true">QLabel {
-    font-size: 14px;
-    font-weight: bold;
-    color: #D22730;
-}</string>
-                     </property>
-                     <property name="text">
-                      <string>90%</string>
-                     </property>
-                    </widget>
-                   </item>
-                  </layout>
-                 </item>
-                 <item>
-                  <widget class="QProgressBar" name="progressBar2">
-                   <property name="value">
-                    <number>90</number>
-                   </property>
-                  </widget>
-                 </item>
-                 <item>
-                  <widget class="QLabel" name="labelTasks2">
-                   <property name="styleSheet">
-                    <string notr="true">QLabel {
-    font-size: 12px;
-    color: #666;
-}</string>
-                   </property>
-                   <property name="text">
-                    <string>Задачи: 9/10 выполнено</string>
-                   </property>
-                  </widget>
-                 </item>
-                </layout>
-               </widget>
-              </item>
-              <item>
-               <widget class="QFrame" name="project3">
-                <layout class="QVBoxLayout" name="verticalLayout_11">
-                 <item>
-                  <layout class="QHBoxLayout" name="horizontalLayout_8">
-                   <item>
-                    <widget class="QLabel" name="labelProject3">
-                     <property name="styleSheet">
-                      <string notr="true">QLabel {
-    font-size: 16px;
-    font-weight: bold;
-    color: #1B232A;
-}</string>
-                     </property>
-                     <property name="text">
-                      <string>Внедрение ERP-системы</string>
-                     </property>
-                    </widget>
-                   </item>
-                   <item>
-                    <spacer name="horizontalSpacer_7">
-                     <property name="orientation">
-                      <enum>Qt::Orientation::Horizontal</enum>
-                     </property>
-                     <property name="sizeHint" stdset="0">
-                      <size>
-                       <width>40</width>
-                       <height>20</height>
-                      </size>
-                     </property>
-                    </spacer>
-                   </item>
-                   <item>
-                    <widget class="QLabel" name="labelProgress3">
-                     <property name="styleSheet">
-                      <string notr="true">QLabel {
-    font-size: 14px;
-    font-weight: bold;
-    color: #D22730;
-}</string>
-                     </property>
-                     <property name="text">
-                      <string>45%</string>
-                     </property>
-                    </widget>
-                   </item>
-                  </layout>
-                 </item>
-                 <item>
-                  <widget class="QProgressBar" name="progressBar3">
-                   <property name="value">
-                    <number>45</number>
-                   </property>
-                  </widget>
-                 </item>
-                 <item>
-                  <widget class="QLabel" name="labelTasks3">
-                   <property name="styleSheet">
-                    <string notr="true">QLabel {
-    font-size: 12px;
-    color: #666;
-}</string>
-                   </property>
-                   <property name="text">
-                    <string>Задачи: 18/40 выполнено</string>
-                   </property>
-                  </widget>
-                 </item>
-                </layout>
+                    </layout>
+                   </widget>
+                  </item>
+                 </layout>
+                </widget>
                </widget>
               </item>
               <item>
@@ -979,7 +777,7 @@ QPushButton:pressed {
 }</string>
                   </property>
                   <property name="text">
-                   <string>Показать выполненные проекты</string>
+                   <string>Показать все проекты</string>
                   </property>
                  </widget>
                 </item>
@@ -1008,7 +806,6 @@ QPushButton:pressed {
          </property>
         </widget>
        </item>
-       <!-- Контейнер для графика - УВЕЛИЧЕННЫЙ РАЗМЕР -->
        <item>
         <widget class="QFrame" name="frameChart">
          <property name="minimumSize">
@@ -1062,8 +859,6 @@ QPushButton:pressed {
          </layout>
         </widget>
        </item>
-
-       <!-- Добавляем растягивающийся spacer в конец -->
        <item>
         <spacer name="verticalSpacer">
          <property name="orientation">

@@ -11,7 +11,7 @@
    </rect>
   </property>
   <property name="windowTitle">
-   <string>Выполненные проекты</string>
+   <string>Все проекты</string>
   </property>
   <property name="styleSheet">
    <string>
