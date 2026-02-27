@@ -1,0 +1,225 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>archivePage</class>
+ <widget class="QWidget" name="archivePage">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>1024</width>
+    <height>768</height>
+   </rect>
+  </property>
+  <property name="windowTitle">
+   <string>Archive Page</string>
+  </property>
+  <property name="styleSheet">
+   <string notr="true">background-color: white;</string>
+  </property>
+  <layout class="QVBoxLayout" name="main_layout">
+   <property name="leftMargin">
+    <number>20</number>
+   </property>
+   <property name="topMargin">
+    <number>20</number>
+   </property>
+   <property name="rightMargin">
+    <number>20</number>
+   </property>
+   <property name="bottomMargin">
+    <number>20</number>
+   </property>
+   <property name="spacing">
+    <number>15</number>
+   </property>
+   <item>
+    <widget class="QPushButton" name="back_button">
+     <property name="text">
+      <string>← Назад к проектам</string>
+     </property>
+     <property name="styleSheet">
+      <string notr="true">QPushButton {
+    background-color: #1B232A;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    padding: 10px 15px;
+    font-size: 14px;
+    font-weight: bold;
+    text-align: left;
+    max-width: 200px;
+}
+QPushButton:hover {
+    background-color: #D9D9D6;
+    color: black;
+}</string>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <widget class="QScrollArea" name="scroll_area">
+     <property name="frameShape">
+      <enum>QFrame::NoFrame</enum>
+     </property>
+     <property name="widgetResizable">
+      <bool>true</bool>
+     </property>
+     <property name="styleSheet">
+      <string notr="true">QScrollArea {
+    background-color: transparent;
+    border: none;
+}
+QScrollBar:vertical {
+    border: none;
+    background: #f0f0f0;
+    width: 10px;
+    border-radius: 5px;
+}
+QScrollBar::handle:vertical {
+    background: #ccab6e;
+    border-radius: 5px;
+    min-height: 20px;
+}
+QScrollBar::handle:vertical:hover {
+    background: #998664;
+}
+QScrollBar:horizontal {
+    border: none;
+    background: #f0f0f0;
+    height: 10px;
+    border-radius: 5px;
+}
+QScrollBar::handle:horizontal {
+    background: #ccab6e;
+    border-radius: 5px;
+    min-width: 20px;
+}
+QScrollBar::handle:horizontal:hover {
+    background: #998664;
+}</string>
+     </property>
+     <widget class="QWidget" name="content_container">
+      <property name="geometry">
+       <rect>
+        <x>0</x>
+        <y>0</y>
+        <width>984</width>
+        <height>688</height>
+       </rect>
+      </property>
+      <layout class="QVBoxLayout" name="content_layout">
+       <property name="leftMargin">
+        <number>0</number>
+       </property>
+       <property name="topMargin">
+        <number>10</number>
+       </property>
+       <property name="rightMargin">
+        <number>0</number>
+       </property>
+       <property name="bottomMargin">
+        <number>10</number>
+       </property>
+       <property name="spacing">
+        <number>15</number>
+       </property>
+       <item>
+        <widget class="QLabel" name="section_title">
+         <property name="text">
+          <string>Архивированные проекты</string>
+         </property>
+         <property name="styleSheet">
+          <string notr="true">font-size: 20px;
+font-weight: bold;
+color: #1B232A;
+padding: 5px 0;</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QWidget" name="projects_widget" native="true">
+         <layout class="QGridLayout" name="projects_layout">
+          <property name="leftMargin">
+           <number>0</number>
+          </property>
+          <property name="topMargin">
+           <number>0</number>
+          </property>
+          <property name="rightMargin">
+           <number>0</number>
+          </property>
+          <property name="bottomMargin">
+           <number>0</number>
+          </property>
+          <property name="spacing">
+           <number>15</number>
+          </property>
+         </layout>
+        </widget>
+       </item>
+       <item>
+        <widget class="QWidget" name="tasks_widget" native="true">
+         <property name="visible">
+          <bool>false</bool>
+         </property>
+         <layout class="QGridLayout" name="tasks_layout">
+          <property name="leftMargin">
+           <number>0</number>
+          </property>
+          <property name="topMargin">
+           <number>0</number>
+          </property>
+          <property name="rightMargin">
+           <number>0</number>
+          </property>
+          <property name="bottomMargin">
+           <number>0</number>
+          </property>
+          <property name="spacing">
+           <number>15</number>
+          </property>
+         </layout>
+        </widget>
+       </item>
+       <item>
+        <widget class="QLabel" name="empty_label">
+         <property name="text">
+          <string>📭 Архив пуст</string>
+         </property>
+         <property name="styleSheet">
+          <string notr="true">font-size: 24px;
+color: #999999;
+padding: 100px;
+background-color: #f9f9f9;
+border-radius: 20px;</string>
+         </property>
+         <property name="alignment">
+          <set>Qt::AlignCenter</set>
+         </property>
+         <property name="visible">
+          <bool>false</bool>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <spacer name="verticalSpacer">
+         <property name="orientation">
+          <enum>Qt::Vertical</enum>
+         </property>
+         <property name="sizeHint" stdset="0">
+          <size>
+           <width>20</width>
+           <height>40</height>
+          </size>
+         </property>
+        </spacer>
+       </item>
+      </layout>
+     </widget>
+    </widget>
+   </item>
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>
