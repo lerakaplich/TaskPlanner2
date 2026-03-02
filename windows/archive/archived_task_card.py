@@ -1,3 +1,6 @@
+import os
+
+from PyQt6 import uic
 from PyQt6.QtCore import pyqtSignal, QPoint
 from PyQt6.QtWidgets import QMenu
 
@@ -13,11 +16,41 @@ class ArchivedTaskCard(TaskCard):
     def __init__(self, task_data, parent=None):
         super().__init__(task_data, parent)
 
+        # Дополнительная загрузка UI для архивированной карточки
+        ui_path = os.path.join(
+            os.path.dirname(__file__),
+            "..", "..",
+            "ui", "archive"
+        )
+
+        # Загружаем дополнительные стили из UI файла
+        # Примечание: мы не перезагружаем полностью виджет,
+        # а применяем дополнительные стили и настройки
+        self.load_ui_styles(ui_path)
+
         # Изменяем внешний вид для архивированных задач
         self.setProperty("archived", True)
 
         # Модифицируем контекстное меню
         self.modify_context_menu()
+
+    def load_ui_styles(self, ui_path):
+        """Загрузка стилей из UI файла"""
+        try:
+            # Создаем временный виджет для загрузки стилей
+            temp_widget = uic.loadUi(os.path.join(ui_path, "archived_task_card.ui"))
+
+            # Копируем стили
+            archived_style = temp_widget.styleSheet()
+            current_style = self.styleSheet()
+
+            # Объединяем стили (стили архива имеют приоритет для определенных свойств)
+            self.setStyleSheet(current_style + "\n" + archived_style)
+
+            # Удаляем временный виджет
+            temp_widget.deleteLater()
+        except Exception as e:
+            print(f"Не удалось загрузить стили из UI: {e}")
 
     def modify_context_menu(self):
         """Изменение контекстного меню для архивированных задач"""
@@ -31,7 +64,6 @@ class ArchivedTaskCard(TaskCard):
 
     def show_archived_context_menu(self):
         """Показать контекстное меню для архивированной задачи"""
-
         menu = QMenu(self)
 
         # Копируем стиль из родительского класса для единообразия
@@ -77,3 +109,26 @@ class ArchivedTaskCard(TaskCard):
                 QPoint(0, self.menuButton.height())
             )
         )
+
+    def update_data(self, task_data):
+        """Обновление данных карточки"""
+        super().update_data(task_data)
+
+        # Дополнительная настройка для архивированных задач
+        # Например, можно добавить метку "В архиве" или изменить цвет
+        if not hasattr(self, 'archive_badge'):
+            from PyQt6.QtWidgets import QLabel
+            self.archive_badge = QLabel("📦 В архиве", self)
+            self.archive_badge.setStyleSheet("""
+                QLabel {
+                    color: #888888;
+                    font-size: 10px;
+                    font-style: italic;
+                    padding: 2px 5px;
+                    background-color: #f0f0f0;
+                    border-radius: 3px;
+                }
+            """)
+            # Добавляем бейдж в нижнюю часть карточки
+            if hasattr(self, 'footer_layout'):
+                self.footer_layout.insertWidget(0, self.archive_badge)

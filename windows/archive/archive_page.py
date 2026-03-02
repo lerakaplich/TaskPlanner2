@@ -13,6 +13,14 @@ class ArchivePage(QWidget):
         super().__init__(parent)
         self.setObjectName("archivePage")
 
+        # Загрузка UI из файла
+        ui_path = os.path.join(
+            os.path.dirname(__file__),
+            "..", "..",
+            "ui", "archive"
+        )
+        uic.loadUi(os.path.join(ui_path, "archive_page.ui"), self)
+
         # Данные
         self.archived_projects = []
         self.archived_tasks = []
@@ -20,121 +28,12 @@ class ArchivePage(QWidget):
         self.current_project_id = None
         self.task_cards = []  # Список для хранения карточек задач
 
-        self.setup_ui()
+        # Подключение сигналов
+        self.back_button.clicked.connect(self.show_projects_list)
+
+        # Инициализация UI
         self.load_test_data()
         self.show_projects_list()
-
-    def setup_ui(self):
-        """Настройка пользовательского интерфейса"""
-        # Основной layout
-        self.main_layout = QVBoxLayout(self)
-        self.main_layout.setContentsMargins(20, 20, 20, 20)
-        self.main_layout.setSpacing(15)
-
-        # Область контента
-        self.setup_content_area()
-
-        # Кнопка "Назад" (появляется при просмотре задач проекта)
-        self.back_button = QPushButton("← Назад к проектам")
-        self.back_button.setStyleSheet("""
-            QPushButton {
-                background-color: #1B232A;
-                color: white;
-                border: none;
-                border-radius: 8px;
-                padding: 10px 15px;
-                font-size: 14px;
-                font-weight: bold;
-                text-align: left;
-                max-width: 200px;
-            }
-            QPushButton:hover {
-                background-color: #D9D9D6;
-                color: black;
-            }
-        """)
-        self.back_button.clicked.connect(self.show_projects_list)
-        self.back_button.hide()
-        self.main_layout.addWidget(self.back_button)
-
-
-    def setup_content_area(self):
-        """Настройка области контента"""
-        # Скролл-область
-        self.scroll_area = QScrollArea()
-        self.scroll_area.setWidgetResizable(True)
-        self.scroll_area.setFrameShape(QFrame.Shape.NoFrame)
-        self.scroll_area.setStyleSheet("""
-            QScrollArea {
-                background-color: transparent;
-            }
-            QScrollBar:vertical {
-                border: none;
-                background: #f0f0f0;
-                width: 10px;
-                border-radius: 5px;
-            }
-            QScrollBar::handle:vertical {
-                background: #ccab6e;
-                border-radius: 5px;
-                min-height: 20px;
-            }
-            QScrollBar::handle:vertical:hover {
-                background: #998664;
-            }
-        """)
-
-        # Контейнер для контента
-        self.content_container = QWidget()
-        self.content_layout = QVBoxLayout(self.content_container)
-        self.content_layout.setContentsMargins(0, 10, 0, 10)
-        self.content_layout.setSpacing(15)
-
-        # Заголовок раздела
-        self.section_title = QLabel("Архивированные проекты")
-        self.section_title.setStyleSheet("""
-            font-size: 20px;
-            font-weight: bold;
-            color: #1B232A;
-            padding: 5px 0;
-        """)
-        self.content_layout.addWidget(self.section_title)
-
-        # Контейнер для карточек проектов (grid)
-        self.projects_widget = QWidget()
-        self.projects_layout = QGridLayout(self.projects_widget)
-        self.projects_layout.setContentsMargins(0, 0, 0, 0)
-        self.projects_layout.setSpacing(15)
-        self.projects_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
-        self.content_layout.addWidget(self.projects_widget)
-
-        # Контейнер для задач (grid - карточки идут вправо)
-        self.tasks_widget = QWidget()
-        self.tasks_layout = QGridLayout(self.tasks_widget)
-        self.tasks_layout.setContentsMargins(0, 0, 0, 0)
-        self.tasks_layout.setSpacing(15)
-        self.tasks_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
-        self.tasks_widget.hide()
-        self.content_layout.addWidget(self.tasks_widget)
-
-        # Сообщение о пустом архиве
-        self.empty_label = QLabel("📭 Архив пуст")
-        self.empty_label.setStyleSheet("""
-            font-size: 24px;
-            color: #999999;
-            padding: 100px;
-            background-color: #f9f9f9;
-            border-radius: 20px;
-        """)
-        self.empty_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.empty_label.hide()
-        self.content_layout.addWidget(self.empty_label)
-
-        # Добавляем растяжку
-        self.content_layout.addStretch()
-
-        self.scroll_area.setWidget(self.content_container)
-        self.main_layout.addWidget(self.scroll_area)
 
     def load_test_data(self):
         """Загрузка тестовых данных"""
@@ -244,7 +143,6 @@ class ArchivePage(QWidget):
                 "due_date": "2025-11-01"
             }
         ]
-
 
     def show_projects_list(self):
         """Показать список проектов"""
@@ -389,7 +287,6 @@ class ArchivePage(QWidget):
             self.show_projects_list()
         else:
             self.show_project_tasks(self.current_project_id)
-
 
     def on_search(self, text):
         """Обработка поиска"""

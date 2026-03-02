@@ -24,15 +24,18 @@ class ProjectsPage(QWidget):
             )
             uic.loadUi(os.path.join(ui_path, "projects_page.ui"), self)
             self.projects_layout = self.findChild(QVBoxLayout, "projectsLayout")
+
+            # Скрываем заголовок для компактного режима
+            if hasattr(self, 'page_title'):
+                self.page_title.setVisible(False)
         else:
+            # Компактный режим - создаем layout вручную
             self.setLayout(QVBoxLayout())
             self.projects_layout = self.layout()
             self.projects_layout.setContentsMargins(10, 10, 10, 10)
             self.projects_layout.setSpacing(10)
 
         self.refresh_data()
-
-    # ... (parse_date, format_date, calculate_kpi удалены — они теперь в TaskCard)
 
     def _get_default_projects(self):
         # Тестовые данные для режима "completed" (как было раньше)
@@ -108,10 +111,12 @@ class ProjectsPage(QWidget):
         if not projects_to_show:
             no_data_label = QLabel(no_data_text)
             no_data_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            no_data_label.setStyleSheet(
-                f"font-size: {'18px' if not self.compact else '16px'}; "
-                "color: #666666; margin: 50px;" if not self.compact else "margin: 20px;"
-            )
+
+            if self.compact:
+                no_data_label.setStyleSheet("font-size: 16px; color: #666666; margin: 20px;")
+            else:
+                no_data_label.setStyleSheet("font-size: 18px; color: #666666; margin: 50px;")
+
             self.projects_layout.addWidget(no_data_label)
         else:
             for project in projects_to_show:
@@ -123,19 +128,41 @@ class ProjectsPage(QWidget):
         # Стиль заголовка проекта (как было ранее)
         if self.compact:
             header_style = """
-                QPushButton { background-color: #D22730; color: white; border-radius: 6px;
-                              font-weight: bold; font-size: 14px; border: none; text-align: left;
-                              padding: 8px 12px; }
-                QPushButton:hover { background-color: #862633; }
-                QPushButton:pressed { background-color: #6a1e29; }
+                QPushButton { 
+                    background-color: #D22730; 
+                    color: white; 
+                    border-radius: 6px;
+                    font-weight: bold; 
+                    font-size: 14px; 
+                    border: none; 
+                    text-align: left;
+                    padding: 8px 12px; 
+                }
+                QPushButton:hover { 
+                    background-color: #862633; 
+                }
+                QPushButton:pressed { 
+                    background-color: #6a1e29; 
+                }
             """
         else:
             header_style = """
-                QPushButton { background-color: #D22730; color: white; border-radius: 10px;
-                              font-weight: bold; font-size: 18px; border: none; text-align: left;
-                              padding: 15px 15px; }
-                QPushButton:hover { background-color: #862633; }
-                QPushButton:pressed { background-color: #6a1e29; }
+                QPushButton { 
+                    background-color: #D22730; 
+                    color: white; 
+                    border-radius: 10px;
+                    font-weight: bold; 
+                    font-size: 18px; 
+                    border: none; 
+                    text-align: left;
+                    padding: 15px 15px; 
+                }
+                QPushButton:hover { 
+                    background-color: #862633; 
+                }
+                QPushButton:pressed { 
+                    background-color: #6a1e29; 
+                }
             """
 
         header_btn = QPushButton(project_name + " ►")
@@ -148,7 +175,12 @@ class ProjectsPage(QWidget):
         project_panel.setVisible(False)
         project_panel.setStyleSheet("background-color: #f5f5f5; border-radius: 4px;")
         panel_layout = QVBoxLayout(project_panel)
-        panel_layout.setContentsMargins(10 if self.compact else 20, 10, 10, 10)
+
+        if self.compact:
+            panel_layout.setContentsMargins(10, 10, 10, 10)
+        else:
+            panel_layout.setContentsMargins(20, 10, 10, 10)
+
         panel_layout.setSpacing(8)
 
         # Импортируем TaskCard, если ещё не импортирован в начале файла
@@ -184,28 +216,24 @@ class ProjectsPage(QWidget):
             status_btn = QPushButton(f"▶ {status_display} ({len(status_tasks)})")
             status_btn.setCheckable(True)
             status_btn.setStyleSheet("""
-
-                
-               QPushButton {
-                background-color: #1B232A;
-                color: white;
-                border: none;
-                border-radius: 6px;
-                padding: 8px 12px;
-                font-size: 13px;
-                font-weight: bold;
-                text-align: left;
-                margin-left: 5px;
-                 padding: 6px 10px;
-            }
-            QPushButton:hover {
-                background-color: #D9D9D6;
-                color: black;
-            }
-            QPushButton:pressed {
-                background-color: #B8B8B5;
-            } 
-                
+                QPushButton {
+                    background-color: #1B232A;
+                    color: white;
+                    border: none;
+                    border-radius: 6px;
+                    padding: 8px 12px;
+                    font-size: 13px;
+                    font-weight: bold;
+                    text-align: left;
+                    margin-left: 5px;
+                }
+                QPushButton:hover {
+                    background-color: #D9D9D6;
+                    color: black;
+                }
+                QPushButton:pressed {
+                    background-color: #B8B8B5;
+                }
             """)
             panel_layout.addWidget(status_btn)
 
@@ -242,7 +270,12 @@ class ProjectsPage(QWidget):
         if not tasks:
             no_tasks = QLabel("Нет задач в этом проекте")
             no_tasks.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            no_tasks.setStyleSheet("color: #888888; padding: 30px; font-size: 16px;")
+
+            if self.compact:
+                no_tasks.setStyleSheet("color: #888888; padding: 20px; font-size: 14px;")
+            else:
+                no_tasks.setStyleSheet("color: #888888; padding: 30px; font-size: 16px;")
+
             panel_layout.addWidget(no_tasks)
 
         self.projects_layout.addWidget(header_btn)
