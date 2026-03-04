@@ -6,7 +6,7 @@ from PyQt6.QtWidgets import (
     QSizePolicy, QMessageBox
 )
 
-from services.analytics_service import AnalyticsService
+from services.archive_service import ArchiveService
 
 
 class ArchivePage(QWidget):
@@ -29,7 +29,7 @@ class ArchivePage(QWidget):
         # =============================
         # Сервис
         # =============================
-        self.analytics_service = AnalyticsService()
+        self.analytics_service = ArchiveService()
         self.analytics_service.load_test_data()
 
         # =============================
