@@ -1,0 +1,1 @@
+# Модели для projects, board_columns и таблицы связей employees_projects.

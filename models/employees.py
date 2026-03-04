@@ -1,0 +1,1 @@
+# SQLAlchemy-модели для foreign_data.employees (внешняя) и public.employees_data (локальная).
