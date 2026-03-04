@@ -6,7 +6,7 @@ from windows.analytics.theme.employees_stats_view import EmployeesStatsView
 from windows.analytics.theme.theme_projects_view import ThemeProjectsView
 
 class ThemeCard(QFrame):
-    def __init__(self, theme_name, tasks, parent=None):
+    def __init__(self, theme_data, parent=None):
         super().__init__(parent)
         ui_path = os.path.join(
             os.path.dirname(__file__),  # windows/analytics/employees/
@@ -15,19 +15,26 @@ class ThemeCard(QFrame):
         )
         uic.loadUi(os.path.join(ui_path, "theme_card.ui"), self)
 
-        self.theme_name = theme_name
-        self.tasks = tasks  # список задач, содержащих этот тег
+        self.data = theme_data
 
         # Основные данные
-        self.name_btn.setText(theme_name)
-        self.count_label.setText(f"Задач: {len(tasks)}")
+        self.name_btn.setText(self.data["theme_name"])
+        self.count_label.setText(f"Задач: {self.data['task_count']}")
 
         # Панель сотрудников
-        self.employees_stats = EmployeesStatsView(theme_name, tasks, self)
+        self.employees_stats = EmployeesStatsView(
+            self.data["theme_name"],
+            self.data["employee_stats"],
+            self
+        )
         self.employees_panel.layout().addWidget(self.employees_stats)
 
         # Панель проектов
-        self.projects_view = ThemeProjectsView(theme_name, tasks, self)
+        self.projects_view = ThemeProjectsView(
+            self.data["theme_name"],
+            self.data["project_stats"],
+            self
+        )
         self.projects_panel.layout().addWidget(self.projects_view)
 
         # Подключение сигналов

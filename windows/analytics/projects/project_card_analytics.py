@@ -21,111 +21,58 @@ class ProjectCard(QFrame):
         )
         uic.loadUi(os.path.join(ui_path, "project_card_analytics.ui"), self)
 
-        self.project_data = project_data
+        self.data = project_data
 
-        # Основная информация
-        self.name_btn.setText(project_data["name"])
-
-        # Форматирование даты старта
-        start_date = project_data.get("start_date", "не указана")
-        if start_date != "не указана":
-            try:
-                date_obj = datetime.strptime(start_date, "%Y-%m-%d")
-                start_date = date_obj.strftime("%d.%m.%Y")
-            except:
-                pass
-
-        # Статус проекта
-        status = project_data.get("status", "unknown")
-        status_display = {
-            "to_do": "к выполнению",
-            "in_progress": "в работе",
-            "review": "на проверке",
-            "completed": "выполнен",
-            "archived": "архивирован"
-        }.get(status, status)
-
-        # Количество сотрудников
-        emp_count = len(project_data.get("employees", []))
-
+        # Основная информация - берем готовые строки из DTO
+        self.name_btn.setText(self.data.get("name", "Без названия"))
         self.info_label.setText(
-            f"Старт: {start_date} · Статус: {status_display} · Сотрудников: {emp_count}"
+            f"Старт: {self.data.get('start_date_str', '—')} · "
+            f"Статус: {self.data.get('status_display', '—')} · "
+            f"Сотрудников: {self.data.get('emp_count', 0)}"
         )
 
-        # Заполняем панели
         self._populate_tasks()
         self._populate_employees()
 
-        # Подключение сигналов
+        # Сигналы
         self.tasks_btn.toggled.connect(self._toggle_tasks_panel)
         self.employees_btn.toggled.connect(self._toggle_employees_panel)
-
         self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
 
     def _toggle_tasks_panel(self, checked):
-        """Переключение видимости панели задач."""
         self.tasks_panel.setVisible(checked)
-        arrow = "▼" if checked else "▶"
-        self.tasks_btn.setText(f"{arrow} Задачи")
+        self.tasks_btn.setText(f"{'▼' if checked else '▶'} Задачи")
 
     def _toggle_employees_panel(self, checked):
-        """Переключение видимости панели сотрудников."""
         self.employees_panel.setVisible(checked)
-        arrow = "▼" if checked else "▶"
-        self.employees_btn.setText(f"{arrow} Сотрудники")
+        self.employees_btn.setText(f"{'▼' if checked else '▶'} Сотрудники")
 
     def _populate_tasks(self):
         """Заполняет панель задач с группировкой по статусам."""
-        # Очищаем панель задач
-        layout = self.tasks_panel.layout()
-        if layout is None:
-            layout = QVBoxLayout(self.tasks_panel)
-            self.tasks_panel.setLayout(layout)
-        else:
-            while layout.count():
-                item = layout.takeAt(0)
-                if item.widget():
-                    item.widget().deleteLater()
+        layout = self.tasks_panel.layout() or QVBoxLayout(self.tasks_panel)
+        # Очистка layout (стандартный цикл while layout.count()...)
+        self._clear_layout(layout)
 
-        # Устанавливаем правильные отступы в layout панели задач
-        layout.setSpacing(8)  # ← ВАЖНО: добавляем расстояние между элементами
-        layout.setContentsMargins(5, 5, 5, 5)  # небольшие отступы по краям
+        layout.setSpacing(8)
+        layout.setContentsMargins(5, 5, 5, 5)
 
-        tasks = self.project_data.get("tasks", [])
+        grouped_tasks = self.data.get("grouped_tasks", {})
 
-        # Группировка задач по статусам
-        status_order = ["to_do", "in_progress", "review", "completed", "archived"]
-        status_groups = {s: [] for s in status_order}
-
-        for task in tasks:
-            status = task.get("status", "").lower()
-            if status in status_groups:
-                status_groups[status].append(task)
-            else:
-                status_groups["to_do"].append(task)
-
-        # Проверка просрочки для незавершённых проектов
-        project_status = self.project_data.get("status", "").lower()
-        check_overdue = project_status in ("to_do", "in_progress", "review")
+        # Человеческие названия из TaskCard
+        display_names = TaskCard.STATUS_MAP
 
         # Создаём сворачиваемые блоки для каждого статуса
-        for status_key in status_order:
-            status_tasks = status_groups.get(status_key, [])
-            if not status_tasks:
-                continue
+        for status_key, tasks in grouped_tasks.items():
+            if not tasks: continue
 
-            # Человеческое название статуса
-            status_display = TaskCard.STATUS_MAP.get(status_key, status_key.capitalize())
-
-            # Контейнер для одного блока статуса (кнопка + панель задач)
+            # Создаем контейнер статуса
             status_container = QFrame()
-            status_container.setStyleSheet("background-color: transparent;")
             container_layout = QVBoxLayout(status_container)
-            container_layout.setSpacing(4)  # отступ между кнопкой и панелью
+            container_layout.setSpacing(4)
             container_layout.setContentsMargins(0, 0, 0, 0)
 
             # Кнопка статуса
-            status_btn = QPushButton(f"▶ {status_display} ({len(status_tasks)})")
+            status_btn = QPushButton(f"▶ {display_names.get(status_key, status_key)} ({len(tasks)})")
             status_btn.setCheckable(True)
             status_btn.setStyleSheet("""
                 QPushButton {
@@ -162,44 +109,39 @@ class ProjectCard(QFrame):
             tasks_layout.setContentsMargins(8, 8, 8, 8)
             tasks_layout.setSpacing(6)  # отступы между карточками задач
 
-            for task in status_tasks:
-                card = TaskCard(
-                    task_data=task,
-                    compact=True,
-                    show_theme=False,
-                    show_project=False,
-                    check_overdue=check_overdue,
-                    creator_names=TaskCard.DEFAULT_CREATOR_NAMES,
-                    parent=self
-                )
+            for task_dto in tasks:
+                # TaskCard уже готов принимать DTO и не парсить даты!
+                card = TaskCard(task_data=task_dto, compact=True)
                 tasks_layout.addWidget(card)
 
             container_layout.addWidget(tasks_panel)
             layout.addWidget(status_container)
 
             # Связываем кнопку с панелью
-            def make_toggle(panel):
-                return lambda checked: panel.setVisible(checked)
-
-            status_btn.toggled.connect(make_toggle(tasks_panel))
             status_btn.toggled.connect(
-                lambda checked, btn=status_btn: btn.setText(
-                    ("▼" if checked else "▶") + btn.text()[1:]
-                )
+                lambda ch, p=tasks_panel, b=status_btn: self._update_status_btn(ch, p, b)
             )
 
-        # Если задач нет
-        if not tasks:
-            no_tasks = QLabel("Нет задач в этом проекте")
-            no_tasks.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            no_tasks.setStyleSheet("color: #888888; padding: 20px; font-size: 14px;")
-            layout.addWidget(no_tasks)
-
-        # Добавляем растяжение в конце, чтобы всё прижималось к верху
+        if not any(grouped_tasks.values()):
+            layout.addWidget(QLabel("Нет задач в этом проекте"))
         layout.addStretch()
+
+    def _update_status_btn(self, checked, panel, button):
+        panel.setVisible(checked)
+        button.setText(f"{'▼' if checked else '▶'}{button.text()[1:]}")
+
     def _populate_employees(self):
         """Заполняет панель сотрудников."""
-        employees = self.project_data.get("employees", [])
-        for emp in employees:
-            card = EmployeeProjectCard(emp, self.project_data.get("id", ""))
-            self.employees_panel.layout().addWidget(card)
+        layout = self.employees_panel.layout()
+        self._clear_layout(layout)
+
+        for emp in self.data.get("employees", []):
+            # Передаем id проекта для контекста, если нужно
+            card = EmployeeProjectCard(emp, self.data.get("id", ""))
+            layout.addWidget(card)
+
+    def _clear_layout(self, layout):
+        if layout:
+            while layout.count():
+                item = layout.takeAt(0)
+                if item.widget(): item.widget().deleteLater()

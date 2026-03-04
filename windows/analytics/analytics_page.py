@@ -9,15 +9,16 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.uic import loadUi
 
+from services.analytics_service import AnalyticsService
 from windows.analytics.employees.employee_card import EmployeeCard
 from windows.analytics.projects.project_card_analytics import ProjectCard
 from windows.analytics.theme.theme_card import ThemeCard# новый импорт
 
 
 class AnalyticsPage(QWidget):
-    def __init__(self, parent=None):
+    def __init__(self, service: AnalyticsService, parent=None): # Передаем сервис
         super().__init__(parent)
-
+        self.service = service
         ui_path = os.path.join(
             os.path.dirname(__file__),  # windows/analytics/employees/
             "..", "..",   # поднимаемся до корня проекта
@@ -25,199 +26,13 @@ class AnalyticsPage(QWidget):
         )
         uic.loadUi(os.path.join(ui_path, "analytics_page.ui"), self)
 
-
-        self.test_employees = self.create_test_employees()
-        self.test_tasks = self.create_test_tasks()
+        # Теперь данные берем только из сервиса
+        self.employees_data = self.service.get_employees_analytics()
+        self.projects_data = self.service.get_projects_analytics()
+        self.themes_data = self.service.get_themes_analytics()
         self.populate_employees_tab()
         self.populate_themes_tab()
         self.populate_projects_tab()   # новая вкладка
-
-    def create_test_employees(self):
-        """Создаёт список сотрудников (без изменений)."""
-        employees = [
-            {
-                "id": 1,
-                "first_name": "Иван",
-                "last_name": "Иванов",
-                "middle_name": "Иванович",
-                "position": "Ведущий разработчик",
-                "department": "Отдел разработки",
-                "subdivision": "Фронтенд"
-            },
-            {
-                "id": 2,
-                "first_name": "Анна",
-                "last_name": "Петрова",
-                "middle_name": "Сергеевна",
-                "position": "Аналитик",
-                "department": "Отдел аналитики",
-                "subdivision": "Бизнес-анализ"
-            },
-            {
-                "id": 3,
-                "first_name": "Алексей",
-                "last_name": "Сидоров",
-                "middle_name": "Владимирович",
-                "position": "Тестировщик",
-                "department": "Отдел тестирования",
-                "subdivision": "Автоматизация"
-            }
-        ]
-
-        themes_data = {
-            1: [
-                {"theme": "Интерфейсы пользователя", "kpi": 1.2, "completed": 8},
-                {"theme": "Оптимизация производительности", "kpi": 0.9, "completed": 3}
-            ],
-            2: [
-                {"theme": "Сбор требований", "kpi": 1.5, "completed": 12},
-                {"theme": "Документирование", "kpi": 1.1, "completed": 7}
-            ],
-            3: [
-                {"theme": "Автотесты", "kpi": 0.8, "completed": 4},
-                {"theme": "Регрессионное тестирование", "kpi": 1.3, "completed": 6}
-            ]
-        }
-
-        projects_data = {
-            1: [
-                {
-                    "name": "Портал самообслуживания",
-                    "tasks": [
-                        {
-                            "title": "Разработать компонент таблицы",
-                            "theme": "Интерфейсы пользователя",
-                            "priority": "high",
-                            "created_at": "2026-02-01",
-                            "due_date": "2026-02-15",
-                            "completed_at": None,
-                            "status": "in_progress",
-                            "creator_id": 1,
-                            "tags": ["UI", "frontend"]
-                        },
-                        {
-                            "title": "Настроить маршрутизацию",
-                            "theme": "Архитектура",
-                            "priority": "medium",
-                            "created_at": "2026-02-05",
-                            "due_date": "2026-02-20",
-                            "completed_at": None,
-                            "status": "to_do",
-                            "creator_id": 2,
-                            "tags": ["backend"]
-                        }
-                    ]
-                },
-                {
-                    "name": "Мобильное приложение",
-                    "tasks": [
-                        {
-                            "title": "Верстка экрана профиля",
-                            "theme": "Интерфейсы пользователя",
-                            "priority": "critical",
-                            "created_at": "2026-02-10",
-                            "due_date": "2026-02-12",
-                            "completed_at": None,
-                            "status": "review",
-                            "creator_id": 1,
-                            "tags": ["UI", "mobile"]
-                        }
-                    ]
-                }
-            ],
-            2: [
-                {
-                    "name": "CRM система",
-                    "tasks": [
-                        {
-                            "title": "Описать процесс продаж",
-                            "theme": "Сбор требований",
-                            "priority": "high",
-                            "created_at": "2026-01-20",
-                            "due_date": "2026-02-01",
-                            "completed_at": "2026-01-30",
-                            "status": "completed",
-                            "creator_id": 2,
-                            "tags": ["аналитика"]
-                        },
-                        {
-                            "title": "Спецификация интеграции",
-                            "theme": "Документирование",
-                            "priority": "medium",
-                            "created_at": "2026-01-25",
-                            "due_date": "2026-02-10",
-                            "completed_at": None,
-                            "status": "in_progress",
-                            "creator_id": 2,
-                            "tags": ["документация"]
-                        }
-                    ]
-                }
-            ],
-            3: [
-                {
-                    "name": "Интернет-банк",
-                    "tasks": [
-                        {
-                            "title": "Написать тесты на платежи",
-                            "theme": "Автотесты",
-                            "priority": "critical",
-                            "created_at": "2026-02-01",
-                            "due_date": "2026-02-05",
-                            "completed_at": None,
-                            "status": "in_progress",
-                            "creator_id": 3,
-                            "tags": ["автотесты"]
-                        }
-                    ]
-                }
-            ]
-        }
-
-        result = []
-        for emp in employees:
-            emp_id = emp["id"]
-            full_name = f"{emp['last_name']} {emp['first_name']} {emp['middle_name']}".strip()
-            result.append({
-                "id": emp_id,
-                "name": full_name,
-                "position": emp["position"],
-                "department": emp["department"],
-                "subdivision": emp["subdivision"],
-                "themes": themes_data.get(emp_id, []),
-                "projects": projects_data.get(emp_id, [])
-            })
-        return result
-
-    def create_test_tasks(self):
-        """Создаёт общий список задач (без изменений)."""
-        tasks = []
-        employee_names = {
-            1: "Иван Иванов",
-            2: "Анна Петрова",
-            3: "Алексей Сидоров"
-        }
-        for emp in self.test_employees:
-            emp_id = emp["id"]
-            for proj in emp.get("projects", []):
-                proj_name = proj["name"]
-                for task in proj.get("tasks", []):
-                    task_copy = task.copy()
-                    task_copy["project"] = proj_name
-                    if "assigned_to" not in task_copy:
-                        task_copy["assigned_to"] = emp_id
-                    if "creator_id" in task_copy and "creator" not in task_copy:
-                        task_copy["creator"] = employee_names.get(task_copy["creator_id"], str(task_copy["creator_id"]))
-                    tasks.append(task_copy)
-        return tasks
-
-    def get_all_tags(self):
-        """Собирает все уникальные теги из задач (без изменений)."""
-        tags = set()
-        for task in self.test_tasks:
-            for tag in task.get("tags", []):
-                tags.add(tag)
-        return sorted(tags)
 
     def populate_themes_tab(self):
         """Заполняет вкладку 'Темы'."""
@@ -244,12 +59,13 @@ class AnalyticsPage(QWidget):
         grid.setHorizontalSpacing(15)
         grid.setVerticalSpacing(15)
 
-        tags = self.get_all_tags()
+        themes_map = self.service.get_themes_analytics()  # Получаем словарь {тег: [задачи]}
+
         row = col = 0
         max_cols = 3
-        for tag in tags:
-            tag_tasks = [t for t in self.test_tasks if tag in t.get("tags", [])]
-            card = ThemeCard(tag, tag_tasks)
+        for theme_name, tasks in themes_map.items():
+            theme_card_data = self.service.get_theme_card_data(theme_name, tasks)
+            card = ThemeCard(theme_card_data)
             grid.addWidget(card, row, col, alignment=Qt.AlignmentFlag.AlignTop)
             col += 1
             if col >= max_cols:
@@ -291,10 +107,20 @@ class AnalyticsPage(QWidget):
         grid.setVerticalSpacing(15)
 
         # Добавляем карточки
+        employees = self.service.get_employees_analytics()
+
         row = col = 0
         max_cols = 3
-        for emp_data in self.test_employees:
-            card = EmployeeCard(emp_data)
+        for emp_data in employees:
+            # ДООБОГАЩЕНИЕ: Получаем глубокую аналитику (КПД по тегам, проекты)
+            # Этот метод мы обсуждали ранее в AnalyticsService
+            personal_stats = self.service.get_employee_personal_analytics(emp_data['id'])
+
+            # Склеиваем базу и аналитику в один DTO для карточки
+            full_emp_data = {**emp_data, **personal_stats}
+
+            # Создаем "тонкую" карточку
+            card = EmployeeCard(full_emp_data)
             grid.addWidget(card, row, col, alignment=Qt.AlignmentFlag.AlignTop)
             col += 1
             if col >= max_cols:
@@ -307,55 +133,6 @@ class AnalyticsPage(QWidget):
         layout = QVBoxLayout(employees_tab)
         layout.setContentsMargins(15, 15, 15, 15)  # единые отступы
         layout.addWidget(scroll)
-
-    def create_test_projects(self):
-        """Создаёт список проектов с полным набором полей."""
-        projects = []
-        emp_dict = {e["id"]: e for e in self.test_employees}
-        proj_map = {}
-
-        for emp in self.test_employees:
-            emp_id = emp["id"]
-            for proj in emp.get("projects", []):
-                proj_name = proj["name"]
-                if proj_name not in proj_map:
-                    proj_map[proj_name] = {
-                        "name": proj_name,
-                        "start_date": "2026-01-15",
-                        "status": "in_progress",
-                        "tasks": [],
-                        "employees": {}
-                    }
-                for task in proj.get("tasks", []):
-                    task_copy = task.copy()
-                    task_copy["assigned_to"] = emp_id
-                    task_copy["project"] = proj_name
-                    proj_map[proj_name]["tasks"].append(task_copy)
-                    if emp_id not in proj_map[proj_name]["employees"]:
-                        proj_map[proj_name]["employees"][emp_id] = []
-                    proj_map[proj_name]["employees"][emp_id].append(task_copy)
-
-        for proj_name, data in proj_map.items():
-            employees_list = []
-            for emp_id, tasks in data["employees"].items():
-                emp = emp_dict.get(emp_id, {})
-                active = sum(1 for t in tasks if t.get("status") not in ("completed", "archived"))
-                completed = sum(1 for t in tasks if t.get("status") in ("completed", "archived"))
-                employees_list.append({
-                    "id": emp_id,
-                    "name": emp.get("name", f"Сотрудник {emp_id}"),
-                    "active_tasks": active,
-                    "completed_tasks": completed
-                })
-            projects.append({
-                "id": proj_name,
-                "name": proj_name,
-                "start_date": data["start_date"],
-                "status": data["status"],
-                "tasks": data["tasks"],
-                "employees": employees_list
-            })
-        return projects
 
     def populate_projects_tab(self):
         """Заполняет вкладку Проекты карточками проектов."""
@@ -406,13 +183,12 @@ class AnalyticsPage(QWidget):
         # grid.setContentsMargins(0, 0, 0, 0)  <-- УДАЛИТЕ ЭТУ СТРОКУ!
 
         # Получаем данные проектов
-        projects = self.create_test_projects()
+        projects = self.service.get_projects_analytics()
 
-        # Добавляем карточки в сетку
         row = col = 0
         max_cols = 3
-
         for proj in projects:
+            # proj содержит и статистику, и список сотрудников, посчитанные в сервисе
             card = ProjectCard(proj)
             grid.addWidget(card, row, col, alignment=Qt.AlignmentFlag.AlignTop)
 
