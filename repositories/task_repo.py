@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import select, update, delete
 
 from models.tasks import Task, Tag, TaskTag
+from sqlalchemy.orm import joinedload
 
 
 class TaskRepo:
@@ -67,3 +68,20 @@ class TaskRepo:
             TaskTag.tag_id == tag_id
         )
         self.session.execute(stmt)
+
+    def get_all_with_relations(self):
+        """Метод для получения всех задач с подгрузкой тегов и колонок (для аналитики)"""
+        stmt = select(Task).options(
+            joinedload(Task.tags),
+            joinedload(Task.column),
+            joinedload(Task.project)
+        )
+        return list(self.session.scalars(stmt))
+
+    def get_by_employee(self, employee_id: int):
+        """Все задачи конкретного сотрудника"""
+        stmt = select(Task).where(Task.assigned_to == employee_id).options(
+            joinedload(Task.tags),
+            joinedload(Task.column)
+        )
+        return list(self.session.scalars(stmt))

@@ -1,8 +1,8 @@
 # Расчеты статистики (кол-во задач, среднее время выполнения).
 
 from datetime import datetime
-from models.schemas.employees_dto import EmployeeAnalyticsDTO
-from models.schemas.projects_dto import ProjectAnalyticsDTO
+from models.schemas.employees_dto import EmployeeDTO
+from models.schemas.projects_dto import ProjectDTO
 
 class AnalyticsService:
     STATUS_MAP = {
@@ -12,20 +12,22 @@ class AnalyticsService:
         'completed': 'Выполнено',
         'archived': 'Архивировано'
     }
-    def __init__(self, employee_repo, project_repo, task_repo):
-        self.employee_repo = employee_repo
+    def __init__(self, external_emp_repo, project_repo, task_repo):
+        # external_emp_repo — это экземпляр ExternalEmployeeRepo
+        self.employee_repo = external_emp_repo
         self.project_repo = project_repo
         self.task_repo = task_repo
 
     # ВКЛАДКА ТЕМЫ
 
     def get_themes_analytics(self):
-        """Возвращает словарь {ИмяТега: [СписокОбъектовЗадач]} для генерации вкладок."""
-        all_tasks = self.task_repo.get_all_tasks_with_tags()
+        # Используем новый метод, который мы добавили в TaskRepo
+        all_tasks = self.task_repo.get_all_with_relations()
         themes = {}
         for task in all_tasks:
-            for tag in task.tags:
-                themes.setdefault(tag.name, []).append(task)
+            for task_tag in task.tags: # В модели Task.tags — это список TaskTag
+                tag_name = task_tag.tag.name # Путь: TaskTag -> Tag -> name
+                themes.setdefault(tag_name, []).append(task)
         return themes
 
     def get_theme_stats_by_employees(self, tasks):
@@ -57,7 +59,7 @@ class AnalyticsService:
                 stats[emp_name][prio] += 1
 
             # Считаем выполненные и КПД
-            if task.status in ("completed", "archived"):
+            if self._get_task_status_key(task) == 'completed':
                 stats[emp_name]["completed"] += 1
                 kpi = self._calculate_kpi_value(task)  # Используем наш приватный метод
                 if kpi is not None and kpi != float('inf'):
@@ -140,15 +142,15 @@ class AnalyticsService:
     # ВКЛАДКА СОТРУДНИКИ
 
     def get_employees_analytics(self):
-        """Базовый список сотрудников для инициализации вкладок."""
-        remote_employees = self.employee_repo.get_all_remote()
+        """Базовый список из ExternalEmployeeRepo"""
+        employees = self.employee_repo.get_all()
         return [{
             "id": emp.id,
-            "name": f"{emp.last_name} {emp.first_name} {emp.middle_name}",
-            "position": emp.position,
-            "department": emp.department,
-            "subdivision": getattr(emp, 'subdivision', '—') # Добавили поле из UI
-        } for emp in remote_employees]
+            "name": f"{emp.last_name} {emp.first_name} {emp.middle_name or ''}".strip(),
+            "position": emp.position or "—",
+            "department": "Департамент " + str(emp.department_id) if emp.department_id else "—",
+            "subdivision": "Отдел " + str(emp.division_id) if emp.division_id else "—"
+        } for emp in employees]
 
     def get_employee_personal_analytics(self, employee_id):
         """Глубокая аналитика для конкретной карточки EmployeeCard."""
@@ -157,7 +159,7 @@ class AnalyticsService:
 
         tag_stats = {}
         for task in tasks:
-            if task.status == 'completed':
+            if self._get_task_status_key(task) == 'completed':
                 kpi = self._calculate_kpi_value(task)
                 if kpi and kpi != float('inf'):
                     for tag in task.tags:
@@ -177,24 +179,32 @@ class AnalyticsService:
     # ВСПОМОГАТЕЛЬНЫЕ МЕТОДЫ
 
     def _calculate_kpi_value(self, task):
-        if not all([task.created_at, task.completed_at, task.due_date]): return None
-        planned = (task.due_date - task.created_at).days
+        if not all([task.created_at, task.completed_at, task.deadline]): return None
+        planned = (task.deadline - task.created_at).days
         actual = (task.completed_at - task.created_at).days
         return round(planned / actual, 2) if actual > 0 else 0
 
     def _is_task_overdue(self, task):
         if task.status in ('completed', 'archived'): return False
-        return task.due_date and task.due_date < datetime.now().date()
+        return task.deadline and task.deadline < datetime.now().date()
+
+    def _get_task_status_key(self, task):
+        # В вашей модели Task есть связь 'column'
+        if task.column and task.column.is_done_column:
+            return 'completed'
+        return 'in_progress'
 
     def _prepare_task_dto(self, task, creator_name=None):
+        status_key = self._get_task_status_key(task)
+
         return {
             "title": task.title,
             "priority": task.priority,
-            "status": task.status,
+            "status": status_key,
             "is_overdue": self._is_task_overdue(task),
             "tags_list": [tag.name for tag in task.tags],
             "created_at_str": task.created_at.strftime("%d.%m.%Y") if task.created_at else "—",
-            "due_date_str": task.due_date.strftime("%d.%m.%Y") if task.due_date else "Нет",
+            "deadline_str": task.deadline.strftime("%d.%m.%Y") if task.deadline else "Нет",
             "creator_name": creator_name or "Неизвестно",
             "kpi_value": self._calculate_kpi_value(task) if task.status == 'completed' else None,
             "project_name": task.project.name if task.project else "—"
