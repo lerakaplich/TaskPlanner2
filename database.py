@@ -26,27 +26,26 @@ DB_TASKS = {
     "database": "taskplanner",
     "host": "localhost",
     "port": 5433,
+    "options": "-c search_path=foreign_data,public"  # 👈 ДЛЯ ЗАДАЧ ТОЖЕ НУЖЕН ПОИСК
 }
 
 DB_EMPLOYEES = {
     "user": "postgres",
     "password": "admin",
-    "database": "employees",
+    "database": "employees",  # 👈 ОСТАВЛЯЕМ ДЛЯ ЛОКАЛЬНЫХ ТАБЛИЦ
     "host": "localhost",
     "port": 5433,
+    # options НЕ НУЖЕН, здесь нет foreign_data
 }
 
-
-# ==========================================================
-# Функция формирования URL
-# ==========================================================
-
 def build_db_url(config: dict) -> str:
-    return (
-        f"postgresql+psycopg2://{config['user']}:{config['password']}"
-        f"@{config['host']}:{config['port']}/{config['database']}"
-    )
-
+    base_url = f"postgresql+psycopg2://{config['user']}:{config['password']}@{config['host']}:{config['port']}/{config['database']}"
+    if "options" in config:
+        # Важно: параметры в URL должны быть правильно закодированы
+        import urllib.parse
+        encoded_options = urllib.parse.quote_plus(config['options'])
+        base_url += f"?options={encoded_options}"
+    return base_url
 
 # ==========================================================
 # Engines

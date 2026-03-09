@@ -2,11 +2,11 @@ import sys
 from PyQt6.QtWidgets import QApplication, QDialog, QVBoxLayout, QHBoxLayout, QLabel, QComboBox, QPushButton, QMessageBox
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QFont
-from sqlalchemy import select
+from sqlalchemy import select, text
 
 from windows.projects.main_window import MainWindow
-from database import test_connections, get_employees_session
-from models.employees import ExternalEmployee  # 👈 ИСПОЛЬЗУЕМ ExternalEmployee из foreign_data
+from database import test_connections, get_tasks_session  # 👈 ЗАМЕНЯЕМ get_employees_session на get_tasks_session
+from models.employees import ExternalEmployee
 
 
 class UserSelectDialog(QDialog):
@@ -145,9 +145,22 @@ class UserSelectDialog(QDialog):
     def load_users(self):
         """Загружает список пользователей из foreign_data.employees"""
         try:
-            session = get_employees_session()
+            # 👇 ИСПОЛЬЗУЕМ get_tasks_session() вместо get_employees_session()
+            session = get_tasks_session()
 
-            # Загружаем всех сотрудников из foreign_data.employees
+            # ДИАГНОСТИКА: проверим текущего пользователя и его права
+            current_user = session.execute(text("SELECT current_user")).scalar()
+            print(f"Текущий пользователь БД: {current_user}")
+
+            # Проверим, какие схемы доступны
+            result = session.execute(text("SHOW search_path")).first()
+            print(f"Текущий search_path: {result[0]}")
+
+            # Проверим, видит ли сессия таблицу
+            result = session.execute(text("SELECT COUNT(*) FROM foreign_data.employees")).scalar()
+            print(f"Количество записей в foreign_data.employees: {result}")
+
+            # Теперь сам запрос через ORM
             stmt = select(ExternalEmployee).order_by(ExternalEmployee.last_name)
             users = session.scalars(stmt).all()
 
@@ -158,7 +171,7 @@ class UserSelectDialog(QDialog):
                         "last_name": u.last_name,
                         "first_name": u.first_name,
                         "middle_name": u.middle_name,
-                        "rights": u.rights or 'user',  # Если rights нет, по умолчанию 'user'
+                        "rights": u.rights or 'user',
                         "position": u.position,
                         "phone_number": u.phone_number,
                         "email": u.email
@@ -167,30 +180,12 @@ class UserSelectDialog(QDialog):
                 ]
                 print(f"✅ Загружено {len(self.users)} пользователей из foreign_data")
             else:
-                # Если нет пользователей в foreign_data, используем тестовых
-                self.users = [
-                    {"id": 1, "last_name": "Копейкина", "first_name": "Виктория", "middle_name": "Анатольевна",
-                     "rights": "superadmin", "position": "Разработчик", "phone_number": "375445742434", "email": ""},
-                    {"id": 2, "last_name": "Каплич", "first_name": "Валерия", "middle_name": "Александровна",
-                     "rights": "superadmin", "position": "Разработчик", "phone_number": "375295233026", "email": ""},
-                    {"id": 3, "last_name": "Шершнева", "first_name": "Елена", "middle_name": "Сергеевна",
-                     "rights": "superadmin", "position": "Разработчик", "phone_number": "375297922724", "email": ""}
-                ]
                 print("⚠️ Используются тестовые пользователи")
 
             session.close()
 
         except Exception as e:
             print(f"❌ Ошибка загрузки пользователей из foreign_data: {e}")
-            # Используем тестовых пользователей
-            self.users = [
-                {"id": 1, "last_name": "Копейкина", "first_name": "Виктория", "middle_name": "Анатольевна",
-                 "rights": "superadmin", "position": "Разработчик", "phone_number": "375445742434", "email": ""},
-                {"id": 2, "last_name": "Каплич", "first_name": "Валерия", "middle_name": "Александровна",
-                 "rights": "superadmin", "position": "Разработчик", "phone_number": "375295233026", "email": ""},
-                {"id": 3, "last_name": "Шершнева", "first_name": "Елена", "middle_name": "Сергеевна",
-                 "rights": "superadmin", "position": "Разработчик", "phone_number": "375297922724", "email": ""}
-            ]
 
         # Заполняем комбобокс
         self.user_combo.clear()
@@ -201,11 +196,9 @@ class UserSelectDialog(QDialog):
             if user['middle_name']:
                 full_name += f" {user['middle_name']}"
 
-            # Добавляем информацию о должности если есть
             if user.get('position'):
                 full_name += f" ({user['position']})"
 
-            # Добавляем иконку роли
             role_icon = "👑" if user.get('rights') == 'superadmin' else "👤"
             display_text = f"{role_icon} {full_name}"
 
@@ -213,7 +206,7 @@ class UserSelectDialog(QDialog):
 
     def on_user_selected(self, index):
         """Обработчик выбора пользователя"""
-        if index > 0:  # Не первый элемент (заглушка)
+        if index > 0:
             user_id = self.user_combo.currentData()
             user = next((u for u in self.users if u['id'] == user_id), None)
 
@@ -223,13 +216,11 @@ class UserSelectDialog(QDialog):
                     full_name += f" {user['middle_name']}"
 
                 role_text = "Администратор" if user.get('rights') == 'superadmin' else "Пользователь"
-
                 info_text = f"Выбран: {full_name}\nРоль: {role_text}"
                 if user.get('position'):
                     info_text += f"\nДолжность: {user['position']}"
 
                 self.info_label.setText(info_text)
-
                 self.selected_user = user
                 self.btn_ok.setEnabled(True)
         else:
