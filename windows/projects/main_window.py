@@ -16,8 +16,14 @@ from windows.projects.project_creation_dialog import ProjectCreationDialog
 
 class MainWindow(QMainWindow):
 
-    def __init__(self):
+    def __init__(self, current_user=None):
         super().__init__()
+
+        self.current_user = current_user or {"id": 1, "name": "Текущий пользователь"}
+        print(f"\n=== Текущий пользователь ===")
+        print(f"ID: {self.current_user.get('id')}")
+        print(f"Имя: {self.current_user.get('last_name')} {self.current_user.get('first_name')}")
+        print(f"Роль: {self.current_user.get('rights', 'user')}")
 
         ui_path = os.path.join(
             os.path.dirname(__file__),  # windows/analytics/employees/
