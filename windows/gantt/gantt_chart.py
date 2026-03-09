@@ -318,11 +318,8 @@ class GanttScene(QGraphicsScene):
                 for child in task.children:
                     add_task(child)
 
-        print("Файл найден по этому пути18!")
         for root in self.tasks:
-            print("Файл найден по этому пути19!")
             add_task(root)
-        print("Файл найден по этому пути20!")
         for task in self.all_tasks_dict.values():
             for dep in task.dependencies:
                 pred_item = self.task_items.get(dep['id'])
@@ -421,15 +418,11 @@ class GanttChartWidget(QWidget):
         self.ganttView.setScene(self.scene)
         self.ganttView.setDragMode(QGraphicsView.DragMode.ScrollHandDrag)
         self.ganttView.setRenderHint(QPainter.RenderHint.Antialiasing)
-        print("Файл найден по этому пути1!")
         self.linking_mode = False
         self.pending_pred = None
         self.ganttView.viewport().installEventFilter(self)
-        print("Файл найден по этому пути!2")
         self.connect_signals()
-        print("Файл найден по этому пути!3")
         self.load_test_data()
-        print("Файл найден по этому пути!4")
 
     def connect_signals(self):
         self.btnZoomIn.clicked.connect(self.zoom_in)
@@ -489,35 +482,22 @@ class GanttChartWidget(QWidget):
         task4.dependencies = [{'id': 2, 'lag': 0}, {'id': 3, 'lag': 2}]
         task5 = GanttTask(5, "Тестирование", "2026-02-23", "2026-02-28", "Морозов Д.В.")
         task5.dependencies = [{'id': 4, 'lag': 0}]
-        print("Файл найден по этому пути!5")
         self.scene.tasks = [task1, task2, task3, task4, task5]
-        print("Файл найден по этому пути!6")
         self.scene.collect_tasks()
-        print("Файл найден по этому пути!7")
         self.update_task_tree()
-        print("Файл найден по этому пути8!")
         start = min(t.start_date for t in self.scene.all_tasks_dict.values())
-        print("Файл найден по этому пути12!")
         end = max(t.end_date for t in self.scene.all_tasks_dict.values())
-        print("Файл найден по этому пути13!")
         self.scene.project_start = start
-        print("Файл найден по этому пути14!")
         self.scene.project_end = end
-        print("Файл найден по этому пути15!")
         self.dateRangeLabel.setText(f"{start.strftime('%d.%m.%Y')} - {end.strftime('%d.%m.%Y')}")
-        print("Файл найден по этому пути16!")
 
         self.scene.update_scene()
-        print("Файл найден по этому пути17!")
         self.update_statistics()
 
     def update_task_tree(self):
-        print("Файл найден по этому пути!9")
         self.taskList.blockSignals(True)  # ← добавьте
         self.taskList.clear()
-        print("Файл найден по этому пути!10")
         self.scene.tree_items.clear()
-        print("Файл найден по этому пути!11")
 
         def add_item(task, parent_item=None):
             text = f"{task.title} | {task.start_date.strftime('%d.%m')}–{task.end_date.strftime('%d.%m')} | {task.assignee}"

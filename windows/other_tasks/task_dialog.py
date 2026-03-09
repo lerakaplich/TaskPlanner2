@@ -1,237 +1,200 @@
+# windows/other_tasks/task_dialog.py
+
 import os
-import sys
-import traceback
-from datetime import datetime
 from typing import Dict, Optional
-
 from PyQt6 import uic
-from PyQt6.QtWidgets import QDialog, QApplication, QMessageBox
-from PyQt6.QtCore import Qt, QDate, pyqtSignal
+from PyQt6.QtWidgets import QDialog, QMessageBox
+from PyQt6.QtCore import QDate, pyqtSignal
 
-
-# ГЛОБАЛЬНЫЙ ЛОВЕЦ ОШИБОК
-def global_excepthook(exc_type, exc_value, exc_tb):
-    print("\n" + "="*90)
-    print("=== КРИТИЧЕСКАЯ ОШИБКА В ПРИЛОЖЕНИИ ===")
-    traceback.print_exception(exc_type, exc_value, exc_tb)
-    print("="*90)
-    QMessageBox.critical(None, "Краш приложения",
-                         f"Произошла ошибка:\n{exc_value}\n\nСмотри консоль!")
-
-sys.excepthook = global_excepthook
+from services.other_tasks_service import OtherTasksService
 
 
 class TaskDialog(QDialog):
     task_saved = pyqtSignal(dict)
 
-    def __init__(self,
-                 parent=None,
-                 task_data=None,
-                 current_user=None,
-                 mode: str = "create"):   # ← ВОТ ЭТО ДОБАВИЛИ
+    def __init__(
+            self,
+            parent=None,
+            task_data: Optional[Dict] = None,
+            mode="create"
+    ):
         super().__init__(parent)
-        print(f"=== TaskDialog: __init__ START (mode={mode}) ===")
 
+        self.service: Optional[OtherTasksService] = None
         self.task_data = task_data
         self.mode = mode
-        self.current_user = current_user or self.get_test_user()
-        print(f"  current_user = {self.current_user}")
+        self.current_user = {"id": 1, "name": "Текущий пользователь"}
 
-        # Загрузка UI
-        try:
-            ui_path = os.path.join(os.path.dirname(__file__), "..", "..", "ui", "other_tasks")
-            ui_file = os.path.join(ui_path, "task_dialog.ui")
-            print(f"  Загружаю UI: {ui_file}")
-            uic.loadUi(ui_file, self)
-            print("  ✓ UI загружен успешно")
-        except Exception as e:
-            print("  ❌ ОШИБКА загрузки UI:", e)
-            traceback.print_exc()
-            raise
+        # Загружаем UI
+        ui_path = os.path.join(os.path.dirname(__file__), "..", "..", "ui", "other_tasks")
+        uic.loadUi(os.path.join(ui_path, "task_dialog.ui"), self)
 
-        # Настройка заголовка и кнопки в зависимости от режима
-        if self.mode == "edit" or self.task_data is not None:
-            self.titleLabel.setText("Редактирование задачи")
-            self.createBtn.setText("Сохранить изменения")
+        # Настройка UI
+        self.setup_ui()
+
+        if hasattr(self, 'createBtn'):
+            self.createBtn.clicked.connect(self.validate_and_save)
+
+    def setup_ui(self):
+        """Настраивает UI диалога."""
+        if self.mode == "create":
+            self.setWindowTitle("Создание задачи")
+            if hasattr(self, 'createBtn'):
+                self.createBtn.setText("Создать")
         else:
-            self.titleLabel.setText("Создание новой задачи")
-            self.createBtn.setText("Создать задачу")
+            self.setWindowTitle("Редактирование задачи")
+            if hasattr(self, 'createBtn'):
+                self.createBtn.setText("Сохранить")
 
-        self.createBtn.clicked.connect(self.validate_and_save)
-        print("  ✓ Кнопка подключена")
+    def set_service(self, service: OtherTasksService):
+        """Устанавливает сервис и загружает данные."""
+        self.service = service
+        self.load_dialog_data()
 
-        # Загрузка данных
-        self.load_test_projects()
-        self.load_test_employees()
-        self.update_creation_info()
-
-        if self.task_data:
-            self.load_task_data()
-
-        print("=== TaskDialog: __init__ END ===\n")
-
-    # ==================== ОСТАЛЬНЫЕ МЕТОДЫ (без изменений) ====================
-    def get_test_user(self):
-        return {
-            'id': 1,
-            'last_name': 'Иванов',
-            'first_name': 'Иван',
-            'middle_name': 'Иванович',
-            'position': 'Генеральный директор'
-        }
-
-    def load_test_projects(self):
-        self.test_projects = [
-            {'id': 1, 'name': 'Task Planner', 'description': 'Планировщик задач'},
-            {'id': 2, 'name': 'CRM System', 'description': 'Система управления клиентами'},
-            {'id': 3, 'name': 'Mobile App', 'description': 'Разработка мобильного приложения'},
-            {'id': 4, 'name': 'Website Redesign', 'description': 'Редизайн корпоративного сайта'},
-            {'id': 5, 'name': 'Analytics Dashboard', 'description': 'Дашборд аналитики'}
-        ]
-        self.comboBoxProject.clear()
-        self.comboBoxProject.addItem("Выберите проект", None)
-        for project in self.test_projects:
-            self.comboBoxProject.addItem(project['name'], project['id'])
-
-    def load_test_employees(self):
-        self.test_employees = [
-            {'id': 1, 'last_name': 'Иванов', 'first_name': 'Иван', 'middle_name': 'Иванович', 'position': 'Генеральный директор'},
-            {'id': 2, 'last_name': 'Петрова', 'first_name': 'Анна', 'middle_name': 'Сергеевна', 'position': 'Ведущий разработчик'},
-            {'id': 3, 'last_name': 'Сидоров', 'first_name': 'Петр', 'middle_name': 'Петрович', 'position': 'Технический директор'},
-            {'id': 4, 'last_name': 'Козлова', 'first_name': 'Елена', 'middle_name': 'Владимировна', 'position': 'Тестировщик'},
-            {'id': 5, 'last_name': 'Морозов', 'first_name': 'Дмитрий', 'middle_name': 'Алексеевич', 'position': 'Аналитик'},
-            {'id': 6, 'last_name': 'Волкова', 'first_name': 'Мария', 'middle_name': 'Дмитриевна', 'position': 'Дизайнер'},
-            {'id': 7, 'last_name': 'Соколов', 'first_name': 'Александр', 'middle_name': 'Игоревич', 'position': 'Менеджер проектов'}
-        ]
-        self.comboBoxAssignee.clear()
-        self.comboBoxAssignee.addItem("Не назначен", None)
-        for emp in self.test_employees:
-            full_name = f"{emp['last_name']} {emp['first_name']} {emp['middle_name']}"
-            display_text = f"{full_name} — {emp['position']}"
-            self.comboBoxAssignee.addItem(display_text, emp['id'])
-
-    def _safe_name(self, person: dict) -> str:
-        if not person:
-            return "Неизвестно"
-        last = person.get('last_name', '') or ''
-        first = (person.get('first_name') or '')[:1]
-        middle = (person.get('middle_name') or '')[:1]
-        f = first + '.' if first else ''
-        m = middle + '.' if middle else ''
-        return f"{last} {f}{m}".strip()
-
-    def update_creation_info(self):
-        now = datetime.now()
-        self.createdByLabel.setText(f"Создал: {self._safe_name(self.current_user)}")
-
-        def fmt(dt):
-            if isinstance(dt, datetime):
-                return dt.strftime('%d.%m.%Y %H:%M')
-            return str(dt)
-
-        created = self.task_data.get('created_at', now) if self.task_data else now
-        updated = self.task_data.get('updated_at', now) if self.task_data else now
-        self.createdAtLabel.setText(f"Создано: {fmt(created)}")
-        self.updatedAtLabel.setText(f"Изменено: {fmt(updated)}")
-
-    def load_task_data(self):
-        if not self.task_data:
+    def load_dialog_data(self):
+        """Загружает данные для диалога через сервис."""
+        if not self.service:
             return
-        self.lineEditTitle.setText(self.task_data.get('title', ''))
-        self.textEditDescription.setPlainText(self.task_data.get('description', ''))
 
-        project_id = self.task_data.get('project_id')
-        if project_id is not None:
-            index = self.comboBoxProject.findData(project_id)
+        dialog_data = self.service.prepare_dialog_data(self.mode, self.task_data)
+
+        # Загружаем проекты
+        if hasattr(self, 'comboBoxProject'):
+            self.comboBoxProject.clear()
+            self.comboBoxProject.addItem("Выберите проект", None)
+            for project in dialog_data["projects"]:
+                self.comboBoxProject.addItem(project["name"], project["id"])
+
+        # Загружаем статусы
+        if hasattr(self, 'comboBoxStatus'):
+            self.comboBoxStatus.clear()
+            for status in dialog_data["statuses"]:
+                self.comboBoxStatus.addItem(status["name"], status["id"])
+
+        # Загружаем исполнителей
+        if hasattr(self, 'comboBoxAssignee'):
+            self.comboBoxAssignee.clear()
+            self.comboBoxAssignee.addItem("Не назначен", None)
+            for emp in dialog_data["employees"]:
+                self.comboBoxAssignee.addItem(emp["display_name"], emp["id"])
+
+        # Загружаем приоритеты
+        if hasattr(self, 'comboBoxPriority'):
+            self.comboBoxPriority.clear()
+            for priority in dialog_data["priorities"]:
+                self.comboBoxPriority.addItem(priority["text"])
+
+        # Если режим редактирования - заполняем данные
+        if self.mode == "edit" and "task_data" in dialog_data:
+            self.fill_task_data(dialog_data["task_data"])
+
+    def fill_task_data(self, task_data: Dict):
+        """Заполняет поля формы данными задачи."""
+        if hasattr(self, 'lineEditTitle'):
+            self.lineEditTitle.setText(task_data.get("title", ""))
+
+        if hasattr(self, 'textEditDescription'):
+            self.textEditDescription.setPlainText(task_data.get("description", ""))
+
+        if hasattr(self, 'comboBoxPriority'):
+            priority = task_data.get("priority", "Средний")
+            index = self.comboBoxPriority.findText(priority)
             if index >= 0:
-                self.comboBoxProject.setCurrentIndex(index)
+                self.comboBoxPriority.setCurrentIndex(index)
 
-        assignee_id = self.task_data.get('assigned_to')
-        if assignee_id is not None:
-            index = self.comboBoxAssignee.findData(assignee_id)
-            if index >= 0:
-                self.comboBoxAssignee.setCurrentIndex(index)
-
-        priority = self.task_data.get('priority', 'medium')
-        priority_map = {'low': 0, 'medium': 1, 'high': 2, 'critical': 3}
-        self.comboBoxPriority.setCurrentIndex(priority_map.get(priority, 1))
-
-        status = self.task_data.get('status', 'to_do')
-        status_map = {'to_do': 0, 'in_progress': 1, 'review': 2, 'done': 3}
-        self.comboBoxStatus.setCurrentIndex(status_map.get(status, 0))
-
-        if self.task_data.get('due_date'):
-            try:
-                due_date = QDate.fromString(self.task_data['due_date'], "yyyy-MM-dd")
-                self.dateEditDeadline.setDate(due_date)
-            except:
-                pass
-
-    def get_task_data(self) -> Dict:
-        now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-
-        task_data = {
-            'id': self.task_data.get('id') if self.task_data else None,
-            'title': self.lineEditTitle.text().strip(),
-            'description': self.textEditDescription.toPlainText().strip(),
-            'project_id': self.comboBoxProject.currentData(),
-            'project_name': self.comboBoxProject.currentText(),
-            'assigned_to': self.comboBoxAssignee.currentData(),
-            'priority': {'Низкий': 'low', 'Средний': 'medium', 'Высокий': 'high', 'Критический': 'critical'}
-                        .get(self.comboBoxPriority.currentText(), 'medium'),
-            'status': {'К выполнению': 'to_do', 'В работе': 'in_progress', 'На проверке': 'review', 'Выполнено': 'done'}
-                      .get(self.comboBoxStatus.currentText(), 'to_do'),
-            'due_date': self.dateEditDeadline.date().toString("yyyy-MM-dd"),
-            'created_by': self.current_user.get('id'),
-            'created_by_name': self._safe_name(self.current_user),
-            'created_at': now_str,
-            'updated_at': now_str,
-            'assignee_name': 'Не назначен'
-        }
-
-        assignee_id = task_data['assigned_to']
-        if assignee_id:
-            for emp in self.test_employees:
-                if emp['id'] == assignee_id:
-                    task_data['assignee_name'] = self._safe_name(emp)
+        if hasattr(self, 'comboBoxStatus'):
+            status = task_data.get("status", "")
+            # Ищем статус по тексту
+            for i in range(self.comboBoxStatus.count()):
+                if self.comboBoxStatus.itemText(i) == status:
+                    self.comboBoxStatus.setCurrentIndex(i)
                     break
 
-        return task_data
+        if hasattr(self, 'comboBoxAssignee'):
+            assigned_to = task_data.get("assigned_to")
+            if assigned_to:
+                # Ищем по данным (ID)
+                for i in range(self.comboBoxAssignee.count()):
+                    if self.comboBoxAssignee.itemData(i) == assigned_to:
+                        self.comboBoxAssignee.setCurrentIndex(i)
+                        break
+
+        if hasattr(self, 'dateEditDeadline') and task_data.get("deadline"):
+            deadline = task_data["deadline"]
+            if isinstance(deadline, str) and deadline:
+                try:
+                    date_parts = deadline.split('.')
+                    if len(date_parts) == 3:
+                        qdate = QDate(int(date_parts[2]), int(date_parts[1]), int(date_parts[0]))
+                        self.dateEditDeadline.setDate(qdate)
+                except:
+                    pass
+
+    def collect_form_data(self) -> Dict:
+        """Собирает данные из полей формы."""
+        data = {}
+
+        if hasattr(self, 'lineEditTitle'):
+            data["title"] = self.lineEditTitle.text().strip()
+
+        if hasattr(self, 'textEditDescription'):
+            data["description"] = self.textEditDescription.toPlainText().strip()
+
+        if hasattr(self, 'comboBoxProject'):
+            data["project_id"] = self.comboBoxProject.currentData()
+
+        if hasattr(self, 'comboBoxAssignee'):
+            data["assigned_to"] = self.comboBoxAssignee.currentData()
+
+        if hasattr(self, 'comboBoxPriority'):
+            data["priority"] = self.comboBoxPriority.currentText()
+
+        if hasattr(self, 'comboBoxStatus'):
+            data["status"] = self.comboBoxStatus.currentText()
+
+        if hasattr(self, 'dateEditDeadline'):
+            data["due_date"] = self.dateEditDeadline.date().toString("yyyy-MM-dd")
+
+        return data
+
+    # windows/other_tasks/task_dialog.py
 
     def validate_and_save(self):
-        print("=== validate_and_save() START ===")
+        """Валидирует и сохраняет задачу."""
+        print("\n=== ОТЛАДКА: Диалог сохранения задачи ===")
+
+        if not self.service:
+            print("❌ Сервис не инициализирован")
+            QMessageBox.critical(self, "Ошибка", "Сервис не инициализирован")
+            return
+
+        form_data = self.collect_form_data()
+        print(f"Собранные данные из формы: {form_data}")
+
+        # Валидация через сервис
+        error = self.service.validate_form_data(form_data)
+        if error:
+            print(f"❌ Ошибка валидации: {error}")
+            QMessageBox.warning(self, "Ошибка", error)
+            return
+
+        print("✅ Валидация пройдена")
+
         try:
-            title = self.lineEditTitle.text().strip()
-            if not title:
-                QMessageBox.warning(self, "Предупреждение", "Введите название задачи")
-                return
+            # Подготовка данных через сервис
+            task_data = self.service.process_form_data(form_data, self.current_user)
+            print(f"Подготовленные данные: {task_data}")
 
-            if self.comboBoxProject.currentData() is None:
-                QMessageBox.warning(self, "Предупреждение", "Выберите проект")
-                return
-
-            task_data = self.get_task_data()
-            print("  → ЭМИТ сигнала task_saved")
+            # Сигнал с данными
+            print("📤 Отправка сигнала task_saved")
             self.task_saved.emit(task_data)
+            print("✅ Сигнал отправлен")
+
             self.accept()
+            print("✅ Диалог закрыт")
 
         except Exception as e:
-            print("  ❌ ИСКЛЮЧЕНИЕ:")
+            print(f"❌ ИСКЛЮЧЕНИЕ: {e}")
+            import traceback
             traceback.print_exc()
-            QMessageBox.critical(self, "Ошибка", f"Произошла ошибка:\n{str(e)}\n\nСмотри консоль!")
-
-
-# ====================== ТЕСТ ======================
-if __name__ == "__main__":
-    app = QApplication(sys.argv)
-    app.setStyle("Fusion")
-    dialog = TaskDialog(mode="create")   # теперь работает и так
-    if dialog.exec() == QDialog.DialogCode.Accepted:
-        data = dialog.get_task_data()
-        print("\n" + "="*70)
-        print("ЗАДАЧА УСПЕШНО СОХРАНЕНА:")
-        print("="*70)
-        for k, v in sorted(data.items()):
-            print(f"{k:18} : {v}")
-        print("="*70)
-    sys.exit(app.exec())
+            QMessageBox.critical(self, "Ошибка", f"Ошибка при сохранении: {str(e)}")

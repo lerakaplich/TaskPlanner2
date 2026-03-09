@@ -1,3 +1,5 @@
+# models/tasks.py
+
 from datetime import datetime
 from typing import Optional, List
 import enum
@@ -12,7 +14,6 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .employees import Base
-
 
 # =========================
 # Enum из БД
@@ -64,6 +65,21 @@ class Task(Base):
         back_populates="task",
         cascade="all, delete-orphan"
     )
+
+    # Добавляем виртуальные поля для удобства работы в UI
+    @property
+    def status(self) -> Optional[str]:
+        """Возвращает статус задачи на основе связанной колонки."""
+        if self.column:
+            return self.column.name
+        return None
+
+    @property
+    def completed(self) -> bool:
+        """Возвращает True, если задача находится в 'done' колонке."""
+        if self.column and self.column.is_done_column:
+            return True
+        return False
 
 
 # =========================
