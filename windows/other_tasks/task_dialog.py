@@ -4,26 +4,29 @@ import os
 from typing import Dict, Optional
 from PyQt6 import uic
 from PyQt6.QtWidgets import QDialog, QMessageBox
-from PyQt6.QtCore import QDate, pyqtSignal
+from PyQt6.QtCore import QDate, QDateTime, pyqtSignal
+from PyQt6.QtGui import QFont
 
-from services.other_tasks_service import OtherTasksService
+from services.tasks_service import TasksService
 
 
 class TaskDialog(QDialog):
-    task_saved = pyqtSignal(dict)
+    task_saved = pyqtSignal(int, dict)
 
     def __init__(
             self,
             parent=None,
             task_data: Optional[Dict] = None,
-            mode="create"
+            mode="create",
+            current_user=None
     ):
         super().__init__(parent)
 
-        self.service: Optional[OtherTasksService] = None
+        self.service: Optional[TasksService] = None
         self.task_data = task_data
         self.mode = mode
-        self.current_user = {"id": 1, "name": "Текущий пользователь"}
+        self.current_user = current_user or {"id": 1, "last_name": "Копейкина", "first_name": "Виктория",
+                                             "middle_name": "Анатольевна"}
 
         # Загружаем UI
         ui_path = os.path.join(os.path.dirname(__file__), "..", "..", "ui", "other_tasks")
@@ -35,18 +38,73 @@ class TaskDialog(QDialog):
         if hasattr(self, 'createBtn'):
             self.createBtn.clicked.connect(self.validate_and_save)
 
+    def format_creator_name(self) -> str:
+        """Форматирует имя создателя в формате Фамилия И.О."""
+        last = self.current_user.get('last_name', '')
+        first = self.current_user.get('first_name', '')
+        middle = self.current_user.get('middle_name', '')
+
+        if last and first:
+            first_initial = first[0] + '.' if first else ''
+            middle_initial = middle[0] + '.' if middle else ''
+            return f"{last} {first_initial}{middle_initial}"
+        return "Неизвестен"
+
+    def get_current_datetime_str(self) -> str:
+        """Возвращает текущую дату и время в формате ДД.ММ.ГГГГ ЧЧ:ММ"""
+        now = QDateTime.currentDateTime()
+        return now.toString("dd.MM.yyyy hh:mm")
+
     def setup_ui(self):
         """Настраивает UI диалога."""
         if self.mode == "create":
             self.setWindowTitle("Создание задачи")
             if hasattr(self, 'createBtn'):
                 self.createBtn.setText("Создать")
-        else:
+            if hasattr(self, 'titleLabel'):
+                self.titleLabel.setText("Создание новой задачи")
+
+            # Для создания показываем текущую дату в createdAtLabel
+            if hasattr(self, 'createdAtLabel'):
+                current_datetime = self.get_current_datetime_str()
+                self.createdAtLabel.setText(f"Создано: {current_datetime}")
+                self.createdAtLabel.show()  # Показываем, а не скрываем
+
+            # updatedAtLabel скрываем при создании
+            if hasattr(self, 'updatedAtLabel'):
+                self.updatedAtLabel.hide()
+
+        else:  # mode == "edit"
             self.setWindowTitle("Редактирование задачи")
             if hasattr(self, 'createBtn'):
                 self.createBtn.setText("Сохранить")
+            if hasattr(self, 'titleLabel'):
+                self.titleLabel.setText("Редактирование задачи")
 
-    def set_service(self, service: OtherTasksService):
+            # При редактировании показываем оба лейбла
+            if hasattr(self, 'createdAtLabel'):
+                self.createdAtLabel.show()
+            if hasattr(self, 'updatedAtLabel'):
+                self.updatedAtLabel.show()
+
+        # Обновляем информацию о создателе в createdByLabel
+        self.update_creator_info()
+
+    def update_creator_info(self):
+        """Обновляет информацию о создателе в createdByLabel"""
+        if hasattr(self, 'createdByLabel'):
+            creator_name = self.format_creator_name()
+            self.createdByLabel.setText(f"Создатель: {creator_name}")
+
+    def update_dates_info(self, task_data: Dict):
+        """Обновляет информацию о датах создания и изменения"""
+        if hasattr(self, 'createdAtLabel') and task_data.get('created_at'):
+            self.createdAtLabel.setText(f"Создано: {task_data['created_at']}")
+
+        if hasattr(self, 'updatedAtLabel') and task_data.get('updated_at'):
+            self.updatedAtLabel.setText(f"Изменено: {task_data['updated_at']}")
+
+    def set_service(self, service: TasksService):
         """Устанавливает сервис и загружает данные."""
         self.service = service
         self.load_dialog_data()
@@ -104,7 +162,6 @@ class TaskDialog(QDialog):
 
         if hasattr(self, 'comboBoxStatus'):
             status = task_data.get("status", "")
-            # Ищем статус по тексту
             for i in range(self.comboBoxStatus.count()):
                 if self.comboBoxStatus.itemText(i) == status:
                     self.comboBoxStatus.setCurrentIndex(i)
@@ -113,7 +170,6 @@ class TaskDialog(QDialog):
         if hasattr(self, 'comboBoxAssignee'):
             assigned_to = task_data.get("assigned_to")
             if assigned_to:
-                # Ищем по данным (ID)
                 for i in range(self.comboBoxAssignee.count()):
                     if self.comboBoxAssignee.itemData(i) == assigned_to:
                         self.comboBoxAssignee.setCurrentIndex(i)
@@ -129,6 +185,9 @@ class TaskDialog(QDialog):
                         self.dateEditDeadline.setDate(qdate)
                 except:
                     pass
+
+        # Обновляем информацию о датах
+        self.update_dates_info(task_data)
 
     def collect_form_data(self) -> Dict:
         """Собирает данные из полей формы."""
@@ -157,8 +216,6 @@ class TaskDialog(QDialog):
 
         return data
 
-    # windows/other_tasks/task_dialog.py
-
     def validate_and_save(self):
         """Валидирует и сохраняет задачу."""
         print("\n=== ОТЛАДКА: Диалог сохранения задачи ===")
@@ -171,7 +228,6 @@ class TaskDialog(QDialog):
         form_data = self.collect_form_data()
         print(f"Собранные данные из формы: {form_data}")
 
-        # Валидация через сервис
         error = self.service.validate_form_data(form_data)
         if error:
             print(f"❌ Ошибка валидации: {error}")
@@ -181,15 +237,19 @@ class TaskDialog(QDialog):
         print("✅ Валидация пройдена")
 
         try:
-            # Подготовка данных через сервис
             task_data = self.service.process_form_data(form_data, self.current_user)
             print(f"Подготовленные данные: {task_data}")
 
-            # Сигнал с данными
-            print("📤 Отправка сигнала task_saved")
-            self.task_saved.emit(task_data)
-            print("✅ Сигнал отправлен")
+            # Если это редактирование - добавляем ID
+            if self.mode == "edit" and self.task_data:
+                task_id = self.task_data.get("id")
+                print(f"📤 Отправка сигнала task_saved с ID: {task_id}")
+                self.task_saved.emit(task_id, task_data)  # 👈 Передаем ID
+            else:
+                print("📤 Отправка сигнала task_saved для создания")
+                self.task_saved.emit(None, task_data)  # 👈 ID = None для создания
 
+            print("✅ Сигнал отправлен")
             self.accept()
             print("✅ Диалог закрыт")
 

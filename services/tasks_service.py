@@ -1,6 +1,4 @@
-# services/other_tasks_service.py
-
-# services/other_tasks_service.py
+# services/tasks_service.py
 
 import json
 from typing import Dict, List, Optional, Any
@@ -8,35 +6,172 @@ from datetime import datetime
 from sqlalchemy.orm import Session
 
 # Импортируем репозиторий
-from repositories.other_task_repo import OtherTaskRepo
+from repositories.task_repo import TaskRepo
 from models.projects import BoardColumn
 from models.tasks import Task
 from models.schemas.tasks_dto import TaskPriority
 
 
-class OtherTasksService:
+class TasksService:
     """
     Сервис для работы с задачами других сотрудников.
     Вся бизнес-логика здесь, UI только вызывает методы.
     """
 
-    def __init__(self, db_session: Session, project_id: int = 1):
+    def __init__(self, db_session: Session, project_id: int = 1, current_user: Dict = None, mode: str = "all"):
         self.db_session = db_session
-        self.repo = OtherTaskRepo(db_session)
+        self.repo = TaskRepo(db_session)
         self.current_project_id = project_id
+        self.current_user = current_user
+
+        # режим загрузки задач
+        self.mode = mode  # my | others | all
+
+    def prepare_task_card(self, task: dict) -> dict:
+        """Подготавливает данные для TaskCard"""
+
+        import datetime
+
+        priority_map = {
+            "low": ("Низкий", "#4CAF50"),
+            "medium": ("Средний", "#FFA726"),
+            "high": ("Высокий", "#D22730"),
+            "critical": ("Критический", "#D22730")
+        }
+
+        priority = task.get("priority", "medium")
+
+        priority_text, priority_color = priority_map.get(
+            priority,
+            ("Средний", "#FFA726")
+        )
+
+        created = self.format_date(task.get("created_at"))
+        updated = self.format_date(task.get("updated_at"))
+
+        author = self.format_user(task.get("author"))
+        executor = self.format_user(task.get("assignee"))
+
+        deadline_text, deadline_color = self.prepare_deadline(task.get("deadline"))
+
+        return {
+            **task,
+
+            "priority_text": priority_text,
+            "priority_color": priority_color,
+
+            "created_text": f"Создана: {created}",
+            "updated_text": f"Обновление: {updated}",
+
+            "author_text": author,
+            "executor_text": executor,
+
+            "deadline_text": deadline_text,
+            "deadline_color": deadline_color,
+
+            "project_name": task.get("project", "Без проекта")
+        }
+
+    def format_date(self, date):
+
+        if not date:
+            return "Неизвестно"
+
+        if isinstance(date, str):
+            return date.split()[0]
+
+        if hasattr(date, "strftime"):
+            return date.strftime("%d.%m.%Y")
+
+        return "Неизвестно"
+
+    def format_user(self, user):
+
+        if not user:
+            return "Неизвестен"
+
+        last = user.get("last_name", "")
+        first = user.get("first_name", "")
+        middle = user.get("middle_name", "")
+
+        initials = ""
+
+        if first:
+            initials += first[0] + "."
+
+        if middle:
+            initials += middle[0] + "."
+
+        return f"{last} {initials}".strip()
+
+    def prepare_deadline(self, deadline):
+
+        import datetime
+
+        if not deadline:
+            return None, "#666"
+
+        if isinstance(deadline, str):
+            try:
+                deadline = datetime.datetime.strptime(deadline, "%Y-%m-%d")
+            except:
+                return f"До: {deadline}", "#666"
+
+        today = datetime.datetime.now().date()
+
+        diff = (deadline.date() - today).days
+
+        text = deadline.strftime("%d.%m.%Y")
+
+        if diff < 0:
+            return f"До: {text} (просрочено)", "#D22730"
+
+        if diff == 0:
+            return f"До: {text} (сегодня)", "#FF9800"
+
+        if diff <= 3:
+            return f"До: {text} (через {diff} дн.)", "#FF9800"
+
+        return f"До: {text}", "#4CAF50"
+
+    def filter_tasks_by_priority(self, tasks: List[Dict], priority: str) -> List[Dict]:
+        """Фильтрация задач по приоритету"""
+
+        if priority == "Все приоритеты":
+            return tasks
+
+        return [
+            t for t in tasks
+            if t.get("priority") == priority.lower()
+        ]
 
     # =====================================================
     # Работа с задачами
     # =====================================================
 
     def load_tasks(self) -> List[Dict]:
-        """Загружает задачи из БД."""
-        tasks_orm = self.repo.get_tasks_for_kanban(self.current_project_id)
-        return [self._task_to_dict(t) for t in tasks_orm]
+        """Загружает задачи с учетом режима страницы."""
+
+        user_id = self.current_user.get("id")
+
+        tasks = self.repo.get_tasks_for_kanban(self.current_project_id)
+
+        if self.mode == "my":
+            tasks = [
+                t for t in tasks
+                if t.assigned_to == user_id
+            ]
+
+        elif self.mode == "others":
+            tasks = [
+                t for t in tasks
+                if t.created_by == user_id and t.assigned_to != user_id
+            ]
+
+        return [self._task_to_dict(t) for t in tasks]
 
     def get_task_by_id(self, task_id: int) -> Optional[Dict]:
-        """Получает задачу по ID."""
-        task_orm = self.repo.get_task_by_id(task_id)
+        task_orm = self.repo.get_by_id(task_id)  # 👈 стало
         return self._task_to_dict(task_orm) if task_orm else None
 
     def create_task(self, data: Dict) -> Dict:
@@ -89,7 +224,8 @@ class OtherTasksService:
         print(f"Значение priority: {priority_enum}")
 
         try:
-            new_task = self.repo.create_task(**task_data)
+            # 👇 ИЗМЕНЕНО: было self.repo.create_task, стало self.repo.create
+            new_task = self.repo.create(**task_data)
             print(f"Задача создана в БД, ID: {new_task.id}")
 
             self.db_session.commit()
@@ -108,16 +244,34 @@ class OtherTasksService:
 
     def update_task(self, task_id: int, updated_data: Dict) -> Optional[Dict]:
         """Обновляет задачу."""
-        task = self.repo.get_task_by_id(task_id)
+        # Получаем задачу
+        task = self.repo.get_by_id(task_id)
         if not task:
             return None
 
+        # Обновляем поля
         if "title" in updated_data:
             task.title = updated_data["title"]
         if "description" in updated_data:
             task.description = updated_data.get("description")
         if "priority" in updated_data:
-            task.priority = TaskPriority(updated_data["priority"])
+            # Конвертируем строку в enum если нужно
+            priority_value = updated_data["priority"]
+            if isinstance(priority_value, str):
+                priority_map = {
+                    "low": TaskPriority.low,
+                    "medium": TaskPriority.medium,
+                    "high": TaskPriority.high,
+                    "critical": TaskPriority.critical,
+                    "Низкий": TaskPriority.low,
+                    "Средний": TaskPriority.medium,
+                    "Высокий": TaskPriority.high,
+                    "Критический": TaskPriority.critical
+                }
+                task.priority = priority_map.get(priority_value, TaskPriority.medium)
+            else:
+                task.priority = priority_value
+
         if "deadline" in updated_data:
             task.deadline = self._parse_date(updated_data["deadline"])
         if "assigned_to" in updated_data:
@@ -129,16 +283,18 @@ class OtherTasksService:
 
         task.updated_at = datetime.now()
         self.db_session.commit()
+
+        # Возвращаем обновленные данные
         return self._task_to_dict(task)
 
     def delete_task(self, task_id: int):
         """Удаляет задачу."""
-        self.repo.delete_task(task_id)
+        self.repo.delete(task_id)
         self.db_session.commit()
 
     def move_task(self, task_id: int, new_column_name: str) -> Optional[tuple]:
         """Перемещает задачу в другую колонку."""
-        task = self.repo.get_task_by_id(task_id)
+        task = self.repo.get_by_id(task_id)
         if not task:
             return None
 
@@ -277,6 +433,35 @@ class OtherTasksService:
         if task.assigned_to:
             assignee_name = self.repo.get_employee_name_by_id(task.assigned_to)
 
+        # Добавляем поля для отображения
+        priority_map = {
+            TaskPriority.low: ("Низкий", "#4CAF50"),
+            TaskPriority.medium: ("Средний", "#FFA726"),
+            TaskPriority.high: ("Высокий", "#D22730"),
+            TaskPriority.critical: ("Критический", "#D22730")
+        }
+
+        priority_text, priority_color = priority_map.get(
+            task.priority,
+            ("Средний", "#FFA726")
+        )
+
+        # Форматируем даты
+        created_text = ""
+        if task.created_at:
+            created_text = task.created_at.strftime("%d.%m.%Y %H:%M")
+
+        updated_text = ""
+        if task.updated_at:
+            updated_text = task.updated_at.strftime("%d.%m.%Y %H:%M")
+
+        # Форматируем дедлайн
+        deadline_text = ""
+        deadline_color = "#666"
+        if task.deadline:
+            deadline_text = task.deadline.strftime("%d.%m.%Y")
+            # Здесь можно добавить логику цвета в зависимости от близости дедлайна
+
         return {
             "id": task.id,
             "project_id": task.project_id,
@@ -284,17 +469,28 @@ class OtherTasksService:
             "description": task.description or "",
             "position": task.position,
             "priority": task.priority.value,
+            "priority_text": priority_text,  # 👈 ДОБАВЛЕНО
+            "priority_color": priority_color,  # 👈 ДОБАВЛЕНО
             "deadline": task.deadline.strftime("%d.%m.%Y") if task.deadline else "",
+            "deadline_text": deadline_text,  # 👈 ДОБАВЛЕНО
+            "deadline_color": deadline_color,  # 👈 ДОБАВЛЕНО
             "created_by": task.created_by,
             "assigned_to": task.assigned_to,
             "assignee_name": assignee_name,
-            "created_at": task.created_at.strftime("%d.%m.%Y %H:%M") if task.created_at else "",
-            "updated_at": task.updated_at.strftime("%d.%m.%Y %H:%M") if task.updated_at else "",
+            "created_at": created_text,  # 👈 ИЗМЕНЕНО
+            "updated_at": updated_text,  # 👈 ИЗМЕНЕНО
+            "created_text": f"Создана: {created_text}",  # 👈 ДОБАВЛЕНО
+            "updated_text": f"Обновление: {updated_text}",  # 👈 ДОБАВЛЕНО
             "status": task.column.name if task.column else None,
             "completed": task.completed,
             "column_id": task.column_id,
             "column_name": task.column.name if task.column else None,
+            "project_name": "Проект 2",  # 👈 ВРЕМЕННО, потом нужно получать из БД
         }
+
+    def prepare_task_card(self, task: dict) -> dict:
+        """Подготавливает данные для TaskCard (для обратной совместимости)"""
+        return task  # Теперь все поля уже есть в _task_to_dict
 
     def _get_column_by_name(self, column_name: str) -> Optional[BoardColumn]:
         """Получает колонку по названию."""
@@ -421,12 +617,6 @@ class OtherTasksService:
             return []
         column_width = total_width // column_count
         return [column_width] * column_count
-
-    def filter_tasks_by_priority(self, tasks: List[Dict], priority: str) -> List[Dict]:
-        """Фильтрует задачи по приоритету."""
-        if priority == "Все приоритеты":
-            return tasks
-        return [t for t in tasks if t.get("priority") == priority.lower()]
 
     def get_statistics_for_display(self) -> Dict:
         """Возвращает статистику в формате для отображения."""
@@ -613,5 +803,5 @@ class OtherTasksService:
             "priority": priority_map.get(form_data.get("priority", "Средний"), "medium"),
             "status": form_data["status"],
             "deadline": form_data.get("due_date"),
-            "created_by": current_user.get("id"),
+            "created_by": current_user.get("id"),  # 👈 ID текущего пользователя
         }

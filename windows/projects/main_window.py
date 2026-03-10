@@ -1,9 +1,14 @@
 import os
+import os
 import sys
-
+import sys
+from PyQt6 import uic
 from PyQt6 import uic
 from PyQt6.QtWidgets import QApplication, QMainWindow, QFrame, QSizePolicy, QSpacerItem, QWidget, QDialog
+from PyQt6.QtWidgets import QApplication, QMainWindow, QFrame, QSizePolicy, QSpacerItem, QWidget, QDialog
 from PyQt6.uic import loadUi  # <-- Добавьте эту строку
+from PyQt6.uic import loadUi
+from database import get_tasks_session
 from windows.analytics.analytics_page import AnalyticsPage
 from windows.archive.archive_page import ArchivePage
 from windows.gantt.gantt_chart import GanttChartWidget
@@ -12,6 +17,9 @@ from windows.other_tasks.others_tasks_page import OthersTasksPage
 from windows.overtime.overtime_page import OvertimePage
 from windows.profile.profile_page import ProfilePage
 from windows.projects.project_creation_dialog import ProjectCreationDialog
+
+
+# windows/projects/main_window.py
 
 
 class MainWindow(QMainWindow):
@@ -26,19 +34,21 @@ class MainWindow(QMainWindow):
         print(f"Роль: {self.current_user.get('rights', 'user')}")
 
         ui_path = os.path.join(
-            os.path.dirname(__file__),  # windows/analytics/employees/
-            "..", "..",  # поднимаемся до корня проекта
-            "ui", "projects"  # спускаемся в нужную подпапку ui
+            os.path.dirname(__file__),
+            "..", "..",
+            "ui", "projects"
         )
         uic.loadUi(os.path.join(ui_path, "main_window.ui"), self)
 
         ui_path = os.path.join(
-            os.path.dirname(__file__),  # windows/analytics/employees/
-            "..", "..",  # поднимаемся до корня проекта
-            "ui"  # спускаемся в нужную подпапку ui
+            os.path.dirname(__file__),
+            "..", "..",
+            "ui"
         )
         uic.loadUi(os.path.join(ui_path, "left_panel.ui"), self.leftPanel)
 
+        # Обновляем кнопку профиля с данными пользователя
+        self.update_profile_button()
 
         # Инициализация страниц
         self.init_pages()
@@ -49,6 +59,32 @@ class MainWindow(QMainWindow):
         # Инициализация
         self.setup_initial_state()
         self.showMaximized()
+
+    def update_profile_button(self):
+        """Обновляет текст на кнопке профиля с Фамилией И.О."""
+        if hasattr(self, 'btnProfile'):
+            last_name = self.current_user.get('last_name', '')
+            first_name = self.current_user.get('first_name', '')
+            middle_name = self.current_user.get('middle_name', '')
+
+            # Формируем Фамилию и инициалы
+            if last_name and first_name:
+                # Берем первую букву имени и отчества
+                first_initial = first_name[0] + '.' if first_name else ''
+                middle_initial = middle_name[0] + '.' if middle_name else ''
+
+                # Формат: "Фамилия И.О."
+                display_name = f"{last_name} {first_initial}{middle_initial}"
+            else:
+                # Если данных нет, используем логин или ID
+                display_name = f"User {self.current_user.get('id', '')}"
+
+            self.btnProfile.setText(display_name)
+
+            # Добавляем тултип с полным именем
+            full_name = f"{last_name} {first_name} {middle_name}".strip()
+            if full_name:
+                self.btnProfile.setToolTip(full_name)
 
     def get_test_gantt_tasks(self):
         return [
@@ -90,22 +126,29 @@ class MainWindow(QMainWindow):
             self.contentStack.addWidget(self.archive_page_instance)
             # Обновляем навигационные кнопки, если нужно добавить кнопку архива
 
-    # Обновляем метод init_pages в MainWindow
     def init_pages(self):
         """Инициализация всех страниц"""
 
+        # Создаем сессию для страниц задач
+        tasks_session = get_tasks_session()
+
         # 0 — Главная (уже есть в UI)
 
-        # 1 — Мои задачи
-        self.my_tasks_page_instance = MyTasksPage()
+        # 1 — Мои задачи - передаем и сессию, и пользователя
+        self.my_tasks_page_instance = MyTasksPage(
+            db_session=tasks_session,
+            current_user=self.current_user
+        )
         old_page = self.findChild(QWidget, "myTasksPage")
         if old_page:
             index = self.contentStack.indexOf(old_page)
             old_page.deleteLater()
             self.contentStack.insertWidget(index, self.my_tasks_page_instance)
 
-        # 2 — Чужие задачи
-        self.other_tasks_page_instance = OthersTasksPage()
+        # 2 — Чужие задачи - передаем ТОЛЬКО пользователя (сессия создается внутри)
+        self.other_tasks_page_instance = OthersTasksPage(
+            current_user=self.current_user  # 👈 УБИРАЕМ db_session
+        )
         other_old = self.findChild(QWidget, "otherTasksPage")
         if other_old:
             index = self.contentStack.indexOf(other_old)
@@ -144,7 +187,7 @@ class MainWindow(QMainWindow):
         self.init_archive_page()
 
         # Отдельная страница профиля
-        self.profile_page_instance = ProfilePage()
+        self.profile_page_instance = ProfilePage(current_user=self.current_user)
         self.contentStack.addWidget(self.profile_page_instance)
 
     # Обновляем метод connect_signals в MainWindow
@@ -203,7 +246,13 @@ class MainWindow(QMainWindow):
             btn.setChecked(i == page_index)
 
     def show_profile(self):
-        """Показать страницу профиля (не трогает навигационные кнопки)"""
+        """Показать страницу профиля"""
+        if hasattr(self, 'profile_page_instance'):
+            # Обновляем данные профиля для текущего пользователя
+            self.profile_page_instance.employee_id = self.current_user.get('id')
+            self.profile_page_instance.current_user = self.current_user
+            self.profile_page_instance.load_employee()
+
         self.contentStack.setCurrentWidget(self.profile_page_instance)
 
     # Остальной код полностью без изменений
@@ -244,20 +293,21 @@ class MainWindow(QMainWindow):
 
     def init_my_tasks_page(self):
         """Инициализация страницы Мои задачи"""
+        # Создаем сессию для страницы задач
+        tasks_session = get_tasks_session()
+
         # Создаем страницу Мои задачи
-        self.my_tasks_page_instance = MyTasksPage()
+        self.my_tasks_page_instance = MyTasksPage(
+            db_session=tasks_session,  # 👈 ПЕРЕДАЕМ СЕССИЮ
+            current_user=self.current_user
+        )
 
         # Заменяем пустую страницу myTasksPage на нашу кастомную страницу
         old_page = self.findChild(QWidget, "myTasksPage")
         if old_page:
-            # Получаем индекс страницы в contentStack
             index = self.contentStack.indexOf(old_page)
-            # Удаляем старую страницу
             old_page.deleteLater()
-            # Добавляем новую страницу на тот же индекс
             self.contentStack.insertWidget(index, self.my_tasks_page_instance)
-
-            # Обновляем ссылку на страницу
             self.myTasksPage = self.my_tasks_page_instance
 
     def setup_responsive_cards(self):

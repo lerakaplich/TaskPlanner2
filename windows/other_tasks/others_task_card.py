@@ -7,7 +7,7 @@ from PyQt6.QtCore import pyqtSignal, Qt, QMimeData
 from PyQt6.QtGui import QAction, QPixmap, QPainter, QDrag
 
 from windows.my_tasks.task_card import TaskCard
-from services.other_tasks_service import OtherTasksService
+from services.tasks_service import TasksService
 
 
 class OthersTaskCard(TaskCard):
@@ -23,7 +23,7 @@ class OthersTaskCard(TaskCard):
     approveRequested = pyqtSignal(int)
     returnToWorkRequested = pyqtSignal(int)
 
-    def __init__(self, task_data, service: Optional[OtherTasksService] = None,
+    def __init__(self, task_data, service: Optional[TasksService] = None,
                  is_creator=False, parent=None):
         super().__init__(task_data, parent)
 
@@ -174,7 +174,7 @@ class OthersTaskCard(TaskCard):
     def update_task_data(self, new_data):
         """Обновляет данные задачи."""
         self.task_data.update(new_data)
-        self.setup_ui()
+        self.fill_ui()
         self.setup_creator_ui()
 
     # =====================================================

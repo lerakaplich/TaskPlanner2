@@ -1,22 +1,20 @@
 import os
-import json
 
 from PyQt6 import uic
-from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QFrame, QLabel,
-                             QScrollArea, QApplication)
-from PyQt6.QtCore import Qt, QDate, pyqtSignal
-from PyQt6.QtGui import QFont, QDragEnterEvent, QDropEvent
+from PyQt6.QtWidgets import QWidget, QSplitter
+from PyQt6.QtCore import Qt, pyqtSignal
 
 from windows.my_tasks.task_card import TaskCard
+from windows.shared.kanban_column import KanbanColumn
+from services.tasks_service import TasksService
 
 
 class MyTasksPage(QWidget):
-    """Страница Мои задачи с улучшенным интерфейсом и drag & drop"""
+    """Страница Мои задачи (UI слой)"""
 
-    # Сигнал для обновления статистики после перемещения
     task_moved = pyqtSignal()
 
-    def __init__(self, parent=None):
+    def __init__(self, db_session, current_user, parent=None):
         super().__init__(parent)
 
         ui_path = os.path.join(
@@ -24,382 +22,152 @@ class MyTasksPage(QWidget):
             "..", "..",
             "ui", "my_tasks"
         )
+
         uic.loadUi(os.path.join(ui_path, "my_tasks_page.ui"), self)
 
-        # Включаем прием drop для всей страницы
-        self.setAcceptDrops(True)
+        self.service = TasksService(
+            db_session=db_session,
+            project_id=2,
+            current_user=current_user,
+            mode="my"
+        )
 
-        # Настраиваем канбан-доску
-        self.setup_kanban()
+        self.columns = {}  # name -> widget
+        self.column_widgets = []  # список для обратной совместимости
 
-        # Настраиваем задачи
-        self.setup_tasks()
+        self.setup_board()
+        self.load_tasks()
 
-        # Подключаем сигналы
+        # фильтры
         self.priorityFilter.currentTextChanged.connect(self.filter_tasks)
         self.projectFilter.currentTextChanged.connect(self.filter_tasks)
 
-        # Подключаем сигнал перемещения для обновления статистики
-        self.task_moved.connect(self.update_statistics)
+    # =====================================================
+    # BOARD
+    # =====================================================
 
-    def setup_kanban(self):
-        """Настройка канбан-доски"""
-        self.kanbanLayout.setSpacing(15)
+    def setup_board(self):
+        """Создает колонки канбан-доски"""
 
-        # Создаем 4 колонки
-        self.columns = {
-            "todo": self.create_column("📝 К ВЫПОЛНЕНИЮ", "#2196F3", "todo"),
-            "progress": self.create_column("🔧 В РАБОТЕ", "#FF9800", "progress"),
-            "review": self.create_column("👀 НА ПРОВЕРКЕ", "#9C27B0", "review"),
-            "done": self.create_column("✅ ВЫПОЛНЕНО", "#4CAF50", "done")
-        }
+        # Очищаем существующий layout
+        self.clear_layout(self.kanbanLayout)
 
-        for column in self.columns.values():
-            self.kanbanLayout.addWidget(column)
+        column_data = self.service.get_column_data()
+        if not column_data:
+            print("⚠️ Нет колонок для отображения")
+            return
 
-    def create_column(self, title, color, status):
-        """Создание одной колонки канбан-доски"""
-        column = QFrame()
-        column.setStyleSheet(f"""
-            QFrame {{
-                background-color: white;
-                border-radius: 10px;
-            }}
-        """)
-
-        # Устанавливаем свойство для идентификации колонки
-        column.setProperty("column_status", status)
-        column.setAcceptDrops(True)
-
-        layout = QVBoxLayout()
-        layout.setSpacing(10)
-        layout.setContentsMargins(12, 12, 12, 12)
-
-        # Заголовок колонки
-        header = QHBoxLayout()
-
-        title_label = QLabel(title)
-        title_font = QFont()
-        title_font.setBold(True)
-        title_font.setPointSize(12)
-        title_label.setFont(title_font)
-        title_label.setStyleSheet(f"color: {color};")
-        header.addWidget(title_label)
-
-        count_label = QLabel("0")
-        count_label.setStyleSheet("""
-            QLabel {
-                font-size: 12px;
-                color: white;
-                background-color: #666;
-                border-radius: 10px;
-                padding: 2px 8px;
-                font-weight: bold;
+        splitter = QSplitter(Qt.Orientation.Horizontal)
+        splitter.setHandleWidth(5)
+        splitter.setStyleSheet("""
+            QSplitter::handle {
+                background-color: #E0E0E0;
+                border-radius: 2px;
             }
-        """)
-        header.addWidget(count_label)
-
-        header.addStretch()
-
-        layout.addLayout(header)
-
-        # Скроллируемая область для задач
-        scroll_area = QScrollArea()
-        scroll_area.setWidgetResizable(True)
-        scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        scroll_area.setStyleSheet("""
-            QScrollArea {
-                border: none;
-                background-color: transparent;
-            }
-            QScrollBar:vertical {
-                background: #F5F5F5;
-                width: 8px;
-                border-radius: 4px;
-            }
-            QScrollBar::handle:vertical {
-                background: #C1C1C1;
-                border-radius: 4px;
-                min-height: 20px;
+            QSplitter::handle:hover {
+                background-color: #ccab6e;
             }
         """)
 
-        # Контейнер для задач
-        tasks_container = QWidget()
-        tasks_container.setStyleSheet("background-color: transparent;")
-        tasks_container.setAcceptDrops(True)
+        self.columns.clear()
+        self.column_widgets.clear()
 
-        tasks_layout = QVBoxLayout()
-        tasks_layout.setSpacing(8)
-        tasks_layout.setContentsMargins(2, 2, 2, 2)
-        tasks_layout.addStretch()  # Добавляем спейсер в конец
-        tasks_container.setLayout(tasks_layout)
+        for col in sorted(column_data, key=lambda x: x["position"]):
+            column_widget = KanbanColumn(col)
+            self.columns[col["name"]] = column_widget
+            self.column_widgets.append(column_widget)
+            splitter.addWidget(column_widget)
 
-        scroll_area.setWidget(tasks_container)
-        layout.addWidget(scroll_area)
+        # Устанавливаем начальные размеры
+        sizes = self.service.get_initial_sizes(len(column_data), self.width() - 50)
+        if sizes:
+            splitter.setSizes(sizes)
 
-        column.setLayout(layout)
+        self.kanbanLayout.addWidget(splitter)
 
-        # Сохраняем ссылки на важные элементы
-        column.tasks_container = tasks_container
-        column.tasks_layout = tasks_layout
-        column.count_label = count_label
-        column.column_status = status
+    def clear_layout(self, layout):
+        """Очищает layout."""
+        if layout:
+            while layout.count():
+                item = layout.takeAt(0)
+                widget = item.widget()
+                if widget:
+                    widget.deleteLater()
+                else:
+                    self.clear_layout(item.layout())
 
-        return column
+    # =====================================================
+    # TASKS
+    # =====================================================
 
-    def setup_tasks(self):
-        """Настройка начальных задач с понятными данными"""
-        # Тестовые данные с четкой структурой
-        self.sample_tasks = [
-            {
-                "id": 1,
-                "title": "Разработать дизайн главной страницы",
-                "description": "Создать современный дизайн главной страницы сайта с адаптивной версткой",
-                "project": "Разработка сайта компании",
-                "creator": "Алексей Петров",
-                "priority": "high",
-                "deadline": "20.12.2024",
-                "status": "todo",
-                "created_at": "15.11.2024",
-                "updated_at": "18.11.2024",
-                "tags": [
-                    {"text": "Дизайн", "type": "design"},
-                    {"text": "СРОЧНО", "type": "urgent"}
-                ],
-                "completed": False
-            },
-            {
-                "id": 2,
-                "title": "Исправить баг в модуле авторизации",
-                "description": "Пользователи не могут войти в систему после обновления",
-                "project": "Внутренний портал",
-                "creator": "Мария Сидорова",
-                "priority": "critical",
-                "deadline": "10.12.2024",
-                "status": "progress",
-                "created_at": "10.11.2024",
-                "updated_at": "19.11.2024",
-                "tags": [
-                    {"text": "Баг", "type": "bug"},
-                    {"text": "Безопасность", "type": "security"}
-                ],
-                "completed": False
-            },
-            {
-                "id": 3,
-                "title": "Написать документацию для API",
-                "description": "Подготовить подробную документацию для REST API",
-                "project": "Мобильное приложение",
-                "creator": "Иван Иванов",
-                "priority": "medium",
-                "deadline": "25.12.2024",
-                "status": "review",
-                "created_at": "05.11.2024",
-                "updated_at": "17.11.2024",
-                "tags": [
-                    {"text": "Документация", "type": "docs"},
-                    {"text": "Разработка", "type": "development"}
-                ],
-                "completed": False
-            },
-            {
-                "id": 4,
-                "title": "Провести тестирование новой функции",
-                "description": "Протестировать функцию импорта данных из Excel",
-                "project": "ERP система",
-                "creator": "Ольга Ковалева",
-                "priority": "low",
-                "deadline": "05.12.2024",
-                "status": "done",
-                "created_at": "01.11.2024",
-                "updated_at": "05.11.2024",
-                "tags": [
-                    {"text": "Тестирование", "type": "testing"}
-                ],
-                "completed": True
-            },
-            {
-                "id": 5,
-                "title": "Обновить контакты клиентов",
-                "description": "Обновить базу данных контактов ключевых клиентов",
-                "project": "CRM система",
-                "creator": "Сергей Васильев",
-                "priority": "medium",
-                "deadline": "15.12.2024",
-                "status": "todo",
-                "created_at": "12.11.2024",
-                "updated_at": "12.11.2024",
-                "tags": [
-                    {"text": "Данные", "type": "data"},
-                    {"text": "Обновление", "type": "update"}
-                ],
-                "completed": False
-            }
-        ]
+    def load_tasks(self):
+        """Загрузка задач"""
+        tasks = self.service.load_tasks()
 
-        # Словарь для быстрого доступа к задачам по ID
-        self.tasks_dict = {task["id"]: task for task in self.sample_tasks}
+        # Очищаем колонки
+        self.clear_all_columns()
 
-        # Распределяем задачи по колонкам
-        self.all_tasks = []
-        for task_data in self.sample_tasks:
-            task_card = TaskCard(task_data)
-            task_card.setParent(self)
-            self.all_tasks.append(task_card)
+        self.task_cards = []
 
-            # Добавляем в соответствующую колонку
-            status = task_data["status"]
-            if status == "todo":
-                self.columns["todo"].tasks_layout.insertWidget(
-                    self.columns["todo"].tasks_layout.count() - 1, task_card
-                )
-            elif status == "progress":
-                self.columns["progress"].tasks_layout.insertWidget(
-                    self.columns["progress"].tasks_layout.count() - 1, task_card
-                )
-            elif status == "review":
-                self.columns["review"].tasks_layout.insertWidget(
-                    self.columns["review"].tasks_layout.count() - 1, task_card
-                )
-            elif status == "done":
-                self.columns["done"].tasks_layout.insertWidget(
-                    self.columns["done"].tasks_layout.count() - 1, task_card
-                )
+        for task in tasks:
+            task_card = TaskCard(task)
+            self.task_cards.append(task_card)
 
-        # Обновляем статистику
+            column_name = task.get("status")
+            column = self.columns.get(column_name)
+
+            if column:
+                column.add_task(task_card)
+
         self.update_statistics()
 
-        # Заполняем фильтр проектов
-        projects = set(task["project"] for task in self.sample_tasks)
-        self.projectFilter.addItems(sorted(list(projects)))
+    def clear_all_columns(self):
+        """Очищает все колонки от карточек."""
+        for column in self.column_widgets:
+            column.clear_tasks()
 
-    def dragEnterEvent(self, event: QDragEnterEvent):
-        """Обработка входа перетаскивания"""
-        if event.mimeData().hasFormat("application/x-task"):
-            event.acceptProposedAction()
-
-    def dragMoveEvent(self, event):
-        """Обработка перемещения над областью"""
-        if event.mimeData().hasFormat("application/x-task"):
-            event.acceptProposedAction()
-
-    def dropEvent(self, event: QDropEvent):
-        """Обработка сброса задачи"""
-        if not event.mimeData().hasFormat("application/x-task"):
-            return
-
-        # Получаем данные задачи
-        task_data = json.loads(event.mimeData().data("application/x-task").data().decode())
-
-        # Находим виджет карточки
-        source_card = self.find_task_card(task_data["id"])
-        if not source_card:
-            return
-
-        # Определяем целевую колонку
-        target_column = None
-        target_widget = event.source() if event.source() else event.widget()
-
-        # Ищем колонку, на которую сбросили
-        pos = event.position().toPoint()
-        for column in self.columns.values():
-            if column.geometry().contains(pos):
-                target_column = column
-                break
-
-        if not target_column:
-            return
-
-        # Получаем статус целевой колонки
-        new_status = target_column.column_status
-
-        # Получаем старый статус
-        old_status = task_data["status"]
-
-        # Если статус не изменился, ничего не делаем
-        if old_status == new_status:
-            event.acceptProposedAction()
-            return
-
-        # Удаляем карточку из старой колонки
-        source_card.parent().layout().removeWidget(source_card)
-
-        # Обновляем статус в данных
-        task_data["status"] = new_status
-        source_card.task_data["status"] = new_status
-
-        # Обновляем данные в словаре
-        self.tasks_dict[task_data["id"]] = task_data
-
-        # Добавляем в новую колонку
-        target_column.tasks_layout.insertWidget(
-            target_column.tasks_layout.count() - 1,
-            source_card
-        )
-
-        # Обновляем статистику
-        self.task_moved.emit()
-
-        event.acceptProposedAction()
-
-    def find_task_card(self, task_id):
-        """Поиск карточки задачи по ID"""
-        for task_card in self.all_tasks:
-            if task_card.task_data.get("id") == task_id:
-                return task_card
-        return None
-
-    def update_statistics(self):
-        """Обновление статистики"""
-        # Подсчет задач по статусам
-        todo_count = len([t for t in self.sample_tasks if t["status"] == "todo"])
-        progress_count = len([t for t in self.sample_tasks if t["status"] == "progress"])
-        review_count = len([t for t in self.sample_tasks if t["status"] == "review"])
-        done_count = len([t for t in self.sample_tasks if t["status"] == "done"])
-
-        total_count = len(self.sample_tasks)
-
-        # Обновляем заголовки колонок
-        self.columns["todo"].count_label.setText(str(todo_count))
-        self.columns["progress"].count_label.setText(str(progress_count))
-        self.columns["review"].count_label.setText(str(review_count))
-        self.columns["done"].count_label.setText(str(done_count))
-
-        # Обновляем статистику
-        self.totalTasksLabel.setText(f"📊 Всего задач: {total_count}")
-        self.completedTasksLabel.setText(f"✅ Выполнено: {done_count}")
-
-        # Подсчет просроченных задач
-        overdue_count = 0
-        current_date = QDate.currentDate()
-        for task in self.sample_tasks:
-            deadline = task.get("deadline", "")
-            if deadline:
-                deadline_date = self.parse_date(deadline)
-                if deadline_date and deadline_date < current_date and not task.get("completed", False):
-                    overdue_count += 1
-
-        self.overdueTasksLabel.setText(f"⏰ Просрочено: {overdue_count}")
-
-        # Расчет и установка прогресса
-        progress = int((done_count / total_count * 100)) if total_count > 0 else 0
-        self.overallProgress.setValue(progress)
-
-    def parse_date(self, date_str):
-        """Парсинг даты из строки"""
-        try:
-            return QDate.fromString(date_str, "dd.MM.yyyy")
-        except:
-            return None
+    # =====================================================
+    # FILTER
+    # =====================================================
 
     def filter_tasks(self):
-        """Фильтрация задач"""
-        priority_filter = self.priorityFilter.currentText()
-        project_filter = self.projectFilter.currentText()
-        print(f"Фильтр: приоритет={priority_filter}, проект={project_filter}")
+        priority = self.priorityFilter.currentText()
 
-        # Здесь можно добавить логику фильтрации
-        for task_card in self.all_tasks:
-            # Показываем все задачи (заглушка для фильтрации)
-            task_card.show()
+        tasks = self.service.filter_tasks_by_priority(
+            [t.task_data for t in self.task_cards],
+            priority
+        )
+
+        visible_ids = {t["id"] for t in tasks}
+
+        for card in self.task_cards:
+            if card.task_data["id"] in visible_ids:
+                card.show()
+            else:
+                card.hide()
+
+    # =====================================================
+    # STATISTICS
+    # =====================================================
+
+    def update_statistics(self):
+        stats = self.service.get_statistics_for_display()
+
+        # Обновляем счетчики в колонках
+        for column in self.column_widgets:
+            count = stats["column_counts"].get(column.column_name, 0)
+            column.update_count(count)
+
+        # Обновляем статистику в UI
+        if hasattr(self, 'totalTasksLabel'):
+            self.totalTasksLabel.setText(f"📊 Всего задач: {stats['total']}")
+
+        if hasattr(self, 'completedTasksLabel'):
+            self.completedTasksLabel.setText(f"✅ Выполнено: {stats['done']}")
+
+        if hasattr(self, 'overdueTasksLabel'):
+            self.overdueTasksLabel.setText(f"⏰ Просрочено: {stats['overdue']}")
+
+        if hasattr(self, 'overallProgress'):
+            progress = self.service.get_progress_percent()
+            self.overallProgress.setValue(progress)

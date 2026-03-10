@@ -34,6 +34,12 @@
    </property>
    <item>
     <widget class="QFrame" name="controlPanel">
+     <property name="maximumSize">
+      <size>
+       <width>16777215</width>
+       <height>90</height>
+      </size>
+     </property>
      <property name="styleSheet">
       <string notr="true">QFrame {
     background-color: white;
@@ -61,12 +67,9 @@
        <widget class="QLabel" name="totalTasksLabel">
         <property name="minimumSize">
          <size>
-          <width>180</width>
+          <width>186</width>
           <height>0</height>
          </size>
-        </property>
-        <property name="alignment">
-         <set>Qt::AlignCenter</set>
         </property>
         <property name="styleSheet">
          <string notr="true">QLabel {
@@ -84,18 +87,18 @@ QLabel:hover {
         <property name="text">
          <string>📊 Всего задач: 0</string>
         </property>
+        <property name="alignment">
+         <set>Qt::AlignCenter</set>
+        </property>
        </widget>
       </item>
       <item alignment="Qt::AlignVCenter">
        <widget class="QLabel" name="completedTasksLabel">
         <property name="minimumSize">
          <size>
-          <width>180</width>
+          <width>186</width>
           <height>0</height>
          </size>
-        </property>
-        <property name="alignment">
-         <set>Qt::AlignCenter</set>
         </property>
         <property name="styleSheet">
          <string notr="true">QLabel {
@@ -113,18 +116,18 @@ QLabel:hover {
         <property name="text">
          <string>✅ Выполнено: 0</string>
         </property>
+        <property name="alignment">
+         <set>Qt::AlignCenter</set>
+        </property>
        </widget>
       </item>
       <item alignment="Qt::AlignVCenter">
        <widget class="QLabel" name="overdueTasksLabel">
         <property name="minimumSize">
          <size>
-          <width>180</width>
+          <width>186</width>
           <height>0</height>
          </size>
-        </property>
-        <property name="alignment">
-         <set>Qt::AlignCenter</set>
         </property>
         <property name="styleSheet">
          <string notr="true">QLabel {
@@ -141,6 +144,9 @@ QLabel:hover {
         </property>
         <property name="text">
          <string>⏰ Просрочено: 0</string>
+        </property>
+        <property name="alignment">
+         <set>Qt::AlignCenter</set>
         </property>
        </widget>
       </item>
