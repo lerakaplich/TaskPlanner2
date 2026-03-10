@@ -175,8 +175,6 @@ class MainWindow(QMainWindow):
 
         # 3. Генерация виджетов (карточек) на основе DTO
         for dto in projects_dtos:
-            # Создаем экземпляр карточки.
-            # Карточка внутри себя использует поля DTO: dto.name, dto.tasks_total и т.д.
             card = ProjectCard(project_id=dto.id, project_data=dto)
 
             # Соединяем сигналы карточки с методами-контроллерами главного окна

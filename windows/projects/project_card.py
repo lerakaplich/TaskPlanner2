@@ -3,6 +3,13 @@ from PyQt6.QtWidgets import QFrame, QDialog
 from PyQt6.QtCore import pyqtSignal
 import os
 
+# windows/projects/project_card.py
+
+from PyQt6 import uic
+from PyQt6.QtWidgets import QFrame, QDialog
+from PyQt6.QtCore import pyqtSignal
+import os
+
 
 class ProjectCard(QFrame):
     """Карточка проекта с кнопкой редактирования и отображением участников"""
@@ -36,45 +43,45 @@ class ProjectCard(QFrame):
 
     def update_data(self, project_data):
         """Обновление данных карточки"""
-        self.projectTitle.setText(project_data.get('name', ''))
-        self.progressBar.setValue(project_data.get('progress', 0))
+        # 👈 ИСПРАВЛЕНО: используем прямой доступ к атрибутам вместо .get()
+        self.projectTitle.setText(project_data.name if project_data.name else '')
 
-        owner = project_data.get('owner', 'Не назначен')
+        # Прогресс вычисляем из задач
+        if project_data.tasks_total > 0:
+            progress = int((project_data.tasks_done / project_data.tasks_total) * 100)
+        else:
+            progress = 0
+        self.progressBar.setValue(progress)
+
+        # Владелец - пока нет в DTO, можно добавить позже или показывать заглушку
+        owner = getattr(project_data, 'owner', 'Не назначен')
         self.projectInfo.setText(f"Владелец: {owner}")
 
-        start_date = project_data.get('start_date', '')
+        # Дата старта - пока нет в DTO
+        start_date = getattr(project_data, 'start_date', '')
         if start_date:
             self.startDate.setText(f"Старт: {start_date}")
-
-        # Отображение участников
-        participants = project_data.get('participants', [])
-        if participants:
-            if isinstance(participants, list):
-                participants_text = f"👥 Участники: {len(participants)} чел."
-            else:
-                participants_text = f"👥 Участники: {participants}"
         else:
-            participants_text = "👥 Участники: 0 чел."
+            self.startDate.setText("")
+
+        # Отображение участников - пока нет в DTO
+        participants_text = "👥 Участники: 0 чел."
         self.participants.setText(participants_text)
 
         # Отображение администраторов
-        admins = project_data.get('admins', [])
-        if admins:
-            if isinstance(admins, list):
-                admins_text = f"👑 Админы: {len(admins)} чел."
-            else:
-                admins_text = f"👑 Админы: {admins}"
-        else:
-            admins_text = "👑 Админы: 0 чел."
+        admins_text = "👑 Админы: 0 чел."
         self.admins.setText(admins_text)
 
         # Дедлайн
-        deadline = project_data.get('deadline', '')
+        deadline = project_data.deadline
         if deadline:
-            self.deadline.setText(f"До {deadline}")
+            # Форматируем time объект в строку
+            deadline_str = deadline.strftime("%H:%M") if hasattr(deadline, 'strftime') else str(deadline)
+            self.deadline.setText(f"До {deadline_str}")
 
             # Подсветка критических дедлайнов
-            if project_data.get('is_critical', False):
+            is_critical = getattr(project_data, 'is_critical', False)
+            if is_critical:
                 self.deadline.setStyleSheet(
                     "font-size: 11px; color: #D22730; "
                     "padding: 4px 8px; background-color: #FFEEEE; "
@@ -86,3 +93,5 @@ class ProjectCard(QFrame):
                     "padding: 4px 8px; background-color: #F0F0F0; "
                     "border-radius: 4px;"
                 )
+        else:
+            self.deadline.setText("")
