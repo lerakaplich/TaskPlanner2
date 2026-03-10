@@ -12,7 +12,7 @@ from services.analytics_service import AnalyticsService
 class ArchivePage(QWidget):
     """Страница архива (UI-слой, без бизнес-логики)"""
 
-    def __init__(self, parent=None):
+    def __init__(self, service=None, parent=None):  # 👈 ДОБАВЛЯЕМ service
         super().__init__(parent)
         self.setObjectName("archivePage")
 
@@ -29,7 +29,13 @@ class ArchivePage(QWidget):
         # =============================
         # Сервис
         # =============================
-        self.analytics_service = AnalyticsService()
+        if service is None:
+            from database import get_tasks_session
+            session = get_tasks_session()
+            self.analytics_service = AnalyticsService(session)
+        else:
+            self.analytics_service = service
+
         self.analytics_service.load_test_data()
 
         # =============================

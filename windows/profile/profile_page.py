@@ -24,14 +24,20 @@ class ProfilePage(QWidget):
 
     edit_profile_requested = pyqtSignal()
 
-    def __init__(self, employee_id=None, parent=None, current_user=None):
+    def __init__(self, employee_id=None, parent=None, current_user=None, service=None):
         super().__init__(parent)
 
         self.employee_id = employee_id or (current_user.get('id') if current_user else None)
         self.main_window = parent
         self.current_user = current_user
 
-        self.profile_service = ProfileService()
+        # Используем переданный сервис или создаем новый
+        if service:
+            # 👈 ИСПРАВЛЕНО: меняем db_session на session
+            self.profile_service = ProfileService(session=service.session)
+        else:
+            self.profile_service = ProfileService()
+
         if current_user:
             self.profile_service.set_current_user(current_user)
 

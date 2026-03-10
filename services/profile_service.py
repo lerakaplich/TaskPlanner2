@@ -5,6 +5,8 @@ from datetime import datetime
 from PyQt6.QtCore import QDate
 import random
 
+from repositories.external_employee_repo import ExternalEmployeeRepo
+from repositories.project_repo import ProjectRepo
 # Импортируем репозитории
 from repositories.task_repo import TaskRepo
 from database import get_tasks_session  # 👈 ТОЛЬКО ОДНА СЕССИЯ
@@ -13,11 +15,13 @@ from database import get_tasks_session  # 👈 ТОЛЬКО ОДНА СЕССИ�
 class ProfileService:
     """Сервис профиля сотрудника с реальными данными из БД"""
 
-    def __init__(self, db_session=None):
-        self.db_session = db_session or get_tasks_session()  # только одна сессия для всего
+    def __init__(self, session=None):  # 👈 ПАРАМЕТР НАЗЫВАЕТСЯ session
+        self.db_session = session or get_tasks_session()  # внутри используем db_session
         self.task_repo = TaskRepo(self.db_session)
-        # Убираем employee_repo, так как работаем только через foreign_data
         self.current_user = None
+        # 👈 ИСПРАВЛЕНО: используем self.db_session везде
+        self.project_repo = ProjectRepo(self.db_session)
+        self.employee_repo = ExternalEmployeeRepo(self.db_session)
 
     def set_current_user(self, user_data: Dict):
         """Устанавливает текущего пользователя"""
@@ -32,10 +36,10 @@ class ProfileService:
         Получение данных профиля сотрудника из БД
         """
         try:
-            # Получаем данные сотрудника из внешней таблицы
             from models.employees import ExternalEmployee
             from sqlalchemy import select
 
+            # 👈 ИСПРАВЛЕНО: self.db_session вместо self.session
             stmt = select(ExternalEmployee).where(ExternalEmployee.id == employee_id)
             employee = self.db_session.scalar(stmt)
 

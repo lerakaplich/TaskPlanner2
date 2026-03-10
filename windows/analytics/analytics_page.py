@@ -15,7 +15,7 @@ from windows.analytics.theme.theme_card import ThemeCard# новый импор�
 
 
 class AnalyticsPage(QWidget):
-    def __init__(self, parent=None):
+    def __init__(self, service=None, parent=None):  # 👈 ДОБАВЛЯЕМ service
         super().__init__(parent)
 
         ui_path = os.path.join(
@@ -25,6 +25,8 @@ class AnalyticsPage(QWidget):
         )
         uic.loadUi(os.path.join(ui_path, "analytics_page.ui"), self)
 
+        # Сохраняем сервис, если он нужен для загрузки реальных данных
+        self.service = service
 
         self.test_employees = self.create_test_employees()
         self.test_tasks = self.create_test_tasks()

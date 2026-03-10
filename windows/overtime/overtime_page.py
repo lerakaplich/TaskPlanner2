@@ -14,8 +14,8 @@ from windows.overtime.period_dialog import PeriodDialog
 
 
 class OvertimePage(QWidget):
-    def __init__(self):
-        super().__init__()
+    def __init__(self, service=None, parent=None):  # 👈 ДОБАВЛЯЕМ service
+        super().__init__(parent)
 
         ui_path = os.path.join(
             os.path.dirname(__file__),  # windows/analytics/employees/
@@ -23,6 +23,9 @@ class OvertimePage(QWidget):
             "ui", "overtime"  # спускаемся в нужную подпапку ui
         )
         uic.loadUi(os.path.join(ui_path, "overtime_page.ui"), self)
+
+        # Сохраняем сервис, если он нужен для загрузки реальных данных
+        self.service = service
 
         # Заголовок
         self.titleLabel.setText("Переработки")

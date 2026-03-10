@@ -23,3 +23,16 @@ class ExternalEmployeeRepo:
             ExternalEmployee.last_name.ilike(f"%{query}%")
         )
         return list(self.session.scalars(stmt))
+
+    def get_full_name(self, employee_id: int) -> str:
+        """Возвращает форматированное имя сотрудника: Иванов И. И."""
+        from models.employees import ExternalEmployee  # Убедись в правильности импорта
+        emp = self.session.get(ExternalEmployee, employee_id)
+        if not emp:
+            return "Неизвестен"
+
+        # Формируем ФИО
+        first_initial = f"{emp.first_name[0]}." if emp.first_name else ""
+        middle_initial = f"{emp.middle_name[0]}." if emp.middle_name else ""
+
+        return f"{emp.last_name} {first_initial}{middle_initial}".strip()

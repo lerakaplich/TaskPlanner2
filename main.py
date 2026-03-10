@@ -254,7 +254,12 @@ def main():
                 print(f"   Должность: {selected_user['position']}")
 
             # Создаем главное окно и передаем выбранного пользователя
-            window = MainWindow(current_user=selected_user)
+            session = get_tasks_session()
+
+            window = MainWindow(
+                session=session,
+                user_id=selected_user["id"]
+            )
             window.show()
 
             sys.exit(app.exec())

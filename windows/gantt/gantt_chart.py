@@ -403,16 +403,18 @@ class GanttScene(QGraphicsScene):
 
 
 class GanttChartWidget(QWidget):
-    def __init__(self, parent=None):
+    def __init__(self, service=None, parent=None):  # 👈 ДОБАВЛЯЕМ service
         super().__init__(parent)
 
         ui_path = os.path.join(
             os.path.dirname(__file__),  # windows/analytics/employees/
-            "..", "..",   # поднимаемся до корня проекта
+            "..", "..",  # поднимаемся до корня проекта
             "ui", "gantt"  # спускаемся в нужную подпапку ui
         )
         uic.loadUi(os.path.join(ui_path, "gantt_chart.ui"), self)
 
+        # Сохраняем сервис, если он нужен для загрузки реальных данных
+        self.service = service
 
         self.scene = GanttScene(self)
         self.ganttView.setScene(self.scene)
@@ -422,6 +424,17 @@ class GanttChartWidget(QWidget):
         self.pending_pred = None
         self.ganttView.viewport().installEventFilter(self)
         self.connect_signals()
+
+        # Если есть сервис - загружаем реальные данные, иначе тестовые
+        if service:
+            self.load_real_data()
+        else:
+            self.load_test_data()
+
+    def load_real_data(self):
+        """Загрузка реальных данных из сервиса"""
+        # Здесь будет код загрузки данных из БД через сервис
+        # Пока оставляем тестовые данные
         self.load_test_data()
 
     def connect_signals(self):

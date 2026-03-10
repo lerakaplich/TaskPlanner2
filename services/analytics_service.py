@@ -1,5 +1,7 @@
 from typing import List, Dict, Optional
 
+from database import get_tasks_session
+
 
 class AnalyticsService:
     """
@@ -8,9 +10,15 @@ class AnalyticsService:
     UI ничего не знает о структуре данных.
     """
 
-    def __init__(self):
+    def __init__(self, session=None):
+        self.session = session or get_tasks_session()
+        self.current_user_id = None
         self._archived_projects: List[Dict] = []
         self._archived_tasks: List[Dict] = []
+
+    def set_current_user_id(self, user_id):
+        self.current_user_id = user_id
+
 
     # ======================================================
     # Загрузка данных

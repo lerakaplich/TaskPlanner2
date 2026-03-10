@@ -1,14 +1,14 @@
 import os
 import os
 import sys
-import sys
+
 from PyQt6 import uic
-from PyQt6 import uic
-from PyQt6.QtWidgets import QApplication, QMainWindow, QFrame, QSizePolicy, QSpacerItem, QWidget, QDialog
-from PyQt6.QtWidgets import QApplication, QMainWindow, QFrame, QSizePolicy, QSpacerItem, QWidget, QDialog
-from PyQt6.uic import loadUi  # <-- Добавьте эту строку
-from PyQt6.uic import loadUi
+from PyQt6.QtWidgets import QApplication, QMainWindow, QSizePolicy, QSpacerItem, QWidget, QDialog
+from PyQt6.QtWidgets import QMessageBox
+
 from database import get_tasks_session
+from services.analytics_service import AnalyticsService
+from services.projects_service import ProjectsService
 from windows.analytics.analytics_page import AnalyticsPage
 from windows.archive.archive_page import ArchivePage
 from windows.gantt.gantt_chart import GanttChartWidget
@@ -16,7 +16,8 @@ from windows.my_tasks.my_tasks_page import MyTasksPage
 from windows.other_tasks.others_tasks_page import OthersTasksPage
 from windows.overtime.overtime_page import OvertimePage
 from windows.profile.profile_page import ProfilePage
-from windows.projects.project_creation_dialog import ProjectCreationDialog
+from windows.projects.project_card import ProjectCard
+from windows.projects.project_edit_dialog import ProjectEditDialog
 
 
 # windows/projects/main_window.py
@@ -24,40 +25,45 @@ from windows.projects.project_creation_dialog import ProjectCreationDialog
 
 class MainWindow(QMainWindow):
 
-    def __init__(self, current_user=None):
+    def __init__(self, session, user_id):  # Принимаем user_id при входе
         super().__init__()
+        self.current_user_id = user_id
+        # 1. Базовые переменные состояния (ДО инициализации UI и загрузки данных)
+        self.session = session
+        self.current_search_query = ""
+        self.current_status_filter = "Все"
+        self.current_columns = -1
+        self.project_cards = []
 
-        self.current_user = current_user or {"id": 1, "name": "Текущий пользователь"}
-        print(f"\n=== Текущий пользователь ===")
-        print(f"ID: {self.current_user.get('id')}")
-        print(f"Имя: {self.current_user.get('last_name')} {self.current_user.get('first_name')}")
-        print(f"Роль: {self.current_user.get('rights', 'user')}")
+        # 2. Инициализируем сервисы
+        # 👈 ИСПРАВЛЕНО: убираем current_user_id, передаем только session
+        self.project_service = ProjectsService(session)
+        self.analytics_service = AnalyticsService(session)
 
-        ui_path = os.path.join(
-            os.path.dirname(__file__),
-            "..", "..",
-            "ui", "projects"
-        )
-        uic.loadUi(os.path.join(ui_path, "main_window.ui"), self)
+        # Устанавливаем текущего пользователя в сервисах
+        self.project_service.set_current_user_id(user_id)  # 👈 ДОБАВЛЯЕМ
+        self.analytics_service.set_current_user_id(user_id)  # 👈 ДОБАВЛЯЕМ (если нужно)
 
-        ui_path = os.path.join(
-            os.path.dirname(__file__),
-            "..", "..",
-            "ui"
-        )
-        uic.loadUi(os.path.join(ui_path, "left_panel.ui"), self.leftPanel)
+        # 3. Загружаем UI
+        ui_root = os.path.join(os.path.dirname(__file__), "..", "..", "ui")
+        uic.loadUi(os.path.join(ui_root, "projects", "main_window.ui"), self)
+        uic.loadUi(os.path.join(ui_root, "left_panel.ui"), self.leftPanel)
 
-        # Обновляем кнопку профиля с данными пользователя
-        self.update_profile_button()
+        # 4. Настройка навигации
+        self.nav_buttons = [
+            self.leftPanel.btnMain, self.leftPanel.btnMyTasks,
+            self.leftPanel.btnOtherTasks, self.leftPanel.btnGantt,
+            self.leftPanel.btnAnalytics, self.leftPanel.btnChat,
+            self.leftPanel.btnOvertime, self.leftPanel.btnSettings
+        ]
+        if hasattr(self.leftPanel, 'btnArchive'):
+            self.nav_buttons.append(self.leftPanel.btnArchive)
 
-        # Инициализация страниц
+        # 5. Инициализация логики
         self.init_pages()
-
-        # Подключаем сигналы к слотам
         self.connect_signals()
+        self.setup_initial_state() # Здесь уже есть вызов refresh_projects_view
 
-        # Инициализация
-        self.setup_initial_state()
         self.showMaximized()
 
     def update_profile_button(self):
@@ -86,31 +92,6 @@ class MainWindow(QMainWindow):
             if full_name:
                 self.btnProfile.setToolTip(full_name)
 
-    def get_test_gantt_tasks(self):
-        return [
-            {
-                "id": 1,
-                "title": "Проектирование UI",
-                "start": "2026-02-01",
-                "end": "2026-02-05",
-                "progress": 100
-            },
-            {
-                "id": 2,
-                "title": "Верстка экранов",
-                "start": "2026-02-06",
-                "end": "2026-02-12",
-                "progress": 60
-            },
-            {
-                "id": 3,
-                "title": "Логика приложения",
-                "start": "2026-02-10",
-                "end": "2026-02-18",
-                "progress": 20
-            }
-        ]
-
     def init_archive_page(self):
         """Инициализация страницы архива"""
         self.archive_page_instance = ArchivePage()
@@ -129,99 +110,172 @@ class MainWindow(QMainWindow):
     def init_pages(self):
         """Инициализация всех страниц"""
 
-        # Создаем сессию для страниц задач
-        tasks_session = get_tasks_session()
-
-        # 0 — Главная (уже есть в UI)
-
-        # 1 — Мои задачи - передаем и сессию, и пользователя
+        # Мои задачи
         self.my_tasks_page_instance = MyTasksPage(
-            db_session=tasks_session,
-            current_user=self.current_user
+            db_session=self.session,
+            current_user={"id": self.current_user_id, "last_name": "", "first_name": ""}
         )
-        old_page = self.findChild(QWidget, "myTasksPage")
-        if old_page:
-            index = self.contentStack.indexOf(old_page)
-            old_page.deleteLater()
-            self.contentStack.insertWidget(index, self.my_tasks_page_instance)
+        self._replace_in_stack("myTasksPage", self.my_tasks_page_instance)
 
-        # 2 — Чужие задачи - передаем ТОЛЬКО пользователя (сессия создается внутри)
+        # Чужие задачи
         self.other_tasks_page_instance = OthersTasksPage(
-            current_user=self.current_user  # 👈 УБИРАЕМ db_session
+            parent=self,
+            current_user={"id": self.current_user_id, "last_name": "", "first_name": ""},
+            project_id=2
         )
-        other_old = self.findChild(QWidget, "otherTasksPage")
-        if other_old:
-            index = self.contentStack.indexOf(other_old)
-            other_old.deleteLater()
-            self.contentStack.insertWidget(index, self.other_tasks_page_instance)
+        self._replace_in_stack("otherTasksPage", self.other_tasks_page_instance)
 
-        # 3 — Диаграмма Ганта
-        self.gantt_page_instance = GanttChartWidget()
-        gantt_old = self.findChild(QWidget, "ganttPage")
-        if gantt_old:
-            index = self.contentStack.indexOf(gantt_old)
-            gantt_old.deleteLater()
-            self.contentStack.insertWidget(index, self.gantt_page_instance)
+        # Гант - передаем сервис
+        self.gantt_page_instance = GanttChartWidget(service=self.project_service)  # 👈 ТЕПЕРЬ РАБОТАЕТ
+        self._replace_in_stack("ganttPage", self.gantt_page_instance)
 
-        # 4 — Аналитика / Навыки
-        self.analytics_page_instance = AnalyticsPage()
-        analytics_old = self.findChild(QWidget, "analyticsPage")
-        if analytics_old:
-            index = self.contentStack.indexOf(analytics_old)
-            analytics_old.deleteLater()
-            self.contentStack.insertWidget(index, self.analytics_page_instance)
+        # Аналитика
+        self.analytics_page_instance = AnalyticsPage(service=self.analytics_service)
+        self._replace_in_stack("analyticsPage", self.analytics_page_instance)
 
-        # 5 — Чат (если есть в UI)
+        # Переработки
+        self.overtime_page_instance = OvertimePage(service=self.project_service)
+        self._replace_in_stack("overtimePage", self.overtime_page_instance)
 
-        # 6 — Переработки
-        self.overtime_page_instance = OvertimePage()
-        overtime_old = self.findChild(QWidget, "overtimePage")
-        if overtime_old:
-            index = self.contentStack.indexOf(overtime_old)
-            overtime_old.deleteLater()
-            self.contentStack.insertWidget(index, self.overtime_page_instance)
-
-        # 7 — Настройки (если есть в UI)
-
-        # 8 — Архив (новая страница)
-        self.init_archive_page()
-
-        # Отдельная страница профиля
-        self.profile_page_instance = ProfilePage(current_user=self.current_user)
-        self.contentStack.addWidget(self.profile_page_instance)
-
-    # Обновляем метод connect_signals в MainWindow
-    def connect_signals(self):
-        """Подключение всех сигналов к слотам"""
-        # Навигационные кнопки
-        self.leftPanel.btnMain.clicked.connect(lambda: self.switch_page(0))
-        self.leftPanel.btnMyTasks.clicked.connect(lambda: self.switch_page(1))
-        self.leftPanel.btnOtherTasks.clicked.connect(lambda: self.switch_page(2))
-        self.leftPanel.btnGantt.clicked.connect(lambda: self.switch_page(3))
-        self.leftPanel.btnAnalytics.clicked.connect(lambda: self.switch_page(4))
-        self.leftPanel.btnChat.clicked.connect(lambda: self.switch_page(5))
-        self.leftPanel.btnOvertime.clicked.connect(lambda: self.switch_page(6))
-        self.leftPanel.btnSettings.clicked.connect(lambda: self.switch_page(7))
-
-        # Добавляем кнопку для архива, если её нет в левой панели
-        if hasattr(self.leftPanel, 'btnArchive'):
-            self.leftPanel.btnArchive.clicked.connect(lambda: self.switch_page(8))
-
-        # Кнопки действий
-        self.btnCreateProject.clicked.connect(self.create_project)
-        self.leftPanel.btnCollapse.clicked.connect(self.toggle_left_panel)
-
-        # Поиск
-        self.searchInput.textChanged.connect(self.search_projects)
-
-        # Фильтр
-        self.filterCombo.currentTextChanged.connect(self.filter_projects)
-
-        # Уведомления
-        self.btnNotifications.clicked.connect(self.show_notifications)
+        # Архив
+        self.archive_page_instance = ArchivePage(service=self.analytics_service)
+        self._replace_in_stack("archivePage", self.archive_page_instance)
 
         # Профиль
-        self.btnProfile.clicked.connect(self.show_profile)
+        self.profile_page_instance = ProfilePage(service=self.project_service)
+        self.contentStack.addWidget(self.profile_page_instance)
+
+    def refresh_projects_view(self):
+        """
+        Финальная версия: Обновление списка проектов из БД и перерисовка UI.
+        Связывает ProjectsService (данные) с MainWindow (интерфейс).
+        """
+        # 1. Очистка старых карточек и освобождение памяти
+        # Используем deleteLater(), чтобы Qt безопасно удалил виджеты из памяти
+        if hasattr(self, 'project_cards') and self.project_cards:
+            for card in self.project_cards:
+                self.projectsGrid.removeWidget(card)
+                card.deleteLater()
+
+        # Инициализируем/обнуляем список активных карточек
+        self.project_cards = []
+
+        # 2. Получение данных от сервиса
+        # Мы передаем текущие значения фильтров, которые обновились
+        # в методах search_projects и filter_projects
+        try:
+            # Сервис возвращает List[ProjectCardDTO]
+            projects_dtos = self.project_service.get_projects_for_cards(
+                search_query=self.current_search_query,
+                status_filter=self.current_status_filter
+            )
+        except Exception as e:
+            print(f"Критическая ошибка при загрузке проектов: {e}")
+            return
+
+        # 3. Генерация виджетов (карточек) на основе DTO
+        for dto in projects_dtos:
+            # Создаем экземпляр карточки.
+            # Карточка внутри себя использует поля DTO: dto.name, dto.tasks_total и т.д.
+            card = ProjectCard(project_id=dto.id, project_data=dto)
+
+            # Соединяем сигналы карточки с методами-контроллерами главного окна
+            # Это позволяет каждой карточке знать, что делать при нажатии кнопок
+            card.edit_clicked.connect(self.edit_project)  # Вызывает диалог редактирования
+            card.open_clicked.connect(self.open_project)  # Открывает Канбан-доску
+
+            # Сохраняем ссылку на карточку для управления сеткой
+            self.project_cards.append(card)
+
+        # 4. Обработка пустого состояния (Optional)
+        # Если проектов нет, можно показать заглушку (Label "Ничего не найдено")
+        if not self.project_cards:
+            # Здесь могла бы быть логика отображения сообщения о пустом списке
+            pass
+
+        # 5. Перерисовка сетки (Responsive Layout)
+        # Сбрасываем current_columns, чтобы метод adjust_card_columns
+        # гарантированно пересчитал позиции всех новых карточек
+        self.current_columns = -1
+        self.adjust_card_columns()
+
+        # Логируем для отладки
+        print(f"UI обновлен: отображено {len(self.project_cards)} проектов.")
+
+    def connect_signals(self):
+        """
+        Подключение всех сигналов интерфейса к соответствующим слотам (обработчикам).
+        Централизованное управление событиями MainWindow.
+        """
+        # ==========================================
+        # 1. Навигация по страницам (contentStack)
+        # ==========================================
+        # Создаем маппинг кнопок к индексам страниц для чистоты кода
+        self.nav_map = {
+            self.leftPanel.btnMain: 0,
+            self.leftPanel.btnMyTasks: 1,
+            self.leftPanel.btnOtherTasks: 2,
+            self.leftPanel.btnGantt: 3,
+            self.leftPanel.btnAnalytics: 4,
+            self.leftPanel.btnChat: 5,
+            self.leftPanel.btnOvertime: 6,
+            self.leftPanel.btnSettings: 7
+        }
+        if hasattr(self.leftPanel, 'btnArchive'):
+            self.nav_map[self.leftPanel.btnArchive] = 8
+
+        for btn, index in self.nav_map.items():
+            btn.clicked.connect(lambda checked, i=index: self.switch_page(i))
+
+        # ==========================================
+        # 2. Поиск и Фильтрация (Data Flow)
+        # ==========================================
+        # Поиск: срабатывает при каждом изменении текста
+        if hasattr(self, 'searchInput'):
+            self.searchInput.textChanged.connect(self.search_projects)
+
+        # Фильтр: срабатывает при выборе нового значения в выпадающем списке
+        if hasattr(self, 'filterCombo'):
+            self.filterCombo.currentTextChanged.connect(self.filter_projects)
+
+        # ==========================================
+        # 3. Кнопки действий и системные функции
+        # ==========================================
+        # Создание нового проекта
+        if hasattr(self, 'btnCreateProject'):
+            self.btnCreateProject.clicked.connect(self.create_project)
+
+        # Сворачивание/разворачивание левой панели
+        if hasattr(self.leftPanel, 'btnCollapse'):
+            self.leftPanel.btnCollapse.clicked.connect(self.toggle_left_panel)
+
+        # Уведомления (заглушка)
+        if hasattr(self, 'btnNotifications'):
+            self.btnNotifications.clicked.connect(self.show_notifications)
+
+        # Профиль пользователя
+        if hasattr(self, 'btnProfile'):
+            self.btnProfile.clicked.connect(self.show_profile)
+
+        # Общий сигнал для обновления данных при переключении на главную страницу
+        # (Чтобы данные всегда были актуальны при возврате в список проектов)
+        self.contentStack.currentChanged.connect(self.on_stack_page_changed)
+
+    def on_stack_page_changed(self, index):
+        """Дополнительный обработчик смены страницы в StackedWidget"""
+        if index == 0:  # Если вернулись на страницу списка проектов
+            self.refresh_projects_view()
+
+    def _replace_in_stack(self, object_name, new_widget):
+        """Вспомогательный метод для замены виджетов"""
+        placeholder = self.findChild(QWidget, object_name)
+        if placeholder:
+            index = self.contentStack.indexOf(placeholder)
+            self.contentStack.removeWidget(placeholder)
+            placeholder.deleteLater()
+            self.contentStack.insertWidget(index, new_widget)
+        else:
+            self.contentStack.addWidget(new_widget)
 
     def switch_page(self, page_index):
         """Переключение между основными страницами (0–7)"""
@@ -255,7 +309,6 @@ class MainWindow(QMainWindow):
 
         self.contentStack.setCurrentWidget(self.profile_page_instance)
 
-    # Остальной код полностью без изменений
     def setup_initial_state(self):
         """Начальная настройка интерфейса"""
         self.contentStack.setCurrentIndex(0)
@@ -267,7 +320,8 @@ class MainWindow(QMainWindow):
             self.leftPanel.btnAnalytics,
             self.leftPanel.btnChat,
             self.leftPanel.btnOvertime,
-            self.leftPanel.btnSettings
+            self.leftPanel.btnSettings,
+            self.leftPanel.btnArchive
         ]
         self.button_texts = {
             self.leftPanel.btnMain: "🚚 Проекты",
@@ -277,7 +331,8 @@ class MainWindow(QMainWindow):
             self.leftPanel.btnAnalytics: "📊 Аналитика/Навыки",
             self.leftPanel.btnChat: "💬 Чат",
             self.leftPanel.btnOvertime: "♻️ Переработки",
-            self.leftPanel.btnSettings: "⚙️ Настройки"
+            self.leftPanel.btnSettings: "⚙️ Настройки",
+            self.leftPanel.btnArchive: "📦 Архив"
         }
         self.button_icons = {
             self.leftPanel.btnMain: "🚚",
@@ -287,9 +342,10 @@ class MainWindow(QMainWindow):
             self.leftPanel.btnAnalytics: "📊",
             self.leftPanel.btnChat: "💬",
             self.leftPanel.btnOvertime: "♻️",
-            self.leftPanel.btnSettings: "⚙️"
+            self.leftPanel.btnSettings: "⚙️",
+            self.leftPanel.btnArchive: "📦"
         }
-        self.setup_responsive_cards()
+        self.refresh_projects_view()
 
     def init_my_tasks_page(self):
         """Инициализация страницы Мои задачи"""
@@ -310,123 +366,45 @@ class MainWindow(QMainWindow):
             self.contentStack.insertWidget(index, self.my_tasks_page_instance)
             self.myTasksPage = self.my_tasks_page_instance
 
-    def setup_responsive_cards(self):
-        """Настройка адаптивности карточек проектов"""
-        projects = [
-            {
-                "id": 1,
-                "title": "Разработка новой кабины",
-                "name": "Разработка новой кабины",
-                "progress": 75,
-                "owner": "Петров А.В.",
-                "start_date": "01.09.2024",
-                "deadline": "15.12.2024",
-                "is_critical": True,
-                "participants": [1, 2, 3, 4, 5, 6, 7, 8],
-                "admins": [1, 2],
-                "description": "Проект по разработке новой кабины для автомобиля",
-                "status": "Активен",
-                "end_date": "15.12.2024"
-            },
-            {
-                "id": 2,
-                "title": "Внедрение ERP-системы",
-                "name": "Внедрение ERP-системы",
-                "progress": 45,
-                "owner": "Сидорова Е.П.",
-                "start_date": "15.08.2024",
-                "deadline": "30.03.2025",
-                "is_critical": False,
-                "participants": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15],
-                "admins": [1, 3, 5],
-                "description": "Внедрение корпоративной ERP-системы",
-                "status": "Активен",
-                "end_date": "30.03.2025"
-            },
-            {
-                "id": 3,
-                "title": "Модернизация конвейера",
-                "name": "Модернизация конвейера",
-                "progress": 90,
-                "owner": "Иванов И.И.",
-                "start_date": "01.07.2024",
-                "deadline": "10.11.2024",
-                "is_critical": True,
-                "participants": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
-                "admins": [1, 4],
-                "description": "Модернизация производственного конвейера",
-                "status": "Активен",
-                "end_date": "10.11.2024"
-            },
-            {
-                "id": 4,
-                "title": "Разработка сайта",
-                "name": "Разработка сайта",
-                "progress": 30,
-                "owner": "Кузнецов С.П.",
-                "start_date": "01.10.2024",
-                "deadline": "15.02.2025",
-                "is_critical": False,
-                "participants": [1, 2, 3, 4, 5],
-                "admins": [1],
-                "description": "Разработка корпоративного сайта",
-                "status": "Активен",
-                "end_date": "15.02.2025"
-            }
-        ]
-
-        from windows.projects.project_card import ProjectCard
-
-        self.project_cards = []
-        for proj in projects:
-            card = ProjectCard(proj["id"], proj, self.scrollAreaWidgetContents)
-
-            # Подключаем сигналы
-            card.open_clicked.connect(self.open_project)
-            card.edit_clicked.connect(self.edit_project)
-
-            self.project_cards.append(card)
-
-        self.current_columns = 0
-        self.adjust_card_columns()
-
     def edit_project(self, project_id):
-        """Редактирование проекта"""
-        print(f"Редактирование проекта {project_id}...")
-
-        # Находим данные проекта
-        project_data = None
-        for card in self.project_cards:
-            if card.project_id == project_id:
-                project_data = card.project_data
-                break
-
-        if not project_data:
+        # 1. Получаем DTO из сервиса
+        project_dto = self.project_service.get_project_for_edit(project_id)
+        if not project_dto:
+            QMessageBox.warning(self, "Ошибка", "Проект не найден")
             return
 
-        from windows.projects.project_edit_dialog import ProjectEditDialog
+        # 2. Превращаем DTO в словарь для диалога (совместимость с вашим UI)
+        # Важно: ваши диалоги ждут ключи 'participants' и 'admins'
+        dialog_data = project_dto.model_dump()
+        dialog_data['participants'] = project_dto.member_ids
+        dialog_data['admins'] = project_dto.admin_ids
+        dialog_data['is_active'] = not project_dto.is_archived
 
-        dialog = ProjectEditDialog(project_data, parent=self)
+        dialog = ProjectEditDialog(dialog_data, parent=self)
 
         if dialog.exec() == QDialog.DialogCode.Accepted:
-            updated_data = dialog.get_project_data()
-            print("Проект обновлен:", updated_data)
+            # 3. Получаем словарь из диалога
+            raw_results = dialog.get_project_data()
 
-            # Обновляем данные в карточке
-            for card in self.project_cards:
-                if card.project_id == project_id:
-                    card.update_data(updated_data)
-                    break
+            # 4. ОБНОВЛЯЕМ наш исходный DTO новыми данными
+            project_dto.name = raw_results['name']
+            project_dto.description = raw_results['description']
+            project_dto.is_archived = not raw_results.get('is_active', True)
 
-            # Здесь можно добавить сохранение в БД
-            from PyQt6.QtWidgets import QMessageBox
-            QMessageBox.information(
-                self,
-                "Проект обновлен",
-                f"Проект '{updated_data['name']}' успешно обновлен!\n\n"
-                f"Участников: {len(updated_data.get('participants', []))}\n"
-                f"Администраторов: {len(updated_data.get('admins', []))}"
-            )
+            # Конвертируем строки "1,2,3" от диалога в списки [1, 2, 3]
+            def str_to_ids(s):
+                # Безопасная конвертация "1, 2, 3" -> [1, 2, 3]
+                return [int(i.strip()) for i in s.split(',') if i.strip().isdigit()]
+
+            project_dto.member_ids = str_to_ids(raw_results['participants_ids'])
+            project_dto.admin_ids = str_to_ids(raw_results['admins_ids'])
+
+            # 5. Отправляем ОБЪЕКТ DTO в сервис
+            if self.project_service.update_project(project_id, project_dto):
+                self.refresh_projects_view()
+                QMessageBox.information(self, "Успех", "Проект обновлен")
+
+
     def resizeEvent(self, event):
         """Обработка изменения размера окна для адаптивности"""
         super().resizeEvent(event)
@@ -434,6 +412,8 @@ class MainWindow(QMainWindow):
 
     def adjust_card_columns(self):
         """Настройка количества колонок в зависимости от ширины окна"""
+        if not hasattr(self, 'project_cards') or not self.project_cards:
+            return
         grid = self.projectsGrid
         width = self.scrollAreaWidgetContents.width() if self.scrollAreaWidgetContents else 0
 
@@ -447,58 +427,57 @@ class MainWindow(QMainWindow):
         else:
             columns = 1
 
-        if columns != self.current_columns or grid.count() == 0:
-            # Очищаем grid
+        # Перестраиваем сетку только если число колонок изменилось
+        if columns != self.current_columns:
+            self.current_columns = columns
+
+            # 1. Удаляем все элементы из сетки (не удаляя сами виджеты!)
             while grid.count():
                 item = grid.takeAt(0)
-                if item.widget():
-                    item.widget().setParent(None)
+                if isinstance(item, QSpacerItem):
+                    del item  # удаляем только спейсеры
 
-            # Добавляем карточки заново
+            # 2. Раскладываем карточки по новым позициям
             for i, card in enumerate(self.project_cards):
-                row = i // columns
-                col = i % columns
+                row, col = divmod(i, columns)
                 grid.addWidget(card, row, col)
 
-            # Добавляем вертикальный спейсер в конце для выравнивания сверху
-            rows = (len(self.project_cards) + columns - 1) // columns
-            spacer = QSpacerItem(20, 40, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Expanding)
-            grid.addItem(spacer, rows, 0, 1, columns)
-
-            self.current_columns = columns
+            # 3. Добавляем "пружину" (spacer) вниз, чтобы карточки были прижаты к верху
+            last_row = (len(self.project_cards) + columns - 1) // columns
+            grid.addItem(
+                QSpacerItem(20, 40, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Expanding),
+                last_row, 0, 1, columns
+            )
 
     def create_project(self):
         """Открыть диалог создания нового проекта"""
+        from windows.projects.project_creation_dialog import ProjectCreationDialog
         dialog = ProjectCreationDialog(self)
 
         if dialog.exec() == QDialog.DialogCode.Accepted:
-            project = dialog.get_project_data()
-            print("Проект создан:", project)
+            raw_data = dialog.get_project_data()
 
-            # Здесь можно добавить:
-            # - Сохранение в БД
-            # - Обновление списка проектов
-            # - Показ уведомления
-            # - Открытие созданного проекта
-
-            from PyQt6.QtWidgets import QMessageBox
-            QMessageBox.information(
-                self,
-                "Проект создан",
-                f"Проект '{project['name']}' успешно создан!"
+            # Передаем наш ID в сервис
+            new_project_dto = self.project_service.create_new_project(
+                raw_data,
+                creator_id=self.current_user_id
             )
 
+            if new_project_dto:
+                # Обновляем список карточек на главном экране
+                self.refresh_projects_view()
 
-    def refresh_projects_list(self, new_project=None):
-        """Обновление списка проектов после создания"""
-        if new_project:
-            # Добавление нового проекта в список
-            # Здесь должен быть код для динамического добавления карточки проекта
-            print(f"Добавление проекта '{new_project['name']}' в список")
+                QMessageBox.information(
+                    self,
+                    "Успех",
+                    f"Проект '{new_project_dto.name}' успешно создан!\n"
+                    f"Созданы стандартные колонки задач и добавлено участников: {len(new_project_dto.member_ids)}"
+                )
 
-            # Можно вызвать метод для перезагрузки всех проектов
-            # self.load_projects()
-            pass
+                # Опционально: можно сразу открыть созданный проект
+                # self.open_project_detail(new_project_dto.id)
+            else:
+                QMessageBox.critical(self, "Ошибка", "Не удалось создать проект в базе данных.")
 
     def toggle_left_panel(self):
         """Свернуть/развернуть левую панель"""
@@ -562,53 +541,30 @@ class MainWindow(QMainWindow):
                 """)
 
     def open_project(self, project_id):
-        """Открыть проект по ID"""
-        print(f"Открытие проекта {project_id}...")
-
-        # Здесь можно загрузить данные проекта из базы данных
-        # Для примера создаем тестовые данные
-        project_data = {
-            'id': project_id,
-            'name': f'Проект #{project_id}: Разработка новой CRM системы',
-            'description': 'Проект по созданию современной CRM системы для отдела продаж с интеграцией существующих сервисов и аналитикой в реальном времени. Включает модули управления контактами, сделками, задачами и отчетами.',
-            'status': 'Активен',
-            'start_date': '01.02.2024',
-            'end_date': '30.06.2024',
-            'progress': 45,
-            'admins': [
-                'Иванов Иван Иванович (Руководитель проекта)',
-                'Петрова Анна Сергеевна (Технический директор)',
-                'Сидоров Алексей Владимирович (Ведущий разработчик)'
-            ],
-            'participants': [
-                'Кузнецова Елена Павловна (Аналитик)',
-                'Васильев Дмитрий Николаевич (Backend-разработчик)',
-                'Михайлова Ольга Андреевна (Frontend-разработчик)',
-                'Новиков Павел Игоревич (Тестировщик)',
-                'Соколова Татьяна Валерьевна (Дизайнер)',
-                'Морозов Артем Викторович (DevOps)',
-                'Волкова Наталья Сергеевна (Project Manager)',
-                'Козлов Максим Денисович (Аналитик данных)'
-            ]
-        }
-
-        # Создаем страницу проекта
+        """Переход на страницу проекта (Канбан-доска)"""
         from windows.projects.project_view_page import ProjectViewPage
-        self.project_view_page = ProjectViewPage(project_data)
+        # Мы передаем сервис, чтобы страница могла сама вызывать get_project_board_data
+        # Это чище, чем передавать готовое DTO, которое может устареть
+        project_page = ProjectViewPage(
+            session=self.session,
+            project_id=project_id,
+            service=self.project_service,
+            parent=self
+        )
 
-        # Добавляем в стек контента
-        self.contentStack.addWidget(self.project_view_page)
-
-        # Переключаемся на страницу проекта
-        self.contentStack.setCurrentWidget(self.project_view_page)
+        self.contentStack.addWidget(project_page)
+        self.contentStack.setCurrentWidget(project_page)
 
     def search_projects(self, text):
-        """Поиск проектов"""
-        print(f"Поиск: {text}")
+        """Вызывается при изменении текста в поле поиска"""
+        self.current_search_query = text
+        # Каждый раз перерисовываем карточки с учетом нового текста
+        self.refresh_projects_view()
 
     def filter_projects(self, filter_text):
-        """Фильтрация проектов"""
-        print(f"Фильтр: {filter_text}")
+        """Вызывается при выборе фильтра (Все, Активные, Архив)"""
+        self.current_status_filter = filter_text
+        self.refresh_projects_view()
 
     def show_notifications(self):
         """Показать уведомления"""

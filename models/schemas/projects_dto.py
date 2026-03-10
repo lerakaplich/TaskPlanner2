@@ -2,6 +2,8 @@ from datetime import datetime, time
 from typing import Optional, List
 from pydantic import BaseModel, ConfigDict
 
+from models.schemas.tasks_dto import BoardColumnDTO, TaskCardDTO
+
 
 # =========================
 # Базовый DTO проекта
@@ -23,7 +25,8 @@ class ProjectDTO(BaseModel):
 # DTO проекта с участниками
 # =========================
 class ProjectWithMembersDTO(ProjectDTO):
-    members: List[int] = []  # список employee_id
+    member_ids: List[int] = []  # Все участники (включая админов)
+    admin_ids: List[int] = []  # Только те, у кого есть флаг is_admin
     is_admin: Optional[bool] = None
 
 
@@ -50,3 +53,11 @@ class ProjectAnalyticsDTO(BaseModel):
     completed_tasks: int
     overdue_tasks: int
     high_priority_tasks: int
+
+# В файле схем проектов/задач
+class BoardColumnWithTasksDTO(BoardColumnDTO):
+    tasks: List[TaskCardDTO] = []
+
+class ProjectBoardDTO(BaseModel):
+    project: ProjectWithMembersDTO
+    columns: List[BoardColumnWithTasksDTO]

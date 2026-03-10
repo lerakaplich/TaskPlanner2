@@ -79,3 +79,13 @@ class ProjectRepo:
             EmployeeProject.employee_id == employee_id
         )
         self.session.execute(stmt)
+
+    def update_member_role(self, project_id: int, employee_id: int, is_admin: bool):
+        """Обновляет только роль участника в проекте"""
+        stmt = (
+            update(EmployeeProject)
+            .where(EmployeeProject.project_id == project_id)
+            .where(EmployeeProject.employee_id == employee_id)
+            .values(is_admin=is_admin)
+        )
+        self.session.execute(stmt)

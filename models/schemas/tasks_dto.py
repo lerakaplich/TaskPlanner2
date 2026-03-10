@@ -1,6 +1,6 @@
 from datetime import datetime
 from typing import Optional, List
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, field_validator
 from enum import Enum
 
 
@@ -42,6 +42,14 @@ class TaskCardDTO(BaseModel):
     deadline: Optional[datetime]
     assigned_to_name: Optional[str]
     is_overdue: bool
+
+    @field_validator('priority', mode='before')
+    @classmethod
+    def parse_priority(cls, v):
+        # Если пришел объект SQLAlchemy Enum, берем его значение
+        if hasattr(v, 'value'):
+            return v.value
+        return v
 
 
 # =========================
