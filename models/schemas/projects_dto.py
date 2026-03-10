@@ -41,12 +41,12 @@ class ProjectCardDTO(BaseModel):
     description: Optional[str]
     tasks_total: int
     tasks_done: int
-    deadline: Optional[time]
     is_archived: bool
-    # 👇 ДОБАВЛЯЕМ поля для отображения участников
     member_count: int = 0  # Количество участников
     admin_count: int = 0   # Количество администраторов
-
+    owner_name: str = "Не назначен"
+    owner_id: Optional[int] = None
+    created_at: Optional[str] = None
 
 # =========================
 # DTO для аналитики

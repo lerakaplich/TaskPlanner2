@@ -41,8 +41,6 @@ class ProjectCard(QFrame):
         self.setSizePolicy(self.sizePolicy().Policy.Expanding,
                            self.sizePolicy().Policy.Fixed)
 
-    # windows/projects/project_card.py
-
     def update_data(self, project_data):
         """Обновление данных карточки"""
         self.projectTitle.setText(project_data.name if project_data.name else '')
@@ -54,46 +52,23 @@ class ProjectCard(QFrame):
             progress = 0
         self.progressBar.setValue(progress)
 
-        # Владелец - пока нет в DTO, можно добавить позже или показывать заглушку
-        owner = getattr(project_data, 'owner', 'Не назначен')
-        self.projectInfo.setText(f"Владелец: {owner}")
+        # 👇 ИСПРАВЛЕНО: отображаем владельца
+        owner_name = getattr(project_data, 'owner_name', 'Не назначен')
+        self.projectInfo.setText(f"👤 Владелец: {owner_name}")
 
-        # Дата старта - пока нет в DTO
-        start_date = getattr(project_data, 'start_date', '')
-        if start_date:
-            self.startDate.setText(f"Старт: {start_date}")
+        # 👇 ДОБАВЛЯЕМ дату создания проекта
+        created_at = getattr(project_data, 'created_at', None)
+        if created_at:
+            self.startDate.setText(f"📅 Создан: {created_at}")
         else:
             self.startDate.setText("")
 
-        # 👇 ИСПРАВЛЕНО: отображаем участников из новых полей
+        # Отображаем участников
         member_count = getattr(project_data, 'member_count', 0)
         participants_text = f"👥 Участники: {member_count} чел."
         self.participants.setText(participants_text)
 
-        # 👇 ИСПРАВЛЕНО: отображаем администраторов из новых полей
+        # Отображаем администраторов
         admin_count = getattr(project_data, 'admin_count', 0)
         admins_text = f"👑 Админы: {admin_count} чел."
         self.admins.setText(admins_text)
-
-        # Дедлайн
-        deadline = project_data.deadline
-        if deadline:
-            deadline_str = deadline.strftime("%H:%M") if hasattr(deadline, 'strftime') else str(deadline)
-            self.deadline.setText(f"До {deadline_str}")
-
-            # Подсветка критических дедлайнов
-            is_critical = getattr(project_data, 'is_critical', False)
-            if is_critical:
-                self.deadline.setStyleSheet(
-                    "font-size: 11px; color: #D22730; "
-                    "padding: 4px 8px; background-color: #FFEEEE; "
-                    "border-radius: 4px;"
-                )
-            else:
-                self.deadline.setStyleSheet(
-                    "font-size: 11px; color: #666; "
-                    "padding: 4px 8px; background-color: #F0F0F0; "
-                    "border-radius: 4px;"
-                )
-        else:
-            self.deadline.setText("")

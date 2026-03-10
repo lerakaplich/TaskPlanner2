@@ -32,6 +32,7 @@ class MainWindow(QMainWindow):
         self.session = session
         self.current_search_query = ""
         self.current_status_filter = "Все"
+        self.current_owner_filter = False
         self.current_columns = -1
         self.project_cards = []
 
@@ -164,10 +165,10 @@ class MainWindow(QMainWindow):
         # Мы передаем текущие значения фильтров, которые обновились
         # в методах search_projects и filter_projects
         try:
-            # Сервис возвращает List[ProjectCardDTO]
             projects_dtos = self.project_service.get_projects_for_cards(
                 search_query=self.current_search_query,
-                status_filter=self.current_status_filter
+                status_filter=self.current_status_filter,
+                owner_filter=self.current_owner_filter  # 👈 ДОБАВЛЯЕМ
             )
         except Exception as e:
             print(f"Критическая ошибка при загрузке проектов: {e}")
@@ -232,8 +233,8 @@ class MainWindow(QMainWindow):
         if hasattr(self, 'searchInput'):
             self.searchInput.textChanged.connect(self.search_projects)
 
-        # Фильтр: срабатывает при выборе нового значения в выпадающем списке
         if hasattr(self, 'filterCombo'):
+            # 👈 ИСПРАВЛЕНО: передаем текст, а не индекс
             self.filterCombo.currentTextChanged.connect(self.filter_projects)
 
         # ==========================================
@@ -601,8 +602,16 @@ class MainWindow(QMainWindow):
         self.refresh_projects_view()
 
     def filter_projects(self, filter_text):
-        """Вызывается при выборе фильтра (Все, Активные, Архив)"""
-        self.current_status_filter = filter_text
+        """Вызывается при выборе фильтра (Все, Активные, Архив, Мои проекты)"""
+        print(f"📊 Выбран фильтр: {filter_text}")  # 👈 ОТЛАДКА
+
+        if filter_text == "Мои проекты":
+            self.current_owner_filter = True
+            self.current_status_filter = "Все"  # Сбрасываем статусный фильтр
+        else:
+            self.current_owner_filter = False
+            self.current_status_filter = filter_text
+
         self.refresh_projects_view()
 
     def show_notifications(self):

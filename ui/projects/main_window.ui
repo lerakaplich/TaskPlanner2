@@ -135,10 +135,7 @@ QLabel.projectParticipants {
 }</string>
       </property>
       <property name="frameShape">
-       <enum>QFrame::Shape::StyledPanel</enum>
-      </property>
-      <property name="frameShadow">
-       <enum>QFrame::Shadow::Raised</enum>
+       <enum>QFrame::NoFrame</enum>
       </property>
      </widget>
     </item>
@@ -146,6 +143,12 @@ QLabel.projectParticipants {
      <layout class="QVBoxLayout" name="verticalLayout">
       <item>
        <widget class="QFrame" name="topPanel">
+        <property name="maximumSize">
+         <size>
+          <width>16777215</width>
+          <height>66</height>
+         </size>
+        </property>
         <property name="styleSheet">
          <string notr="true">QFrame#topPanel {
     background-color: white;
@@ -154,10 +157,7 @@ QLabel.projectParticipants {
 }</string>
         </property>
         <property name="frameShape">
-         <enum>QFrame::Shape::StyledPanel</enum>
-        </property>
-        <property name="frameShadow">
-         <enum>QFrame::Shadow::Raised</enum>
+         <enum>QFrame::NoFrame</enum>
         </property>
         <layout class="QHBoxLayout" name="horizontalLayout_2">
          <item>
@@ -202,7 +202,7 @@ QPushButton:hover {
          <item>
           <spacer name="horizontalSpacer_4">
            <property name="orientation">
-            <enum>Qt::Orientation::Horizontal</enum>
+            <enum>Qt::Vertical</enum>
            </property>
            <property name="sizeHint" stdset="0">
             <size>
@@ -246,6 +246,12 @@ QPushButton:hover {
          <layout class="QVBoxLayout" name="verticalLayout_3">
           <item>
            <widget class="QFrame" name="projectsHeader">
+            <property name="maximumSize">
+             <size>
+              <width>16777215</width>
+              <height>59</height>
+             </size>
+            </property>
             <layout class="QHBoxLayout" name="horizontalLayout_3">
              <item>
               <widget class="QLabel" name="label_2">
@@ -264,7 +270,7 @@ QPushButton:hover {
              <item>
               <spacer name="horizontalSpacer">
                <property name="orientation">
-                <enum>Qt::Orientation::Horizontal</enum>
+                <enum>Qt::Vertical</enum>
                </property>
                <property name="sizeHint" stdset="0">
                 <size>
@@ -276,6 +282,12 @@ QPushButton:hover {
              </item>
              <item>
               <widget class="QComboBox" name="filterCombo">
+               <property name="maximumSize">
+                <size>
+                 <width>204</width>
+                 <height>16777215</height>
+                </size>
+               </property>
                <property name="styleSheet">
                 <string notr="true">QComboBox {
     border: 2px solid #E0E0E0;
@@ -302,18 +314,13 @@ QComboBox::drop-down {
                  <string>Мои проекты</string>
                 </property>
                </item>
-               <item>
-                <property name="text">
-                 <string>Редактирую</string>
-                </property>
-               </item>
               </widget>
              </item>
              <item>
               <widget class="QPushButton" name="btnCreateProject">
                <property name="maximumSize">
                 <size>
-                 <width>16777215</width>
+                 <width>185</width>
                  <height>41</height>
                 </size>
                </property>
