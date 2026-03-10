@@ -43,12 +43,6 @@ class TaskCard(QFrame):
     def fill_ui(self):
         """Заполнение карточки готовыми данными"""
 
-        print(f"=== ДИАГНОСТИКА КАРТОЧКИ ===")
-        print(f"task_data keys: {self.task_data.keys()}")
-        print(f"priority: {self.task_data.get('priority')}")
-        print(f"priority_text: {self.task_data.get('priority_text')}")
-        print(f"priority_color: {self.task_data.get('priority_color')}")
-
         self.taskTitleLabel.setText(self.task_data.get("title", ""))
 
         self.projectButton.setText(self.task_data.get("project_name", ""))

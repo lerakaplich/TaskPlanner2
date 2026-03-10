@@ -36,15 +36,11 @@ class TaskRepo:
             query = query.options(joinedload(Task.column))
         return self.session.scalar(query)
 
+    # repositories/task_repo.py
+
     def get_by_column(self, column_id: int) -> List[Task]:
-        """Получает все задачи в конкретной колонке, отсортированные по позиции"""
-        stmt = (
-            select(Task)
-            .where(Task.column_id == column_id)
-            .order_by(Task.position)
-            # Подгружаем теги сразу, чтобы не делать N+1 запросов при отрисовке карточек
-            .options(joinedload(Task.tags))
-        )
+        """Получить все задачи в колонке"""
+        stmt = select(Task).where(Task.column_id == column_id)
         return list(self.session.scalars(stmt))
 
     def get_by_project(self, project_id: int, load_column: bool = True) -> List[Task]:

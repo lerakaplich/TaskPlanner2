@@ -2,7 +2,7 @@ from typing import Optional, List
 from sqlalchemy.orm import Session
 from sqlalchemy import select, update, delete
 
-from models.employees import EmployeeData, RoleEnum
+from models.employees import EmployeeData, RoleEnum, ExternalEmployee
 
 
 class EmployeeRepo:
@@ -17,8 +17,9 @@ class EmployeeRepo:
         stmt = select(EmployeeData).where(EmployeeData.employee_id == employee_id)
         return self.session.scalar(stmt)
 
-    def get_all(self) -> List[EmployeeData]:
-        stmt = select(EmployeeData)
+    def get_all(self) -> List[ExternalEmployee]:
+        """Получить всех сотрудников из внешней БД"""
+        stmt = select(ExternalEmployee).order_by(ExternalEmployee.last_name)
         return list(self.session.scalars(stmt))
 
     # =========================

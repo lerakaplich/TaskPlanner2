@@ -1,9 +1,15 @@
+# windows/projects/employee_selector.py
+
 import os
 import sys
 from typing import List, Dict, Optional, Set
 from PyQt6 import uic
 from PyQt6.QtWidgets import QDialog, QApplication, QVBoxLayout, QCheckBox, QWidget, QLabel
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal
+
+from database import get_tasks_session
+from models.employees import ExternalEmployee
+from sqlalchemy import select
 
 
 class EmployeeSelectorDialog(QDialog):
@@ -39,12 +45,48 @@ class EmployeeSelectorDialog(QDialog):
         self.selectBtn.clicked.connect(self.accept)
 
         # Инициализация
-        self.load_test_data()
+        self.load_employees_from_db()  # 👈 Загружаем реальных сотрудников
         self.load_departments()
         self.selected_employees.clear()
 
         # Принудительно показываем всех сотрудников сразу
         QTimer.singleShot(0, self.apply_filters)
+
+    def load_employees_from_db(self):
+        """Загрузка реальных сотрудников из БД"""
+        try:
+            session = get_tasks_session()
+            stmt = select(ExternalEmployee).order_by(ExternalEmployee.last_name)
+            employees = session.scalars(stmt).all()
+
+            self.all_employees = []
+            for emp in employees:
+                # Определяем отдел (пока заглушка, потом можно добавить из БД)
+                department = "IT"
+                if emp.position and "директор" in emp.position.lower():
+                    department = "Руководство"
+                elif emp.position and "менеджер" in emp.position.lower():
+                    department = "Управление проектами"
+
+                self.all_employees.append({
+                    'id': emp.id,
+                    'last_name': emp.last_name,
+                    'first_name': emp.first_name,
+                    'middle_name': emp.middle_name or '',
+                    'position': emp.position or 'Сотрудник',
+                    'department': department,
+                    'sub_department': '',
+                    'phone': emp.phone_number or '',
+                    'is_admin': emp.rights == 'superadmin' if emp.rights else False
+                })
+
+            print(f"✅ Загружено {len(self.all_employees)} сотрудников из БД")
+            session.close()
+
+        except Exception as e:
+            print(f"❌ Ошибка загрузки сотрудников из БД: {e}")
+            # Если не удалось загрузить, используем тестовые данные
+            self.load_test_data()
 
     def load_departments(self):
         """Загрузка отделов БЕЗ лишних сигналов"""
@@ -72,190 +114,43 @@ class EmployeeSelectorDialog(QDialog):
         QTimer.singleShot(0, self.apply_filters)
 
     def load_test_data(self):
-        """Загрузка тестовых данных о сотрудниках"""
+        """Загрузка тестовых данных о сотрудниках (резервный вариант)"""
         self.all_employees = [
             {
                 'id': 1,
-                'last_name': 'Иванов',
-                'first_name': 'Иван',
-                'middle_name': 'Иванович',
-                'position': 'Генеральный директор',
+                'last_name': 'Копейкина',
+                'first_name': 'Виктория',
+                'middle_name': 'Анатольевна',
+                'position': 'Руководитель',
                 'department': 'Руководство',
                 'sub_department': '',
-                'phone': '+7 (999) 123-45-67',
+                'phone': '+375 44 574-24-34',
                 'is_admin': True
             },
             {
                 'id': 2,
-                'last_name': 'Петров',
-                'first_name': 'Петр',
-                'middle_name': 'Петрович',
-                'position': 'Технический директор',
-                'department': 'Руководство',
-                'sub_department': '',
-                'phone': '+7 (999) 234-56-78',
-                'is_admin': True
-            },
-            {
-                'id': 3,
-                'last_name': 'Сидорова',
-                'first_name': 'Анна',
-                'middle_name': 'Сергеевна',
-                'position': 'Ведущий разработчик',
-                'department': 'IT',
-                'sub_department': 'Разработка',
-                'phone': '+7 (999) 345-67-89',
-                'is_admin': False
-            },
-            {
-                'id': 4,
-                'last_name': 'Козлов',
-                'first_name': 'Дмитрий',
-                'middle_name': 'Алексеевич',
+                'last_name': 'Каплич',
+                'first_name': 'Валерия',
+                'middle_name': 'Александровна',
                 'position': 'Разработчик',
                 'department': 'IT',
                 'sub_department': 'Разработка',
-                'phone': '+7 (999) 456-78-90',
+                'phone': '+375 29 523-30-26',
                 'is_admin': False
             },
             {
-                'id': 5,
-                'last_name': 'Морозова',
+                'id': 3,
+                'last_name': 'Шершнева',
                 'first_name': 'Елена',
-                'middle_name': 'Владимировна',
-                'position': 'Тестировщик',
-                'department': 'IT',
-                'sub_department': 'Тестирование',
-                'phone': '+7 (999) 567-89-01',
-                'is_admin': False
-            },
-            {
-                'id': 6,
-                'last_name': 'Волков',
-                'first_name': 'Александр',
-                'middle_name': 'Игоревич',
-                'position': 'Системный администратор',
-                'department': 'IT',
-                'sub_department': 'Инфраструктура',
-                'phone': '+7 (999) 678-90-12',
-                'is_admin': False
-            },
-            {
-                'id': 7,
-                'last_name': 'Соколова',
-                'first_name': 'Мария',
-                'middle_name': 'Дмитриевна',
-                'position': 'Менеджер проектов',
-                'department': 'Управление проектами',
-                'sub_department': '',
-                'phone': '+7 (999) 789-01-23',
-                'is_admin': True
-            },
-            {
-                'id': 8,
-                'last_name': 'Лебедев',
-                'first_name': 'Андрей',
-                'middle_name': 'Николаевич',
+                'middle_name': 'Сергеевна',
                 'position': 'Аналитик',
                 'department': 'Управление проектами',
                 'sub_department': 'Аналитика',
-                'phone': '+7 (999) 890-12-34',
-                'is_admin': False
-            },
-            {
-                'id': 9,
-                'last_name': 'Новикова',
-                'first_name': 'Татьяна',
-                'middle_name': 'Александровна',
-                'position': 'Дизайнер',
-                'department': 'Маркетинг',
-                'sub_department': 'Дизайн',
-                'phone': '+7 (999) 901-23-45',
-                'is_admin': False
-            },
-            {
-                'id': 10,
-                'last_name': 'Федоров',
-                'first_name': 'Максим',
-                'middle_name': 'Олегович',
-                'position': 'Маркетолог',
-                'department': 'Маркетинг',
-                'sub_department': 'Продвижение',
-                'phone': '+7 (999) 012-34-56',
-                'is_admin': False
-            },
-            {
-                'id': 11,
-                'last_name': 'Михайлов',
-                'first_name': 'Михаил',
-                'middle_name': 'Михайлович',
-                'position': 'HR-менеджер',
-                'department': 'HR',
-                'sub_department': '',
-                'phone': '+7 (999) 123-45-67',
-                'is_admin': False
-            },
-            {
-                'id': 12,
-                'last_name': 'Алексеева',
-                'first_name': 'Наталья',
-                'middle_name': 'Павловна',
-                'position': 'Бухгалтер',
-                'department': 'Финансы',
-                'sub_department': 'Бухгалтерия',
-                'phone': '+7 (999) 234-56-78',
-                'is_admin': False
-            },
-            {
-                'id': 13,
-                'last_name': 'Григорьев',
-                'first_name': 'Сергей',
-                'middle_name': 'Викторович',
-                'position': 'Финансовый аналитик',
-                'department': 'Финансы',
-                'sub_department': 'Аналитика',
-                'phone': '+7 (999) 345-67-89',
-                'is_admin': False
-            },
-            {
-                'id': 14,
-                'last_name': 'Васильева',
-                'first_name': 'Ольга',
-                'middle_name': 'Ивановна',
-                'position': 'Секретарь',
-                'department': 'Администрация',
-                'sub_department': '',
-                'phone': '+7 (999) 456-78-90',
-                'is_admin': False
-            },
-            {
-                'id': 15,
-                'last_name': 'Павлов',
-                'first_name': 'Денис',
-                'middle_name': 'Сергеевич',
-                'position': 'DevOps-инженер',
-                'department': 'IT',
-                'sub_department': 'Инфраструктура',
-                'phone': '+7 (999) 567-89-01',
+                'phone': '+375 29 792-27-24',
                 'is_admin': False
             }
         ]
-
-
-    # 2. В методе on_select_all_changed
-    def on_select_all_changed(self, state):
-        """Обработка изменения состояния чекбокса 'Выбрать всех'"""
-        if state == Qt.CheckState.Checked:  # ← исправлено
-            for emp in self.filtered_employees:
-                self.selected_employees.add(emp['id'])
-            for checkbox, emp in zip(self.checkboxes, self.filtered_employees):
-                checkbox.setChecked(True)
-        elif state == Qt.CheckState.Unchecked:  # ← исправлено
-            for emp in self.filtered_employees:
-                self.selected_employees.discard(emp['id'])
-            for checkbox in self.checkboxes:
-                checkbox.setChecked(False)
-        self.update_selected_count()
+        print("⚠️ Используются тестовые данные сотрудников")
 
     def load_sub_departments(self, department):
         """Загрузка подразделений"""
@@ -316,6 +211,8 @@ class EmployeeSelectorDialog(QDialog):
 
         self.display_employees()
 
+    # windows/projects/employee_selector.py
+
     def display_employees(self):
         """Отображение отфильтрованных сотрудников с чекбоксами"""
         layout = self.scrollAreaWidgetContents.layout()
@@ -363,9 +260,9 @@ class EmployeeSelectorDialog(QDialog):
             if emp['id'] in self.selected_employees:
                 checkbox.setChecked(True)
 
-            checkbox.stateChanged.connect(
-                lambda checked, eid=emp['id']: self._handle_checkbox(eid, checked)
-            )
+            # 👈 ИСПРАВЛЕНО: используем partial из functools
+            from functools import partial
+            checkbox.stateChanged.connect(partial(self._on_checkbox_changed, emp['id']))
 
             layout.addWidget(checkbox)
             self.checkboxes.append(checkbox)
@@ -373,12 +270,16 @@ class EmployeeSelectorDialog(QDialog):
         layout.addStretch()
         self.update_selected_count()
 
-    def _handle_checkbox(self, emp_id: int, state):
-        """Простой обработчик для одного чекбокса"""
-        if state == Qt.CheckState.Checked:
+    def _on_checkbox_changed(self, emp_id: int, state):
+        """Обработчик изменения состояния чекбокса"""
+        print(f"📊 Чекбокс изменен: ID={emp_id}, state={state}")  # 👈 ОТЛАДКА
+
+        if state == Qt.CheckState.Checked.value:  # 👈 ИСПРАВЛЕНО: используем .value
             self.selected_employees.add(emp_id)
-        else:
+            print(f"✅ Добавлен ID: {emp_id}")
+        elif state == Qt.CheckState.Unchecked.value:  # 👈 ИСПРАВЛЕНО: используем .value
             self.selected_employees.discard(emp_id)
+            print(f"❌ Удален ID: {emp_id}")
 
         self.update_selected_count()
         self._update_select_all_state()
@@ -389,35 +290,25 @@ class EmployeeSelectorDialog(QDialog):
         elif self.selectAllCheckBox.checkState() == Qt.CheckState.Checked:
             self.selectAllCheckBox.setCheckState(Qt.CheckState.Unchecked)
 
-    def on_checkbox_state_changed(self, state):
-        """Обработка изменения состояния любого чекбокса"""
-        checkbox = self.sender()
-        if checkbox is None:
-            return
-
-        emp_id = self.employee_checkbox_map.get(checkbox)
-        if emp_id is None:
-            return
-
-        # ИСПРАВЛЕНО
+    def on_select_all_changed(self, state):
+        """Обработка изменения состояния чекбокса 'Выбрать всех'"""
         if state == Qt.CheckState.Checked:
-            self.selected_employees.add(emp_id)
-        else:
-            self.selected_employees.discard(emp_id)
-
+            for emp in self.filtered_employees:
+                self.selected_employees.add(emp['id'])
+            for checkbox in self.checkboxes:
+                checkbox.setChecked(True)
+        elif state == Qt.CheckState.Unchecked:
+            for emp in self.filtered_employees:
+                self.selected_employees.discard(emp['id'])
+            for checkbox in self.checkboxes:
+                checkbox.setChecked(False)
         self.update_selected_count()
-
-        # Обновляем "Выбрать всех"
-        if len(self.selected_employees) == len(self.filtered_employees):
-            self.selectAllCheckBox.setCheckState(Qt.CheckState.Checked)
-        elif self.selectAllCheckBox.checkState() == Qt.CheckState.Checked:
-            self.selectAllCheckBox.setCheckState(Qt.CheckState.Unchecked)
-
 
     def update_selected_count(self):
         """Обновление счетчика выбранных сотрудников"""
         count = len(self.selected_employees)
         self.selectedCountLabel.setText(f"Выбрано: {count}")
+        print(f"📊 Выбрано сотрудников: {count}, IDs: {sorted(self.selected_employees)}")  # 👈 ОТЛАДКА
 
     def get_selected_employees(self) -> List[Dict]:
         """Получение списка выбранных сотрудников с полной информацией"""
@@ -440,23 +331,3 @@ class EmployeeSelectorDialog(QDialog):
         """Переопределяем accept для возврата данных"""
         self.employees_selected.emit(self.get_selected_employees())
         super().accept()
-
-
-# Для тестирования
-if __name__ == "__main__":
-    app = QApplication(sys.argv)
-    app.setStyle("Fusion")
-
-    # Создаем диалог в режиме выбора участников
-    dialog = EmployeeSelectorDialog(mode="participants")
-
-    # Можно предустановить выбранных сотрудников (например, Иванова и Петрова)
-    # dialog.set_preselected([1, 2])
-
-    if dialog.exec() == QDialog.DialogCode.Accepted:
-        selected = dialog.get_selected_employees()
-        print("Выбраны сотрудники:")
-        for emp in selected:
-            print(f"- {emp['last_name']} {emp['first_name']} (ID: {emp['id']}, Отдел: {emp['department']})")
-
-    sys.exit(app.exec())

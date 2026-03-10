@@ -371,12 +371,54 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "Ошибка", "Проект не найден")
             return
 
-        # 2. Превращаем DTO в словарь для диалога (совместимость с вашим UI)
-        # Важно: ваши диалоги ждут ключи 'participants' и 'admins'
-        dialog_data = project_dto.model_dump()
-        dialog_data['participants'] = project_dto.member_ids
-        dialog_data['admins'] = project_dto.admin_ids
-        dialog_data['is_active'] = not project_dto.is_archived
+        # 2. Создаем словарь для диалога с полной информацией о сотрудниках
+        from database import get_tasks_session
+        from models.employees import ExternalEmployee
+        from sqlalchemy import select
+
+        session = get_tasks_session()
+
+        # Загружаем полные данные участников
+        participants_full = []
+        if project_dto.member_ids:
+            stmt = select(ExternalEmployee).where(ExternalEmployee.id.in_(project_dto.member_ids))
+            employees = session.scalars(stmt).all()
+            for emp in employees:
+                participants_full.append({
+                    'id': emp.id,
+                    'last_name': emp.last_name,
+                    'first_name': emp.first_name,
+                    'middle_name': emp.middle_name or '',
+                    'position': emp.position or 'Сотрудник'
+                })
+
+        # Загружаем полные данные администраторов
+        admins_full = []
+        if project_dto.admin_ids:
+            stmt = select(ExternalEmployee).where(ExternalEmployee.id.in_(project_dto.admin_ids))
+            employees = session.scalars(stmt).all()
+            for emp in employees:
+                admins_full.append({
+                    'id': emp.id,
+                    'last_name': emp.last_name,
+                    'first_name': emp.first_name,
+                    'middle_name': emp.middle_name or '',
+                    'position': emp.position or 'Сотрудник'
+                })
+
+        session.close()
+
+        dialog_data = {
+            'id': project_dto.id,
+            'name': project_dto.name,
+            'description': project_dto.description,
+            'is_active': not project_dto.is_archived,
+            'created_date': project_dto.created_at.strftime('%d.%m.%Y') if project_dto.created_at else '',
+            'participants': participants_full,  # 👈 Передаем полные данные
+            'admins': admins_full,  # 👈 Передаем полные данные
+            'participants_ids': project_dto.member_ids,
+            'admins_ids': project_dto.admin_ids
+        }
 
         dialog = ProjectEditDialog(dialog_data, parent=self)
 
@@ -384,20 +426,19 @@ class MainWindow(QMainWindow):
             # 3. Получаем словарь из диалога
             raw_results = dialog.get_project_data()
 
-            # 4. ОБНОВЛЯЕМ наш исходный DTO новыми данными
+            # 4. Обновляем DTO
             project_dto.name = raw_results['name']
             project_dto.description = raw_results['description']
             project_dto.is_archived = not raw_results.get('is_active', True)
 
             # Конвертируем строки "1,2,3" от диалога в списки [1, 2, 3]
             def str_to_ids(s):
-                # Безопасная конвертация "1, 2, 3" -> [1, 2, 3]
                 return [int(i.strip()) for i in s.split(',') if i.strip().isdigit()]
 
             project_dto.member_ids = str_to_ids(raw_results['participants_ids'])
             project_dto.admin_ids = str_to_ids(raw_results['admins_ids'])
 
-            # 5. Отправляем ОБЪЕКТ DTO в сервис
+            # 5. Отправляем DTO в сервис
             if self.project_service.update_project(project_id, project_dto):
                 self.refresh_projects_view()
                 QMessageBox.information(self, "Успех", "Проект обновлен")

@@ -40,6 +40,8 @@ class ProjectCreationDialog(BaseProjectDialog):
         if self.validate_input():
             self.accept()
 
+    # windows/projects/project_creation_dialog.py
+
     def get_project_data(self):
         """Получить данные нового проекта"""
         data = self.get_common_data()
@@ -49,6 +51,15 @@ class ProjectCreationDialog(BaseProjectDialog):
             'id': None,  # ID будет присвоен при сохранении в БД
             'created_date': QDate.currentDate().toString("dd.MM.yyyy")
         })
+
+        # 👈 ДОБАВЛЯЕМ отладочный вывод
+        print("\n=== ДАННЫЕ ДЛЯ СОЗДАНИЯ ПРОЕКТА ===")
+        print(f"Название: {data['name']}")
+        print(f"Описание: {data['description']}")
+        print(f"Активен: {data['is_active']}")
+        print(f"Участники (ID): {data['participants_ids']}")
+        print(f"Администраторы (ID): {data['admins_ids']}")
+        print("=" * 40)
 
         return data
 

@@ -61,15 +61,52 @@ class BaseProjectDialog(QDialog):
         # Загружаем участников и администраторов
         self.load_participants_and_admins()
 
+    # windows/projects/project_edit_dialog.py
+
     def load_participants_and_admins(self):
         """Загрузка участников и администраторов из project_data"""
-        # Загружаем участников
-        participants_data = self.project_data.get('participants', [])
-        self.participants = self._normalize_employee_data(participants_data)
+        # Получаем ID участников и администраторов из DTO
+        if hasattr(self.project_data, 'member_ids'):
+            # Это DTO объект
+            member_ids = self.project_data.member_ids
+            admin_ids = self.project_data.admin_ids
 
-        # Загружаем администраторов
-        admins_data = self.project_data.get('admins', [])
-        self.admins = self._normalize_employee_data(admins_data)
+            # Загружаем полные данные сотрудников из БД
+            self.participants = []
+            self.admins = []
+
+            if member_ids:
+                from database import get_tasks_session
+                from models.employees import ExternalEmployee
+                from sqlalchemy import select
+
+                session = get_tasks_session()
+
+                # Загружаем участников
+                stmt = select(ExternalEmployee).where(ExternalEmployee.id.in_(member_ids))
+                employees = session.scalars(stmt).all()
+
+                for emp in employees:
+                    emp_dict = {
+                        'id': emp.id,
+                        'last_name': emp.last_name,
+                        'first_name': emp.first_name,
+                        'middle_name': emp.middle_name or '',
+                        'position': emp.position or 'Сотрудник',
+                        'phone': emp.phone_number or ''
+                    }
+                    self.participants.append(emp_dict)
+                    if emp.id in admin_ids:
+                        self.admins.append(emp_dict)
+
+                session.close()
+        else:
+            # Это словарь - используем старую логику
+            participants_data = self.project_data.get('participants', [])
+            self.participants = self._normalize_employee_data(participants_data)
+
+            admins_data = self.project_data.get('admins', [])
+            self.admins = self._normalize_employee_data(admins_data)
 
         self.update_participants_button_text()
         self.update_admins_button_text()

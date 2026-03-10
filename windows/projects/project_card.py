@@ -41,9 +41,10 @@ class ProjectCard(QFrame):
         self.setSizePolicy(self.sizePolicy().Policy.Expanding,
                            self.sizePolicy().Policy.Fixed)
 
+    # windows/projects/project_card.py
+
     def update_data(self, project_data):
         """Обновление данных карточки"""
-        # 👈 ИСПРАВЛЕНО: используем прямой доступ к атрибутам вместо .get()
         self.projectTitle.setText(project_data.name if project_data.name else '')
 
         # Прогресс вычисляем из задач
@@ -64,18 +65,19 @@ class ProjectCard(QFrame):
         else:
             self.startDate.setText("")
 
-        # Отображение участников - пока нет в DTO
-        participants_text = "👥 Участники: 0 чел."
+        # 👇 ИСПРАВЛЕНО: отображаем участников из новых полей
+        member_count = getattr(project_data, 'member_count', 0)
+        participants_text = f"👥 Участники: {member_count} чел."
         self.participants.setText(participants_text)
 
-        # Отображение администраторов
-        admins_text = "👑 Админы: 0 чел."
+        # 👇 ИСПРАВЛЕНО: отображаем администраторов из новых полей
+        admin_count = getattr(project_data, 'admin_count', 0)
+        admins_text = f"👑 Админы: {admin_count} чел."
         self.admins.setText(admins_text)
 
         # Дедлайн
         deadline = project_data.deadline
         if deadline:
-            # Форматируем time объект в строку
             deadline_str = deadline.strftime("%H:%M") if hasattr(deadline, 'strftime') else str(deadline)
             self.deadline.setText(f"До {deadline_str}")
 

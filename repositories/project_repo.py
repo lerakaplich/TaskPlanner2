@@ -1,5 +1,8 @@
+# repositories/project_repo.py
+
+from datetime import datetime
 from typing import Optional, List
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import select, update, delete
 
 from models.projects import Project, BoardColumn, EmployeeProject
@@ -16,8 +19,17 @@ class ProjectRepo:
     def get_by_id(self, project_id: int) -> Optional[Project]:
         return self.session.get(Project, project_id)
 
+    # repositories/project_repo.py
+
     def get_all(self) -> List[Project]:
-        return list(self.session.scalars(select(Project)))
+        """Получить все проекты с загрузкой участников"""
+        from sqlalchemy.orm import joinedload
+
+        stmt = select(Project).options(
+            joinedload(Project.members)
+        )
+        # 👈 ИСПРАВЛЕНО: добавляем .unique() для предотвращения дублирования
+        return list(self.session.scalars(stmt).unique())
 
     def create(self, **kwargs) -> Project:
         project = Project(**kwargs)
@@ -41,12 +53,15 @@ class ProjectRepo:
     # Columns
     # =========================
     def add_column(self, project_id: int, name: str, position: int) -> BoardColumn:
+        """Добавляет колонку в проект"""
         column = BoardColumn(
             project_id=project_id,
             name=name,
-            position=position
+            position=position,
+            created_at=datetime.now()
         )
         self.session.add(column)
+        self.session.flush()
         return column
 
     def delete_column(self, column_id: int):

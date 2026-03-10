@@ -1,8 +1,12 @@
+# windows/projects/project_view_page.py
+
 import os
+from typing import Dict
+
 from PyQt6 import uic
 from PyQt6.QtWidgets import (QListWidgetItem, QFrame, QVBoxLayout, QHBoxLayout,
                              QLabel, QPushButton, QListWidget, QProgressBar,
-                             QLineEdit, QWidget)
+                             QLineEdit, QWidget, QMessageBox)
 from PyQt6.QtCore import Qt, QDate, pyqtSignal
 
 from windows.other_tasks.others_tasks_page import OthersTasksPage
@@ -15,362 +19,173 @@ class ProjectViewPage(OthersTasksPage):
 
     projectUpdated = pyqtSignal()  # Сигнал при обновлении проекта
 
-    def __init__(self, project_data=None, parent=None):
+    def __init__(self, session=None, project_id=None, service=None, parent=None):
         """
         Инициализация страницы проекта
 
         Args:
-            project_data: dict с данными проекта {
-                'id': int,
-                'name': str,
-                'description': str,
-                'status': str,
-                'start_date': str,
-                'end_date': str,
-                'progress': int,
-                'admins': list,
-                'participants': list,
-                'tasks': list (опционально)
-            }
+            session: сессия БД
+            project_id: ID проекта
+            service: сервис проектов
+            parent: родительский виджет
         """
-        # Сохраняем данные проекта ДО вызова родительского конструктора
-        self.project_data = project_data or self.get_default_project_data()
+        self.project_id = project_id
+        self.project_service = service
+
+        # Получаем данные проекта из сервиса
+        if service and project_id:
+            self.project_data = service.get_project_for_edit(project_id)
+            if not self.project_data:
+                self.project_data = self.get_default_project_data()
+        else:
+            self.project_data = self.get_default_project_data()
+
+        # Создаем временного пользователя для OthersTasksPage
+        temp_user = {"id": 1, "last_name": "", "first_name": ""}
 
         # Вызываем родительский конструктор
-        super().__init__(parent)
+        super().__init__(parent=parent, current_user=temp_user, project_id=project_id or 2)
 
-        # Инициализируем состояние
-        self.members_visible = True
+        # Перенастраиваем UI для проекта
+        self.setup_project_ui()
 
-        # Настраиваем информацию о проекте
-        self.setup_project_info()
-        self.setup_members_lists()
-
-        # Подключаем сигналы
-        if hasattr(self, 'btnToggleMembers') and self.btnToggleMembers:
-            self.btnToggleMembers.clicked.connect(self.toggle_members_visibility)
-
-        # Переопределяем задачи для этого проекта
-        if 'tasks' in self.project_data and self.project_data['tasks']:
-            self.sample_tasks = self.project_data['tasks']
-        else:
-            # Создаем тестовые задачи для проекта
-            self.sample_tasks = self.create_project_tasks()
-
-        # Обновляем канбан-доску
-        self.refresh_tasks_board()
+        # Загружаем задачи проекта
+        self.load_project_tasks()
 
     def get_default_project_data(self):
         """Возвращает данные проекта по умолчанию"""
         return {
-            'id': 1,
-            'name': 'Разработка новой CRM системы',
-            'description': 'Проект по созданию современной CRM системы для отдела продаж с интеграцией существующих сервисов и аналитикой в реальном времени.',
+            'id': self.project_id or 1,
+            'name': f'Проект #{self.project_id or 1}',
+            'description': 'Описание проекта',
             'status': 'Активен',
-            'start_date': '01.02.2024',
-            'end_date': '30.06.2024',
-            'progress': 45,
-            'admins': [
-                'Иванов Иван Иванович (Руководитель проекта)',
-                'Петрова Анна Сергеевна (Технический директор)',
-                'Сидоров Алексей Владимирович (Ведущий разработчик)'
-            ],
-            'participants': [
-                'Кузнецова Елена Павловна (Аналитик)',
-                'Васильев Дмитрий Николаевич (Backend-разработчик)',
-                'Михайлова Ольга Андреевна (Frontend-разработчик)',
-                'Новиков Павел Игоревич (Тестировщик)',
-                'Соколова Татьяна Валерьевна (Дизайнер)',
-                'Морозов Артем Викторович (DevOps)',
-                'Волкова Наталья Сергеевна (Project Manager)',
-                'Козлов Максим Денисович (Аналитик данных)'
-            ]
+            'start_date': '01.01.2026',
+            'progress': 0
         }
 
-    def create_project_tasks(self):
-        """Создает тестовые задачи для проекта"""
-        return [
-            {
-                "id": 1,
-                "title": "Анализ требований к CRM",
-                "description": "Провести встречи с отделом продаж, собрать и задокументировать требования к системе",
-                "project": self.project_data['name'],
-                "creator": "Вы",
-                "assignee": "Кузнецова Елена Павловна",
-                "priority": "high",
-                "deadline": "15.02.2024",
-                "status": "done",
-                "created_at": "01.02.2024",
-                "updated_at": "10.02.2024",
-                "tags": [
-                    {"text": "Анализ", "type": "analysis"},
-                    {"text": "Документация", "type": "docs"}
-                ],
-                "completed": True
-            },
-            {
-                "id": 2,
-                "title": "Проектирование архитектуры БД",
-                "description": "Спроектировать структуру базы данных для CRM",
-                "project": self.project_data['name'],
-                "creator": "Вы",
-                "assignee": "Васильев Дмитрий Николаевич",
-                "priority": "high",
-                "deadline": "20.02.2024",
-                "status": "progress",
-                "created_at": "05.02.2024",
-                "updated_at": "15.02.2024",
-                "tags": [
-                    {"text": "Архитектура", "type": "architecture"},
-                    {"text": "База данных", "type": "database"}
-                ],
-                "completed": False
-            },
-            {
-                "id": 3,
-                "title": "Разработка макетов интерфейса",
-                "description": "Создать прототипы основных экранов CRM",
-                "project": self.project_data['name'],
-                "creator": "Вы",
-                "assignee": "Соколова Татьяна Валерьевна",
-                "priority": "medium",
-                "deadline": "25.02.2024",
-                "status": "review",
-                "created_at": "08.02.2024",
-                "updated_at": "18.02.2024",
-                "tags": [
-                    {"text": "Дизайн", "type": "design"},
-                    {"text": "UI/UX", "type": "uiux"}
-                ],
-                "completed": False
-            },
-            {
-                "id": 4,
-                "title": "Настройка CI/CD пайплайна",
-                "description": "Настроить автоматическую сборку и деплой",
-                "project": self.project_data['name'],
-                "creator": "Вы",
-                "assignee": "Морозов Артем Викторович",
-                "priority": "medium",
-                "deadline": "10.03.2024",
-                "status": "todo",
-                "created_at": "12.02.2024",
-                "updated_at": "12.02.2024",
-                "tags": [
-                    {"text": "DevOps", "type": "devops"},
-                    {"text": "Инфраструктура", "type": "infrastructure"}
-                ],
-                "completed": False
-            },
-            {
-                "id": 5,
-                "title": "Разработка API для интеграции",
-                "description": "Создать REST API для внешних сервисов",
-                "project": self.project_data['name'],
-                "creator": "Вы",
-                "assignee": "Сидоров Алексей Владимирович",
-                "priority": "critical",
-                "deadline": "15.03.2024",
-                "status": "progress",
-                "created_at": "10.02.2024",
-                "updated_at": "18.02.2024",
-                "tags": [
-                    {"text": "API", "type": "api"},
-                    {"text": "Разработка", "type": "development"}
-                ],
-                "completed": False
-            }
-        ]
+    def setup_project_ui(self):
+        """Настройка UI для страницы проекта"""
+        # Скрываем стандартные элементы OthersTasksPage
+        if hasattr(self, 'btnCreateTask'):
+            self.btnCreateTask.hide()
 
-    def setup_project_info(self):
-        """Настройка информации о проекте"""
-        if not hasattr(self, 'projectTitle') or not self.projectTitle:
-            return
+        # Добавляем информацию о проекте в верхнюю панель
+        if hasattr(self, 'controlPanel'):
+            # Создаем виджет с информацией о проекте
+            project_info = QFrame()
+            project_info.setStyleSheet("""
+                QFrame {
+                    background-color: white;
+                    border-radius: 12px;
+                    border: 1px solid #E0E0E0;
+                    padding: 10px;
+                }
+            """)
 
-        # Заголовок и описание
-        self.projectTitle.setText(self.project_data['name'])
-        self.projectDescription.setText(self.project_data['description'])
+            layout = QHBoxLayout(project_info)
+            layout.setContentsMargins(15, 10, 15, 10)
 
-        # Статус проекта
-        status = self.project_data.get('status', 'Активен')
-        self.projectStatus.setText(status)
+            # Название проекта
+            title_label = QLabel(f"📋 Проект: {self.project_data.name}")
+            title_label.setStyleSheet("font-size: 16px; font-weight: bold; color: #1B232A;")
+            layout.addWidget(title_label)
 
-        # Настройка цвета статуса
-        status_colors = {
-            'Активен': '#4CAF50',
-            'Завершен': '#9C27B0',
-            'На паузе': '#FF9800',
-            'Архив': '#666666'
-        }
-        color = status_colors.get(status, '#4CAF50')
-        self.projectStatus.setStyleSheet(f"""
-            QLabel {{
-                font-size: 14px;
+            # Статус
+            status_label = QLabel("Активен")
+            status_label.setStyleSheet("""
+                font-size: 12px;
                 font-weight: bold;
                 color: white;
-                background-color: {color};
-                border-radius: 12px;
+                background-color: #4CAF50;
+                border-radius: 10px;
                 padding: 4px 12px;
-                min-width: 80px;
-            }}
-        """)
+            """)
+            layout.addWidget(status_label)
 
-        # Даты
-        self.startDateLabel.setText(f"📅 Начало: {self.project_data.get('start_date', 'Не указана')}")
+            # Кнопка возврата к проектам
+            back_btn = QPushButton("← К проектам")
+            back_btn.setStyleSheet("""
+                QPushButton {
+                    background-color: #f0f0f0;
+                    border: 1px solid #E0E0E0;
+                    border-radius: 8px;
+                    padding: 8px 16px;
+                    font-size: 14px;
+                }
+                QPushButton:hover {
+                    background-color: #e0e0e0;
+                }
+            """)
+            back_btn.clicked.connect(self.go_back_to_projects)
+            layout.addWidget(back_btn)
 
-    def setup_members_lists(self):
-        """Настройка списков участников"""
-        if not hasattr(self, 'membersList') or not self.membersList:
-            return
+            layout.addStretch()
 
-        # Очищаем список
-        self.membersList.clear()
+            # Вставляем в начало controlPanel
+            self.controlLayout.insertWidget(0, project_info)
 
-        # Добавляем администраторов
-        admins = self.project_data.get('admins', [])
-        participants = self.project_data.get('participants', [])
+    def go_back_to_projects(self):
+        """Возврат к списку проектов"""
+        # Ищем MainWindow в родителях
+        parent = self.parent()
+        while parent:
+            if hasattr(parent, 'contentStack') and hasattr(parent, 'switch_page'):
+                parent.switch_page(0)  # Переключаемся на главную страницу
+                break
+            parent = parent.parent()
 
-        # Добавляем всех участников в один список
-        for admin in admins:
-            item = QListWidgetItem(f"👑 {admin}")
-            self.membersList.addItem(item)
+    def load_project_tasks(self):
+        """Загрузка задач проекта"""
+        if self.project_service and self.project_id:
+            # Получаем данные доски проекта
+            board_data = self.project_service.get_project_board_data(self.project_id)
+            if board_data:
+                # Преобразуем задачи в формат для карточек
+                all_tasks = []
+                for column in board_data.columns:
+                    for task in column.tasks:
+                        task_dict = {
+                            'id': task.id,
+                            'title': task.title,
+                            'description': '',
+                            'priority': task.priority.value if hasattr(task.priority, 'value') else task.priority,
+                            'deadline': task.deadline.strftime('%d.%m.%Y') if task.deadline else '',
+                            'status': column.name,
+                            'column_id': column.id,
+                            'assignee_name': task.assigned_to_name,
+                            'completed': task.is_overdue,  # или другой признак
+                        }
+                        all_tasks.append(task_dict)
 
-        for participant in participants:
-            item = QListWidgetItem(f"👤 {participant}")
-            self.membersList.addItem(item)
+                # Очищаем текущие задачи и добавляем новые
+                self.clear_all_columns()
+                for task_dict in all_tasks:
+                    self.add_task_card(task_dict)
 
-        # Обновляем заголовок
-        if hasattr(self, 'membersTitle') and self.membersTitle:
-            total_members = len(admins) + len(participants)
-            self.membersTitle.setText(f"👥 Участники: {total_members} (админов: {len(admins)})")
+                self.update_statistics()
 
-    def toggle_members_visibility(self):
-        """Скрыть/показать список участников"""
-        if not hasattr(self, 'membersList') or not self.membersList:
-            return
+    def create_task_card(self, task_data: Dict) -> QWidget:
+        """Создает карточку задачи (переопределяем для проекта)"""
+        # Определяем, является ли текущий пользователь создателем
+        is_creator = (task_data.get('created_by') == self.current_user.get('id'))
 
-        self.members_visible = not self.members_visible
-
-        if self.members_visible:
-            self.membersList.show()
-            self.btnToggleMembers.setText("⌄")
-        else:
-            self.membersList.hide()
-            self.btnToggleMembers.setText("›")
-
-    def refresh_tasks_board(self):
-        """Обновление канбан-доски с задачами проекта"""
-        # Очищаем существующие задачи из колонок
-        for column_key, column in self.columns.items():
-            layout = column.tasks_layout
-            # Удаляем все виджеты, кроме спейсера в конце
-            while layout.count() > 1:
-                item = layout.takeAt(0)
-                if item.widget():
-                    item.widget().deleteLater()
-
-        # Очищаем список всех задач
-        self.all_tasks = []
-
-        # Создаем новые карточки задач
-        for task_data in self.sample_tasks:
-            task_card = OthersTaskCard(task_data, is_creator=True)
-            task_card.editRequested.connect(self.edit_task)
-            task_card.deleteRequested.connect(self.delete_task)
-            task_card.archiveRequested.connect(self.archive_task)
-            task_card.approveRequested.connect(self.approve_task)
-            task_card.returnToWorkRequested.connect(self.return_to_work)
-            self.all_tasks.append(task_card)
-
-            # Добавляем в соответствующую колонку
-            status = task_data["status"]
-            if status == "todo":
-                self.columns["todo"].tasks_layout.insertWidget(
-                    self.columns["todo"].tasks_layout.count() - 1, task_card
-                )
-            elif status == "progress":
-                self.columns["progress"].tasks_layout.insertWidget(
-                    self.columns["progress"].tasks_layout.count() - 1, task_card
-                )
-            elif status == "review":
-                self.columns["review"].tasks_layout.insertWidget(
-                    self.columns["review"].tasks_layout.count() - 1, task_card
-                )
-            elif status == "done":
-                self.columns["done"].tasks_layout.insertWidget(
-                    self.columns["done"].tasks_layout.count() - 1, task_card
-                )
-
-        # Обновляем статистику
-        self.update_statistics()
-
-        # Обновляем фильтр проектов
-        if hasattr(self, 'projectFilter'):
-            self.projectFilter.clear()
-            self.projectFilter.addItem("Все проекты")
-            self.projectFilter.addItem(self.project_data['name'])
-            self.projectFilter.setCurrentText(self.project_data['name'])
-
-    def create_new_task(self):
-        """Переопределяем создание задачи для привязки к текущему проекту"""
-        dialog = TaskDialog(self, mode='create')
-        if dialog.exec():
-            new_task_data = dialog.get_task_data()
-            new_task_data["id"] = len(self.sample_tasks) + 1
-            new_task_data["creator"] = "Вы"
-            new_task_data["project"] = self.project_data['name']  # Привязываем к текущему проекту
-            new_task_data["created_at"] = QDate.currentDate().toString("dd.MM.yyyy")
-            new_task_data["updated_at"] = QDate.currentDate().toString("dd.MM.yyyy")
-            new_task_data["completed"] = False
-            self.sample_tasks.append(new_task_data)
-
-            # Создаем карточку задачи
-            task_card = OthersTaskCard(new_task_data, is_creator=True)
-            task_card.editRequested.connect(self.edit_task)
-            task_card.deleteRequested.connect(self.delete_task)
-            task_card.archiveRequested.connect(self.archive_task)
-            task_card.approveRequested.connect(self.approve_task)
-            task_card.returnToWorkRequested.connect(self.return_to_work)
-            self.all_tasks.append(task_card)
-
-            # Добавляем в соответствующую колонку
-            status = new_task_data["status"]
-            if status == "todo":
-                self.columns["todo"].tasks_layout.insertWidget(
-                    self.columns["todo"].tasks_layout.count() - 1, task_card
-                )
-            elif status == "progress":
-                self.columns["progress"].tasks_layout.insertWidget(
-                    self.columns["progress"].tasks_layout.count() - 1, task_card
-                )
-            elif status == "review":
-                self.columns["review"].tasks_layout.insertWidget(
-                    self.columns["review"].tasks_layout.count() - 1, task_card
-                )
-            elif status == "done":
-                self.columns["done"].tasks_layout.insertWidget(
-                    self.columns["done"].tasks_layout.count() - 1, task_card
-                )
-
-            self.update_statistics()
-            self.taskUpdated.emit()
-            self.projectUpdated.emit()
-
-    def update_project_progress(self):
-        """Обновление прогресса проекта на основе выполненных задач"""
-        if not hasattr(self, 'project_data') or not self.sample_tasks:
-            return
-
-        completed_tasks = len([t for t in self.sample_tasks if t.get("completed", False)])
-        total_tasks = len(self.sample_tasks)
-
-        if total_tasks > 0:
-            progress = int((completed_tasks / total_tasks) * 100)
-            self.project_data['progress'] = progress
+        return OthersTaskCard(
+            task_data,
+            service=self.service,
+            is_creator=is_creator
+        )
 
     def update_statistics(self):
-        """Переопределяем обновление статистики для обновления прогресса проекта"""
-        # Сначала вызываем родительский метод
+        """Обновление статистики с учетом прогресса проекта"""
         super().update_statistics()
-        # Затем обновляем прогресс проекта
-        self.update_project_progress()
+
+        # Обновляем прогресс проекта
+        if hasattr(self, 'project_data') and self.project_data:
+            total = len(self.all_tasks) if hasattr(self, 'all_tasks') else 0
+            completed = len([t for t in self.all_tasks if t.task_data.get('completed')]) if hasattr(self,
+                                                                                                    'all_tasks') else 0
+
+            if total > 0:
+                progress = int((completed / total) * 100)
+                if hasattr(self, 'project_data'):
+                    self.project_data.progress = progress
