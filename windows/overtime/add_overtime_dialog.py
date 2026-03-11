@@ -1,136 +1,140 @@
-import os
-import sys
-from datetime import datetime
+# windows/overtime/add_overtime_dialog.py
 
+import os
+from typing import Dict, Optional
 from PyQt6 import uic
-from PyQt6.QtWidgets import QApplication, QDialog
+from PyQt6.QtWidgets import QDialog, QMessageBox
 from PyQt6.QtCore import QDate, QTime
-from PyQt6.uic import loadUi
+
+from services.overtime_service import OvertimeService
 
 
 class AddOvertimeDialog(QDialog):
-    def __init__(self, parent=None):
+    """UI-диалог добавления переработки"""
+
+    def __init__(self, service: Optional[OvertimeService] = None, parent=None):
         super().__init__(parent)
 
-        ui_path = os.path.join(
-            os.path.dirname(__file__),  # windows/analytics/employees/
-            "..", "..",  # поднимаемся до корня проекта
-            "ui", "overtime"  # спускаемся в нужную подпапку ui
-        )
+        # UI
+        ui_path = os.path.join(os.path.dirname(__file__), "..", "..", "ui", "overtime")
         uic.loadUi(os.path.join(ui_path, "add_overtime_dialog.ui"), self)
 
+        self.service = service
+        self.current_user_id = None
 
-        # Фиксируем высоту 32 px
-        self.comboProject.setFixedHeight(32)
-        self.comboTask.setFixedHeight(32)
-        self.dateEdit.setFixedHeight(32)
-        self.timeStart.setFixedHeight(32)
-        self.timeEnd.setFixedHeight(32)
-        self.btnSave.setFixedHeight(32)
+        # Настройки высоты
+        for widget in [self.comboEmployee, self.comboProject, self.comboTask,
+                       self.dateEdit, self.timeStart, self.timeEnd, self.btnSave]:
+            widget.setFixedHeight(32)
 
-        # Заголовок
-        self.titleLabel.setStyleSheet("font-size: 22px; font-weight: bold; color: #000000; background-color: #FFFFFF;")
+        self.titleLabel.setStyleSheet(
+            "font-size: 22px; font-weight: bold; color: #000000; background-color: #FFFFFF;"
+        )
 
-        # Заполняем проекты
-        self.projects = {
-            "CRM-система для отдела продаж": [
-                "Разработка модуля лидов",
-                "Интеграция с 1С",
-                "Дизайн дашборда",
-                "Тестирование API"
-            ],
-            "Мобильное приложение доставки еды": [
-                "Карта и геолокация",
-                "Корзина и оплата",
-                "Профиль курьера",
-                "Push-уведомления"
-            ],
-            "Внутренний портал сотрудников": [
-                "Модуль отпусков и больничных",
-                "Таблица переработок",
-                "Личный кабинет",
-                "Отчёты по зарплате"
-            ],
-            "Админка интернет-магазина": [
-                "Управление товарами",
-                "Обработка заказов",
-                "Аналитика продаж",
-                "Импорт каталога"
-            ]
-        }
+        # Загружаем сотрудников
+        self.load_employees()
 
-        self.comboProject.addItem("Выберите проект", None)
-        for project in self.projects:
-            self.comboProject.addItem(project, project)
-        self.comboProject.addItem("Без проекта", "Без проекта")
+        # Загружаем проекты
+        self.load_projects()
 
-        # По умолчанию — текущая дата и время (округлённое)
+        # Дата и время по умолчанию
         self.dateEdit.setDate(QDate.currentDate())
-        self.timeStart.setTime(QTime.currentTime().addSecs(-QTime.currentTime().second()))  # без секунд
-        self.timeEnd.setTime(self.timeStart.time().addSecs(3600))  # +1 час
+        self.timeStart.setTime(QTime.currentTime().addSecs(-QTime.currentTime().second()))
+        self.timeEnd.setTime(self.timeStart.time().addSecs(3600))
 
         # Сигналы
-        self.comboProject.currentIndexChanged.connect(self.update_tasks)
+        self.comboProject.currentIndexChanged.connect(self.on_project_changed)
         self.btnSave.clicked.connect(self.accept)
 
         # Изначально задачи отключены
         self.comboTask.setEnabled(False)
+        self.comboTask.clear()
         self.comboTask.addItem("Сначала выберите проект", None)
 
-    def update_tasks(self):
-        self.comboTask.clear()
-        selected = self.comboProject.currentData()
+    # windows/overtime/add_overtime_dialog.py
 
-        if selected is None or selected == "Без проекта":
+    def load_employees(self):
+        """Загружает список сотрудников в комбобокс"""
+        self.comboEmployee.clear()
+        print("🔄 Загрузка сотрудников в диалог...")
+
+        if self.service:
+            employees = self.service.get_all_employees()
+            print(f"📊 Получено {len(employees)} сотрудников из сервиса")
+
+            for emp in employees:
+                self.comboEmployee.addItem(emp['name'], emp['id'])
+                print(f"  + Добавлен: {emp['name']} (ID: {emp['id']})")
+
+            # Если есть текущий пользователь, выбираем его по умолчанию
+            if hasattr(self.service, 'current_user_id') and self.service.current_user_id:
+                for i in range(self.comboEmployee.count()):
+                    if self.comboEmployee.itemData(i) == self.service.current_user_id:
+                        self.comboEmployee.setCurrentIndex(i)
+                        print(f"✅ Выбран текущий пользователь ID: {self.service.current_user_id}")
+                        break
+        else:
+            print("❌ Сервис не инициализирован")
+
+    def load_projects(self):
+        """Загружает список проектов в комбобокс"""
+        self.comboProject.clear()
+        self.comboProject.addItem("Выберите проект", None)
+
+        if self.service:
+            projects = self.service.get_projects()
+            for project in projects:
+                self.comboProject.addItem(project['name'], project['id'])
+
+        self.comboProject.addItem("Без проекта", -1)
+        self.comboProject.setCurrentIndex(0)
+
+    def on_project_changed(self, index):
+        """Обработчик изменения выбранного проекта"""
+        project_id = self.comboProject.currentData()
+
+        if project_id is None or project_id == -1:
+            # Если проект не выбран или "Без проекта"
             self.comboTask.setEnabled(False)
-            self.comboTask.addItem("Задачи недоступны", None)
+            self.comboTask.clear()
+            self.comboTask.addItem("Нет задач", None)
             return
 
-        self.comboTask.setEnabled(True)
+        # Загружаем задачи для выбранного проекта
+        self.load_tasks(project_id)
+
+    def load_tasks(self, project_id: int):
+        """Загружает задачи для выбранного проекта"""
+        self.comboTask.clear()
         self.comboTask.addItem("Выберите задачу", None)
-        for task in self.projects.get(selected, []):
-            self.comboTask.addItem(task, task)
 
-    def get_overtime_data(self):
-        """Возвращает данные для сохранения в основной программе"""
-        project = self.comboProject.currentText()
-        if project == "Без проекта" or project == "Выберите проект":
-            project = None
+        if self.service:
+            tasks = self.service.get_tasks_for_project(project_id)
+            for task in tasks:
+                self.comboTask.addItem(task['title'], task['id'])
 
-        task = self.comboTask.currentText() if self.comboTask.isEnabled() else None
-        if task == "Выберите задачу":
-            task = None
+        self.comboTask.addItem("Без задачи", -1)
+        self.comboTask.setEnabled(True)
+        self.comboTask.setCurrentIndex(0)
+
+    def get_overtime_data(self) -> Dict:
+        """Возвращает данные для добавления переработки"""
+        employee_id = self.comboEmployee.currentData()
+        project_id = self.comboProject.currentData()
+        task_id = self.comboTask.currentData() if self.comboTask.isEnabled() else None
+
+        # Если выбрано "Без проекта" или "Без задачи", передаем None
+        if project_id == -1:
+            project_id = None
+        if task_id == -1:
+            task_id = None
 
         return {
-            'project': project,
-            'task': task,
-            'date': self.dateEdit.date().toString("dd.MM.yyyy"),
-            'start_time': self.timeStart.time().toString("hh:mm"),
-            'end_time': self.timeEnd.time().toString("hh:mm"),
-            'duration': self.calculate_duration(),
-            'description': self.textDescription.toPlainText().strip()
+            'employee_id': employee_id,
+            'date': self.dateEdit.date(),
+            'start_time': self.timeStart.time(),
+            'end_time': self.timeEnd.time(),
+            'description': self.textDescription.toPlainText(),
+            'project_id': project_id,
+            'task_id': task_id
         }
-
-    def calculate_duration(self):
-        """Вычисляет продолжительность в часах (например, 2.5)"""
-        start = self.timeStart.time()
-        end = self.timeEnd.time()
-        secs = start.secsTo(end)
-        if secs < 0:
-            secs += 86400  # если конец на следующий день
-        hours = secs / 3600
-        return f"{hours:.1f}".replace(".", ",")
-
-
-# Тест отдельно
-if __name__ == "__main__":
-    app = QApplication(sys.argv)
-    app.setStyle("Fusion")
-    dialog = AddOvertimeDialog()
-    if dialog.exec():
-        data = dialog.get_overtime_data()
-        print("Сохранённые данные:")
-        for k, v in data.items():
-            print(f"  {k}: {v}")
-    else:
-        print("Диалог закрыт без сохранения")

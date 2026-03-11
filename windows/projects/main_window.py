@@ -18,17 +18,16 @@ from windows.overtime.overtime_page import OvertimePage
 from windows.profile.profile_page import ProfilePage
 from windows.projects.project_card import ProjectCard
 from windows.projects.project_edit_dialog import ProjectEditDialog
-
+from services.overtime_service import OvertimeService
 
 # windows/projects/main_window.py
 
 
 class MainWindow(QMainWindow):
 
-    def __init__(self, session, user_id):  # Принимаем user_id при входе
+    def __init__(self, session, user_id):
         super().__init__()
         self.current_user_id = user_id
-        # 1. Базовые переменные состояния (ДО инициализации UI и загрузки данных)
         self.session = session
         self.current_search_query = ""
         self.current_status_filter = "Все"
@@ -37,13 +36,15 @@ class MainWindow(QMainWindow):
         self.project_cards = []
 
         # 2. Инициализируем сервисы
-        # 👈 ИСПРАВЛЕНО: убираем current_user_id, передаем только session
         self.project_service = ProjectsService(session)
         self.analytics_service = AnalyticsService(session)
+        # 👇 СОЗДАЕМ ОТДЕЛЬНЫЙ СЕРВИС ДЛЯ ПЕРЕРАБОТОК
+        self.overtime_service = OvertimeService(session)
 
         # Устанавливаем текущего пользователя в сервисах
-        self.project_service.set_current_user_id(user_id)  # 👈 ДОБАВЛЯЕМ
-        self.analytics_service.set_current_user_id(user_id)  # 👈 ДОБАВЛЯЕМ (если нужно)
+        self.project_service.set_current_user_id(user_id)
+        self.analytics_service.set_current_user_id(user_id)
+        self.overtime_service.set_current_user_id(user_id)  # 👈 ДОБАВЛЯЕМ
 
         # 3. Загружаем UI
         ui_root = os.path.join(os.path.dirname(__file__), "..", "..", "ui")
@@ -127,15 +128,15 @@ class MainWindow(QMainWindow):
         self._replace_in_stack("otherTasksPage", self.other_tasks_page_instance)
 
         # Гант - передаем сервис
-        self.gantt_page_instance = GanttChartWidget(service=self.project_service)  # 👈 ТЕПЕРЬ РАБОТАЕТ
+        self.gantt_page_instance = GanttChartWidget(service=self.project_service)
         self._replace_in_stack("ganttPage", self.gantt_page_instance)
 
         # Аналитика
         self.analytics_page_instance = AnalyticsPage(service=self.analytics_service)
         self._replace_in_stack("analyticsPage", self.analytics_page_instance)
 
-        # Переработки
-        self.overtime_page_instance = OvertimePage(service=self.project_service)
+        # 👇 ИСПРАВЛЕНО: передаем overtime_service, а не project_service
+        self.overtime_page_instance = OvertimePage(service=self.overtime_service)
         self._replace_in_stack("overtimePage", self.overtime_page_instance)
 
         # Архив

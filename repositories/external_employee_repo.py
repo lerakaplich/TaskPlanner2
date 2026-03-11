@@ -15,8 +15,15 @@ class ExternalEmployeeRepo:
         return self.session.scalar(stmt)
 
     def get_all(self) -> List[ExternalEmployee]:
-        stmt = select(ExternalEmployee)
-        return list(self.session.scalars(stmt))
+        """Получить всех сотрудников из внешней БД"""
+        try:
+            stmt = select(ExternalEmployee).order_by(ExternalEmployee.last_name)
+            result = list(self.session.scalars(stmt))
+            print(f"📊 ExternalEmployeeRepo.get_all() вернул {len(result)} записей")
+            return result
+        except Exception as e:
+            print(f"❌ Ошибка в ExternalEmployeeRepo.get_all(): {e}")
+            return []
 
     def search_by_name(self, query: str) -> List[ExternalEmployee]:
         stmt = select(ExternalEmployee).where(

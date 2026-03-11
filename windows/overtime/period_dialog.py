@@ -1,27 +1,25 @@
 import os
-
+from PyQt6.QtWidgets import QDialog
+from PyQt6.QtCore import QDate
 from PyQt6 import uic
-from PyQt6.QtWidgets import *
-from PyQt6.QtCore import *
-
-from PyQt6.uic import loadUi
 
 
 class PeriodDialog(QDialog):
+    """Диалог выбора периода. Только UI"""
+
     def __init__(self, parent=None):
         super().__init__(parent)
 
         ui_path = os.path.join(
-            os.path.dirname(__file__),  # windows/analytics/employees/
-            "..", "..",   # поднимаемся до корня проекта
-            "ui", "overtime"  # спускаемся в нужную подпапку ui
+            os.path.dirname(__file__),
+            "..", "..",
+            "ui", "overtime"
         )
         uic.loadUi(os.path.join(ui_path, "period_dialog.ui"), self)
 
-
         self.setWindowTitle("Выбор периода экспорта")
 
-        # Устанавливаем даты по умолчанию
+        # Даты по умолчанию
         today = QDate.currentDate()
         self.dateStart.setDate(today.addMonths(-1))
         self.dateEnd.setDate(today)
@@ -29,4 +27,5 @@ class PeriodDialog(QDialog):
         self.btnOk.clicked.connect(self.accept)
 
     def get_period(self):
+        """Возвращает выбранные даты: (start_date, end_date)"""
         return self.dateStart.date(), self.dateEnd.date()
