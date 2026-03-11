@@ -1,3 +1,5 @@
+# models/projects.py
+
 from datetime import datetime, time
 from typing import Optional, List
 
@@ -72,7 +74,7 @@ class EmployeeProject(Base):
     __tablename__ = "employees_projects"
 
     employee_id: Mapped[int] = mapped_column(
-        ForeignKey("employees_data.employee_id", ondelete="CASCADE"),
+        ForeignKey("public.employees.id", ondelete="CASCADE"),  # 👈 ИСПРАВЛЕНО
         primary_key=True,
     )
 
@@ -84,3 +86,4 @@ class EmployeeProject(Base):
     is_admin: Mapped[Optional[bool]]
 
     project: Mapped["Project"] = relationship(back_populates="members")
+    # relationship с Employee не добавляем, чтобы не создавать лишних связей

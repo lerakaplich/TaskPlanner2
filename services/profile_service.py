@@ -11,15 +11,26 @@ from repositories.project_repo import ProjectRepo
 from repositories.task_repo import TaskRepo
 from database import get_tasks_session  # 👈 ТОЛЬКО ОДНА СЕССИЯ
 
+# services/profile_service.py
+
+from typing import Dict, List, Optional, Any
+from datetime import datetime
+from PyQt6.QtCore import QDate
+import random
+
+from repositories.external_employee_repo import ExternalEmployeeRepo
+from repositories.project_repo import ProjectRepo
+from repositories.task_repo import TaskRepo
+from database import get_tasks_session
+
 
 class ProfileService:
     """Сервис профиля сотрудника с реальными данными из БД"""
 
-    def __init__(self, session=None):  # 👈 ПАРАМЕТР НАЗЫВАЕТСЯ session
-        self.db_session = session or get_tasks_session()  # внутри используем db_session
+    def __init__(self, session=None):
+        self.db_session = session or get_tasks_session()
         self.task_repo = TaskRepo(self.db_session)
         self.current_user = None
-        # 👈 ИСПРАВЛЕНО: используем self.db_session везде
         self.project_repo = ProjectRepo(self.db_session)
         self.employee_repo = ExternalEmployeeRepo(self.db_session)
 
@@ -39,16 +50,12 @@ class ProfileService:
             from models.employees import ExternalEmployee
             from sqlalchemy import select
 
-            # 👈 ИСПРАВЛЕНО: self.db_session вместо self.session
             stmt = select(ExternalEmployee).where(ExternalEmployee.id == employee_id)
             employee = self.db_session.scalar(stmt)
 
             if not employee:
                 print(f"⚠️ Сотрудник с ID {employee_id} не найден, возвращаю тестовые данные")
                 return self._get_test_profile(employee_id)
-
-            # Вся информация о сотруднике уже есть в ExternalEmployee
-            # Убираем обращение к employee_repo.get_by_id()
 
             # Получаем статистику по задачам
             tasks = self.task_repo.get_tasks_for_kanban(2)  # project_id=2
@@ -81,10 +88,10 @@ class ProfileService:
                 'settings': employee.settings or {}
             }
 
-            # Добавляем навыки (из настроек или генерируем)
+            # Добавляем навыки
             profile['skills'] = self._get_employee_skills(employee_id, user_tasks)
 
-            # Добавляем проекты
+            # 👇 ДОБАВЛЯЕМ РЕАЛЬНЫЕ ПРОЕКТЫ СОТРУДНИКА
             profile['projects'] = self._get_employee_projects(employee_id)
 
             return profile
@@ -94,6 +101,104 @@ class ProfileService:
             import traceback
             traceback.print_exc()
             return self._get_test_profile(employee_id)
+
+    # =====================================================
+    # Получение проектов сотрудника
+    # =====================================================
+
+    def _get_employee_projects(self, employee_id: int) -> List[Dict]:
+        """
+        Получает реальные проекты сотрудника из БД
+        """
+        try:
+            from models.projects import Project
+            from sqlalchemy import select, and_
+
+            # Получаем все проекты, где сотрудник является участником
+            stmt = select(Project).where(
+                Project.members.any(employee_id=employee_id)
+            )
+            projects = self.db_session.scalars(stmt).all()
+
+            result = []
+            for project in projects:
+                # Получаем задачи проекта, назначенные на этого сотрудника
+                tasks = self.task_repo.get_by_project(project.id)
+                user_tasks = [t for t in tasks if t.assigned_to == employee_id]
+
+                completed_tasks = len([t for t in user_tasks if t.completed])
+                total_tasks = len(user_tasks)
+
+                # Рассчитываем прогресс
+                progress = 0
+                if total_tasks > 0:
+                    progress = int((completed_tasks / total_tasks) * 100)
+
+                result.append({
+                    'id': project.id,
+                    'name': project.name,
+                    'description': project.description,
+                    'progress': progress,
+                    'tasks_completed': completed_tasks,
+                    'tasks_total': total_tasks,
+                    'is_archived': project.is_archived
+                })
+
+            return result
+
+        except Exception as e:
+            print(f"❌ Ошибка при загрузке проектов сотрудника: {e}")
+            return self._get_test_projects()
+
+    def get_all_employee_projects_with_tasks(self, employee_id: int) -> List[Dict]:
+        """
+        Получает все проекты сотрудника с детализацией задач для страницы проектов
+        """
+        try:
+            from models.projects import Project
+            from models.tasks import Task
+            from sqlalchemy import select, and_
+
+            # Получаем все проекты сотрудника
+            stmt = select(Project).where(
+                Project.members.any(employee_id=employee_id)
+            )
+            projects = self.db_session.scalars(stmt).all()
+
+            result = []
+            for project in projects:
+                # Получаем все задачи проекта, назначенные на этого сотрудника
+                tasks = self.task_repo.get_by_project(project.id)
+                user_tasks = [t for t in tasks if t.assigned_to == employee_id]
+
+                # Преобразуем задачи в нужный формат
+                task_list = []
+                for task in user_tasks:
+                    task_list.append({
+                        'id': task.id,
+                        'title': task.title,
+                        'description': task.description,
+                        'priority': task.priority.value if task.priority else 'medium',
+                        'status': task.column.name if task.column else 'unknown',
+                        'created_at': task.created_at.strftime('%d.%m.%Y') if task.created_at else '',
+                        'completed_at': task.updated_at.strftime('%d.%m.%Y') if task.completed else None,
+                        'deadline': task.deadline.strftime('%d.%m.%Y') if task.deadline else None,
+                        'tags': []  # TODO: добавить теги
+                    })
+
+                result.append({
+                    'id': project.id,
+                    'name': project.name,
+                    'description': project.description,
+                    'tasks': task_list,
+                    'is_archived': project.is_archived
+                })
+
+            return result
+
+        except Exception as e:
+            print(f"❌ Ошибка при загрузке проектов с задачами: {e}")
+            return []
 
     def _get_test_profile(self, employee_id: int) -> Dict:
         """Возвращает тестовые данные для профиля"""
@@ -228,11 +333,6 @@ class ProfileService:
             })
 
         return sorted(skills, key=lambda x: x['kpd'], reverse=True)
-
-    def _get_employee_projects(self, employee_id: int) -> List[Dict]:
-        """Получает проекты сотрудника"""
-        # TODO: получать из реальных данных
-        return self._get_test_projects()
 
     # =====================================================
     # Обновление профиля

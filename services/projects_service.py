@@ -27,20 +27,17 @@ class ProjectsService:
     def set_current_user(self, user):
         self.current_user = user
 
-    # services/projects_service.py
-
     def get_projects_for_cards(self, search_query: str = "", status_filter: str = "Все", owner_filter: bool = False) -> \
     List[ProjectCardDTO]:
         """
         Получает список проектов, фильтрует их и возвращает в виде списка DTO для карточек.
 
-        Args:
-            search_query: строка поиска по названию
-            status_filter: фильтр по статусу ("Все", "Активные", "Архив")
-            owner_filter: если True, показывать только проекты где текущий пользователь владелец
+        ВАЖНО: Архивные проекты НИКОГДА не возвращаются в этой вкладке!
         """
-        # 1. Получаем все проекты
-        all_projects = self.project_repo.get_all()
+        # 👇 ВСЕГДА исключаем архивные проекты из вкладки "Проекты"
+        all_projects = self.project_repo.get_all(exclude_archived=True)
+        print(f"📊 Запрошены ТОЛЬКО АКТИВНЫЕ проекты из БД (архивные исключены принудительно)")
+
         result = []
 
         for proj in all_projects:
@@ -52,22 +49,16 @@ class ProjectsService:
             if search_query and search_query.lower() not in proj.name.lower():
                 continue
 
-            # 4. Фильтрация по статусу
-            if status_filter == "Активные" and proj.is_archived:
-                continue
-            if status_filter == "Архив" and not proj.is_archived:
-                continue
-
-            # 5. Расчет прогресса (Задачи)
+            # 4. Расчет прогресса (Задачи)
             tasks = self.task_repo.get_by_project(proj.id)
             total_tasks = len(tasks)
             done_tasks = len([t for t in tasks if t.column and t.column.is_done_column])
 
-            # 👇 ПОЛУЧАЕМ КОЛИЧЕСТВО УЧАСТНИКОВ И АДМИНОВ
+            # Получаем количество участников и админов
             member_count = len(proj.members) if hasattr(proj, 'members') else 0
             admin_count = len([m for m in proj.members if m.is_admin]) if hasattr(proj, 'members') else 0
 
-            # 👇 ПОЛУЧАЕМ ИМЯ ВЛАДЕЛЬЦА
+            # Получаем имя владельца
             owner_name = "Не назначен"
             if proj.owner:
                 owner = self.employee_repo.get_by_id(proj.owner)
@@ -76,12 +67,12 @@ class ProjectsService:
                     if owner.middle_name:
                         owner_name += f"{owner.middle_name[0]}."
 
-            # 👇 ФОРМАТИРУЕМ ДАТУ СОЗДАНИЯ
+            # Форматируем дату создания
             created_at_str = None
             if proj.created_at:
                 created_at_str = proj.created_at.strftime("%d.%m.%Y")
 
-            # 6. Сборка DTO
+            # Сборка DTO
             card_dto = ProjectCardDTO(
                 id=proj.id,
                 name=proj.name,
@@ -100,6 +91,32 @@ class ProjectsService:
             result.append(card_dto)
 
         return result
+
+    def archive_project(self, project_id: int) -> bool:
+        """
+        Архивирует проект (устанавливает is_archived = True)
+        """
+        try:
+            # Получаем проект через репозиторий
+            project = self.project_repo.get_by_id(project_id)
+
+            if not project:
+                print(f"❌ Проект {project_id} не найден")
+                return False
+
+            # Архивируем проект
+            project.is_archived = True
+            project.updated_at = datetime.now()
+
+            # Сохраняем изменения
+            self.session.commit()
+            print(f"✅ Проект {project_id} успешно архивирован")
+            return True
+
+        except Exception as e:
+            self.session.rollback()
+            print(f"❌ Ошибка при архивации проекта: {e}")
+            return False
 
     def create_new_project(self, raw_data: dict, creator_id: int) -> Optional[ProjectWithMembersDTO]:
         """

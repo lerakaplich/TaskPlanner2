@@ -1,4 +1,5 @@
 import os
+
 from PyQt6 import uic
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import (
@@ -6,13 +7,13 @@ from PyQt6.QtWidgets import (
     QSizePolicy, QMessageBox
 )
 
-from services.analytics_service import AnalyticsService
+from services.archive_service import ArchiveService
 
 
 class ArchivePage(QWidget):
-    """Страница архива (UI-слой, без бизнес-логики)"""
+    """UI страница архива"""
 
-    def __init__(self, service=None, parent=None):  # 👈 ДОБАВЛЯЕМ service
+    def __init__(self, service: ArchiveService = None, parent=None):
         super().__init__(parent)
         self.setObjectName("archivePage")
 
@@ -24,6 +25,7 @@ class ArchivePage(QWidget):
             "..", "..",
             "ui", "archive"
         )
+
         uic.loadUi(os.path.join(ui_path, "archive_page.ui"), self)
 
         # =============================
@@ -31,12 +33,14 @@ class ArchivePage(QWidget):
         # =============================
         if service is None:
             from database import get_tasks_session
-            session = get_tasks_session()
-            self.analytics_service = AnalyticsService(session)
-        else:
-            self.analytics_service = service
+            from services.analytics_service import AnalyticsService
 
-        self.analytics_service.load_test_data()
+            session = get_tasks_session()
+            analytics = AnalyticsService(session)
+
+            self.archive_service = ArchiveService(analytics)
+        else:
+            self.archive_service = service
 
         # =============================
         # Состояние
@@ -59,11 +63,12 @@ class ArchivePage(QWidget):
         self.show_projects_list()
 
     # ==========================================================
-    # Отображение проектов
+    # Проекты
     # ==========================================================
 
     def show_projects_list(self):
         self.current_project_id = None
+
         self.section_title.setText("Архивированные проекты")
         self.back_button.hide()
 
@@ -72,7 +77,7 @@ class ArchivePage(QWidget):
 
         self.clear_projects()
 
-        projects = self.analytics_service.get_archived_projects()
+        projects = self.archive_service.get_archived_projects()
 
         if not projects:
             self.empty_label.show()
@@ -80,59 +85,80 @@ class ArchivePage(QWidget):
             return
 
         self.empty_label.hide()
-        self.projects_widget.show()
 
         from windows.archive.archived_project_card import ArchivedProjectCard
 
         columns = self.calculate_columns()
 
         for i, project in enumerate(projects):
+
             card = ArchivedProjectCard(project, self)
 
             card.clicked.connect(self.on_project_clicked)
             card.restore_requested.connect(self.on_restore_project)
-            card.delete_permanently_requested.connect(self.on_delete_project_permanently)
+            card.delete_permanently_requested.connect(
+                self.on_delete_project_permanently
+            )
 
             self.project_cards.append(card)
 
             row = i // columns
             col = i % columns
+
             self.projects_layout.addWidget(card, row, col)
 
         rows = (len(projects) + columns - 1) // columns
-        spacer = QSpacerItem(20, 40, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Expanding)
+
+        spacer = QSpacerItem(
+            20, 40,
+            QSizePolicy.Policy.Minimum,
+            QSizePolicy.Policy.Expanding
+        )
+
         self.projects_layout.addItem(spacer, rows, 0, 1, columns)
 
     # ==========================================================
-    # Отображение задач проекта
+    # Задачи проекта
     # ==========================================================
 
     def show_project_tasks(self, project_id: int):
+
         self.current_project_id = project_id
 
-        project = self.analytics_service.get_project_by_id(project_id)
+        project = self.archive_service.get_project_by_id(project_id)
+
         if project:
-            self.section_title.setText(f"Задачи проекта: {project['name']}")
+            self.section_title.setText(
+                f"Задачи проекта: {project['name']}"
+            )
 
         self.back_button.show()
+
         self.projects_widget.hide()
         self.tasks_widget.show()
 
         self.clear_tasks()
 
-        tasks = self.analytics_service.get_project_tasks(project_id)
+        tasks = self.archive_service.get_project_tasks(project_id)
 
         if not tasks:
-            no_tasks_label = QLabel("📭 В этом проекте нет архивированных задач")
-            no_tasks_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            no_tasks_label.setStyleSheet("""
+
+            label = QLabel("📭 В этом проекте нет архивированных задач")
+
+            label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+            label.setStyleSheet("""
                 color: #999999;
                 font-size: 18px;
                 padding: 50px;
             """)
+
             self.tasks_layout.addWidget(
-                no_tasks_label, 0, 0, 1, self.calculate_columns()
+                label,
+                0, 0,
+                1, self.calculate_columns()
             )
+
             return
 
         from windows.archive.archived_task_card import ArchivedTaskCard
@@ -140,15 +166,19 @@ class ArchivePage(QWidget):
         columns = self.calculate_columns()
 
         for i, task in enumerate(tasks):
+
             card = ArchivedTaskCard(task, self)
 
             card.restore_requested.connect(self.on_restore_task)
-            card.delete_permanently_requested.connect(self.on_delete_task_permanently)
+            card.delete_permanently_requested.connect(
+                self.on_delete_task_permanently
+            )
 
             self.task_cards.append(card)
 
             row = i // columns
             col = i % columns
+
             self.tasks_layout.addWidget(card, row, col)
 
     # ==========================================================
@@ -156,35 +186,43 @@ class ArchivePage(QWidget):
     # ==========================================================
 
     def on_search(self, text: str):
+
         text = text.strip()
 
         if not text:
+
             if self.current_project_id is None:
                 self.show_projects_list()
             else:
                 self.show_project_tasks(self.current_project_id)
+
             return
 
         if self.current_project_id is None:
-            projects = self.analytics_service.search_projects(text)
+
+            projects = self.archive_service.search_projects(text)
             self.render_projects(projects)
+
         else:
-            tasks = self.analytics_service.search_tasks(
-                self.current_project_id, text
+
+            tasks = self.archive_service.search_tasks(
+                self.current_project_id,
+                text
             )
+
             self.render_tasks(tasks)
 
     # ==========================================================
-    # Рендеринг
+    # Рендер
     # ==========================================================
 
     def render_projects(self, projects):
+
         self.clear_projects()
 
         if not projects:
             self.empty_label.setText("🔍 Ничего не найдено")
             self.empty_label.show()
-            self.projects_widget.hide()
             return
 
         from windows.archive.archived_project_card import ArchivedProjectCard
@@ -192,24 +230,36 @@ class ArchivePage(QWidget):
         columns = self.calculate_columns()
 
         for i, project in enumerate(projects):
+
             card = ArchivedProjectCard(project, self)
+
             card.clicked.connect(self.on_project_clicked)
             card.restore_requested.connect(self.on_restore_project)
-            card.delete_permanently_requested.connect(self.on_delete_project_permanently)
+            card.delete_permanently_requested.connect(
+                self.on_delete_project_permanently
+            )
 
             row = i // columns
             col = i % columns
+
             self.projects_layout.addWidget(card, row, col)
 
     def render_tasks(self, tasks):
+
         self.clear_tasks()
 
         if not tasks:
-            no_tasks_label = QLabel("🔍 Ничего не найдено")
-            no_tasks_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+            label = QLabel("🔍 Ничего не найдено")
+
+            label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
             self.tasks_layout.addWidget(
-                no_tasks_label, 0, 0, 1, self.calculate_columns()
+                label,
+                0, 0,
+                1, self.calculate_columns()
             )
+
             return
 
         from windows.archive.archived_task_card import ArchivedTaskCard
@@ -217,111 +267,165 @@ class ArchivePage(QWidget):
         columns = self.calculate_columns()
 
         for i, task in enumerate(tasks):
+
             card = ArchivedTaskCard(task, self)
+
             card.restore_requested.connect(self.on_restore_task)
-            card.delete_permanently_requested.connect(self.on_delete_task_permanently)
+            card.delete_permanently_requested.connect(
+                self.on_delete_task_permanently
+            )
 
             row = i // columns
             col = i % columns
+
             self.tasks_layout.addWidget(card, row, col)
 
     # ==========================================================
-    # Действия
+    # Действия UI
     # ==========================================================
 
     def on_project_clicked(self, project_id: int):
         self.show_project_tasks(project_id)
 
     def on_restore_project(self, project_id: int):
-        project_name = self.analytics_service.get_project_display_name(project_id)
-        if not project_name:
+
+        name = self.archive_service.get_project_display_name(project_id)
+
+        if not name:
             return
 
         reply = QMessageBox.question(
             self,
             "Восстановление проекта",
-            f"Восстановить проект '{project_name}'?",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+            f"Восстановить проект '{name}'?",
+            QMessageBox.StandardButton.Yes |
+            QMessageBox.StandardButton.No
         )
 
         if reply == QMessageBox.StandardButton.Yes:
-            self.analytics_service.restore_project(project_id)
+
+            self.archive_service.restore_project(project_id)
+
             self.show_projects_list()
-            QMessageBox.information(self, "Успех", "Проект восстановлен")
+
+            QMessageBox.information(
+                self,
+                "Успех",
+                "Проект восстановлен"
+            )
 
     def on_restore_task(self, task_id: int):
-        task_name = self.analytics_service.get_task_display_name(task_id)
-        if not task_name:
+
+        name = self.archive_service.get_task_display_name(task_id)
+
+        if not name:
             return
 
         reply = QMessageBox.question(
             self,
             "Восстановление задачи",
-            f"Восстановить задачу '{task_name}'?",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+            f"Восстановить задачу '{name}'?",
+            QMessageBox.StandardButton.Yes |
+            QMessageBox.StandardButton.No
         )
 
         if reply == QMessageBox.StandardButton.Yes:
-            self.analytics_service.restore_task(task_id)
+
+            self.archive_service.restore_task(task_id)
+
             self.show_project_tasks(self.current_project_id)
-            QMessageBox.information(self, "Успех", "Задача восстановлена")
+
+            QMessageBox.information(
+                self,
+                "Успех",
+                "Задача восстановлена"
+            )
 
     def on_delete_project_permanently(self, project_id: int):
+
         reply = QMessageBox.warning(
             self,
             "Удаление проекта",
             "Вы уверены? Это действие нельзя отменить.",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+            QMessageBox.StandardButton.Yes |
+            QMessageBox.StandardButton.No
         )
 
         if reply == QMessageBox.StandardButton.Yes:
-            self.analytics_service.delete_project_permanently(project_id)
+
+            self.archive_service.delete_project_permanently(project_id)
+
             self.show_projects_list()
-            QMessageBox.information(self, "Удалено", "Проект удалён")
+
+            QMessageBox.information(
+                self,
+                "Удалено",
+                "Проект удалён"
+            )
 
     def on_delete_task_permanently(self, task_id: int):
+
         reply = QMessageBox.warning(
             self,
             "Удаление задачи",
             "Вы уверены? Это действие нельзя отменить.",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+            QMessageBox.StandardButton.Yes |
+            QMessageBox.StandardButton.No
         )
 
         if reply == QMessageBox.StandardButton.Yes:
-            self.analytics_service.delete_task_permanently(task_id)
+
+            self.archive_service.delete_task_permanently(task_id)
+
             self.show_project_tasks(self.current_project_id)
-            QMessageBox.information(self, "Удалено", "Задача удалена")
+
+            QMessageBox.information(
+                self,
+                "Удалено",
+                "Задача удалена"
+            )
 
     # ==========================================================
-    # Вспомогательные
+    # UI helpers
     # ==========================================================
 
     def clear_projects(self):
+
         while self.projects_layout.count():
             item = self.projects_layout.takeAt(0)
+
             if item.widget():
                 item.widget().deleteLater()
+
         self.project_cards.clear()
 
     def clear_tasks(self):
+
         while self.tasks_layout.count():
             item = self.tasks_layout.takeAt(0)
+
             if item.widget():
                 item.widget().deleteLater()
+
         self.task_cards.clear()
 
     def calculate_columns(self):
+
         width = self.width()
+
         if width > 1400:
             return 4
         elif width > 1100:
             return 3
         elif width > 800:
             return 2
+
         return 1
 
     def resizeEvent(self, event):
+
         super().resizeEvent(event)
+
         if self.current_project_id is None:
             self.show_projects_list()
         else:

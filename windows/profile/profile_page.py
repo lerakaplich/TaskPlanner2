@@ -27,13 +27,16 @@ class ProfilePage(QWidget):
     def __init__(self, employee_id=None, parent=None, current_user=None, service=None):
         super().__init__(parent)
 
-        self.employee_id = employee_id or (current_user.get('id') if current_user else None)
+        self.employee_id = employee_id
         self.main_window = parent
         self.current_user = current_user
 
+        # Если employee_id не передан, пытаемся взять из current_user
+        if not self.employee_id and current_user:
+            self.employee_id = current_user.get('id')
+
         # Используем переданный сервис или создаем новый
         if service:
-            # 👈 ИСПРАВЛЕНО: меняем db_session на session
             self.profile_service = ProfileService(session=service.session)
         else:
             self.profile_service = ProfileService()
@@ -55,7 +58,10 @@ class ProfilePage(QWidget):
         self.init_chart_widget()
         self.connect_signals()
 
-        self.load_employee()
+        if self.employee_id:
+            self.load_employee()
+        else:
+            print("⚠️ Не указан ID сотрудника")
 
     # ---------- DATA ----------
 
@@ -265,15 +271,40 @@ class ProfilePage(QWidget):
                 "Данные профиля успешно обновлены"
             )
 
+    # windows/profile/profile_page.py
+
     def show_completed_projects(self):
-        """Показывает страницу с выполненными проектами"""
-        if self.projects_page is None:
-            self.projects_page = ProjectsPage(
-                employee_id=self.employee_id,
-                mode="completed",
-                parent=self
+        """Показать окно выполненных проектов"""
+        if ProjectsPage is None:
+            print("Ошибка: ProjectsPage не импортирован")
+            return
+
+        try:
+            # Получаем все проекты с задачами
+            all_projects = self.profile_service.get_all_employee_projects_with_tasks(
+                self.employee_id
             )
-        self.projects_page.show()
+
+            if self.projects_page is None:
+                self.projects_page = ProjectsPage(
+                    employee_id=self.employee_id,
+                    mode="all",
+                    projects_data=all_projects
+                )
+                self.projects_page.back_requested.connect(self.hide_completed_projects)
+            else:
+                self.projects_page.set_employee_id(self.employee_id)
+                self.projects_page.projects_data = all_projects
+                self.projects_page.refresh_data()
+
+            self.projects_page.show()
+            self.projects_page.raise_()
+            self.projects_page.activateWindow()
+
+        except Exception as e:
+            print(f"Ошибка при открытии окна выполненных проектов: {e}")
+            import traceback
+            traceback.print_exc()
 
     # ---------- CHART ----------
 

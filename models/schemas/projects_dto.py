@@ -41,7 +41,7 @@ class ProjectCardDTO(BaseModel):
     description: Optional[str]
     tasks_total: int
     tasks_done: int
-    is_archived: bool
+    is_archived: bool = False
     member_count: int = 0  # Количество участников
     admin_count: int = 0   # Количество администраторов
     owner_name: str = "Не назначен"

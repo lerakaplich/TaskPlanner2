@@ -38,6 +38,7 @@ class TaskDTO(BaseModel):
 class TaskCardDTO(BaseModel):
     id: int
     title: str
+    is_archived: bool = False
     priority: TaskPriority
     deadline: Optional[datetime]
     assigned_to_name: Optional[str]

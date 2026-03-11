@@ -10,10 +10,12 @@ from sqlalchemy import (
     ForeignKey,
     DateTime,
     Enum,
+    Boolean,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .employees import Base
+
 
 # =========================
 # Enum из БД
@@ -56,6 +58,10 @@ class Task(Base):
     created_at: Mapped[datetime]
     updated_at: Mapped[datetime]
 
+    # Поля для архивации
+    is_archived: Mapped[bool] = mapped_column(Boolean, default=False)
+    archived_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+
     # relationships
     column: Mapped[Optional["BoardColumn"]] = relationship(
         back_populates="tasks"
@@ -92,8 +98,13 @@ class Tag(Base):
     project_id: Mapped[int] = mapped_column(
         ForeignKey("projects.id", ondelete="CASCADE")
     )
-    name: Mapped[str]
+    name: Mapped[str] = mapped_column(String(100))
 
+    # Поля для архивации
+    is_archived: Mapped[bool] = mapped_column(Boolean, default=False)
+    archived_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+
+    # relationships
     tasks: Mapped[List["TaskTag"]] = relationship(
         back_populates="tag",
         cascade="all, delete-orphan"

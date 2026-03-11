@@ -10,7 +10,7 @@ from windows.my_tasks.task_card import TaskCard
 class ArchivedTaskCard(TaskCard):
     """
     Карточка архивированной задачи.
-    Содержит только UI-логику.
+    Только UI.
     """
 
     restore_requested = pyqtSignal(int)
@@ -25,14 +25,17 @@ class ArchivedTaskCard(TaskCard):
         self._override_context_menu()
 
     # ======================================================
-    # UI
+    # UI оформление
     # ======================================================
 
     def _apply_archive_styles(self):
+
         self.setProperty("archived", True)
 
         if not hasattr(self, "archive_badge"):
+
             self.archive_badge = QLabel("📦 В архиве", self)
+
             self.archive_badge.setStyleSheet("""
                 QLabel {
                     color: #888888;
@@ -52,6 +55,7 @@ class ArchivedTaskCard(TaskCard):
     # ======================================================
 
     def _override_context_menu(self):
+
         try:
             self.menuButton.clicked.disconnect()
         except TypeError:
@@ -60,6 +64,7 @@ class ArchivedTaskCard(TaskCard):
         self.menuButton.clicked.connect(self._show_archive_menu)
 
     def _show_archive_menu(self):
+
         menu = QMenu(self)
 
         menu.setStyleSheet("""
@@ -99,9 +104,11 @@ class ArchivedTaskCard(TaskCard):
         )
 
     # ======================================================
-    # Обновление
+    # Обновление данных
     # ======================================================
 
     def update_data(self, task_data: dict):
+
         super().update_data(task_data)
+
         self.task_id = task_data["id"]

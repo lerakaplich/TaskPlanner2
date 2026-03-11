@@ -21,14 +21,22 @@ class ProjectRepo:
 
     # repositories/project_repo.py
 
-    def get_all(self) -> List[Project]:
-        """Получить все проекты с загрузкой участников"""
+    def get_all(self, exclude_archived: bool = False) -> List[Project]:
+        """Получить все проекты с загрузкой участников
+
+        Args:
+            exclude_archived: если True, исключает архивные проекты
+        """
         from sqlalchemy.orm import joinedload
 
         stmt = select(Project).options(
             joinedload(Project.members)
         )
-        # 👈 ИСПРАВЛЕНО: добавляем .unique() для предотвращения дублирования
+
+        # 👇 Добавляем фильтрацию на уровне SQL
+        if exclude_archived:
+            stmt = stmt.where(Project.is_archived == False)
+
         return list(self.session.scalars(stmt).unique())
 
     def create(self, **kwargs) -> Project:

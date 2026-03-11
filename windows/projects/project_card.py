@@ -1,13 +1,9 @@
-from PyQt6 import uic
-from PyQt6.QtWidgets import QFrame, QDialog
-from PyQt6.QtCore import pyqtSignal
-import os
-
 # windows/projects/project_card.py
 
 from PyQt6 import uic
-from PyQt6.QtWidgets import QFrame, QDialog
-from PyQt6.QtCore import pyqtSignal
+from PyQt6.QtWidgets import QFrame, QMenu
+from PyQt6.QtCore import pyqtSignal, QPoint
+from PyQt6.QtGui import QAction
 import os
 
 
@@ -16,6 +12,7 @@ class ProjectCard(QFrame):
 
     edit_clicked = pyqtSignal(int)  # Сигнал для редактирования
     open_clicked = pyqtSignal(int)  # Сигнал для открытия
+    archive_clicked = pyqtSignal(int)  # Сигнал для архивации
 
     def __init__(self, project_id, project_data, parent=None):
         super().__init__(parent)
@@ -35,11 +32,56 @@ class ProjectCard(QFrame):
 
         # Подключаем сигналы
         self.btnOpen.clicked.connect(lambda: self.open_clicked.emit(self.project_id))
-        self.btnEdit.clicked.connect(lambda: self.edit_clicked.emit(self.project_id))
+        self.btnEdit.clicked.connect(lambda: self.edit_clicked.emit(self.project_id))  # 👈 КНОПКА РЕДАКТИРОВАНИЯ
+
+        # 👇 ОБРАБОТЧИК ДЛЯ КНОПКИ МЕНЮ (только архивирование)
+        if hasattr(self, 'menuButton'):
+            self.menuButton.clicked.connect(self.show_context_menu)
 
         # Настройка размеров
         self.setSizePolicy(self.sizePolicy().Policy.Expanding,
                            self.sizePolicy().Policy.Fixed)
+
+    # windows/projects/project_card.py
+
+    def show_context_menu(self):
+        """Показывает контекстное меню с действиями (только архивирование)"""
+        print(f"🔍 MENU: Показываем меню для проекта {self.project_id}")
+
+        menu = QMenu(self)
+
+        # Стилизация меню
+        menu.setStyleSheet("""
+            QMenu {
+                background-color: #ffffff;
+                border: 1px solid #e0e0e0;
+                border-radius: 10px;
+                padding: 6px 0;
+                font-size: 14px;
+            }
+            QMenu::item {
+                padding: 10px 30px 10px 15px;
+                color: #1B232A;
+            }
+            QMenu::item:selected {
+                background-color: #ccab6e;
+                color: white;
+                border-radius: 6px;
+                margin: 2px 6px;
+            }
+        """)
+
+        archive_action = QAction("Архивировать", self)
+        archive_action.triggered.connect(lambda: self._on_archive_clicked())
+        menu.addAction(archive_action)
+
+        # Показываем меню под кнопкой
+        menu.exec(self.menuButton.mapToGlobal(QPoint(0, self.menuButton.height())))
+
+    def _on_archive_clicked(self):
+        """Обработчик нажатия на пункт меню 'Архивировать'"""
+        print(f"🔍 MENU: Нажат пункт 'Архивировать' для проекта {self.project_id}")
+        self.archive_clicked.emit(self.project_id)
 
     def update_data(self, project_data):
         """Обновление данных карточки"""
@@ -52,23 +94,23 @@ class ProjectCard(QFrame):
             progress = 0
         self.progressBar.setValue(progress)
 
-        # 👇 ИСПРАВЛЕНО: отображаем владельца
+        # Отображаем владельца
         owner_name = getattr(project_data, 'owner_name', 'Не назначен')
-        self.projectInfo.setText(f"👤 Владелец: {owner_name}")
+        self.projectInfo.setText(f"Владелец: {owner_name}")
 
-        # 👇 ДОБАВЛЯЕМ дату создания проекта
+        # Дата создания проекта
         created_at = getattr(project_data, 'created_at', None)
         if created_at:
-            self.startDate.setText(f"📅 Создан: {created_at}")
+            self.startDate.setText(f"Создан: {created_at}")
         else:
             self.startDate.setText("")
 
         # Отображаем участников
         member_count = getattr(project_data, 'member_count', 0)
-        participants_text = f"👥 Участники: {member_count} чел."
+        participants_text = f"Участники: {member_count} чел."
         self.participants.setText(participants_text)
 
         # Отображаем администраторов
         admin_count = getattr(project_data, 'admin_count', 0)
-        admins_text = f"👑 Админы: {admin_count} чел."
+        admins_text = f"Админы: {admin_count} чел."
         self.admins.setText(admins_text)

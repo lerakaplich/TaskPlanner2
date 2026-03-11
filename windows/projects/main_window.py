@@ -1,3 +1,4 @@
+import datetime
 import os
 import os
 import sys
@@ -20,14 +21,13 @@ from windows.projects.project_card import ProjectCard
 from windows.projects.project_edit_dialog import ProjectEditDialog
 from services.overtime_service import OvertimeService
 
-# windows/projects/main_window.py
-
-
 class MainWindow(QMainWindow):
 
     def __init__(self, session, user_id):
         super().__init__()
         self.current_user_id = user_id
+        # 👇 ДОБАВЛЯЕМ СЛОВАРЬ current_user
+        self.current_user = self.get_user_by_id(session, user_id)
         self.session = session
         self.current_search_query = ""
         self.current_status_filter = "Все"
@@ -38,13 +38,12 @@ class MainWindow(QMainWindow):
         # 2. Инициализируем сервисы
         self.project_service = ProjectsService(session)
         self.analytics_service = AnalyticsService(session)
-        # 👇 СОЗДАЕМ ОТДЕЛЬНЫЙ СЕРВИС ДЛЯ ПЕРЕРАБОТОК
         self.overtime_service = OvertimeService(session)
 
         # Устанавливаем текущего пользователя в сервисах
         self.project_service.set_current_user_id(user_id)
         self.analytics_service.set_current_user_id(user_id)
-        self.overtime_service.set_current_user_id(user_id)  # 👈 ДОБАВЛЯЕМ
+        self.overtime_service.set_current_user_id(user_id)
 
         # 3. Загружаем UI
         ui_root = os.path.join(os.path.dirname(__file__), "..", "..", "ui")
@@ -64,9 +63,42 @@ class MainWindow(QMainWindow):
         # 5. Инициализация логики
         self.init_pages()
         self.connect_signals()
-        self.setup_initial_state() # Здесь уже есть вызов refresh_projects_view
+        self.setup_initial_state()
+        self.update_profile_button()  # 👈 ДОБАВЛЯЕМ ОБНОВЛЕНИЕ КНОПКИ
 
         self.showMaximized()
+
+    def get_user_by_id(self, session, user_id):
+        """Получает данные пользователя по ID из БД"""
+        try:
+            from models.employees import ExternalEmployee
+            from sqlalchemy import select
+
+            stmt = select(ExternalEmployee).where(ExternalEmployee.id == user_id)
+            user = session.scalar(stmt)
+
+            if user:
+                return {
+                    'id': user.id,
+                    'last_name': user.last_name,
+                    'first_name': user.first_name,
+                    'middle_name': user.middle_name,
+                    'rights': user.rights,
+                    'position': user.position,
+                    'phone_number': user.phone_number,
+                    'email': user.email
+                }
+        except Exception as e:
+            print(f"❌ Ошибка при загрузке пользователя: {e}")
+
+        # Возвращаем заглушку если не найден
+        return {
+            'id': user_id,
+            'last_name': 'Неизвестен',
+            'first_name': '',
+            'middle_name': '',
+            'rights': 'user'
+        }
 
     def update_profile_button(self):
         """Обновляет текст на кнопке профиля с Фамилией И.О."""
@@ -77,14 +109,10 @@ class MainWindow(QMainWindow):
 
             # Формируем Фамилию и инициалы
             if last_name and first_name:
-                # Берем первую букву имени и отчества
                 first_initial = first_name[0] + '.' if first_name else ''
                 middle_initial = middle_name[0] + '.' if middle_name else ''
-
-                # Формат: "Фамилия И.О."
                 display_name = f"{last_name} {first_initial}{middle_initial}"
             else:
-                # Если данных нет, используем логин или ID
                 display_name = f"User {self.current_user.get('id', '')}"
 
             self.btnProfile.setText(display_name)
@@ -93,6 +121,8 @@ class MainWindow(QMainWindow):
             full_name = f"{last_name} {first_name} {middle_name}".strip()
             if full_name:
                 self.btnProfile.setToolTip(full_name)
+
+    # ... остальные методы без изменений ...
 
     def init_archive_page(self):
         """Инициализация страницы архива"""
@@ -127,7 +157,7 @@ class MainWindow(QMainWindow):
         )
         self._replace_in_stack("otherTasksPage", self.other_tasks_page_instance)
 
-        # Гант - передаем сервис
+        # Гант
         self.gantt_page_instance = GanttChartWidget(service=self.project_service)
         self._replace_in_stack("ganttPage", self.gantt_page_instance)
 
@@ -135,12 +165,14 @@ class MainWindow(QMainWindow):
         self.analytics_page_instance = AnalyticsPage(service=self.analytics_service)
         self._replace_in_stack("analyticsPage", self.analytics_page_instance)
 
-        # 👇 ИСПРАВЛЕНО: передаем overtime_service, а не project_service
+        # Переработки
         self.overtime_page_instance = OvertimePage(service=self.overtime_service)
         self._replace_in_stack("overtimePage", self.overtime_page_instance)
 
-        # Архив
-        self.archive_page_instance = ArchivePage(service=self.analytics_service)
+        # 👇 ИСПРАВЛЕНО: Создаем ArchiveService с той же сессией
+        from services.archive_service import ArchiveService
+        archive_service = ArchiveService(self.session)
+        self.archive_page_instance = ArchivePage(service=archive_service)
         self._replace_in_stack("archivePage", self.archive_page_instance)
 
         # Профиль
@@ -150,57 +182,165 @@ class MainWindow(QMainWindow):
     def refresh_projects_view(self):
         """
         Финальная версия: Обновление списка проектов из БД и перерисовка UI.
-        Связывает ProjectsService (данные) с MainWindow (интерфейс).
         """
-        # 1. Очистка старых карточек и освобождение памяти
-        # Используем deleteLater(), чтобы Qt безопасно удалил виджеты из памяти
-        if hasattr(self, 'project_cards') and self.project_cards:
-            for card in self.project_cards:
-                self.projectsGrid.removeWidget(card)
-                card.deleteLater()
+        print("\n🔄 Начало refresh_projects_view")
+        print(
+            f"📊 Текущие фильтры: search='{self.current_search_query}', status='{self.current_status_filter}', owner_filter={self.current_owner_filter}")
 
-        # Инициализируем/обнуляем список активных карточек
-        self.project_cards = []
+        # 1. Очистка старых карточек и освобождение памяти
+        if hasattr(self, 'project_cards') and self.project_cards:
+            print(f"📊 Очищаем {len(self.project_cards)} старых карточек")
+            cards_to_remove = self.project_cards.copy()
+            self.project_cards = []
+
+            for card in cards_to_remove:
+                try:
+                    print(f"  - Удаляем карточку проекта {getattr(card, 'project_id', 'unknown')}")
+                    self.projectsGrid.removeWidget(card)
+                    card.deleteLater()
+                except Exception as e:
+                    print(f"❌ Ошибка при удалении карточки: {e}")
+            print("✅ Очистка завершена")
 
         # 2. Получение данных от сервиса
-        # Мы передаем текущие значения фильтров, которые обновились
-        # в методах search_projects и filter_projects
         try:
+            print("📊 Запрашиваем проекты из сервиса...")
             projects_dtos = self.project_service.get_projects_for_cards(
                 search_query=self.current_search_query,
                 status_filter=self.current_status_filter,
-                owner_filter=self.current_owner_filter  # 👈 ДОБАВЛЯЕМ
+                owner_filter=self.current_owner_filter
             )
+            print(f"📊 Получено {len(projects_dtos)} проектов из сервиса")
+
+            # Выводим первые несколько проектов для отладки
+            for i, dto in enumerate(projects_dtos[:3]):
+                print(f"  Проект {i + 1}: ID={dto.id}, name={dto.name}, is_archived={dto.is_archived}")
+
         except Exception as e:
-            print(f"Критическая ошибка при загрузке проектов: {e}")
+            print(f"❌ Критическая ошибка при загрузке проектов: {e}")
+            import traceback
+            traceback.print_exc()
             return
 
         # 3. Генерация виджетов (карточек) на основе DTO
-        for dto in projects_dtos:
-            card = ProjectCard(project_id=dto.id, project_data=dto)
+        print("📊 Создаем новые карточки...")
+        for i, dto in enumerate(projects_dtos):
+            try:
+                print(f"  - Создаем карточку {i + 1} для проекта {dto.id}")
+                card = ProjectCard(project_id=dto.id, project_data=dto)
 
-            # Соединяем сигналы карточки с методами-контроллерами главного окна
-            # Это позволяет каждой карточке знать, что делать при нажатии кнопок
-            card.edit_clicked.connect(self.edit_project)  # Вызывает диалог редактирования
-            card.open_clicked.connect(self.open_project)  # Открывает Канбан-доску
+                # Соединяем сигналы карточки с методами-контроллерами главного окна
+                card.edit_clicked.connect(self.edit_project)
+                card.open_clicked.connect(self.open_project)
+                card.archive_clicked.connect(self.archive_project)
 
-            # Сохраняем ссылку на карточку для управления сеткой
-            self.project_cards.append(card)
+                self.project_cards.append(card)
+                print(f"    ✅ Карточка создана")
+            except Exception as e:
+                print(f"❌ Ошибка при создании карточки для проекта {dto.id}: {e}")
+                import traceback
+                traceback.print_exc()
 
-        # 4. Обработка пустого состояния (Optional)
-        # Если проектов нет, можно показать заглушку (Label "Ничего не найдено")
-        if not self.project_cards:
-            # Здесь могла бы быть логика отображения сообщения о пустом списке
-            pass
+        print(f"📊 Создано {len(self.project_cards)} карточек")
 
-        # 5. Перерисовка сетки (Responsive Layout)
-        # Сбрасываем current_columns, чтобы метод adjust_card_columns
-        # гарантированно пересчитал позиции всех новых карточек
+        # 4. Перерисовка сетки
+        print("📊 Перерисовываем сетку...")
         self.current_columns = -1
         self.adjust_card_columns()
 
-        # Логируем для отладки
-        print(f"UI обновлен: отображено {len(self.project_cards)} проектов.")
+        print(f"✅ UI обновлен: отображено {len(self.project_cards)} проектов.")
+
+    def archive_project(self, project_id: int) -> bool:
+        """
+        Архивирует проект (устанавливает is_archived = True)
+        """
+        print(f"\n🔍 АРХИВАЦИЯ: Начало архивации проекта {project_id}")
+        try:
+            # Запоминаем имя проекта для уведомления
+            project_name = ""
+            for card in self.project_cards:
+                if card.project_id == project_id:
+                    project_name = card.projectTitle.text()
+                    break
+
+            # Архивируем проект
+            result = self.project_service.archive_project(project_id)
+
+            if result:
+                print(f"✅ АРХИВАЦИЯ: Проект {project_id} успешно архивирован")
+                print(f"📊 Текущий фильтр до архивации: {self.current_status_filter}")
+
+                # 👇 ИСПРАВЛЕНО: Устанавливаем фильтр "Активные" принудительно
+                if hasattr(self, 'filterCombo'):
+                    self.filterCombo.blockSignals(True)
+
+                    # Находим индекс пункта "Активные"
+                    index = self.filterCombo.findText("Активные")
+                    if index >= 0:
+                        print(f"📊 Принудительно переключаем фильтр на: Активные")
+                        self.filterCombo.setCurrentIndex(index)
+                        # ЯВНО устанавливаем current_status_filter
+                        self.current_status_filter = "Активные"
+                        self.current_owner_filter = False
+
+                    self.filterCombo.blockSignals(False)
+
+                # Обновляем отображение проектов
+                self.refresh_projects_view()
+
+                # 👇 ВАЖНО: Обновляем страницу архива, если она существует
+                if hasattr(self, 'archive_page_instance'):
+                    print(f"📦 Обновляем страницу архива после архивации")
+                    self.archive_page_instance.show_projects_list()
+
+                # Показываем уведомление
+                QMessageBox.information(
+                    self,
+                    "Архивация",
+                    f"Проект '{project_name}' перемещён в архив.\n\n"
+                    "Чтобы увидеть архивные проекты, нажмите кнопку 📦 Архив в левом меню."
+                )
+
+                return True
+            else:
+                print(f"❌ АРХИВАЦИЯ: Не удалось архивировать проект {project_id}")
+                QMessageBox.warning(self, "Ошибка", "Не удалось архивировать проект")
+                return False
+
+        except Exception as e:
+            print(f"❌ АРХИВАЦИЯ: Ошибка при архивации проекта: {e}")
+            import traceback
+            traceback.print_exc()
+            QMessageBox.critical(self, "Ошибка", f"Ошибка при архивации: {str(e)}")
+            return False
+
+    def switch_page(self, page_index):
+        """Переключение между основными страницами (0–7)"""
+        page_map = {
+            'main': 0,
+            'my_tasks': 1,
+            'other_tasks': 2,
+            'gantt': 3,
+            'analytics': 4,
+            'chat': 5,
+            'overtime': 6,
+            'settings': 7,
+            'archive': 8  # 👈 ДОБАВЛЯЕМ архив
+        }
+
+        if isinstance(page_index, str):
+            page_index = page_map.get(page_index, 0)
+
+        # 👇 Если переключаемся на страницу архива, обновляем её
+        if page_index == 8 and hasattr(self, 'archive_page_instance'):
+            print("📦 Обновляем страницу архива")
+            self.archive_page_instance.show_projects_list()
+
+        self.contentStack.setCurrentIndex(page_index)
+
+        # Обновляем состояние кнопок навигации
+        for i, btn in enumerate(self.nav_buttons):
+            btn.setChecked(i == page_index)
 
     def connect_signals(self):
         """
@@ -257,9 +397,24 @@ class MainWindow(QMainWindow):
         if hasattr(self, 'btnProfile'):
             self.btnProfile.clicked.connect(self.show_profile)
 
+        # Для кнопки архива - показываем архив
+        if hasattr(self.leftPanel, 'btnArchive'):
+            self.leftPanel.btnArchive.clicked.connect(self.show_archive)
+
         # Общий сигнал для обновления данных при переключении на главную страницу
         # (Чтобы данные всегда были актуальны при возврате в список проектов)
         self.contentStack.currentChanged.connect(self.on_stack_page_changed)
+
+    def show_archive(self):
+        """Показать страницу архива"""
+        print("📦 Открываем страницу архива")
+
+        # Переключаем на страницу архива (индекс 8)
+        self.switch_page(8)
+
+        # Обновляем страницу архива
+        if hasattr(self, 'archive_page_instance'):
+            self.archive_page_instance.show_projects_list()
 
     def on_stack_page_changed(self, index):
         """Дополнительный обработчик смены страницы в StackedWidget"""
@@ -604,15 +759,20 @@ class MainWindow(QMainWindow):
 
     def filter_projects(self, filter_text):
         """Вызывается при выборе фильтра (Все, Активные, Архив, Мои проекты)"""
-        print(f"📊 Выбран фильтр: {filter_text}")  # 👈 ОТЛАДКА
+        print(f"📊 Выбран фильтр: {filter_text}")
+
+        # 👇 ВАЖНО: Сначала сбрасываем оба фильтра
+        self.current_owner_filter = False
+        self.current_status_filter = "Все"  # Значение по умолчанию
 
         if filter_text == "Мои проекты":
             self.current_owner_filter = True
-            self.current_status_filter = "Все"  # Сбрасываем статусный фильтр
+            self.current_status_filter = "Все"  # Показываем все мои проекты (и активные, и архивные)
         else:
             self.current_owner_filter = False
-            self.current_status_filter = filter_text
+            self.current_status_filter = filter_text  # "Активные", "Архив" или "Все"
 
+        print(f"📊 Установлены фильтры: status='{self.current_status_filter}', owner_filter={self.current_owner_filter}")
         self.refresh_projects_view()
 
     def show_notifications(self):

@@ -67,6 +67,37 @@ QFrame#projectCard:hover {
        </property>
       </spacer>
      </item>
+     <item>
+      <widget class="QPushButton" name="menuButton">
+       <property name="minimumSize">
+        <size>
+         <width>30</width>
+         <height>30</height>
+        </size>
+       </property>
+       <property name="maximumSize">
+        <size>
+         <width>30</width>
+         <height>30</height>
+        </size>
+       </property>
+       <property name="styleSheet">
+        <string notr="true">QPushButton {
+    background-color: transparent;
+    border: none;
+    color: #666;
+    font-size: 20px;
+    font-weight: bold;
+}
+QPushButton:hover {
+    color: #D22730;
+}</string>
+       </property>
+       <property name="text">
+        <string>⋮</string>
+       </property>
+      </widget>
+     </item>
     </layout>
    </item>
    <item>
