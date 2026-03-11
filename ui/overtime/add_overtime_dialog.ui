@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>520</width>
-    <height>450</height>
+    <height>481</height>
    </rect>
   </property>
   <property name="minimumSize">
@@ -163,6 +163,13 @@ QPushButton#btnSave:hover {
     <widget class="QLabel" name="titleLabel">
      <property name="text">
       <string>Добавление переработки</string>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <widget class="QComboBox" name="comboEmployee">
+     <property name="currentText">
+      <string/>
      </property>
     </widget>
    </item>

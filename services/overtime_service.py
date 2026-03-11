@@ -32,7 +32,7 @@ class OvertimeService:
     def get_all_employees(self) -> List[Dict]:
         """Получает список всех сотрудников для выпадающего списка"""
         try:
-            employees = self.employee_repo.get_all()  # Это ExternalEmployeeRepo
+            employees = self.employee_repo.get_all()
             print(f"📊 Загружено сотрудников из БД: {len(employees)}")
 
             result = []
@@ -41,9 +41,6 @@ class OvertimeService:
                 full_name = f"{emp.last_name} {emp.first_name}"
                 if emp.middle_name:
                     full_name += f" {emp.middle_name}"
-
-                # Для отладки
-                print(f"  - ID: {emp.id}, Имя: {full_name}")
 
                 result.append({
                     'id': emp.id,
@@ -54,8 +51,6 @@ class OvertimeService:
             return sorted(result, key=lambda x: x['name'])
         except Exception as e:
             print(f"❌ Ошибка при загрузке сотрудников: {e}")
-            import traceback
-            traceback.print_exc()
             return []
 
     # ======================================================
@@ -70,7 +65,7 @@ class OvertimeService:
                 'id': project.id,
                 'name': project.name
             })
-        return result
+        return sorted(result, key=lambda x: x['name'])
 
     def get_tasks_for_project(self, project_id: int) -> List[Dict]:
         """Получает список задач для выбранного проекта"""
@@ -81,7 +76,7 @@ class OvertimeService:
                 'id': task.id,
                 'title': task.title
             })
-        return result
+        return sorted(result, key=lambda x: x['title'])
 
     # ======================================================
     # Работа с временем
@@ -149,6 +144,26 @@ class OvertimeService:
         duration = self.calculate_duration(note.overtime_start, note.overtime_end)
         time_period = self.format_time_period(note.overtime_start, note.overtime_end)
 
+        # Извлекаем проект и задачу из описания
+        project_name = None
+        task_title = None
+        description = note.note_text or "Без описания"
+
+        if description.startswith("[Проект:"):
+            import re
+            project_match = re.search(r'\[Проект: (.*?)\]', description)
+            if project_match:
+                project_name = project_match.group(1)
+
+            task_match = re.search(r'\[Задача: (.*?)\]', description)
+            if task_match:
+                task_title = task_match.group(1)
+
+            # Убираем теги из описания для отображения
+            clean_description = re.sub(r'\[Проект: .*?\]\s*', '', description)
+            clean_description = re.sub(r'\[Задача: .*?\]\s*', '', clean_description)
+            description = clean_description.strip()
+
         return {
             "id": note.id,
             "number": note.number,
@@ -159,9 +174,9 @@ class OvertimeService:
             "end_time": note.overtime_end.strftime("%H:%M") if note.overtime_end else "",
             "time_period": time_period,
             "duration": duration,
-            "description": note.note_text or "Без описания",
-            "project": None,  # В employee_notes нет привязки к проектам
-            "task": None,  # В employee_notes нет привязки к задачам
+            "description": description,
+            "project": project_name,
+            "task": task_title,
             "is_mine": is_mine
         }
 
@@ -220,14 +235,30 @@ class OvertimeService:
             return None
 
     # ======================================================
-    # Фильтрация (пока на клиенте)
+    # Фильтрация
     # ======================================================
     def filter_overtimes(self, overtimes: List[Dict], **filters) -> List[Dict]:
         """
         Фильтрует список переработок
-        filters может содержать: project, task, start_date, end_date
+        filters может содержать: project_name, task_title, start_date, end_date
         """
         filtered = overtimes.copy()
+
+        # Фильтр по проекту
+        project_name = filters.get('project_name')
+        if project_name and project_name != "Все переработки":
+            filtered = [
+                ot for ot in filtered
+                if ot.get('project') == project_name
+            ]
+
+        # Фильтр по задаче
+        task_title = filters.get('task_title')
+        if task_title and task_title != "Все задачи":
+            filtered = [
+                ot for ot in filtered
+                if ot.get('task') == task_title
+            ]
 
         # Фильтр по периоду
         start_date = filters.get('start_date')
@@ -238,7 +269,39 @@ class OvertimeService:
                 if start_date <= QDate.fromString(ot['date'], "dd.MM.yyyy") <= end_date
             ]
 
-        # В будущем можно добавить фильтры по проекту/задаче,
-        # когда они появятся в employee_notes
-
         return filtered
+
+    def get_filtered_overtimes(self, employee_id: Optional[int] = None,
+                               project_name: Optional[str] = None,
+                               task_title: Optional[str] = None,
+                               start_date: Optional[QDate] = None,
+                               end_date: Optional[QDate] = None) -> List[Dict]:
+        """Получает отфильтрованные переработки напрямую из БД"""
+        all_notes = self.overtime_repo.get_all()
+        result = []
+
+        for note in all_notes:
+            # Проверяем условие employee_id
+            if employee_id is not None and note.employee_id != employee_id:
+                continue
+
+            # Преобразуем в словарь
+            note_dict = self._note_to_dict(note, is_mine=(note.employee_id == self.current_user_id))
+
+            # Проверяем проект
+            if project_name and note_dict.get('project') != project_name:
+                continue
+
+            # Проверяем задачу
+            if task_title and note_dict.get('task') != task_title:
+                continue
+
+            # Проверяем период
+            if start_date and end_date:
+                note_qdate = QDate.fromString(note_dict['date'], "dd.MM.yyyy")
+                if not (start_date <= note_qdate <= end_date):
+                    continue
+
+            result.append(note_dict)
+
+        return result

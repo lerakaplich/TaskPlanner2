@@ -3,7 +3,7 @@
 from datetime import date, time
 from typing import Optional, List
 from sqlalchemy.orm import Session
-from sqlalchemy import select, and_, func
+from sqlalchemy import select, and_, func, or_
 
 from models.employees import EmployeeNote
 
@@ -27,6 +27,23 @@ class OvertimeRepo:
             EmployeeNote.overtime_date.desc(),
             EmployeeNote.employee_id
         )
+        return list(self.session.scalars(stmt))
+
+    def get_by_project(self, project_name: str) -> List[EmployeeNote]:
+        """Получить переработки по проекту (поиск в note_text)"""
+        stmt = select(EmployeeNote).where(
+            EmployeeNote.note_text.ilike(f"%[Проект: {project_name}]%")
+        ).order_by(EmployeeNote.overtime_date.desc())
+        return list(self.session.scalars(stmt))
+
+    def get_by_task(self, project_name: str, task_title: str) -> List[EmployeeNote]:
+        """Получить переработки по задаче (поиск в note_text)"""
+        stmt = select(EmployeeNote).where(
+            and_(
+                EmployeeNote.note_text.ilike(f"%[Проект: {project_name}]%"),
+                EmployeeNote.note_text.ilike(f"%[Задача: {task_title}]%")
+            )
+        ).order_by(EmployeeNote.overtime_date.desc())
         return list(self.session.scalars(stmt))
 
     def create(self, employee_id: int, overtime_date: date, note_text: Optional[str] = None,

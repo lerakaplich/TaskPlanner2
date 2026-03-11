@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>413</width>
-    <height>257</height>
+    <width>420</width>
+    <height>413</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -124,34 +124,74 @@ QDateEdit::drop-down {
     border: none;
     padding-right: 10px;
 }
+QComboBox {
+    min-height: 41px;
+    max-height: 41px;
+    height: 41px;
 
+    border-radius: 10px;
+    border: 1px solid #ccab6e;
+
+    padding-left: 10px;
+    padding-right: 30px; /* место под стрелку */
+    padding-top: 0px;
+    padding-bottom: 0px;
+}
+
+QComboBox:focus {
+    border: 2px solid #ccab6e;
+}
+QComboBox::drop-down {
+    border: none;
+    padding-right: 10px;
+}
 /* Группа */
 QGroupBox {
     font-weight: bold;
     border: 1px solid #E0E0E0;
     border-radius: 8px;
-    margin-top: 10px;
-    padding-top: 10px;
     background-color: #F8F9FA;
 }
-QGroupBox::title {
-    subcontrol-origin: margin;
-    left: 10px;
-    padding: 0 5px 0 5px;
-    color: #1B232A;
-    font-weight: bold;
 }</string>
   </property>
   <layout class="QVBoxLayout" name="verticalLayout">
    <item>
     <widget class="QGroupBox" name="groupBox">
      <property name="title">
-      <string>Период переработок</string>
+      <string/>
      </property>
      <layout class="QVBoxLayout" name="verticalLayout_2">
       <property name="spacing">
        <number>4</number>
       </property>
+      <item>
+       <widget class="QLabel" name="label_4">
+        <property name="text">
+         <string>Выберите подразделение:</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QComboBox" name="comboDivision">
+        <property name="currentText">
+         <string/>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QLabel" name="label_3">
+        <property name="text">
+         <string>Выберите отдел:</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QComboBox" name="comboDepartment">
+        <property name="currentText">
+         <string/>
+        </property>
+       </widget>
+      </item>
       <item>
        <widget class="QLabel" name="label">
         <property name="text">
@@ -170,13 +210,13 @@ QGroupBox::title {
         <property name="minimumSize">
          <size>
           <width>0</width>
-          <height>41</height>
+          <height>43</height>
          </size>
         </property>
         <property name="maximumSize">
          <size>
           <width>16777215</width>
-          <height>41</height>
+          <height>43</height>
          </size>
         </property>
         <property name="calendarPopup">
@@ -202,13 +242,13 @@ QGroupBox::title {
         <property name="minimumSize">
          <size>
           <width>0</width>
-          <height>41</height>
+          <height>43</height>
          </size>
         </property>
         <property name="maximumSize">
          <size>
           <width>16777215</width>
-          <height>41</height>
+          <height>43</height>
          </size>
         </property>
         <property name="calendarPopup">
