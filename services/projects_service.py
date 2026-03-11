@@ -7,6 +7,7 @@ from database import get_tasks_session
 from models.projects import Project
 from models.schemas.projects_dto import ProjectWithMembersDTO, ProjectCardDTO, ProjectBoardDTO, BoardColumnWithTasksDTO
 from models.schemas.tasks_dto import TaskCardDTO, TaskPriority
+from repositories.chat_repo import ChatRepo
 from repositories.project_repo import ProjectRepo
 from repositories.task_repo import TaskRepo
 from repositories.external_employee_repo import ExternalEmployeeRepo
@@ -19,6 +20,8 @@ class ProjectsService:
         self.project_repo = ProjectRepo(session)
         self.task_repo = TaskRepo(session)
         self.employee_repo = ExternalEmployeeRepo(session)
+        # 👇 Добавляем репозиторий чатов
+        self.chat_repo = ChatRepo(self.session)
 
     def set_current_user_id(self, user_id):  # 👈 ДОБАВЛЯЕМ
         """Устанавливает ID текущего пользователя"""
@@ -103,10 +106,10 @@ class ProjectsService:
 
     def create_new_project(self, raw_data: dict, creator_id: int) -> Optional[ProjectWithMembersDTO]:
         """
-        Создает проект 'под ключ': запись в БД, участников и базовые колонки.
+        Создает проект 'под ключ': запись в БД, участников, колонки и связанный чат.
         """
         try:
-            # 1. Создаем сам проект
+            # 1. Создание базовой записи проекта
             project = self.project_repo.create(
                 name=raw_data['name'],
                 description=raw_data.get('description', ''),
@@ -116,95 +119,22 @@ class ProjectsService:
                 updated_at=datetime.now(),
                 is_archived=not raw_data.get('is_active', True)
             )
+            self.session.flush()  # Получаем ID проекта
 
-            # Flush чтобы получить ID проекта
-            self.session.flush()
-            print(f"✅ Проект создан в БД, ID: {project.id}")
-
-            # 2. Обработка участников и администраторов
-            def to_id_list(val):
-                if isinstance(val, str):
-                    return [int(i.strip()) for i in val.split(',') if i.strip().isdigit()]
-                return val or []
-
-            # Получаем списки из входных данных
-            member_ids = to_id_list(raw_data.get('participants_ids'))
-            admin_ids = to_id_list(raw_data.get('admins_ids'))
-
-            print(f"📊 member_ids из формы: {member_ids}")
-            print(f"📊 admin_ids из формы: {admin_ids}")
-            print(f"👤 creator_id: {creator_id}")
-
-            # 👇 ПРОВЕРЯЕМ СУЩЕСТВОВАНИЕ СОТРУДНИКОВ В БД
-            from models.employees import ExternalEmployee
-            from sqlalchemy import select
-
-            # Проверяем creator
-            stmt = select(ExternalEmployee).where(ExternalEmployee.id == creator_id)
-            creator_exists = self.session.scalar(stmt) is not None
-            print(f"✅ Creator с ID {creator_id} существует в БД: {creator_exists}")
-
-            # Проверяем всех участников
-            for emp_id in member_ids:
-                stmt = select(ExternalEmployee).where(ExternalEmployee.id == emp_id)
-                exists = self.session.scalar(stmt) is not None
-                print(f"✅ Участник с ID {emp_id} существует в БД: {exists}")
-
-            # Проверяем всех админов
-            for emp_id in admin_ids:
-                stmt = select(ExternalEmployee).where(ExternalEmployee.id == emp_id)
-                exists = self.session.scalar(stmt) is not None
-                print(f"✅ Админ с ID {emp_id} существует в БД: {exists}")
-
-            # Формируем итоговые наборы
-            all_members = set(member_ids) | {creator_id}
-            all_admins = set(admin_ids) | {creator_id}
-
-            print(f"📊 all_members: {all_members}")
-            print(f"📊 all_admins: {all_admins}")
-
-            for emp_id in all_members:
-                # 👇 ПРОВЕРЯЕМ КАЖДОГО ПЕРЕД ДОБАВЛЕНИЕМ
-                stmt = select(ExternalEmployee).where(ExternalEmployee.id == emp_id)
-                employee = self.session.scalar(stmt)
-                if not employee:
-                    print(f"⚠️ Сотрудник с ID {emp_id} не найден в БД, пропускаем")
-                    continue
-
-                self.project_repo.add_member(
-                    project_id=project.id,
-                    employee_id=emp_id,
-                    is_admin=(emp_id in all_admins)
-                )
-                print(f"✅ Добавлен участник: {employee.last_name} {employee.first_name} (ID: {emp_id})")
-
-            print(f"✅ Добавлено участников")
+            # 2. Обработка участников (логика вынесена в отдельный метод)
+            all_members, all_admins = self._prepare_participant_sets(raw_data, creator_id)
+            self._add_project_members(project.id, all_members, all_admins)
 
             # 3. Создание стандартных колонок Канбан-доски
-            default_columns = [
-                ("К выполнению", 0, False),
-                ("В работе", 1, False),
-                ("Проверка", 2, False),
-                ("Готово", 3, True)
-            ]
+            self._create_default_columns(project.id)
 
-            for name, pos, is_done in default_columns:
-                column = self.project_repo.add_column(
-                    project_id=project.id,
-                    name=name,
-                    position=pos
-                )
-                # Устанавливаем флаг завершающей колонки
-                if is_done:
-                    column.is_done_column = True
-                    self.session.flush()
-            print(f"✅ Созданы стандартные колонки")
+            # 4. Создание связанного чата через ChatRepo
+            self._create_project_chat(project, all_members)
 
-            # Фиксируем все изменения
+            # Финальная фиксация всей транзакции
             self.session.commit()
-            print(f"✅ Проект успешно сохранен в БД")
+            print(f"✅ Проект '{project.name}' (ID: {project.id}) успешно создан со всеми связями.")
 
-            # Возвращаем полные данные созданного проекта
             return self.get_project_for_edit(project.id)
 
         except Exception as e:
@@ -213,6 +143,77 @@ class ProjectsService:
             import traceback
             traceback.print_exc()
             return None
+
+    # --- Вспомогательные методы для разбиения логики ---
+
+    def _prepare_participant_sets(self, raw_data, creator_id):
+        """Парсит входящие данные и формирует наборы участников и админов"""
+
+        def to_id_list(val):
+            if isinstance(val, str):
+                return [int(i.strip()) for i in val.split(',') if i.strip().isdigit()]
+            return val or []
+
+        member_ids = to_id_list(raw_data.get('participants_ids'))
+        admin_ids = to_id_list(raw_data.get('admins_ids'))
+
+        # Объединяем с создателем (он всегда участник и админ)
+        all_members = set(member_ids) | {creator_id}
+        all_admins = set(admin_ids) | {creator_id}
+        return all_members, all_admins
+
+    def _add_project_members(self, project_id, all_members, all_admins):
+        """Проверяет существование сотрудников и добавляет их в проект"""
+        from models.employees import ExternalEmployee
+        from sqlalchemy import select
+
+        for emp_id in all_members:
+            stmt = select(ExternalEmployee).where(ExternalEmployee.id == emp_id)
+            employee = self.session.scalar(stmt)
+
+            if employee:
+                self.project_repo.add_member(
+                    project_id=project_id,
+                    employee_id=emp_id,
+                    is_admin=(emp_id in all_admins)
+                )
+            else:
+                print(f"⚠️ Сотрудник ID {emp_id} не найден, пропущен.")
+
+    def _create_default_columns(self, project_id):
+        """Генерирует стандартный набор колонок для нового проекта"""
+        default_columns = [
+            ("К выполнению", 0, False),
+            ("В работе", 1, False),
+            ("Проверка", 2, False),
+            ("Готово", 3, True)
+        ]
+        for name, pos, is_done in default_columns:
+            column = self.project_repo.add_column(project_id, name, pos)
+            if is_done:
+                column.is_done_column = True
+                self.session.flush()
+
+    def _create_project_chat(self, project, participants):
+        """Создает чат проекта и добавляет в него всех участников через ChatRepo"""
+        try:
+            # Создаем сам чат
+            new_chat = self.chat_repo.create_chat(
+                title=f"Проект: {project.name}",
+                chat_type="project",
+                project_id=project.id
+            )
+
+            # Добавляем участников в чат
+            for emp_id in participants:
+                self.chat_repo.add_participant(new_chat.id, emp_id)
+
+            print(f"💬 Чат проекта создан (ID чата: {new_chat.id})")
+        except Exception as e:
+            # Ошибка в чате не должна отменять создание проекта,
+            # но в данном случае всё в одной транзакции
+            print(f"⚠️ Не удалось создать чат для проекта: {e}")
+            raise e
 
     def update_project(self, project_id: int, dto: ProjectWithMembersDTO) -> bool:
         try:

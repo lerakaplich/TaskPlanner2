@@ -60,19 +60,32 @@ class ChatService:
         )
 
     def create_new_chat(self, creator_id: int, data: dict):
-        """Создает комнату и добавляет участников"""
-        # 1. Создаем саму комнату
-        new_chat = self.chat_repo.create_chat(
-            chat_type=ChatType(data["type"]),
-            title=data.get("title")
-        )
+        chat_type = ChatType(data["type"])
 
-        # 2. Добавляем создателя
-        self.chat_repo.add_participant(new_chat.id, creator_id)
+        if chat_type == ChatType.private:
+            created_chats = []
+            for target_id in data["participants"]:
+                # 1. Проверяем, существует ли уже чат 1-на-1
+                existing_chat_id = self.chat_repo.get_private_chat(creator_id, target_id)
 
-        # 3. Добавляем остальных участников
-        for emp_id in data["participants"]:
-            self.chat_repo.add_participant(new_chat.id, emp_id)
+                if existing_chat_id:
+                    print(f"ℹ️ Чат с пользователем {target_id} уже существует (ID: {existing_chat_id})")
+                    continue  # Пропускаем создание дубликата
 
-        self.session.commit()
-        return new_chat
+                # 2. Если нет — создаем новый
+                new_chat = self.chat_repo.create_chat(chat_type=ChatType.private)
+                self.chat_repo.add_participant(new_chat.id, creator_id)
+                self.chat_repo.add_participant(new_chat.id, target_id)
+                created_chats.append(new_chat)
+
+            self.session.commit()
+            return created_chats
+
+        else:  # Логика для GROUP
+            new_chat = self.chat_repo.create_chat(chat_type=ChatType.group, title=data["title"])
+            self.chat_repo.add_participant(new_chat.id, creator_id)
+            for emp_id in data["participants"]:
+                self.chat_repo.add_participant(new_chat.id, emp_id)
+
+            self.session.commit()
+            return [new_chat]

@@ -18,15 +18,13 @@ class ChatCreateDialog(ChatCreateView):
         self.load_users()
 
     def toggle_type(self, index):
-        """Скрывает поле названия для личных переписок"""
-        is_private = index == 1
+        is_private = index == 1  # 1 - Личная переписка
         self.title_input.setVisible(not is_private)
         self.title_label.setVisible(not is_private)
-        # В личной переписке можно выбрать только одного человека
-        self.user_list.setSelectionMode(
-            self.user_list.SelectionMode.SingleSelection if is_private
-            else self.user_list.SelectionMode.MultiSelection
-        )
+
+        # Сбрасываем выделение при смене типа, чтобы не было путаницы
+        for i in range(self.user_list.count()):
+            self.user_list.item(i).setCheckState(Qt.CheckState.Unchecked)
 
     def load_users(self):
         """Загрузка списка сотрудников для выбора"""
@@ -70,16 +68,17 @@ class ChatCreateDialog(ChatCreateView):
             item.setHidden(text.lower() not in item.text().lower())
 
     def get_data(self):
-        """Возвращает данные для создания чата"""
         selected_ids = []
         for i in range(self.user_list.count()):
             item = self.user_list.item(i)
             if item.checkState() == Qt.CheckState.Checked:
                 selected_ids.append(item.data(Qt.ItemDataRole.UserRole))
 
+        chat_type = "group" if self.type_combo.currentIndex() == 0 else "private"
+
         return {
-            "type": "group" if self.type_combo.currentIndex() == 0 else "private",
-            "title": self.title_input.text(),
+            "type": chat_type,
+            "title": self.title_input.text() if chat_type == "group" else None,
             "participants": selected_ids
         }
 

@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import List, Optional
 from sqlalchemy import select, and_
 from sqlalchemy.orm import Session
@@ -17,14 +18,42 @@ class ChatRepo:
         )
         return list(self.session.scalars(stmt))
 
-    def create_chat(self, chat_type: ChatType, title: str = None, project_id: int = None) -> Chat:
-        chat = Chat(type=chat_type, title=title, project_id=project_id)
+    def get_private_chat(self, user_a: int, user_b: int) -> Optional[int]:
+        """Ищет ID существующего приватного чата между двумя пользователями"""
+        from sqlalchemy import text
+
+        sql = text("""
+            SELECT cp1.chat_id 
+            FROM chat_participants cp1
+            JOIN chat_participants cp2 ON cp1.chat_id = cp2.chat_id
+            JOIN chats c ON cp1.chat_id = c.id
+            WHERE c.type = 'private'
+              AND cp1.employee_id = :u1
+              AND cp2.employee_id = :u2
+            LIMIT 1
+        """)
+
+        result = self.session.execute(sql, {"u1": user_a, "u2": user_b}).fetchone()
+        return result[0] if result else None
+
+    def create_chat(self, title: str, chat_type: str, project_id: Optional[int] = None) -> Chat:
+        """Создает запись чата и возвращает объект"""
+        chat = Chat(
+            title=title,
+            type=chat_type,
+            project_id=project_id,
+            created_at=datetime.now()
+        )
         self.session.add(chat)
-        self.session.flush() # Получаем ID без коммита
+        self.session.flush()  # Получаем ID без фиксации транзакции
         return chat
 
     def add_participant(self, chat_id: int, employee_id: int):
-        participant = ChatParticipant(chat_id=chat_id, employee_id=employee_id)
+        """Добавляет участника в чат"""
+        participant = ChatParticipant(
+            chat_id=chat_id,
+            employee_id=employee_id
+        )
         self.session.add(participant)
 
     def create_message(self, chat_id: int, sender_id: int, content: str) -> ChatMessage:
