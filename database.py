@@ -12,7 +12,7 @@ DB_TASKS = {
     "password": "admin",
     "database": "taskplanner",
     "host": "localhost",
-    "port": 5433,
+    "port": 5432,
     "options": "-c search_path=foreign_data,public"  # поиск в foreign_data и public
 }
 

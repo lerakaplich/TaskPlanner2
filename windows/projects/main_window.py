@@ -19,6 +19,8 @@ from windows.profile.profile_page import ProfilePage
 from windows.projects.project_card import ProjectCard
 from windows.projects.project_edit_dialog import ProjectEditDialog
 from services.overtime_service import OvertimeService
+from services.chat_service import ChatService
+from windows.chat.chat_page import ChatPage
 
 # windows/projects/main_window.py
 
@@ -40,6 +42,7 @@ class MainWindow(QMainWindow):
         self.analytics_service = AnalyticsService(session)
         # 👇 СОЗДАЕМ ОТДЕЛЬНЫЙ СЕРВИС ДЛЯ ПЕРЕРАБОТОК
         self.overtime_service = OvertimeService(session)
+        self.chat_service = ChatService(self.session)
 
         # Устанавливаем текущего пользователя в сервисах
         self.project_service.set_current_user_id(user_id)
@@ -134,6 +137,15 @@ class MainWindow(QMainWindow):
         # Аналитика
         self.analytics_page_instance = AnalyticsPage(service=self.analytics_service)
         self._replace_in_stack("analyticsPage", self.analytics_page_instance)
+
+        # Инициализация Чата
+        self.chat_page_instance = ChatPage(
+            session=self.session,
+            service=self.chat_service,
+            projects_service=self.project_service,
+            current_user_id=self.current_user_id
+        )
+        self._replace_in_stack("chatPage", self.chat_page_instance)
 
         # 👇 ИСПРАВЛЕНО: передаем overtime_service, а не project_service
         self.overtime_page_instance = OvertimePage(service=self.overtime_service)
@@ -265,6 +277,9 @@ class MainWindow(QMainWindow):
         """Дополнительный обработчик смены страницы в StackedWidget"""
         if index == 0:  # Если вернулись на страницу списка проектов
             self.refresh_projects_view()
+        elif index == 5:  # Индекс страницы чата
+            if hasattr(self, 'chat_page_instance'):
+                self.chat_page_instance.load_chat_list()
 
     def _replace_in_stack(self, object_name, new_widget):
         """Вспомогательный метод для замены виджетов"""
