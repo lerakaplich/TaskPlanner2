@@ -172,12 +172,21 @@ class TaskRepo:
 
     def get_board_columns(self, project_id: int) -> List[BoardColumn]:
         """Получить все колонки доски для проекта."""
+        print(f"\n=== ОТЛАДКА: get_board_columns для project_id={project_id} ===")
+
         stmt = (
             select(BoardColumn)
             .where(BoardColumn.project_id == project_id)
             .order_by(BoardColumn.position)
         )
-        return list(self.session.scalars(stmt))
+
+        columns = list(self.session.scalars(stmt))
+        print(f"Найдено колонок: {len(columns)}")
+
+        for col in columns:
+            print(f"  - Колонка: id={col.id}, name='{col.name}', color='{col.color}'")
+
+        return columns
 
     def get_column_by_name(self, project_id: int, column_name: str) -> Optional[BoardColumn]:
         """Получить колонку по названию."""
