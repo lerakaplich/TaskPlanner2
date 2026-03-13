@@ -3,6 +3,7 @@
 from PyQt6.QtWidgets import QWidget, QListWidgetItem, QVBoxLayout
 from PyQt6.QtCore import Qt
 
+from models.schemas.chat_dto import MessageReadDTO
 from windows.chat.chat_message_widget import ChatMessageWidget
 from windows.chat.chat_view import ChatView
 
@@ -16,6 +17,7 @@ class ChatPage(QWidget):
         self.current_user_id = current_user_id
         self.current_chat_id = None
         self.editing_message_id = None
+        self.reply_message_id = None  # Добавляем это
 
         # Инициализируем UI
         self.ui = ChatView()
@@ -115,6 +117,11 @@ class ChatPage(QWidget):
                 self.cancel_editing()
                 # 2. Обновляем чат, чтобы увидеть надпись "ред."
                 self.refresh_messages()
+        elif self.reply_message_id:
+            # ОТВЕТ
+            self.service.save_reply(self.current_chat_id, self.current_user_id, text, self.reply_message_id)
+            self.cancel_editing()  # Очистит всё
+            self.refresh_messages()
         else:
             # --- ОБЫЧНАЯ ОТПРАВКА ---
             new_msg = self.service.save_new_message(
@@ -141,11 +148,10 @@ class ChatPage(QWidget):
             self.service.create_new_chat(self.current_user_id, data)
             self.load_chat_list()
 
-    def display_message(self, msg_dto):
+    def display_message(self, msg_dto: MessageReadDTO):
         is_mine = (msg_dto.sender_id == self.current_user_id)
 
-        print(f"DEBUG: Сообщение {msg_dto.id}, текст: {msg_dto.content[:10]}, ред: {msg_dto.is_edited}")
-
+        # ПЕРЕДАЕМ ВСЕ НОВЫЕ ПАРАМЕТРЫ В ВИДЖЕТ
         msg_widget = ChatMessageWidget(
             message_id=msg_dto.id,
             text=msg_dto.content,
@@ -153,12 +159,15 @@ class ChatPage(QWidget):
             time_str=msg_dto.time_display,
             is_mine=is_mine,
             is_read=msg_dto.is_read,
-            is_edited=msg_dto.is_edited,  # <--- Проверь это место!
-            parent=self.ui.messages_container  # Лучше передавать контейнер как родителя
+            is_edited=msg_dto.is_edited,
+            # ВОТ ЭТИ ПОЛЯ:
+            reply_to_id=msg_dto.reply_to_id,
+            reply_text=msg_dto.reply_text,
+            reply_sender_name=getattr(msg_dto, 'reply_sender_name', None),  # берем если есть
+            forward_from_name=msg_dto.forward_from_name,
+            parent=self.ui.messages_container
         )
         msg_widget.action_triggered.connect(self.handle_message_action)
-
-        # Вставляем ПЕРЕД распоркой (spacer)
         self.messages_layout.insertWidget(self.messages_layout.count() - 1, msg_widget)
         self.scroll_to_bottom()
 
@@ -167,13 +176,20 @@ class ChatPage(QWidget):
         if action_type == "delete":
             if self.service.delete_message(message_id):
                 self.refresh_messages()
-
         elif action_type == "edit":
             # Получаем актуальные данные сообщения из базы через сервис
             msg = self.service.get_message_by_id(message_id)
             if msg:
                 # Вызываем новый метод, который настроит UI
                 self.start_editing(message_id, msg.content)
+        elif action_type == "reply":
+            msg = self.service.get_message_by_id(message_id)
+            if msg:
+                self.start_replying(message_id, msg.content, msg.sender_name)
+        elif action_type == "forward":
+            self.open_forward_dialog(message_id)
+        elif action_type == "goto":
+            self.scroll_to_message(message_id)
 
     def scroll_to_bottom(self):
         """Прокрутка чата вниз"""
@@ -182,6 +198,27 @@ class ChatPage(QWidget):
         QTimer.singleShot(10, lambda: self.ui.scroll_area.verticalScrollBar().setValue(
             self.ui.scroll_area.verticalScrollBar().maximum()
         ))
+
+    def scroll_to_message(self, message_id: int):
+        # 1. Ищем нужный виджет среди дочерних элементов layout'а сообщений
+        target_widget = None
+        container = self.ui.messages_container  # Тот, где лежит QVBoxLayout с сообщениями
+
+        for i in range(container.layout().count()):
+            item = container.layout().itemAt(i)
+            if not item: continue
+            widget = item.widget()
+            # Проверяем, что это ChatMessageWidget и ID совпадает
+            if isinstance(widget, ChatMessageWidget) and widget.message_id == message_id:
+                target_widget = widget
+                break
+
+        if target_widget:
+            # 2. Прокручиваем ScrollArea к виджету
+            self.ui.scroll_area.ensureWidgetVisible(target_widget, 0, 200)
+
+            # 3. Эффект выделения (как в TG — мигнуть цветом)
+            target_widget.highlight()
 
     def start_editing(self, message_id, original_text):
         """Вызывается при нажатии 'Редактировать' в контекстном меню"""
@@ -206,3 +243,10 @@ class ChatPage(QWidget):
         self.ui.edit_panel.setVisible(False)
         self.ui.message_input.clear()
         self.ui.btn_send.setText("➤")
+
+    def start_replying(self, message_id, text, sender):
+        self.reply_message_id = message_id
+        self.ui.edit_label.setText(f"Ответ пользователю {sender}: {text[:40]}...")
+        self.ui.edit_panel.setVisible(True)
+        self.ui.btn_send.setText("↪️")  # Меняем иконку
+        self.ui.message_input.setFocus()

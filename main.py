@@ -7,6 +7,7 @@ from sqlalchemy import select, text
 from windows.projects.main_window import MainWindow
 from database import test_connections, get_tasks_session  # 👈 ЗАМЕНЯЕМ get_employees_session на get_tasks_session
 from models.employees import ExternalEmployee
+from utils.error_handler import setup_exception_hook
 
 
 class UserSelectDialog(QDialog):
@@ -235,6 +236,7 @@ class UserSelectDialog(QDialog):
 
 def main():
     """Главная функция приложения"""
+    setup_exception_hook()
 
     # Проверка БД
     test_connections()

@@ -7,14 +7,18 @@ class MessageReadDTO(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
-    chat_id: int # Добавили поле
+    chat_id: int
     sender_id: int
     sender_name: str
     content: str
     created_at: datetime
     time_display: str
-    is_read: bool = False # Добавили поле для галочек
+    is_read: bool = False
     is_edited: bool = False
+    reply_to_id: Optional[int] = None
+    reply_text: Optional[str] = None
+    reply_sender_name: Optional[str] = None  # <--- Просто добавьте эту строку
+    forward_from_name: Optional[str] = None
 
 
 class ChatReadDTO(BaseModel):

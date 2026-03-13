@@ -65,16 +65,53 @@ class ChatService:
 
     def _prepare_message_dto(self, msg) -> MessageReadDTO:
         sender_name = self.emp_repo.get_full_name(msg.sender_id)
-        return MessageReadDTO(
+
+        reply_text = None
+        reply_sender_name = None  # Новое
+        if msg.replied_to_message:
+            reply_text = msg.replied_to_message.content
+            # Получаем имя автора оригинального сообщения
+            reply_sender_name = self.emp_repo.get_full_name(msg.replied_to_message.sender_id)
+            if len(reply_text) > 50: reply_text = reply_text[:47] + "..."
+
+        # Получаем имя автора оригинала
+        forward_from_name = None
+        if msg.forward_from_id:
+            forward_from_name = self.emp_repo.get_full_name(msg.forward_from_id)
+
+        dto = MessageReadDTO(
             id=msg.id,
             chat_id=msg.chat_id,
             sender_id=msg.sender_id,
             sender_name=sender_name,
-            content=msg.content,
+            content=msg.content if not msg.is_deleted else "Сообщение удалено",
             created_at=msg.created_at,
             time_display=msg.created_at.strftime("%H:%M"),
-            is_edited=msg.updated_at is not None  # Если дата есть — значит редактировалось
+            is_edited=msg.updated_at is not None,
+            reply_to_id=msg.reply_to_id,
+            reply_text=reply_text,
+            forward_from_name=forward_from_name
         )
+        dto.reply_sender_name = reply_sender_name  # Передаем в DTO
+        return dto
+
+    def forward_message(self, message_id: int, to_chat_id: int, current_user_id: int):
+        """Пересылка сообщения в другой чат"""
+        original = self.chat_repo.get_message_by_id(message_id)
+        if not original: return None
+
+        # Для пересылки forward_from_id — это либо автор оригинала,
+        # либо тот, кто уже переслал (если это цепочка)
+        forward_id = original.forward_from_id or original.sender_id
+
+        new_msg = self.chat_repo.create_message(
+            chat_id=to_chat_id,
+            sender_id=current_user_id,
+            content=original.content,
+            forward_from_id=forward_id
+        )
+        self.session.commit()
+        return self._prepare_message_dto(new_msg)
 
     def create_new_chat(self, creator_id: int, data: dict):
         chat_type = ChatType(data["type"])
@@ -123,23 +160,7 @@ class ChatService:
 
     def get_chat_messages(self, chat_id: int, current_user_id: int) -> List[MessageReadDTO]:
         messages = self.chat_repo.get_messages(chat_id)
-        dtos = []
-        for m in messages:
-            # Проверяем статус прочтения
-            is_read = self.chat_repo.is_message_read_by_anyone(m.id, m.sender_id)
-
-            dtos.append(MessageReadDTO(
-                id=m.id,
-                chat_id=m.chat_id,
-                sender_id=m.sender_id,
-                sender_name=m.sender.first_name if m.sender else "Система",
-                content=m.content,
-                created_at=m.created_at,
-                time_display=m.created_at.strftime("%H:%M"),
-                is_read=is_read,  # 👈 Передаем статус
-                is_edited=m.updated_at is not None
-            ))
-        return dtos
+        return [self._prepare_message_dto(m) for m in messages]
 
     def get_message_by_id(self, message_id: int) -> Optional[MessageReadDTO]:
         """Получает сообщение из БД и превращает его в DTO для UI"""
@@ -152,3 +173,18 @@ class ChatService:
         """Обновляет текст сообщения через репозиторий"""
         # Репозиторий сам делает commit() в вашем методе update_message_content
         return self.chat_repo.update_message_content(message_id, new_content)
+
+    def save_reply(self, chat_id: int, sender_id: int, content: str, reply_to_id: int) -> MessageReadDTO:
+        """Сохранение ответа на сообщение"""
+        # Создаем сообщение через репозиторий с указанием reply_to_id
+        msg_orm = self.chat_repo.create_message(
+            chat_id=chat_id,
+            sender_id=sender_id,
+            content=content,
+            reply_to_id=reply_to_id
+        )
+        self.session.commit()
+        self.session.refresh(msg_orm)
+
+        # Возвращаем готовый DTO для отображения в интерфейсе
+        return self._prepare_message_dto(msg_orm)

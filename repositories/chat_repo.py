@@ -59,11 +59,18 @@ class ChatRepo:
         )
         self.session.add(participant)
 
-    def create_message(self, chat_id: int, sender_id: int, content: str) -> ChatMessage:
-        msg = ChatMessage(chat_id=chat_id, sender_id=sender_id, content=content)
+    def create_message(self, chat_id: int, sender_id: int, content: str,
+                       reply_to_id: Optional[int] = None,
+                       forward_from_id: Optional[int] = None) -> ChatMessage:
+        msg = ChatMessage(
+            chat_id=chat_id,
+            sender_id=sender_id,
+            content=content,
+            reply_to_id=reply_to_id,
+            forward_from_id=forward_from_id
+        )
         self.session.add(msg)
         return msg
-
     def get_history(self, chat_id: int, limit: int = 50) -> List[ChatMessage]:
         stmt = (
             select(ChatMessage)

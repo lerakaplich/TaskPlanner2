@@ -63,7 +63,41 @@ class ChatView(QWidget):
         self.scroll_area = QScrollArea()
         self.scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.scroll_area.setWidgetResizable(True)
-        self.scroll_area.setStyleSheet("border: none; background-color: transparent;")
+        self.scroll_area.setStyleSheet("""
+
+        /* Скроллбары */
+        QScrollArea {
+            border: none;
+            background-color: transparent;
+        }
+        QScrollBar:vertical {
+            background: #F5F5F5;
+            width: 8px;
+            border-radius: 4px;
+        }
+        QScrollBar::handle:vertical {
+            background: #C1C1C1;
+            border-radius: 4px;
+            min-height: 20px;
+        }
+        QScrollBar:horizontal {
+            border: none;
+            background: #F5F5F5;
+            height: 8px;
+            margin: 0px;
+            border-radius: 4px;
+        }
+        QScrollBar::handle:horizontal {
+            background: #c1c1c1;
+            border-radius: 4px;
+            min-width: 20px;
+        }
+        QScrollBar::add-line, QScrollBar::sub-line {
+            border: none;
+            background: none;
+        }
+
+                """)
 
         self.messages_container = QWidget()
         self.messages_container.setObjectName("messages_container")

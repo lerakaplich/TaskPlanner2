@@ -5,6 +5,8 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 import enum
 
 from models.employees import Base
+# ВАЖНО: Убедись, что этот импорт есть, чтобы Metadata узнала о таблице сотрудников!
+from models.employees import ExternalEmployee
 
 class ChatType(enum.Enum):
     project = "project"
@@ -43,13 +45,42 @@ class ChatMessage(Base):
     created_at: Mapped[datetime] = mapped_column(default=datetime.now)
     updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
 
+    # НОВЫЕ ПОЛЯ
+    reply_to_id: Mapped[Optional[int]] = mapped_column(ForeignKey("chat_messages.id", ondelete="SET NULL"))
+    forward_from_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("public.employees_data.employee_id", ondelete="SET NULL")
+    )
+
+    # Связь для получения имени (через цепочку отношений)
+    is_deleted: Mapped[bool] = mapped_column(default=False)
+
     chat = relationship("Chat", back_populates="messages")
-    # Связь с сотрудником через primaryjoin (так как это внешняя таблица)
+
+    # Связь для получения текста ответа
+    replied_to_message = relationship("ChatMessage", remote_side=[id], viewonly=True)
+
+    # 2. Ссылка на автора пересланного (forward_from_id -> ExternalEmployee.id)
+    forward_sender = relationship(
+        "ExternalEmployee",
+        primaryjoin="ChatMessage.forward_from_id == foreign(ExternalEmployee.id)",
+        viewonly=True,
+        uselist=False
+    )
+
+    # 3. Ссылка на расширенные данные автора пересланного (forward_from_id -> EmployeeData.employee_id)
+    forward_sender_data = relationship(
+        "EmployeeData",
+        primaryjoin="ChatMessage.forward_from_id == foreign(EmployeeData.employee_id)",
+        viewonly=True,
+        uselist=False
+    )
+
+    # 1. Ссылка на отправителя (sender_id -> ExternalEmployee.id)
     sender = relationship(
         "ExternalEmployee",
-        primaryjoin="ChatMessage.sender_id == ExternalEmployee.id",
-        foreign_keys=[sender_id],
-        viewonly=True
+        primaryjoin="ChatMessage.sender_id == foreign(ExternalEmployee.id)",
+        viewonly=True,
+        uselist=False
     )
 
 class MessageRead(Base):
