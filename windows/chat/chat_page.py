@@ -89,7 +89,8 @@ class ChatPage(QWidget):
             time_str=msg_dto.time_display,
             is_mine=is_mine,
             is_read=msg_dto.is_read,
-            parent=self
+            is_edited=msg_dto.is_edited,  # <--- Проверь это место!
+            parent=self.ui.messages_container  # Лучше передавать контейнер как родителя
         )
 
         # Подключаем контекстное меню (удаление/редактирование)
@@ -152,7 +153,8 @@ class ChatPage(QWidget):
             time_str=msg_dto.time_display,
             is_mine=is_mine,
             is_read=msg_dto.is_read,
-            is_edited=msg_dto.is_edited  # ПЕРЕДАЕМ ФЛАГ ИЗ DTO
+            is_edited=msg_dto.is_edited,  # <--- Проверь это место!
+            parent=self.ui.messages_container  # Лучше передавать контейнер как родителя
         )
         msg_widget.action_triggered.connect(self.handle_message_action)
 
