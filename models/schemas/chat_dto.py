@@ -7,13 +7,13 @@ class MessageReadDTO(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
-    chat_id: int
+    chat_id: int # Добавили поле
     sender_id: int
     sender_name: str
     content: str
     created_at: datetime
     time_display: str
-    date_display: str
+    is_read: bool = False # Добавили поле для галочек
 
 
 class ChatReadDTO(BaseModel):

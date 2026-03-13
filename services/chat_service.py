@@ -36,9 +36,26 @@ class ChatService:
             ))
         return dtos
 
-    def load_history(self, chat_id: int) -> List[MessageReadDTO]:
-        history = self.chat_repo.get_history(chat_id)
-        return [self._prepare_message_dto(m) for m in history]
+    def load_history(self, chat_id: int, current_user_id: int) -> List[MessageReadDTO]:
+        # Вызываем метод репозитория (который мы добавим ниже)
+        messages = self.chat_repo.get_messages(chat_id)
+        dtos = []
+
+        for m in messages:
+            # Проверяем, прочитал ли кто-то сообщение (для галочек)
+            is_read = self.chat_repo.is_message_read_by_anyone(m.id, m.sender_id)
+
+            dtos.append(MessageReadDTO(
+                id=m.id,
+                chat_id=chat_id,  # Исправлено
+                sender_id=m.sender_id,
+                sender_name=self.emp_repo.get_full_name(m.sender_id),
+                content=m.content,
+                created_at=m.created_at,
+                time_display=m.created_at.strftime("%H:%M"),
+                is_read=is_read
+            ))
+        return dtos
 
     def save_new_message(self, chat_id: int, sender_id: int, content: str) -> MessageReadDTO:
         msg_orm = self.chat_repo.create_message(chat_id, sender_id, content)
@@ -89,3 +106,36 @@ class ChatService:
 
             self.session.commit()
             return [new_chat]
+
+    def get_message_read_info(self, message_id: int) -> str:
+        names = self.chat_repo.get_who_read(message_id)
+        if not names:
+            return "Никто еще не прочитал"
+        return "Прочитали: " + ", ".join(names)
+
+    def mark_chat_as_read(self, chat_id: int, user_id: int):
+        """Помечает все входящие сообщения как прочитанные текущим пользователем"""
+        messages = self.chat_repo.get_messages(chat_id)
+        for m in messages:
+            if m.sender_id != user_id:
+                self.chat_repo.mark_as_read(m.id, user_id)
+        self.session.commit()
+
+    def get_chat_messages(self, chat_id: int, current_user_id: int) -> List[MessageReadDTO]:
+        messages = self.chat_repo.get_messages(chat_id)
+        dtos = []
+        for m in messages:
+            # Проверяем статус прочтения
+            is_read = self.chat_repo.is_message_read_by_anyone(m.id, m.sender_id)
+
+            dtos.append(MessageReadDTO(
+                id=m.id,
+                chat_id=m.chat_id,
+                sender_id=m.sender_id,
+                sender_name=m.sender.first_name if m.sender else "Система",
+                content=m.content,
+                created_at=m.created_at,
+                time_display=m.created_at.strftime("%H:%M"),
+                is_read=is_read  # 👈 Передаем статус
+            ))
+        return dtos

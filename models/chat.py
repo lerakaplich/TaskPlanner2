@@ -50,3 +50,10 @@ class ChatMessage(Base):
         foreign_keys=[sender_id],
         viewonly=True
     )
+
+class MessageRead(Base):
+    __tablename__ = "message_reads"
+
+    message_id: Mapped[int] = mapped_column(ForeignKey("chat_messages.id", ondelete="CASCADE"), primary_key=True)
+    user_id: Mapped[int] = mapped_column(primary_key=True) # ID из внешней базы
+    read_at: Mapped[datetime] = mapped_column(default=datetime.now)

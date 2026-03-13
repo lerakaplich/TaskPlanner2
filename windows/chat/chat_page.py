@@ -2,6 +2,8 @@
 
 from PyQt6.QtWidgets import QWidget, QListWidgetItem, QVBoxLayout
 from PyQt6.QtCore import Qt
+
+from windows.chat.chat_message_widget import ChatMessageWidget
 from windows.chat.chat_view import ChatView
 
 
@@ -16,6 +18,7 @@ class ChatPage(QWidget):
 
         # Инициализируем UI
         self.ui = ChatView()
+        self.messages_layout = self.ui.messages_layout
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.addWidget(self.ui)
@@ -48,35 +51,54 @@ class ChatPage(QWidget):
             print(f"❌ Ошибка загрузки списка чатов: {e}")
 
     def on_chat_selected(self, item):
-        chat_id = item.data(Qt.ItemDataRole.UserRole)
-        self.current_chat_id = chat_id
+        self.current_chat_id = item.data(Qt.ItemDataRole.UserRole)
+
+        # Помечаем прочитанным при открытии
+        self.service.mark_chat_as_read(self.current_chat_id, self.current_user_id)
+
         self.ui.chat_header.setText(item.text())
         self.refresh_messages()
 
     def refresh_messages(self):
-        """Подгрузка истории сообщений для выбранного чата"""
-        if not self.current_chat_id:
-            return
+        """Перезагрузка сообщений текущего чата"""
+        if self.current_chat_id:
+            self.clear_messages_layout()
+            messages = self.service.get_chat_messages(self.current_chat_id, self.current_user_id)
+            for m in messages:
+                self.display_message(m)
 
-        self.ui.chat_history.clear()
-        history = self.service.load_history(self.current_chat_id)
-        for msg in history:
-            self.append_message_to_ui(msg)
+    def clear_messages_layout(self):
+        """Удаляет все виджеты сообщений, оставляя только spacer в конце"""
+        while self.messages_layout.count() > 1:  # Оставляем 1, так как последний — это spacer
+            item = self.messages_layout.takeAt(0)
+            widget = item.widget()
+            if widget:
+                widget.deleteLater()
 
     def append_message_to_ui(self, msg_dto):
-        """Отрисовка одного сообщения с простым HTML-стилем"""
-        is_my_msg = msg_dto.sender_id == self.current_user_id
-        color = "#2c3e50" if not is_my_msg else "#D22730"
-        align = "left" if not is_my_msg else "right"
+        """Отрисовка одного сообщения в виде пузырька"""
+        is_mine = (msg_dto.sender_id == self.current_user_id)
 
-        html = f"""
-            <div style="margin-bottom: 10px;">
-                <b style="color: {color};">{msg_dto.sender_name}</b> 
-                <small style="color: gray;">{msg_dto.time_display}</small><br>
-                {msg_dto.content}
-            </div>
-        """
-        self.ui.chat_history.append(html)
+        # Создаем виджет пузырька
+        msg_widget = ChatMessageWidget(
+            message_id=msg_dto.id,
+            text=msg_dto.content,
+            sender_name=msg_dto.sender_name,
+            time_str=msg_dto.time_display,
+            is_mine=is_mine,
+            is_read=msg_dto.is_read,
+            parent=self
+        )
+
+        # Подключаем контекстное меню (удаление/редактирование)
+        msg_widget.action_triggered.connect(self.handle_message_action)
+
+        # Вставляем виджет в лейаут ПЕРЕД распоркой (spacer)
+        # self.ui.messages_layout — это ваш QVBoxLayout из ChatView
+        self.messages_layout.insertWidget(self.messages_layout.count() - 1, msg_widget)
+
+        # Прокручиваем вниз
+        self.scroll_to_bottom()
 
     def send_message(self):
         text = self.ui.message_input.text().strip()
@@ -109,3 +131,44 @@ class ChatPage(QWidget):
             data = dialog.get_data()
             self.service.create_new_chat(self.current_user_id, data)
             self.load_chat_list()
+
+    def display_message(self, msg_dto):
+        is_mine = (msg_dto.sender_id == self.current_user_id)
+
+        msg_widget = ChatMessageWidget(
+            message_id=msg_dto.id,
+            text=msg_dto.content,
+            sender_name=msg_dto.sender_name,
+            time_str=msg_dto.time_display,
+            is_mine=is_mine,
+            is_read=msg_dto.is_read
+        )
+        msg_widget.action_triggered.connect(self.handle_message_action)
+
+        # Вставляем ПЕРЕД распоркой (spacer)
+        self.messages_layout.insertWidget(self.messages_layout.count() - 1, msg_widget)
+        self.scroll_to_bottom()
+
+    def handle_message_action(self, action_type, message_id):
+        """Обработка действий из контекстного меню сообщения"""
+        if action_type == "delete":
+            # Вызываем метод удаления из репозитория/сервиса
+            if self.service.delete_message(message_id):
+                self.refresh_messages()  # Обновляем список после удаления
+
+        elif action_type == "edit":
+            # Находим сообщение, чтобы перенести текст в поле ввода
+            msg = self.service.get_message_by_id(message_id)
+            if msg:
+                self.ui.message_input.setText(msg.content)
+                self.ui.message_input.setFocus()
+                self.editing_message_id = message_id
+                self.ui.btn_send.setText("Сохранить")
+
+    def scroll_to_bottom(self):
+        """Прокрутка чата вниз"""
+        # Используем QTimer, чтобы прокрутка сработала после того, как виджет отрисуется
+        from PyQt6.QtCore import QTimer
+        QTimer.singleShot(10, lambda: self.ui.scroll_area.verticalScrollBar().setValue(
+            self.ui.scroll_area.verticalScrollBar().maximum()
+        ))

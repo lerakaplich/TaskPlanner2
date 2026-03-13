@@ -1,8 +1,11 @@
 from datetime import datetime
 from typing import List, Optional
 from sqlalchemy import select, and_
+from sqlalchemy.dialects.postgresql.dml import insert
 from sqlalchemy.orm import Session
-from models.chat import Chat, ChatMessage, ChatParticipant, ChatType
+from models.chat import Chat, ChatMessage, ChatParticipant, ChatType, MessageRead
+from models.employees import ExternalEmployee
+
 
 class ChatRepo:
     def __init__(self, session: Session):
@@ -70,3 +73,39 @@ class ChatRepo:
         )
         result = list(self.session.scalars(stmt))
         return result[::-1]
+
+    def mark_as_read(self, message_id: int, user_id: int):
+        stmt = insert(MessageRead).values(
+            message_id=message_id,
+            user_id=user_id
+        ).on_conflict_do_nothing()
+        self.session.execute(stmt)
+
+    def get_who_read(self, message_id: int):
+        """Возвращает список ФИО сотрудников, прочитавших сообщение"""
+        stmt = (
+            select(ExternalEmployee.last_name, ExternalEmployee.first_name)
+            .join(MessageRead, ExternalEmployee.id == MessageRead.user_id)
+            .where(MessageRead.message_id == message_id)
+        )
+        results = self.session.execute(stmt).all()
+        return [f"{r.last_name} {r.first_name[0]}." for r in results]
+
+    def is_message_read_by_anyone(self, message_id: int, sender_id: int) -> bool:
+        """Проверка: есть ли хоть одна запись в message_reads от другого человека"""
+        from models.chat import MessageRead
+        stmt = select(MessageRead).where(
+            MessageRead.message_id == message_id,
+            MessageRead.user_id != sender_id
+        ).limit(1)
+        return self.session.scalar(stmt) is not None
+
+    def get_messages(self, chat_id: int, limit: int = 50) -> List[ChatMessage]:
+        stmt = (
+            select(ChatMessage)
+            .where(ChatMessage.chat_id == chat_id)
+            .order_by(ChatMessage.created_at.desc())
+            .limit(limit)
+        )
+        result = list(self.session.scalars(stmt).unique())
+        return result[::-1]  # Переворачиваем для хронологии
