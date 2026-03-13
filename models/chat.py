@@ -41,6 +41,7 @@ class ChatMessage(Base):
     sender_id: Mapped[int] = mapped_column(nullable=False)
     content: Mapped[str] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(default=datetime.now)
+    updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
 
     chat = relationship("Chat", back_populates="messages")
     # Связь с сотрудником через primaryjoin (так как это внешняя таблица)

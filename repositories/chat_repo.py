@@ -1,6 +1,6 @@
 from datetime import datetime
 from typing import List, Optional
-from sqlalchemy import select, and_
+from sqlalchemy import select, and_, update
 from sqlalchemy.dialects.postgresql.dml import insert
 from sqlalchemy.orm import Session
 from models.chat import Chat, ChatMessage, ChatParticipant, ChatType, MessageRead
@@ -109,3 +109,25 @@ class ChatRepo:
         )
         result = list(self.session.scalars(stmt).unique())
         return result[::-1]  # Переворачиваем для хронологии
+
+    def update_message_content(self, message_id: int, new_content: str):
+        try:
+            stmt = (
+                update(ChatMessage)
+                .where(ChatMessage.id == message_id)
+                .values(
+                    content=new_content,
+                    updated_at=datetime.now()  # Фиксируем время изменения
+                )
+            )
+            self.session.execute(stmt)
+            self.session.commit()
+            return True
+        except Exception as e:
+            print(f"Ошибка обновления: {e}")
+            self.session.rollback()
+            return False
+
+    def get_message_by_id(self, message_id: int) -> Optional[ChatMessage]:
+        """Получить одно сообщение по его ID"""
+        return self.session.get(ChatMessage, message_id)

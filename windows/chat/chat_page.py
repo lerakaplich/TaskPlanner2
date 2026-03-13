@@ -15,6 +15,7 @@ class ChatPage(QWidget):
         self.projects_service = projects_service
         self.current_user_id = current_user_id
         self.current_chat_id = None
+        self.editing_message_id = None
 
         # Инициализируем UI
         self.ui = ChatView()
@@ -28,6 +29,7 @@ class ChatPage(QWidget):
         self.ui.btn_send.clicked.connect(self.send_message)
         self.ui.message_input.returnPressed.connect(self.send_message)
         self.ui.btn_create_chat.clicked.connect(self.open_create_chat_dialog)
+        self.ui.btn_cancel_edit.clicked.connect(self.cancel_editing)
 
         # Первичная загрузка
         self.load_chat_list()
@@ -102,19 +104,25 @@ class ChatPage(QWidget):
 
     def send_message(self):
         text = self.ui.message_input.text().strip()
-        if not text or not self.current_chat_id:
+        if not text:
             return
 
-        # 1. Сохраняем в БД через сервис
-        new_msg = self.service.save_new_message(
-            chat_id=self.current_chat_id,
-            sender_id=self.current_user_id,
-            content=text
-        )
-
-        # 2. Очищаем ввод и добавляем в UI (в будущем здесь будет сигнал Socket.IO)
-        self.ui.message_input.clear()
-        self.append_message_to_ui(new_msg)
+        if self.editing_message_id:
+            # --- РЕЖИМ СОХРАНЕНИЯ ПРАВОК ---
+            if self.service.update_message(self.editing_message_id, text):
+                # 1. Сбрасываем режим редактирования (скроет плашку и очистит поле)
+                self.cancel_editing()
+                # 2. Обновляем чат, чтобы увидеть надпись "ред."
+                self.refresh_messages()
+        else:
+            # --- ОБЫЧНАЯ ОТПРАВКА ---
+            new_msg = self.service.save_new_message(
+                chat_id=self.current_chat_id,
+                sender_id=self.current_user_id,
+                content=text
+            )
+            self.ui.message_input.clear()
+            self.append_message_to_ui(new_msg)
 
     def open_create_chat_dialog(self):
         from windows.chat.chat_create_dialog import ChatCreateDialog
@@ -135,13 +143,16 @@ class ChatPage(QWidget):
     def display_message(self, msg_dto):
         is_mine = (msg_dto.sender_id == self.current_user_id)
 
+        print(f"DEBUG: Сообщение {msg_dto.id}, текст: {msg_dto.content[:10]}, ред: {msg_dto.is_edited}")
+
         msg_widget = ChatMessageWidget(
             message_id=msg_dto.id,
             text=msg_dto.content,
             sender_name=msg_dto.sender_name,
             time_str=msg_dto.time_display,
             is_mine=is_mine,
-            is_read=msg_dto.is_read
+            is_read=msg_dto.is_read,
+            is_edited=msg_dto.is_edited  # ПЕРЕДАЕМ ФЛАГ ИЗ DTO
         )
         msg_widget.action_triggered.connect(self.handle_message_action)
 
@@ -152,18 +163,15 @@ class ChatPage(QWidget):
     def handle_message_action(self, action_type, message_id):
         """Обработка действий из контекстного меню сообщения"""
         if action_type == "delete":
-            # Вызываем метод удаления из репозитория/сервиса
             if self.service.delete_message(message_id):
-                self.refresh_messages()  # Обновляем список после удаления
+                self.refresh_messages()
 
         elif action_type == "edit":
-            # Находим сообщение, чтобы перенести текст в поле ввода
+            # Получаем актуальные данные сообщения из базы через сервис
             msg = self.service.get_message_by_id(message_id)
             if msg:
-                self.ui.message_input.setText(msg.content)
-                self.ui.message_input.setFocus()
-                self.editing_message_id = message_id
-                self.ui.btn_send.setText("Сохранить")
+                # Вызываем новый метод, который настроит UI
+                self.start_editing(message_id, msg.content)
 
     def scroll_to_bottom(self):
         """Прокрутка чата вниз"""
@@ -172,3 +180,27 @@ class ChatPage(QWidget):
         QTimer.singleShot(10, lambda: self.ui.scroll_area.verticalScrollBar().setValue(
             self.ui.scroll_area.verticalScrollBar().maximum()
         ))
+
+    def start_editing(self, message_id, original_text):
+        """Вызывается при нажатии 'Редактировать' в контекстном меню"""
+        self.editing_message_id = message_id
+
+        # 1. Показываем панель только для чтения (индикатор)
+        # Обрезаем текст для превью, если он слишком длинный
+        preview = original_text if len(original_text) < 60 else original_text[:57] + "..."
+        self.ui.edit_label.setText(preview)
+        self.ui.edit_panel.setVisible(True)
+
+        # 2. Переносим текст в поле ввода для ФАКТИЧЕСКОГО редактирования
+        self.ui.message_input.setText(original_text)
+        self.ui.message_input.setFocus()
+
+        # 3. Меняем иконку кнопки на галочку
+        self.ui.btn_send.setText("✅")
+
+    def cancel_editing(self):
+        """Вызывается при нажатии на крестик в edit_panel"""
+        self.editing_message_id = None
+        self.ui.edit_panel.setVisible(False)
+        self.ui.message_input.clear()
+        self.ui.btn_send.setText("➤")

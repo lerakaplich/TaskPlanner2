@@ -14,6 +14,7 @@ class MessageReadDTO(BaseModel):
     created_at: datetime
     time_display: str
     is_read: bool = False # Добавили поле для галочек
+    is_edited: bool = False
 
 
 class ChatReadDTO(BaseModel):

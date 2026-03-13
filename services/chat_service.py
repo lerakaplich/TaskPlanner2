@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Optional
 from sqlalchemy.orm import Session
 from repositories.chat_repo import ChatRepo
 from repositories.external_employee_repo import ExternalEmployeeRepo
@@ -73,7 +73,7 @@ class ChatService:
             content=msg.content,
             created_at=msg.created_at,
             time_display=msg.created_at.strftime("%H:%M"),
-            date_display=msg.created_at.strftime("%d.%m.%Y %H:%M")
+            is_edited=msg.updated_at is not None  # Если дата есть — значит редактировалось
         )
 
     def create_new_chat(self, creator_id: int, data: dict):
@@ -136,6 +136,19 @@ class ChatService:
                 content=m.content,
                 created_at=m.created_at,
                 time_display=m.created_at.strftime("%H:%M"),
-                is_read=is_read  # 👈 Передаем статус
+                is_read=is_read,  # 👈 Передаем статус
+                is_edited=m.updated_at is not None
             ))
         return dtos
+
+    def get_message_by_id(self, message_id: int) -> Optional[MessageReadDTO]:
+        """Получает сообщение из БД и превращает его в DTO для UI"""
+        msg = self.chat_repo.get_message_by_id(message_id)
+        if msg:
+            return self._prepare_message_dto(msg)
+        return None
+
+    def update_message(self, message_id: int, new_content: str) -> bool:
+        """Обновляет текст сообщения через репозиторий"""
+        # Репозиторий сам делает commit() в вашем методе update_message_content
+        return self.chat_repo.update_message_content(message_id, new_content)
