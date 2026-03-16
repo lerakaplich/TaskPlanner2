@@ -39,6 +39,41 @@ async def send_chat_msg(sid, data):
 
 
 @sio.event
+async def edit_chat_msg(sid, data):
+    # data: {"message_id": 123, "content": "текст", "chat_id": 5}
+    try:
+        with TasksSessionLocal() as session:
+            service = ChatService(session)
+            # Вызываем твой метод из ChatService
+            success = service.update_message(data['message_id'], data['content'])
+
+            if success:
+                # Оповещаем ВСЕХ в комнате чата
+                await sio.emit("message_edited", {
+                    "message_id": data['message_id'],
+                    "new_content": data['content'],
+                    "chat_id": data['chat_id']
+                }, room=f"chat_{data['chat_id']}")
+    except Exception as e:
+        print(f"❌ Ошибка сервера при правке: {e}")
+
+
+@sio.event
+async def delete_chat_msg(sid, data):
+    # data: {"message_id": 123, "chat_id": 5}
+    try:
+        with TasksSessionLocal() as session:
+            service = ChatService(session)
+            # Тебе нужно добавить метод delete_message в ChatService, если его нет
+            if service.delete_message(data['message_id']):
+                await sio.emit("message_deleted", {
+                    "message_id": data['message_id'],
+                    "chat_id": data['chat_id']
+                }, room=f"chat_{data['chat_id']}")
+    except Exception as e:
+        print(f"❌ Ошибка сервера при удалении: {e}")
+
+@sio.event
 async def forward_message(sid, data):
     # data: {"message_id": 100, "to_chat_id": 5, "current_user_id": 10}
     with TasksSessionLocal() as session:

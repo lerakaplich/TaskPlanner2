@@ -3,7 +3,8 @@
 from PyQt6.QtWidgets import QWidget, QListWidgetItem, QVBoxLayout
 from PyQt6.QtCore import Qt, pyqtSignal, QTimer
 
-from models.schemas.chat_dto import MessageReadDTO
+from models.schemas.chat_dto import MessageReadDTO, MessageEditDTO, MessageDeleteDTO
+from windows.chat.chat_forward_dialog import ForwardDialog
 from windows.chat.chat_message_widget import ChatMessageWidget
 from windows.chat.chat_messages_separator import NewMessagesSeparator
 from windows.chat.chat_view import ChatView
@@ -11,6 +12,8 @@ from windows.chat.chat_view import ChatView
 
 class ChatPage(QWidget):
     new_message_signal = pyqtSignal(MessageReadDTO)
+    message_edited_signal = pyqtSignal(MessageEditDTO)
+    message_deleted_signal = pyqtSignal(MessageDeleteDTO)
 
     def __init__(self, session, service, projects_service, current_user_id, sio):
         super().__init__()
@@ -35,6 +38,8 @@ class ChatPage(QWidget):
 
         # Настраиваем обработчик сокета
         self.sio.on('new_message', self.on_socket_message)
+        self.sio.on('message_edited', self.on_socket_message_edited)
+        self.sio.on('message_deleted', self.on_socket_message_deleted)
 
         # Таймер для проверки видимых сообщений (раз в 500мс, чтобы не грузить процессор)
         self.read_tracker_timer = QTimer()
@@ -51,6 +56,9 @@ class ChatPage(QWidget):
         self.ui.message_input.returnPressed.connect(self.send_message)
         self.ui.btn_create_chat.clicked.connect(self.open_create_chat_dialog)
         self.ui.btn_cancel_edit.clicked.connect(self.cancel_editing)
+
+        self.message_edited_signal.connect(self.process_message_edit)
+        self.message_deleted_signal.connect(self.process_message_delete)
 
         # 1. При ручном скролле проверяем положение
         self.ui.scroll_area.verticalScrollBar().valueChanged.connect(self.handle_scroll)
@@ -71,6 +79,40 @@ class ChatPage(QWidget):
                 self.new_message_signal.emit(msg_dto)
         except Exception as e:
             print(f"❌ Ошибка валидации DTO: {e}")
+
+    def on_socket_message_edited(self, data):
+        try:
+            # Теперь валидация пройдет успешно, так как поля совпадают!
+            dto = MessageEditDTO.model_validate(data)
+            self.message_edited_signal.emit(dto)
+        except Exception as e:
+            print(f"❌ Ошибка валидации EditDTO: {e}")
+
+    def on_socket_message_deleted(self, data):
+        try:
+            dto = MessageDeleteDTO.model_validate(data)
+            self.message_deleted_signal.emit(dto)
+        except Exception as e:
+            print(f"❌ Ошибка валидации DeleteDTO: {e}")
+
+    def process_message_edit(self, dto: MessageEditDTO):
+        widgets = self.ui.messages_container.findChildren(ChatMessageWidget)
+        for widget in widgets:
+            # Обрати внимание на имена полей в новом DTO
+            if int(widget.message_id) == int(dto.message_id):
+                widget.update_text(dto.new_content)
+                print(f"✅ Сообщение {dto.message_id} мгновенно обновлено!")
+                break
+
+    def process_message_delete(self, msg_id: int):
+        """Безопасное удаление в UI-потоке"""
+        widgets = self.ui.messages_container.findChildren(ChatMessageWidget)
+        for widget in widgets:
+            if widget.message_id == msg_id:
+                self.messages_layout.removeWidget(widget)
+                widget.deleteLater()
+                print(f"🗑️ Сообщение {msg_id} удалено")
+                break
 
     def on_messages_read_update(self, data):
         # data = {"message_ids": [101, 102], "chat_id": 5}
@@ -205,6 +247,8 @@ class ChatPage(QWidget):
                 parent=self.ui.messages_container
             )
 
+            msg_widget.action_triggered.connect(self.handle_message_action)
+
             # Просто добавляем в конец, AlignTop сам все прижмет кверху
             self.messages_layout.addWidget(msg_widget)
 
@@ -222,35 +266,36 @@ class ChatPage(QWidget):
             return None
 
     def send_message(self):
-        self.remove_new_messages_separator()  # Пользователь начал активность — убираем метку
         text = self.ui.message_input.text().strip()
         if not text:
             return
 
         if self.editing_message_id:
-            # --- РЕЖИМ СОХРАНЕНИЯ ПРАВОК ---
-            if self.service.update_message(self.editing_message_id, text):
-                # 1. Сбрасываем режим редактирования (скроет плашку и очистит поле)
-                self.cancel_editing()
-                # 2. Обновляем чат, чтобы увидеть надпись "ред."
-                self.refresh_messages()
+            # Отправляем запрос на редактирование
+            self.sio.emit('edit_chat_msg', {
+                "message_id": self.editing_message_id,
+                "content": text,
+                "chat_id": self.current_chat_id
+            })
+            self.cancel_editing()
+        elif self.reply_message_id:
+            # Отправляем ответ
+            self.sio.emit('send_chat_msg', {
+                "chat_id": self.current_chat_id,
+                "sender_id": self.current_user_id,
+                "content": text,
+                "reply_to_id": self.reply_message_id
+            })
+            self.cancel_editing()
         else:
-            # ДЛЯ ВСЕХ сообщений (и ответов, и обычных) используем сокет!
-            payload = {
+            # Обычное сообщение
+            self.sio.emit('send_chat_msg', {
                 "chat_id": self.current_chat_id,
                 "sender_id": self.current_user_id,
                 "content": text
-            }
-            if self.reply_message_id:
-                payload["reply_to_id"] = self.reply_message_id
+            })
 
-            # Отправляем на сервер
-            self.sio.emit('send_chat_msg', payload)
-
-            # Очищаем ввод и закрываем панели
-            self.ui.message_input.clear()
-            if self.reply_message_id:
-                self.cancel_editing()
+        self.ui.message_input.clear()
 
     def open_create_chat_dialog(self):
         from windows.chat.chat_create_dialog import ChatCreateDialog
@@ -270,23 +315,52 @@ class ChatPage(QWidget):
 
     def handle_message_action(self, action_type, message_id):
         """Обработка действий из контекстного меню сообщения"""
-        if action_type == "delete":
-            if self.service.delete_message(message_id):
-                self.refresh_messages()
+        if action_type == "goto":
+            self.scroll_to_message(message_id)  # Этот метод у тебя уже есть в коде!
+
+        elif action_type == "delete":
+            # Удаление тоже лучше через сокет, чтобы у всех пропало
+            self.sio.emit('delete_message', {
+                "message_id": message_id,
+                "chat_id": self.current_chat_id
+            })
+
         elif action_type == "edit":
-            # Получаем актуальные данные сообщения из базы через сервис
             msg = self.service.get_message_by_id(message_id)
             if msg:
-                # Вызываем новый метод, который настроит UI
                 self.start_editing(message_id, msg.content)
+
         elif action_type == "reply":
             msg = self.service.get_message_by_id(message_id)
             if msg:
                 self.start_replying(message_id, msg.content, msg.sender_name)
+
         elif action_type == "forward":
             self.open_forward_dialog(message_id)
-        elif action_type == "goto":
-            self.scroll_to_message(message_id)
+
+        elif action_type == "select":
+            # Наш новый режим мультивыбора
+            self.enter_selection_mode(message_id)
+
+    def open_forward_dialog(self, message_id):
+        """Логика открытия окна пересылки"""
+        try:
+            # Получаем актуальный список чатов из сервиса
+            chats = self.service.get_user_chats(self.current_user_id)
+
+            dialog = ForwardDialog(chats, self)
+            if dialog.exec():
+                target_chat_id = dialog.get_selected_chat_id()
+                if target_chat_id:
+                    # Отправляем событие пересылки на сервер
+                    self.sio.emit('forward_message', {
+                        "message_id": message_id,
+                        "target_chat_id": target_chat_id,
+                        "user_id": self.current_user_id
+                    })
+                    print(f"✅ Сообщение {message_id} переслано в чат {target_chat_id}")
+        except Exception as e:
+            print(f"❌ Ошибка при пересылке: {e}")
 
     def scroll_to_bottom(self, force=False):
         """

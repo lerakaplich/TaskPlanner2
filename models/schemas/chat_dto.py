@@ -20,6 +20,14 @@ class MessageReadDTO(BaseModel):
     reply_sender_name: Optional[str] = None  # <--- Просто добавьте эту строку
     forward_from_name: Optional[str] = None
 
+class MessageEditDTO(BaseModel):
+    message_id: int
+    new_content: str
+    chat_id: int
+
+class MessageDeleteDTO(BaseModel):
+    message_id: int
+    chat_id: int
 
 class ChatReadDTO(BaseModel):
     model_config = ConfigDict(from_attributes=True)

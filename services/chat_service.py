@@ -42,19 +42,13 @@ class ChatService:
         dtos = []
 
         for m in messages:
-            # Проверяем, прочитал ли кто-то сообщение (для галочек)
-            is_read = self.chat_repo.is_message_read_by_anyone(m.id, m.sender_id)
+            dto = self._prepare_message_dto(m)
 
-            dtos.append(MessageReadDTO(
-                id=m.id,
-                chat_id=chat_id,  # Исправлено
-                sender_id=m.sender_id,
-                sender_name=self.emp_repo.get_full_name(m.sender_id),
-                content=m.content,
-                created_at=m.created_at,
-                time_display=m.created_at.strftime("%H:%M"),
-                is_read=is_read
-            ))
+            # 3. Дополнительно проверяем статус прочтения (как и было)
+            dto.is_read = self.chat_repo.is_message_read_by_anyone(m.id, m.sender_id)
+
+            dtos.append(dto)
+
         return dtos
 
     def save_new_message(self, chat_id: int, sender_id: int, content: str,
@@ -191,6 +185,14 @@ class ChatService:
         """Обновляет текст сообщения через репозиторий"""
         # Репозиторий сам делает commit() в вашем методе update_message_content
         return self.chat_repo.update_message_content(message_id, new_content)
+
+    def delete_message(self, message_id: int) -> bool:
+        """Удаляет сообщение из базы через репозиторий"""
+        # Предполагаем, что в chat_repo есть такой метод
+        success = self.chat_repo.delete_message(message_id)
+        if success:
+            self.session.commit()
+        return success
 
     def save_reply(self, chat_id: int, sender_id: int, content: str, reply_to_id: int) -> MessageReadDTO:
         """Сохранение ответа на сообщение"""

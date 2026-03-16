@@ -54,9 +54,16 @@ class ChatMessageWidget(QWidget):
 
         # 1. Если это ПЕРЕСЛАННОЕ сообщение
         if self.forward_from_name:
-            fwd_lbl = QLabel(f"➡️ Переслано от {self.forward_from_name}")
-            fwd_lbl.setStyleSheet("color: #0088CC; font-size: 10px; font-style: italic;")
-            bubble_layout.addWidget(fwd_lbl)
+            forward_label = QLabel(f"↪ Переслано от {self.forward_from_name}")
+            forward_label.setStyleSheet("""
+                font-size: 10px; 
+                font-style: italic; 
+                color: #888; 
+                margin-bottom: 2px;
+                border-left: 2px solid #D22730;
+                padding-left: 5px;
+            """)
+            bubble_layout.insertWidget(0, forward_label)  # Ставим в самый верх пузырька
 
         # 2. Имя отправителя (если не моё)
         if not self.is_mine:
@@ -103,15 +110,16 @@ class ChatMessageWidget(QWidget):
         self.msg_lbl.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         bubble_layout.addWidget(self.msg_lbl)
 
-        # 5. Мета-данные (Время, Статус)
+        # 5. Мета-данные (Время, Статус, Редактирование)
         meta_layout = QHBoxLayout()
         meta_layout.setSpacing(5)
         meta_layout.addStretch()
 
-        if self.is_edited:
-            edit_label = QLabel("ред.")
-            edit_label.setStyleSheet("color: gray; font-size: 9px; font-style: italic;")
-            meta_layout.addWidget(edit_label)
+        # Создаем edit_label ВСЕГДА, но скрываем, если не редактировалось
+        self.edit_label = QLabel("ред.")
+        self.edit_label.setStyleSheet("color: gray; font-size: 9px; font-style: italic;")
+        self.edit_label.setVisible(self.is_edited)  # Показываем только если True
+        meta_layout.addWidget(self.edit_label)
 
         self.time_lbl = QLabel(self.time_str)
         self.time_lbl.setStyleSheet("color: gray; font-size: 10px;")
@@ -152,30 +160,75 @@ class ChatMessageWidget(QWidget):
             self.action_triggered.emit("goto", self.reply_to_id)
 
     def update_bubble_width(self):
-        # Проверка на наличие всех критических виджетов
-        if not hasattr(self, 'bubble') or not hasattr(self, 'msg_lbl'):
+        # Если виджет в процессе удаления или нет ссылки на пузырек
+        if not self or not hasattr(self, 'bubble') or self.bubble is None:
             return
 
-        # Определяем доступную ширину чата (70% от родителя)
-        parent_w = self.parentWidget().width() if self.parentWidget() else self.width()
-        if parent_w < 100: parent_w = 500  # дефолт
+        try:
+            # Проверяем, жив ли родитель
+            p = self.parentWidget()
+            if p is None:
+                return
 
-        max_bubble_w = int(parent_w * 0.5)
+            parent_w = p.width()
+            # Если ширина родителя еще не определена (0 или 1), берем фиксированную
+            if parent_w <= 1:
+                parent_w = 600
 
-        # Считаем, сколько пикселей занял бы текст БЕЗ переноса
-        metrics = self.msg_lbl.fontMetrics()
-        text_width = metrics.boundingRect(self.text).width() + 25  # +25 на отступы
+            max_bubble_w = int(parent_w * 0.7)
 
-        # Идеальная ширина: либо сколько нужно тексту, либо лимит 70%
-        target_width = min(text_width, max_bubble_w)
+            # Обновляем размеры
+            self.msg_lbl.setMinimumWidth(10)  # Сброс, чтобы не мешал расчету
+            metrics = self.msg_lbl.fontMetrics()
+            # Используем boundingRect для более точного расчета
+            rect = metrics.boundingRect(0, 0, max_bubble_w - 20, 1000, Qt.TextFlag.TextWordWrap, self.text)
 
-        # Если в тексте есть принудительные переносы \n, target_width может быть меньше.
-        # Поэтому установим MinimumWidth, чтобы QLabel расширился
-        self.msg_lbl.setMinimumWidth(target_width)
-        self.bubble.setMaximumWidth(max_bubble_w)
+            target_width = max(rect.width() + 25, 100)
+            self.bubble.setFixedWidth(min(target_width, max_bubble_w))
 
-        # Важно вызвать это, чтобы QLayout пересчитал всё
-        self.bubble.adjustSize()
+        except (RuntimeError, AttributeError):
+            pass
+
+    def update_text(self, new_text):
+        """Прямое и жесткое обновление текста"""
+        # Блокируем сигналы на время обновления, чтобы не вызвать рекурсию
+        self.blockSignals(True)
+        try:
+            self.text = new_text
+            self.is_edited = True
+
+            if self.msg_lbl:
+                self.msg_lbl.setText(new_text)
+                # Заставляем лейбл немедленно пересчитать свой размер
+                self.msg_lbl.adjustSize()
+
+            if hasattr(self, 'edit_label') and self.edit_label:
+                self.edit_label.setVisible(True)
+
+            # Пересчитываем пузырек
+            self.update_bubble_width()
+
+            # ВАЖНО: говорим Qt, что виджет нужно перерисовать прямо сейчас
+            self.update()
+
+            self.highlight_update()
+            print(f"✅ Виджет {self.message_id} успешно перерисован с новым текстом")
+
+        finally:
+            self.blockSignals(False)
+
+    def highlight_update(self):
+        """Легкая подсветка изменений"""
+        if not hasattr(self, 'bubble') or self.bubble is None:
+            return
+
+        try:
+            # Используем встроенный механизм свойств Qt, это стабильнее, чем менять таблицу стилей целиком
+            self.bubble.setLineWidth(2)
+            # Через полсекунды возвращаем как было
+            QTimer.singleShot(500, lambda: self.bubble.setLineWidth(1) if self.bubble else None)
+        except RuntimeError:
+            pass
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
