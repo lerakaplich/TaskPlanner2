@@ -130,8 +130,6 @@ class ChatView(QWidget):
         self.messages_layout.setSpacing(10)
         self.messages_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
 
-        self.spacer = QSpacerItem(20, 40, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Expanding)
-        self.messages_layout.addSpacerItem(self.spacer)
         self.scroll_area.setWidget(self.messages_container)
 
         # --- ПАНЕЛЬ РЕДАКТИРОВАНИЯ (Над вводом) ---
