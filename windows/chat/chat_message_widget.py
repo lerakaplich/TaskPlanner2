@@ -137,6 +137,16 @@ class ChatMessageWidget(QWidget):
         self.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.customContextMenuRequested.connect(self.show_context_menu)
 
+    def set_read_status(self, status: bool):
+        """Обновляет визуальное состояние галочек"""
+        self.is_read = status
+        # Проверяем, существует ли статусная метка (она есть только у 'mine' сообщений)
+        if hasattr(self, 'status_lbl') and self.status_lbl:
+            icon = "✓✓" if status else "✓"
+            color = "#34B7F1" if status else "gray"
+            self.status_lbl.setText(icon)
+            self.status_lbl.setStyleSheet(f"color: {color}; font-weight: bold; font-size: 11px;")
+
     def on_reply_clicked(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
             self.action_triggered.emit("goto", self.reply_to_id)

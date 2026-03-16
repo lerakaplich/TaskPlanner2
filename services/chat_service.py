@@ -57,8 +57,17 @@ class ChatService:
             ))
         return dtos
 
-    def save_new_message(self, chat_id: int, sender_id: int, content: str) -> MessageReadDTO:
-        msg_orm = self.chat_repo.create_message(chat_id, sender_id, content)
+    def save_new_message(self, chat_id: int, sender_id: int, content: str,
+                         reply_to_id: int = None,
+                         forward_from_id: int = None) -> MessageReadDTO:
+        # Теперь передаем все аргументы в репозиторий
+        msg_orm = self.chat_repo.create_message(
+            chat_id=chat_id,
+            sender_id=sender_id,
+            content=content,
+            reply_to_id=reply_to_id,
+            forward_from_id=forward_from_id
+        )
         self.session.commit()
         self.session.refresh(msg_orm)
         return self._prepare_message_dto(msg_orm)
@@ -156,6 +165,15 @@ class ChatService:
         for m in messages:
             if m.sender_id != user_id:
                 self.chat_repo.mark_as_read(m.id, user_id)
+        self.session.commit()
+
+    def mark_messages_as_read(self, user_id: int, message_ids: List[int]):
+        """Помечает конкретные сообщения как прочитанные"""
+        for m_id in message_ids:
+            # Не помечаем свои же сообщения как прочитанные нами
+            msg = self.chat_repo.get_message_by_id(m_id)
+            if msg and msg.sender_id != user_id:
+                self.chat_repo.mark_as_read(m_id, user_id)
         self.session.commit()
 
     def get_chat_messages(self, chat_id: int, current_user_id: int) -> List[MessageReadDTO]:

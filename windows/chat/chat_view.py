@@ -60,6 +60,10 @@ class ChatView(QWidget):
         self.chat_header.setStyleSheet("padding: 15px; border-bottom: 1px solid #e0e0e0; background-color: white;")
 
         # Область сообщений
+        self.scroll_container = QWidget()
+        scroll_container_layout = QVBoxLayout(self.scroll_container)
+        scroll_container_layout.setContentsMargins(0, 0, 0, 0)
+
         self.scroll_area = QScrollArea()
         self.scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.scroll_area.setWidgetResizable(True)
@@ -97,6 +101,25 @@ class ChatView(QWidget):
             background: none;
         }
 
+                """)
+
+        scroll_container_layout.addWidget(self.scroll_area)
+
+        # --- КНОПКА ПРОКРУТКИ ВНИЗ ---
+        self.btn_scroll_down = QPushButton("↓", self.scroll_container)
+        self.btn_scroll_down.setFixedSize(40, 40)
+        self.btn_scroll_down.setVisible(False)  # По умолчанию скрыта
+        self.btn_scroll_down.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_scroll_down.setStyleSheet("""
+                    QPushButton {
+                        background-color: white;
+                        color: #555;
+                        border: 1px solid #ddd;
+                        border-radius: 20px;
+                        font-size: 18px;
+                        font-weight: bold;
+                    }
+                    QPushButton:hover { background-color: #f8f8f8; }
                 """)
 
         self.messages_container = QWidget()
@@ -197,10 +220,22 @@ class ChatView(QWidget):
 
         # Собираем всё в правую часть
         right_layout.addWidget(self.chat_header)
-        right_layout.addWidget(self.scroll_area)
+        right_layout.addWidget(self.scroll_container)  # Вместо прямого scroll_area
         right_layout.addWidget(self.edit_panel)  # Панель над вводом
         right_layout.addWidget(input_container)
 
         self.splitter.addWidget(left_container)
         self.splitter.addWidget(right_container)
         main_layout.addWidget(self.splitter)
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        # Сдвигаем кнопку чуть выше поля ввода (примерно на 20px от правого края и 20px от низа контейнера)
+        margin_right = 25
+        margin_bottom = 25
+
+        btn_x = self.scroll_container.width() - self.btn_scroll_down.width() - margin_right
+        btn_y = self.scroll_container.height() - self.btn_scroll_down.height() - margin_bottom
+
+        self.btn_scroll_down.move(btn_x, btn_y)
+        self.btn_scroll_down.raise_()  # Всегда поверх пузырьков

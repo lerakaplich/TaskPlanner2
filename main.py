@@ -8,6 +8,7 @@ from windows.projects.main_window import MainWindow
 from database import test_connections, get_tasks_session  # 👈 ЗАМЕНЯЕМ get_employees_session на get_tasks_session
 from models.employees import ExternalEmployee
 from utils.error_handler import setup_exception_hook
+from utils.socket_manager import connect_to_server, sio
 
 
 class UserSelectDialog(QDialog):
@@ -242,6 +243,8 @@ def main():
     test_connections()
 
     app = QApplication(sys.argv)
+    # Запускаем подключение
+    connect_to_server("http://localhost:8081")
 
     # Показываем диалог выбора пользователя
     user_dialog = UserSelectDialog()
@@ -260,7 +263,8 @@ def main():
 
             window = MainWindow(
                 session=session,
-                user_id=selected_user["id"]
+                user_id=selected_user["id"],
+                sio=sio
             )
             window.show()
 

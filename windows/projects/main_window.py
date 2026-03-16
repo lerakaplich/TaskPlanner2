@@ -27,7 +27,7 @@ from windows.chat.chat_page import ChatPage
 
 class MainWindow(QMainWindow):
 
-    def __init__(self, session, user_id):
+    def __init__(self, session, user_id, sio):
         super().__init__()
         self.current_user_id = user_id
         self.session = session
@@ -36,6 +36,7 @@ class MainWindow(QMainWindow):
         self.current_owner_filter = False
         self.current_columns = -1
         self.project_cards = []
+        self.sio = sio
 
         # 2. Инициализируем сервисы
         self.project_service = ProjectsService(session)
@@ -139,11 +140,13 @@ class MainWindow(QMainWindow):
         self._replace_in_stack("analyticsPage", self.analytics_page_instance)
 
         # Инициализация Чата
+
         self.chat_page_instance = ChatPage(
             session=self.session,
             service=self.chat_service,
             projects_service=self.project_service,
-            current_user_id=self.current_user_id
+            current_user_id=self.current_user_id,
+            sio = self.sio
         )
         self._replace_in_stack("chatPage", self.chat_page_instance)
 
