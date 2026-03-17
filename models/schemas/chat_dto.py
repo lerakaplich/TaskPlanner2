@@ -1,6 +1,12 @@
+from enum import Enum
+
 from pydantic import BaseModel, ConfigDict
 from datetime import datetime
 from typing import Optional, List
+
+class DeleteMode(str, Enum):
+    EVERYONE = "everyone"
+    ME = "me"
 
 
 class MessageReadDTO(BaseModel):
@@ -17,7 +23,7 @@ class MessageReadDTO(BaseModel):
     is_edited: bool = False
     reply_to_id: Optional[int] = None
     reply_text: Optional[str] = None
-    reply_sender_name: Optional[str] = None  # <--- Просто добавьте эту строку
+    reply_sender_name: Optional[str] = None
     forward_from_name: Optional[str] = None
 
 class MessageEditDTO(BaseModel):
@@ -28,6 +34,7 @@ class MessageEditDTO(BaseModel):
 class MessageDeleteDTO(BaseModel):
     message_id: int
     chat_id: int
+    mode: str = "everyone" # "everyone" или "me"
 
 class ChatReadDTO(BaseModel):
     model_config = ConfigDict(from_attributes=True)

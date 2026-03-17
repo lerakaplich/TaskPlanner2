@@ -38,7 +38,7 @@ class ChatService:
 
     def load_history(self, chat_id: int, current_user_id: int) -> List[MessageReadDTO]:
         # Вызываем метод репозитория (который мы добавим ниже)
-        messages = self.chat_repo.get_messages(chat_id)
+        messages = self.chat_repo.get_messages(chat_id, current_user_id)
         dtos = []
 
         for m in messages:
@@ -87,7 +87,7 @@ class ChatService:
             chat_id=msg.chat_id,
             sender_id=msg.sender_id,
             sender_name=sender_name,
-            content=msg.content if not msg.is_deleted else "Сообщение удалено",
+            content=msg.content,
             created_at=msg.created_at,
             time_display=msg.created_at.strftime("%H:%M"),
             is_edited=msg.updated_at is not None,
@@ -155,7 +155,7 @@ class ChatService:
 
     def mark_chat_as_read(self, chat_id: int, user_id: int):
         """Помечает все входящие сообщения как прочитанные текущим пользователем"""
-        messages = self.chat_repo.get_messages(chat_id)
+        messages = self.chat_repo.get_messages(chat_id, user_id)
         for m in messages:
             if m.sender_id != user_id:
                 self.chat_repo.mark_as_read(m.id, user_id)
@@ -171,7 +171,7 @@ class ChatService:
         self.session.commit()
 
     def get_chat_messages(self, chat_id: int, current_user_id: int) -> List[MessageReadDTO]:
-        messages = self.chat_repo.get_messages(chat_id)
+        messages = self.chat_repo.get_messages(chat_id, current_user_id)
         return [self._prepare_message_dto(m) for m in messages]
 
     def get_message_by_id(self, message_id: int) -> Optional[MessageReadDTO]:
@@ -186,10 +186,16 @@ class ChatService:
         # Репозиторий сам делает commit() в вашем методе update_message_content
         return self.chat_repo.update_message_content(message_id, new_content)
 
-    def delete_message(self, message_id: int) -> bool:
-        """Удаляет сообщение из базы через репозиторий"""
-        # Предполагаем, что в chat_repo есть такой метод
-        success = self.chat_repo.delete_message(message_id)
+    def delete_message_for_me(self, message_id: int, user_id: int) -> bool:
+        """Мягкое удаление только для конкретного пользователя"""
+        success = self.chat_repo.delete_message_for_user(message_id, user_id)
+        if success:
+            self.session.commit()
+        return success
+
+    def delete_message_for_everyone(self, message_id: int) -> bool:
+        """Удаление сообщения для всех участников чата"""
+        success = self.chat_repo.delete_message_for_everyone(message_id)
         if success:
             self.session.commit()
         return success

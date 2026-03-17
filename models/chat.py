@@ -89,3 +89,18 @@ class MessageRead(Base):
     message_id: Mapped[int] = mapped_column(ForeignKey("chat_messages.id", ondelete="CASCADE"), primary_key=True)
     user_id: Mapped[int] = mapped_column(primary_key=True) # ID из внешней базы
     read_at: Mapped[datetime] = mapped_column(default=datetime.now)
+
+class DeletedMessage(Base):
+    __tablename__ = "chat_hidden_messages"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    message_id: Mapped[int] = mapped_column(
+        ForeignKey("chat_messages.id", ondelete="CASCADE"),
+        index=True
+    )
+    user_id: Mapped[int] = mapped_column(
+        # Используем строку "employees_data.employee_id"
+        # SQLAlchemy сама найдет её в метаданных позже
+        ForeignKey("public.employees_data.employee_id", ondelete="CASCADE"),
+        index=True
+    )

@@ -3,7 +3,7 @@ from typing import List, Optional
 from sqlalchemy import select, and_, update
 from sqlalchemy.dialects.postgresql.dml import insert
 from sqlalchemy.orm import Session
-from models.chat import Chat, ChatMessage, ChatParticipant, ChatType, MessageRead
+from models.chat import Chat, ChatMessage, ChatParticipant, ChatType, MessageRead, DeletedMessage
 from models.employees import ExternalEmployee
 
 
@@ -107,15 +107,18 @@ class ChatRepo:
         ).limit(1)
         return self.session.scalar(stmt) is not None
 
-    def get_messages(self, chat_id: int, limit: int = 50) -> List[ChatMessage]:
+    def get_messages(self, chat_id: int, user_id: int):
+        # Те сообщения, которые юзер скрыл лично
+        hidden_ids = select(DeletedMessage.message_id).where(DeletedMessage.user_id == user_id)
+
         stmt = (
             select(ChatMessage)
             .where(ChatMessage.chat_id == chat_id)
-            .order_by(ChatMessage.created_at.desc())
-            .limit(limit)
+            .where(ChatMessage.id.not_in(hidden_ids))  # Не показываем скрытые лично
+            .where(ChatMessage.is_deleted == False)  # Не показываем удаленные для всех
+            .order_by(ChatMessage.created_at.asc())
         )
-        result = list(self.session.scalars(stmt).unique())
-        return result[::-1]  # Переворачиваем для хронологии
+        return self.session.scalars(stmt).all()
 
     def update_message_content(self, message_id: int, new_content: str):
         try:
@@ -138,3 +141,41 @@ class ChatRepo:
     def get_message_by_id(self, message_id: int) -> Optional[ChatMessage]:
         """Получить одно сообщение по его ID"""
         return self.session.get(ChatMessage, message_id)
+
+    def delete_message_for_everyone(self, message_id: int):
+        """Мягкое удаление для всех: сообщение просто помечается удаленным"""
+        try:
+            stmt = (
+                update(ChatMessage)
+                .where(ChatMessage.id == message_id)
+                .values(
+                    is_deleted=True  # Используем существующий флаг
+                    # ТЕКСТ НЕ МЕНЯЕМ, updated_at НЕ ТРОГАЕМ
+                )
+            )
+            self.session.execute(stmt)
+            self.session.commit()
+            return True
+        except Exception as e:
+            self.session.rollback()
+            return False
+
+    def delete_message_for_user(self, message_id: int, user_id: int):
+        try:
+            # Проверяем наличие записи
+            exists_stmt = select(DeletedMessage).where(
+                DeletedMessage.message_id == message_id,
+                DeletedMessage.user_id == user_id
+            )
+            if self.session.scalar(exists_stmt):
+                return True
+
+            # Создаем запись в chat_hidden_messages
+            new_hidden = DeletedMessage(message_id=message_id, user_id=user_id)
+            self.session.add(new_hidden)
+            self.session.commit()
+            return True
+        except Exception as e:
+            print(f"Ошибка скрытия сообщения: {e}")
+            self.session.rollback()
+            return False

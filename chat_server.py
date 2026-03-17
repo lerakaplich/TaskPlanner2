@@ -60,18 +60,25 @@ async def edit_chat_msg(sid, data):
 
 @sio.event
 async def delete_chat_msg(sid, data):
-    # data: {"message_id": 123, "chat_id": 5}
     try:
         with TasksSessionLocal() as session:
             service = ChatService(session)
-            # Тебе нужно добавить метод delete_message в ChatService, если его нет
-            if service.delete_message(data['message_id']):
-                await sio.emit("message_deleted", {
-                    "message_id": data['message_id'],
-                    "chat_id": data['chat_id']
-                }, room=f"chat_{data['chat_id']}")
+            mode = data.get('mode', 'everyone')
+
+            if mode == "everyone":
+                if service.delete_message_for_everyone(data['message_id']):
+                    # Рассылаем ВСЕМ в комнате
+                    await sio.emit("message_deleted", {
+                        "message_id": data['message_id'],
+                        "chat_id": data['chat_id'],
+                        "mode": "everyone"
+                    }, room=f"chat_{data['chat_id']}")
+            else:
+                service.delete_message_for_me(data['message_id'], data['user_id'])
+                # Подтверждаем только отправителю
+                await sio.emit("message_deleted", data, to=sid)
     except Exception as e:
-        print(f"❌ Ошибка сервера при удалении: {e}")
+        print(f"❌ Server Error: {e}")
 
 
 @sio.event

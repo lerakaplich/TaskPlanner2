@@ -1,6 +1,7 @@
 # windows/chat/chat_page.py
+from typing import Optional
 
-from PyQt6.QtWidgets import QWidget, QListWidgetItem, QVBoxLayout
+from PyQt6.QtWidgets import QWidget, QListWidgetItem, QVBoxLayout, QMessageBox
 from PyQt6.QtCore import Qt, pyqtSignal, QTimer
 
 from models.schemas.chat_dto import MessageReadDTO, MessageEditDTO, MessageDeleteDTO
@@ -97,11 +98,31 @@ class ChatPage(QWidget):
             print(f"❌ Ошибка валидации EditDTO: {e}")
 
     def on_socket_message_deleted(self, data):
-        try:
-            dto = MessageDeleteDTO.model_validate(data)
-            self.message_deleted_signal.emit(dto)
-        except Exception as e:
-            print(f"❌ Ошибка валидации DeleteDTO: {e}")
+        msg_id = data.get("message_id")
+        chat_id = data.get("chat_id")
+        mode = data.get("mode", "everyone")
+
+        if chat_id == self.current_chat_id:
+            # Теперь и для 'everyone', и для 'me' просто удаляем виджет с экрана
+            self.remove_message_from_ui(msg_id)
+
+    def update_widget_visually_deleted(self, message_id):
+        """Находит виджет сообщения и помечает его удаленным (серым)"""
+        # Ищем среди всех ChatMessageWidget внутри контейнера
+        widgets = self.ui.messages_container.findChildren(ChatMessageWidget)
+        for w in widgets:
+            if w.message_id == message_id:
+                w.mark_as_deleted()  # <--- ВОТ ВЫЗОВ ТОГО САМОГО МЕТОДА
+                break
+
+    def remove_widget_from_layout(self, message_id):
+        """Полностью удаляет виджет с экрана (для режима 'удалить у себя')"""
+        widgets = self.ui.messages_container.findChildren(ChatMessageWidget)
+        for w in widgets:
+            if w.message_id == message_id:
+                self.ui.messages_layout.removeWidget(w)
+                w.deleteLater()
+                break
 
     def process_message_edit(self, dto: MessageEditDTO):
         widgets = self.ui.messages_container.findChildren(ChatMessageWidget)
@@ -364,11 +385,7 @@ class ChatPage(QWidget):
             self.scroll_to_message(message_id)  # Этот метод у тебя уже есть в коде!
 
         elif action_type == "delete":
-            # Удаление тоже лучше через сокет, чтобы у всех пропало
-            self.sio.emit('delete_message', {
-                "message_id": message_id,
-                "chat_id": self.current_chat_id
-            })
+            self.confirm_and_delete(message_id)
 
         elif action_type == "edit":
             msg = self.service.get_message_by_id(message_id)
@@ -386,6 +403,50 @@ class ChatPage(QWidget):
         elif action_type == "select":
 
             self.enter_selection_mode(message_id)
+
+    def confirm_and_delete(self, message_id):
+        widget = self.find_message_widget_by_id(message_id)
+        if not widget:
+            return
+
+        msg_box = QMessageBox(self)
+        msg_box.setWindowTitle("Удаление")
+        msg_box.setText("Вы хотите удалить это сообщение?")
+
+        btn_me = msg_box.addButton("Удалить у меня", QMessageBox.ButtonRole.ActionRole)
+        btn_everyone = None
+
+        if widget.is_mine:
+            btn_everyone = msg_box.addButton("Удалить у всех", QMessageBox.ButtonRole.DestructiveRole)
+
+        msg_box.addButton("Отмена", QMessageBox.ButtonRole.RejectRole)
+        msg_box.exec()
+
+        clicked = msg_box.clickedButton()
+
+        if clicked == btn_me:
+            if self.service.delete_message_for_me(message_id, self.current_user_id):
+                self.remove_message_from_ui(message_id)
+                # Оповещаем сервер, чтобы он запомнил это в chat_hidden_messages
+                if self.sio:
+                    self.sio.emit("delete_chat_msg", {
+                        "message_id": message_id,
+                        "chat_id": self.current_chat_id,
+                        "user_id": self.current_user_id,
+                        "mode": "me"
+                    })
+
+        elif btn_everyone and clicked == btn_everyone:
+            if self.service.delete_message_for_everyone(message_id):
+                if self.sio:
+                    # Имя события должно быть delete_chat_msg, как на сервере
+                    self.sio.emit("delete_chat_msg", {
+                        "message_id": message_id,
+                        "chat_id": self.current_chat_id,
+                        "mode": "everyone"
+                    })
+                # СРАЗУ удаляем у себя, не дожидаясь ответа от сокета
+                self.remove_message_from_ui(message_id)
 
     def open_forward_dialog(self, message_id):
         """Логика открытия окна пересылки"""
@@ -547,3 +608,19 @@ class ChatPage(QWidget):
                 return
 
         self.update_selection_label()
+
+    def find_message_widget_by_id(self, message_id: int) -> Optional[ChatMessageWidget]:
+        """Ищет виджет сообщения в контейнере по его ID"""
+        # Ищем среди всех дочерних виджетов ChatMessageWidget
+        widgets = self.ui.messages_container.findChildren(ChatMessageWidget)
+        for w in widgets:
+            if w.message_id == message_id:
+                return w
+        return None
+
+    def remove_message_from_ui(self, message_id: int):
+        """Полностью удаляет виджет сообщения из интерфейса (для 'удалить у меня')"""
+        widget = self.find_message_widget_by_id(message_id)
+        if widget:
+            self.ui.messages_layout.removeWidget(widget)
+            widget.deleteLater()
