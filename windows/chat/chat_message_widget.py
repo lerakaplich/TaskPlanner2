@@ -1,10 +1,12 @@
 from PyQt6.QtCore import Qt, pyqtSignal, QTimer
 from PyQt6.QtGui import QAction
-from PyQt6.QtWidgets import QLabel, QHBoxLayout, QFrame, QVBoxLayout, QWidget, QApplication, QMenu, QSizePolicy
+from PyQt6.QtWidgets import QLabel, QHBoxLayout, QFrame, QVBoxLayout, QWidget, QApplication, QMenu, QSizePolicy, \
+    QCheckBox
 
 
 class ChatMessageWidget(QWidget):
     action_triggered = pyqtSignal(str, int)
+    toggled = pyqtSignal(int, bool)  # Сигнал для ChatPage
 
     def __init__(self, message_id, text, sender_name, time_str,
                  is_mine=True, is_read=False, is_edited=False,
@@ -19,7 +21,6 @@ class ChatMessageWidget(QWidget):
         self.is_read = is_read
         self.is_edited = is_edited
 
-        # Данные для ответов и пересылок
         self.reply_to_id = reply_to_id
         self.reply_text = reply_text
         self.reply_sender_name = reply_sender_name
@@ -31,7 +32,15 @@ class ChatMessageWidget(QWidget):
     def init_ui(self):
         self.main_layout = QHBoxLayout(self)
         self.main_layout.setContentsMargins(10, 2, 10, 2)
-        self.main_layout.setSpacing(0)
+        self.main_layout.setSpacing(10)  # Добавим немного отступа для чекбокса
+
+        # СНАЧАЛА создаем чекбокс
+        self.checkbox = QCheckBox()
+        self.checkbox.setVisible(False)
+        self.checkbox.stateChanged.connect(self._on_toggled)
+
+        # ДОБАВЛЯЕМ его в лейаут самым первым (слева)
+        self.main_layout.addWidget(self.checkbox)
 
         self.bubble = QFrame()
         self.bubble.setObjectName("bubble")
@@ -47,78 +56,48 @@ class ChatMessageWidget(QWidget):
             QFrame#bubble QLabel {{ background: transparent; border: none; }}
         """)
 
-        # Основной лейаут внутри пузырька
         bubble_layout = QVBoxLayout(self.bubble)
         bubble_layout.setContentsMargins(10, 8, 10, 8)
         bubble_layout.setSpacing(4)
 
-        # 1. Если это ПЕРЕСЛАННОЕ сообщение
         if self.forward_from_name:
             forward_label = QLabel(f"↪ Переслано от {self.forward_from_name}")
-            forward_label.setStyleSheet("""
-                font-size: 10px; 
-                font-style: italic; 
-                color: #888; 
-                margin-bottom: 2px;
-                border-left: 2px solid #D22730;
-                padding-left: 5px;
-            """)
-            bubble_layout.insertWidget(0, forward_label)  # Ставим в самый верх пузырька
+            forward_label.setStyleSheet(
+                "font-size: 10px; font-style: italic; color: #888; border-left: 2px solid #D22730; padding-left: 5px;")
+            bubble_layout.addWidget(forward_label)
 
-        # 2. Имя отправителя (если не моё)
         if not self.is_mine:
             name_lbl = QLabel(self.sender_name)
             name_lbl.setStyleSheet("font-weight: bold; color: #D22730; font-size: 11px;")
             bubble_layout.addWidget(name_lbl)
 
-        # 3. ЦИТАТА (если есть ответ)
         if self.reply_text:
             self.reply_pane = QFrame()
             self.reply_pane.setObjectName("reply_pane")
             self.reply_pane.setCursor(Qt.CursorShape.PointingHandCursor)
-            self.reply_pane.setStyleSheet("""
-                QFrame#reply_pane {
-                    background-color: rgba(0, 0, 0, 0.05);
-                    border-left: 3px solid #34B7F1;
-                    border-radius: 4px;
-                }
-                QFrame#reply_pane:hover { background-color: rgba(0, 0, 0, 0.08); }
-            """)
-
-            reply_lay = QVBoxLayout(self.reply_pane)
-            reply_lay.setContentsMargins(8, 4, 4, 4)
-            reply_lay.setSpacing(2)
-
+            self.reply_pane.setStyleSheet(
+                "QFrame#reply_pane { background-color: rgba(0, 0, 0, 0.05); border-left: 3px solid #34B7F1; border-radius: 4px; }")
+            r_lay = QVBoxLayout(self.reply_pane)
             r_name = QLabel(self.reply_sender_name or "Сообщение")
             r_name.setStyleSheet("font-weight: bold; color: #34B7F1; font-size: 10px;")
-
             short_text = self.reply_text[:50] + "..." if len(self.reply_text) > 50 else self.reply_text
             r_content = QLabel(short_text)
             r_content.setStyleSheet("color: #555; font-size: 10px;")
-
-            reply_lay.addWidget(r_name)
-            reply_lay.addWidget(r_content)
+            r_lay.addWidget(r_name)
+            r_lay.addWidget(r_content)
             bubble_layout.addWidget(self.reply_pane)
-
-            # Подключаем клик по цитате
             self.reply_pane.mousePressEvent = self.on_reply_clicked
 
-        # 4. Текст сообщения
         self.msg_lbl = QLabel(self.text)
         self.msg_lbl.setWordWrap(True)
-        self.msg_lbl.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
         self.msg_lbl.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         bubble_layout.addWidget(self.msg_lbl)
 
-        # 5. Мета-данные (Время, Статус, Редактирование)
         meta_layout = QHBoxLayout()
-        meta_layout.setSpacing(5)
         meta_layout.addStretch()
-
-        # Создаем edit_label ВСЕГДА, но скрываем, если не редактировалось
         self.edit_label = QLabel("ред.")
         self.edit_label.setStyleSheet("color: gray; font-size: 9px; font-style: italic;")
-        self.edit_label.setVisible(self.is_edited)  # Показываем только если True
+        self.edit_label.setVisible(self.is_edited)
         meta_layout.addWidget(self.edit_label)
 
         self.time_lbl = QLabel(self.time_str)
@@ -134,7 +113,6 @@ class ChatMessageWidget(QWidget):
 
         bubble_layout.addLayout(meta_layout)
 
-        # Добавляем пузырек в основной лейаут виджета
         if self.is_mine:
             self.main_layout.addStretch(1)
             self.main_layout.addWidget(self.bubble)
@@ -160,34 +138,41 @@ class ChatMessageWidget(QWidget):
             self.action_triggered.emit("goto", self.reply_to_id)
 
     def update_bubble_width(self):
-        # Если виджет в процессе удаления или нет ссылки на пузырек
-        if not self or not hasattr(self, 'bubble') or self.bubble is None:
-            return
+        p = self.parentWidget()
+        # Определяем доступную ширину (70% от окна)
+        parent_w = p.width() if p and p.width() > 1 else 600
+        max_bubble_w = int(parent_w * 0.7)
 
-        try:
-            # Проверяем, жив ли родитель
-            p = self.parentWidget()
-            if p is None:
-                return
+        metrics = self.msg_lbl.fontMetrics()
 
-            parent_w = p.width()
-            # Если ширина родителя еще не определена (0 или 1), берем фиксированную
-            if parent_w <= 1:
-                parent_w = 600
+        # 1. Считаем ширину имени отправителя (если оно есть и сообщение не моё)
+        name_w = 0
+        if not self.is_mine and hasattr(self, 'sender_name'):
+            # Добавляем запас на отступы (padding)
+            name_w = metrics.horizontalAdvance(self.sender_name) + 25
 
-            max_bubble_w = int(parent_w * 0.7)
+        # 2. Считаем ширину текста сообщения
+        # boundingRect определит, сколько места займет текст с учетом переносов
+        rect = metrics.boundingRect(0, 0, max_bubble_w - 30, 1000, Qt.TextFlag.TextWordWrap, self.text)
+        text_w = rect.width() + 35
 
-            # Обновляем размеры
-            self.msg_lbl.setMinimumWidth(10)  # Сброс, чтобы не мешал расчету
-            metrics = self.msg_lbl.fontMetrics()
-            # Используем boundingRect для более точного расчета
-            rect = metrics.boundingRect(0, 0, max_bubble_w - 20, 1000, Qt.TextFlag.TextWordWrap, self.text)
+        # 3. Считаем ширину строки пересылки (если есть)
+        forward_w = 0
+        if self.forward_from_name:
+            f_text = f"↪ Переслано от {self.forward_from_name}"
+            forward_w = metrics.horizontalAdvance(f_text) + 45
 
-            target_width = max(rect.width() + 25, 100)
-            self.bubble.setFixedWidth(min(target_width, max_bubble_w))
+        # 4. Считаем ширину цитаты (Reply Pane), если она есть
+        reply_w = 0
+        if self.reply_text:
+            # Берем либо имя отправителя цитаты, либо кусочек текста цитаты
+            r_name_w = metrics.horizontalAdvance(self.reply_sender_name or "") + 40
+            reply_w = max(r_name_w, 150)  # Минимум 150 для красоты цитаты
 
-        except (RuntimeError, AttributeError):
-            pass
+        # Итоговая ширина — это максимум из всех элементов, но не больше max_bubble_w
+        final_w = max(text_w, name_w, forward_w, reply_w, 100)
+
+        self.bubble.setFixedWidth(min(final_w, max_bubble_w))
 
     def update_text(self, new_text):
         """Прямое и жесткое обновление текста"""
@@ -238,8 +223,10 @@ class ChatMessageWidget(QWidget):
         menu = QMenu(self)
         reply_act = QAction("↪️ Ответить", self)
         forward_act = QAction("➡️ Переслать", self)
+        select_act = QAction("✅ Выбрать", self)  # Добавляем пункт в меню
         copy_act = QAction("📋 Копировать", self)
-        menu.addActions([reply_act, forward_act, copy_act])
+
+        menu.addActions([reply_act, forward_act, select_act, copy_act])
 
         edit_act = None
         delete_act = None
@@ -252,6 +239,8 @@ class ChatMessageWidget(QWidget):
         action = menu.exec(self.mapToGlobal(pos))
         if action == copy_act:
             QApplication.clipboard().setText(self.text)
+        elif action == select_act:
+            self.action_triggered.emit("select", self.message_id)
         elif action == reply_act:
             self.action_triggered.emit("reply", self.message_id)
         elif action == forward_act:
@@ -272,3 +261,20 @@ class ChatMessageWidget(QWidget):
             }}
         """)
         QTimer.singleShot(1000, lambda: self.bubble.setStyleSheet(old_style))
+
+    def _on_toggled(self, state):
+        # Отправляем сигнал наверх в ChatPage
+        is_checked = (state == Qt.CheckState.Checked.value or state == 2)
+        self.toggled.emit(self.message_id, is_checked)
+
+    def set_selection_mode(self, enabled):
+        """Включает/выключает отображение чекбокса"""
+        if hasattr(self, 'checkbox'):
+            self.checkbox.setVisible(enabled)
+            if not enabled:
+                self.checkbox.setChecked(False)
+
+    def set_selected(self, selected):
+        """Программная установка галочки"""
+        if hasattr(self, 'checkbox'):
+            self.checkbox.setChecked(selected)

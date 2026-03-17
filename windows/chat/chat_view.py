@@ -68,59 +68,11 @@ class ChatView(QWidget):
         self.scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.scroll_area.setWidgetResizable(True)
         self.scroll_area.setStyleSheet("""
-
-        /* Скроллбары */
-        QScrollArea {
-            border: none;
-            background-color: transparent;
-        }
-        QScrollBar:vertical {
-            background: #F5F5F5;
-            width: 8px;
-            border-radius: 4px;
-        }
-        QScrollBar::handle:vertical {
-            background: #C1C1C1;
-            border-radius: 4px;
-            min-height: 20px;
-        }
-        QScrollBar:horizontal {
-            border: none;
-            background: #F5F5F5;
-            height: 8px;
-            margin: 0px;
-            border-radius: 4px;
-        }
-        QScrollBar::handle:horizontal {
-            background: #c1c1c1;
-            border-radius: 4px;
-            min-width: 20px;
-        }
-        QScrollBar::add-line, QScrollBar::sub-line {
-            border: none;
-            background: none;
-        }
-
-                """)
-
-        scroll_container_layout.addWidget(self.scroll_area)
-
-        # --- КНОПКА ПРОКРУТКИ ВНИЗ ---
-        self.btn_scroll_down = QPushButton("↓", self.scroll_container)
-        self.btn_scroll_down.setFixedSize(40, 40)
-        self.btn_scroll_down.setVisible(False)  # По умолчанию скрыта
-        self.btn_scroll_down.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.btn_scroll_down.setStyleSheet("""
-                    QPushButton {
-                        background-color: white;
-                        color: #555;
-                        border: 1px solid #ddd;
-                        border-radius: 20px;
-                        font-size: 18px;
-                        font-weight: bold;
-                    }
-                    QPushButton:hover { background-color: #f8f8f8; }
-                """)
+            QScrollArea { border: none; background-color: transparent; }
+            QScrollBar:vertical { background: #F5F5F5; width: 8px; border-radius: 4px; }
+            QScrollBar::handle:vertical { background: #C1C1C1; border-radius: 4px; min-height: 20px; }
+            QScrollBar::add-line, QScrollBar::sub-line { border: none; background: none; }
+        """)
 
         self.messages_container = QWidget()
         self.messages_container.setObjectName("messages_container")
@@ -131,96 +83,99 @@ class ChatView(QWidget):
         self.messages_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
 
         self.scroll_area.setWidget(self.messages_container)
+        scroll_container_layout.addWidget(self.scroll_area)
 
-        # --- ПАНЕЛЬ РЕДАКТИРОВАНИЯ (Над вводом) ---
+        # Кнопка прокрутки вниз
+        self.btn_scroll_down = QPushButton("↓", self.scroll_container)
+        self.btn_scroll_down.setFixedSize(40, 40)
+        self.btn_scroll_down.setVisible(False)
+        self.btn_scroll_down.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_scroll_down.setStyleSheet("""
+            QPushButton { background-color: white; color: #555; border: 1px solid #ddd; border-radius: 20px; font-size: 18px; font-weight: bold; }
+            QPushButton:hover { background-color: #f8f8f8; }
+        """)
+
+        # --- ПАНЕЛЬ РЕДАКТИРОВАНИЯ ---
         self.edit_panel = QFrame()
         self.edit_panel.setFixedHeight(50)
         self.edit_panel.setVisible(False)
-        # Белый фон, серая полоска сверху и красная акцентная полоска слева
-        self.edit_panel.setStyleSheet("""
-            QFrame { 
-                background-color: white; 
-                border-top: 1px solid #e0e0e0; 
-            }
-        """)
+        self.edit_panel.setStyleSheet("QFrame { background-color: white; border-top: 1px solid #e0e0e0; }")
 
         edit_layout = QHBoxLayout(self.edit_panel)
         edit_layout.setContentsMargins(15, 5, 15, 5)
-        edit_layout.setSpacing(10)
-
-        # Акцентная линия слева (как в ТГ)
-        line = QFrame()
-        line.setFixedWidth(2)
+        line = QFrame();
+        line.setFixedWidth(2);
         line.setStyleSheet("background-color: #D22730; border: none;")
         edit_layout.addWidget(line)
 
-        # Текстовый блок (Иконка + Текст)
         text_container = QVBoxLayout()
-        text_container.setSpacing(2)
-
         self.edit_title = QLabel("Редактирование")
-        self.edit_title.setStyleSheet(
-            "color: #D22730; font-weight: bold; font-size: 11px; border: none; background: transparent;")
-
-        self.edit_label = QLabel("")  # Сюда будем писать исходный текст (Read Only)
-        self.edit_label.setStyleSheet("color: #555555; font-size: 12px; border: none; background: transparent;")
-        # Чтобы длинный текст не распирал панель, ставим ограничение или эллипсис
-        self.edit_label.setMinimumWidth(100)
-
+        self.edit_title.setStyleSheet("color: #D22730; font-weight: bold; font-size: 11px; background: transparent;")
+        self.edit_label = QLabel("")
+        self.edit_label.setStyleSheet("color: #555555; font-size: 12px; background: transparent;")
         text_container.addWidget(self.edit_title)
         text_container.addWidget(self.edit_label)
         edit_layout.addLayout(text_container, 1)
 
-        # Кнопка отмены (Крестик)
         self.btn_cancel_edit = QPushButton("✕")
         self.btn_cancel_edit.setFixedSize(30, 30)
-        self.btn_cancel_edit.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.btn_cancel_edit.setStyleSheet("""
-            QPushButton { border: none; color: #999999; font-size: 16px; background: transparent; }
-            QPushButton:hover { color: #333333; }
-        """)
+        self.btn_cancel_edit.setStyleSheet(
+            "QPushButton { border: none; color: #999999; font-size: 16px; background: transparent; }")
         edit_layout.addWidget(self.btn_cancel_edit)
 
-        # --- ПОЛЕ ВВОДА ---
-        input_container = QFrame()
-        input_container.setFixedHeight(80)
-        input_container.setStyleSheet("border-top: 1px solid #e0e0e0; background-color: white;")
-        input_layout = QHBoxLayout(input_container)
+        # --- ОБЩИЙ НИЖНИЙ КОНТЕЙНЕР ---
+        self.input_container = QFrame()
+        self.input_container.setFixedHeight(80)
+        self.input_container.setStyleSheet("border-top: 1px solid #e0e0e0; background-color: white;")
+        stack_layout = QVBoxLayout(self.input_container)  # Используем для наложения панелей друг на друга
+        stack_layout.setContentsMargins(0, 0, 0, 0)
 
+        # 1. Фрейм обычного ввода (input_frame)
+        self.input_frame = QFrame()
+        input_inner_layout = QHBoxLayout(self.input_frame)
         self.message_input = QLineEdit()
         self.message_input.setPlaceholderText("Напишите сообщение...")
-        self.message_input.setStyleSheet("""
-            QLineEdit {
-                padding: 10px 15px; 
-                border: 1px solid #e0e0e0; 
-                border-radius: 20px; 
-                background: #f0f2f5;
-                font-size: 14px;
-            }
-        """)
+        self.message_input.setStyleSheet(
+            "QLineEdit { padding: 10px 15px; border: 1px solid #e0e0e0; border-radius: 20px; background: #f0f2f5; font-size: 14px; }")
 
         self.btn_send = QPushButton("➤")
         self.btn_send.setFixedSize(45, 45)
-        self.btn_send.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.btn_send.setStyleSheet("""
-            QPushButton { 
-                background-color: #D22730; 
-                color: white; 
-                border-radius: 22px; 
-                font-size: 20px; 
-                padding-left: 3px;
-            }
-            QPushButton:hover { background-color: #b01f28; }
-        """)
+        self.btn_send.setStyleSheet(
+            "QPushButton { background-color: #D22730; color: white; border-radius: 22px; font-size: 20px; }")
 
-        input_layout.addWidget(self.message_input)
-        input_layout.addWidget(self.btn_send)
+        input_inner_layout.addWidget(self.message_input)
+        input_inner_layout.addWidget(self.btn_send)
+        stack_layout.addWidget(self.input_frame)
 
-        # Собираем всё в правую часть
+        # 2. Фрейм выбора (selection_toolbar)
+        self.selection_toolbar = QFrame()
+        self.selection_toolbar.setVisible(False)
+        self.selection_toolbar.setStyleSheet("background-color: #f8f9fa;")
+        sel_inner_layout = QHBoxLayout(self.selection_toolbar)
+        sel_inner_layout.setContentsMargins(15, 0, 15, 0)
+
+        self.btn_cancel_sel = QPushButton("Отмена")
+        self.btn_cancel_sel.setStyleSheet("color: #666; font-weight: bold; border: none;")
+
+        self.lbl_sel_count = QLabel("Выбрано: 0")
+        self.lbl_sel_count.setStyleSheet("font-weight: bold; color: #D22730;")
+
+        self.btn_forward_sel = QPushButton("➡️ Переслать")
+        self.btn_forward_sel.setStyleSheet(
+            "QPushButton { background-color: #D22730; color: white; border-radius: 5px; padding: 8px 15px; font-weight: bold; }")
+
+        sel_inner_layout.addWidget(self.btn_cancel_sel)
+        sel_inner_layout.addStretch()
+        sel_inner_layout.addWidget(self.lbl_sel_count)
+        sel_inner_layout.addStretch()
+        sel_inner_layout.addWidget(self.btn_forward_sel)
+        stack_layout.addWidget(self.selection_toolbar)
+
+        # Сборка правой панели
         right_layout.addWidget(self.chat_header)
-        right_layout.addWidget(self.scroll_container)  # Вместо прямого scroll_area
-        right_layout.addWidget(self.edit_panel)  # Панель над вводом
-        right_layout.addWidget(input_container)
+        right_layout.addWidget(self.scroll_container)
+        right_layout.addWidget(self.edit_panel)
+        right_layout.addWidget(self.input_container)
 
         self.splitter.addWidget(left_container)
         self.splitter.addWidget(right_container)

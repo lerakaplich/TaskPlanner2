@@ -26,8 +26,13 @@ class ChatPage(QWidget):
         self.reply_message_id = None  # Добавляем это
         self.sio = sio
 
+        self.selection_mode = False
+        self.selected_messages = set()
+
         # Инициализируем UI
         self.ui = ChatView()
+        self.selection_toolbar = self.ui.selection_toolbar
+        self.lbl_sel_count = self.ui.lbl_sel_count
         self.messages_layout = self.ui.messages_layout
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -56,6 +61,9 @@ class ChatPage(QWidget):
         self.ui.message_input.returnPressed.connect(self.send_message)
         self.ui.btn_create_chat.clicked.connect(self.open_create_chat_dialog)
         self.ui.btn_cancel_edit.clicked.connect(self.cancel_editing)
+        # Подключаем кнопки из новой панели мультивыбора
+        self.ui.btn_cancel_sel.clicked.connect(self.exit_selection_mode)
+        self.ui.btn_forward_sel.clicked.connect(self.forward_selected_messages)
 
         self.message_edited_signal.connect(self.process_message_edit)
         self.message_deleted_signal.connect(self.process_message_delete)
@@ -249,6 +257,14 @@ class ChatPage(QWidget):
 
             msg_widget.action_triggered.connect(self.handle_message_action)
 
+            # ДОБАВЬ ВОТ ЭТО:
+            if hasattr(msg_widget, 'toggled'):
+                msg_widget.toggled.connect(self.on_message_toggled)
+
+            # Если мы уже в режиме выбора, новое сообщение должно сразу показать чекбокс
+            if getattr(self, 'selection_mode', False):
+                msg_widget.set_selection_mode(True)
+
             # Просто добавляем в конец, AlignTop сам все прижмет кверху
             self.messages_layout.addWidget(msg_widget)
 
@@ -297,6 +313,34 @@ class ChatPage(QWidget):
 
         self.ui.message_input.clear()
 
+    def forward_selected_messages(self):
+        """Массовая пересылка выбранных сообщений"""
+        if not self.selected_messages:
+            return
+
+        # 1. Загружаем чаты для диалога
+        try:
+            chats = self.service.get_user_chats(self.current_user_id)
+            dialog = ForwardDialog(chats, self)
+
+            if dialog.exec():
+                target_chat_id = dialog.get_selected_chat_id()
+                if target_chat_id:
+                    # Сортируем ID, чтобы пересылать в хронологическом порядке
+                    sorted_ids = sorted(list(self.selected_messages))
+
+                    for msg_id in sorted_ids:
+                        self.sio.emit('forward_message', {
+                            "message_id": msg_id,
+                            "target_chat_id": target_chat_id,
+                            "user_id": self.current_user_id
+                        })
+
+                    print(f"✅ Переслано сообщений: {len(sorted_ids)}")
+                    self.exit_selection_mode()
+        except Exception as e:
+            print(f"❌ Ошибка при массовой пересылке: {e}")
+
     def open_create_chat_dialog(self):
         from windows.chat.chat_create_dialog import ChatCreateDialog
 
@@ -339,28 +383,30 @@ class ChatPage(QWidget):
             self.open_forward_dialog(message_id)
 
         elif action_type == "select":
-            # Наш новый режим мультивыбора
+
             self.enter_selection_mode(message_id)
 
     def open_forward_dialog(self, message_id):
         """Логика открытия окна пересылки"""
         try:
-            # Получаем актуальный список чатов из сервиса
             chats = self.service.get_user_chats(self.current_user_id)
-
             dialog = ForwardDialog(chats, self)
+
             if dialog.exec():
                 target_chat_id = dialog.get_selected_chat_id()
                 if target_chat_id:
-                    # Отправляем событие пересылки на сервер
-                    self.sio.emit('forward_message', {
+                    # КЛЮЧИ ДОЛЖНЫ СОВПАДАТЬ С СЕРВЕРОМ:
+                    # message_id, target_chat_id, user_id
+                    payload = {
                         "message_id": message_id,
                         "target_chat_id": target_chat_id,
                         "user_id": self.current_user_id
-                    })
-                    print(f"✅ Сообщение {message_id} переслано в чат {target_chat_id}")
+                    }
+                    print(f"📡 Отправка пересылки: {payload}")
+                    self.sio.emit('forward_message', payload)
+
         except Exception as e:
-            print(f"❌ Ошибка при пересылке: {e}")
+            print(f"❌ Ошибка в ChatPage при пересылке: {e}")
 
     def scroll_to_bottom(self, force=False):
         """
@@ -447,3 +493,56 @@ class ChatPage(QWidget):
         if event.type() == event.Type.MouseButtonPress:
             self.remove_new_messages_separator()
         return super().eventFilter(source, event)
+
+    def enter_selection_mode(self, first_msg_id):
+        """Вход в режим мультивыбора"""
+        self.selection_mode = True
+        self.selected_messages = {first_msg_id}
+
+        # Показываем тулбар выбора и скрываем обычный ввод
+        self.selection_toolbar.setVisible(True)
+        self.ui.input_frame.setVisible(False)
+
+        # Говорим всем сообщениям показать чекбоксы
+        self.update_widgets_selection_state(True)
+        self.update_selection_label()
+
+    def exit_selection_mode(self):
+        """Выход из режима мультивыбора"""
+        self.selection_mode = False
+        self.selected_messages.clear()
+
+        self.selection_toolbar.setVisible(False)
+        self.ui.input_frame.setVisible(True)
+
+        # Скрываем чекбоксы и сбрасываем выделение
+        self.update_widgets_selection_state(False)
+
+    def update_widgets_selection_state(self, enabled):
+        """Проходит по всем сообщениям и включает/выключает чекбоксы"""
+        widgets = self.ui.messages_container.findChildren(ChatMessageWidget)
+        for w in widgets:
+            w.set_selection_mode(enabled)
+            # Если выключаем режим — снимаем визуальное выделение
+            if not enabled:
+                w.set_selected(False)
+            # Если включаем — выделяем те, что в наборе
+            elif w.message_id in self.selected_messages:
+                w.set_selected(True)
+
+    def update_selection_label(self):
+        """Обновляет текст 'Выбрано: 3' на панели"""
+        self.lbl_sel_count.setText(f"Выбрано: {len(self.selected_messages)}")
+
+    def on_message_toggled(self, message_id, is_selected):
+        """Слот, который вызывается при клике на чекбокс в сообщении"""
+        if is_selected:
+            self.selected_messages.add(message_id)
+        else:
+            self.selected_messages.discard(message_id)
+            # Если сняли выделение со всего — выходим из режима
+            if not self.selected_messages:
+                self.exit_selection_mode()
+                return
+
+        self.update_selection_label()

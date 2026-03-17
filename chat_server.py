@@ -73,20 +73,28 @@ async def delete_chat_msg(sid, data):
     except Exception as e:
         print(f"❌ Ошибка сервера при удалении: {e}")
 
+
 @sio.event
 async def forward_message(sid, data):
-    # data: {"message_id": 100, "to_chat_id": 5, "current_user_id": 10}
-    with TasksSessionLocal() as session:
-        service = ChatService(session)
-        formatted_msg = service.forward_message(
-            data['message_id'],
-            data['to_chat_id'],
-            data['current_user_id']
-        )
+    # data: {"message_id": 100, "target_chat_id": 5, "user_id": 10}
+    msg_id = data.get('message_id')
+    target_chat_id = data.get('target_chat_id')
+    user_id = data.get('user_id')
 
-        if formatted_msg:
-            # Рассылаем в тот чат, КУДА переслали
-            await sio.emit("new_message", formatted_msg.model_dump(), room=f"chat_{data['to_chat_id']}")
+    try:
+        with TasksSessionLocal() as session:
+            service = ChatService(session)
+            # Вызываем метод пересылки в ChatService
+            new_msg_dto = service.forward_message(msg_id, target_chat_id, user_id)
+
+            if new_msg_dto:
+                # ВАЖНО: mode='json' превращает datetime в строку, иначе сокет упадет
+                formatted_data = new_msg_dto.model_dump(mode='json')
+
+                print(f"🚀 Сообщение переслано в комнату chat_{target_chat_id}")
+                await sio.emit("new_message", formatted_data, room=f"chat_{target_chat_id}")
+    except Exception as e:
+        print(f"❌ Ошибка сервера при пересылке: {e}")
 
 @sio.event
 async def messages_seen(sid, data):
