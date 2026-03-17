@@ -4,6 +4,8 @@ from PyQt6.QtWidgets import (QWidget, QHBoxLayout, QVBoxLayout, QListWidget,
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QFont
 
+from windows.chat.chat_text_edit import GrowingTextEdit
+
 
 class ChatView(QWidget):
     """Обновленный класс визуального отображения с поддержкой пузырьков"""
@@ -103,8 +105,8 @@ class ChatView(QWidget):
 
         edit_layout = QHBoxLayout(self.edit_panel)
         edit_layout.setContentsMargins(15, 5, 15, 5)
-        line = QFrame();
-        line.setFixedWidth(2);
+        line = QFrame()
+        line.setFixedWidth(2)
         line.setStyleSheet("background-color: #D22730; border: none;")
         edit_layout.addWidget(line)
 
@@ -123,25 +125,56 @@ class ChatView(QWidget):
             "QPushButton { border: none; color: #999999; font-size: 16px; background: transparent; }")
         edit_layout.addWidget(self.btn_cancel_edit)
 
-        # --- ОБЩИЙ НИЖНИЙ КОНТЕЙНЕР ---
+        # --- ОБЩИЙ НИЖНИЙ КОНТЕЙНЕР (Исправлено для роста вверх) ---
         self.input_container = QFrame()
-        self.input_container.setFixedHeight(80)
+        # Убрали fixedHeight, чтобы контейнер мог растягиваться
+        self.input_container.setMinimumHeight(60)
+        self.input_container.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
         self.input_container.setStyleSheet("border-top: 1px solid #e0e0e0; background-color: white;")
-        stack_layout = QVBoxLayout(self.input_container)  # Используем для наложения панелей друг на друга
-        stack_layout.setContentsMargins(0, 0, 0, 0)
 
-        # 1. Фрейм обычного ввода (input_frame)
+        stack_layout = QVBoxLayout(self.input_container)
+        stack_layout.setContentsMargins(0, 0, 0, 0)
+        stack_layout.setSpacing(0)
+
+        # 1. Фрейм обычного ввода
         self.input_frame = QFrame()
         input_inner_layout = QHBoxLayout(self.input_frame)
-        self.message_input = QLineEdit()
-        self.message_input.setPlaceholderText("Напишите сообщение...")
-        self.message_input.setStyleSheet(
-            "QLineEdit { padding: 10px 15px; border: 1px solid #e0e0e0; border-radius: 20px; background: #f0f2f5; font-size: 14px; }")
+        input_inner_layout.setContentsMargins(10, 10, 10, 10)
+        # Прижимаем элементы ввода к низу, чтобы поле росло вверх
+        input_inner_layout.setAlignment(Qt.AlignmentFlag.AlignBottom)
+
+        self.message_input = GrowingTextEdit()
+        # Применяем стили, включая кастомный скроллбар
+        self.message_input.setStyleSheet("""
+                    QTextEdit { 
+                        padding: 8px 15px; 
+                        border: 1px solid #e0e0e0; 
+                        border-radius: 18px; 
+                        background: #f0f2f5; 
+                        font-size: 14px; 
+                    }
+                    /* Красивый скроллбар для поля ввода */
+                    QScrollBar:vertical {
+                        background: transparent;
+                        width: 6px;
+                        margin: 4px 2px 4px 0;
+                    }
+                    QScrollBar::handle:vertical {
+                        background: #C1C1C1;
+                        border-radius: 3px;
+                        min-height: 20px;
+                    }
+                    QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+                        border: none;
+                        background: none;
+                    }
+                """)
 
         self.btn_send = QPushButton("➤")
         self.btn_send.setFixedSize(45, 45)
+        self.btn_send.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_send.setStyleSheet(
-            "QPushButton { background-color: #D22730; color: white; border-radius: 22px; font-size: 20px; }")
+            "QPushButton { background-color: #D22730; color: white; border-radius: 22px; font-size: 20px; padding-left: 3px; }")
 
         input_inner_layout.addWidget(self.message_input)
         input_inner_layout.addWidget(self.btn_send)
@@ -149,16 +182,17 @@ class ChatView(QWidget):
 
         # 2. Фрейм выбора (selection_toolbar)
         self.selection_toolbar = QFrame()
+        self.selection_toolbar.setFixedHeight(60)  # Для тулбара выбора можно оставить фикс
         self.selection_toolbar.setVisible(False)
-        self.selection_toolbar.setStyleSheet("background-color: #f8f9fa;")
+        self.selection_toolbar.setStyleSheet("background-color: #f8f9fa; border-top: 1px solid #e0e0e0;")
         sel_inner_layout = QHBoxLayout(self.selection_toolbar)
         sel_inner_layout.setContentsMargins(15, 0, 15, 0)
 
         self.btn_cancel_sel = QPushButton("Отмена")
-        self.btn_cancel_sel.setStyleSheet("color: #666; font-weight: bold; border: none;")
+        self.btn_cancel_sel.setStyleSheet("color: #666; font-weight: bold; border: none; background: transparent;")
 
         self.lbl_sel_count = QLabel("Выбрано: 0")
-        self.lbl_sel_count.setStyleSheet("font-weight: bold; color: #D22730;")
+        self.lbl_sel_count.setStyleSheet("font-weight: bold; color: #D22730; background: transparent;")
 
         self.btn_forward_sel = QPushButton("➡️ Переслать")
         self.btn_forward_sel.setStyleSheet(

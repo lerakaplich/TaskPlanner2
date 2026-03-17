@@ -282,7 +282,7 @@ class ChatPage(QWidget):
             return None
 
     def send_message(self):
-        text = self.ui.message_input.text().strip()
+        text = self.ui.message_input.toPlainText().strip()
         if not text:
             return
 
@@ -312,6 +312,7 @@ class ChatPage(QWidget):
             })
 
         self.ui.message_input.clear()
+        self.ui.message_input.setFixedHeight(40)  # Сбрасываем высоту к начальной
 
     def forward_selected_messages(self):
         """Массовая пересылка выбранных сообщений"""
@@ -461,7 +462,7 @@ class ChatPage(QWidget):
         self.ui.edit_panel.setVisible(True)
 
         # 2. Переносим текст в поле ввода для ФАКТИЧЕСКОГО редактирования
-        self.ui.message_input.setText(original_text)
+        self.ui.message_input.setPlainText(original_text)
         self.ui.message_input.setFocus()
 
         # 3. Меняем иконку кнопки на галочку
