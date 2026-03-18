@@ -26,13 +26,16 @@ class Chat(Base):
     messages = relationship("ChatMessage", back_populates="chat", cascade="all, delete-orphan")
     participants = relationship("ChatParticipant", back_populates="chat")
 
+
 class ChatParticipant(Base):
     __tablename__ = "chat_participants"
 
     chat_id: Mapped[int] = mapped_column(ForeignKey("chats.id", ondelete="CASCADE"), primary_key=True)
-    employee_id: Mapped[int] = mapped_column(primary_key=True) # ID из foreign_data
+    employee_id: Mapped[int] = mapped_column(primary_key=True)
     joined_at: Mapped[datetime] = mapped_column(default=datetime.now)
+    is_admin: Mapped[bool] = mapped_column(default=False)  # 👈 Добавляем эту строку
 
+    # Связи
     chat = relationship("Chat", back_populates="participants")
 
 class ChatMessage(Base):

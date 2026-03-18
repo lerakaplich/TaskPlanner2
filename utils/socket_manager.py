@@ -1,5 +1,7 @@
 import socketio
 
+user_sid_map = {}  # {user_id: sid}
+
 # Создаем экземпляр клиента
 sio = socketio.Client(
     reconnection=True,
@@ -19,8 +21,9 @@ def connect_to_server(url="http://localhost:8081"):
 # Можно сразу навесить базовые обработчики для отладки
 @sio.event
 def connect():
-    print("Соединение установлено!")
+    # НА КЛИЕНТЕ НЕТ sid и environ!
+    print("✅ Соединение с сервером установлено!")
 
 @sio.event
 def disconnect():
-    print("Соединение разорвано!")
+    print("❌ Соединение с сервером разорвано")

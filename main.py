@@ -253,6 +253,11 @@ def main():
         selected_user = user_dialog.get_selected_user()
 
         if selected_user:
+            user_id = selected_user["id"]  # <--- Сохраняем ID
+
+            # 🔥 ВОТ ТУТ АВТОРИЗУЕМ ПОЛЬЗОВАТЕЛЯ НА СЕРВЕРЕ 🔥
+            # Это заполнит тот самый user_sid_map на сервере
+            sio.emit("auth_user", {"user_id": user_id})
             print(f"\n✅ Вход выполнен: {selected_user['last_name']} {selected_user['first_name']}")
             print(f"   Роль: {selected_user.get('rights', 'user')}")
             if selected_user.get('position'):

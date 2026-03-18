@@ -1,6 +1,6 @@
 from datetime import datetime
 from typing import List, Optional
-from sqlalchemy import select, and_, update
+from sqlalchemy import select, and_, update, delete
 from sqlalchemy.dialects.postgresql.dml import insert
 from sqlalchemy.orm import Session
 from models.chat import Chat, ChatMessage, ChatParticipant, ChatType, MessageRead, DeletedMessage
@@ -51,13 +51,61 @@ class ChatRepo:
         self.session.flush()  # Получаем ID без фиксации транзакции
         return chat
 
-    def add_participant(self, chat_id: int, employee_id: int):
+    def add_participant(self, chat_id: int, employee_id: int, is_admin: bool = False):
         """Добавляет участника в чат"""
-        participant = ChatParticipant(
-            chat_id=chat_id,
-            employee_id=employee_id
+        try:
+            # Убираем аргумент role, заменяем на is_admin
+            participant = ChatParticipant(
+                chat_id=chat_id,
+                employee_id=employee_id,
+                is_admin=is_admin
+            )
+            self.session.add(participant)
+            self.session.commit()
+            return True
+        except Exception as e:
+            print(f"❌ Ошибка при добавлении участника: {e}")
+            self.session.rollback()
+            return False
+
+    def add_participants(self, chat_id: int, user_ids: list[int]):
+        for uid in user_ids:
+            # Проверяем, нет ли его уже там (на всякий случай)
+            stmt = select(ChatParticipant).where(
+                ChatParticipant.chat_id == chat_id,
+                ChatParticipant.employee_id == uid
+            )
+            if not self.session.scalar(stmt):
+                p = ChatParticipant(chat_id=chat_id, employee_id=uid)
+                self.session.add(p)
+
+    def update_chat_info(self, chat_id: int, title: str):
+        stmt = update(Chat).where(Chat.id == chat_id).values(title=title)
+        self.session.execute(stmt)
+
+    def remove_participant(self, chat_id: int, employee_id: int):
+        stmt = delete(ChatParticipant).where(
+            and_(ChatParticipant.chat_id == chat_id, ChatParticipant.employee_id == employee_id)
         )
-        self.session.add(participant)
+        self.session.execute(stmt)
+
+    def remove_participants(self, chat_id: int, user_ids: list[int]):
+        from sqlalchemy import delete
+        stmt = delete(ChatParticipant).where(
+            ChatParticipant.chat_id == chat_id,
+            ChatParticipant.employee_id.in_(user_ids)
+        )
+        self.session.execute(stmt)
+
+    def delete_chat(self, chat_id: int) -> bool:
+        try:
+            chat = self.session.get(Chat, chat_id)
+            if chat:
+                self.session.delete(chat)
+                return True
+            return False
+        except Exception:
+            return False
 
     def create_message(self, chat_id: int, sender_id: int, content: str,
                        reply_to_id: Optional[int] = None,

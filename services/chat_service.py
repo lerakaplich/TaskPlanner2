@@ -117,32 +117,56 @@ class ChatService:
         return self._prepare_message_dto(new_msg)
 
     def create_new_chat(self, creator_id: int, data: dict):
+        # Убеждаемся, что тип чата — это Enum
         chat_type = ChatType(data["type"])
 
         if chat_type == ChatType.private:
             created_chats = []
+            # Предполагаем, что в data["participants"] список ID собеседников
             for target_id in data["participants"]:
+                # Пропускаем, если пытаемся создать чат с самим собой (на всякий случай)
+                if int(target_id) == int(creator_id):
+                    continue
+
                 # 1. Проверяем, существует ли уже чат 1-на-1
                 existing_chat_id = self.chat_repo.get_private_chat(creator_id, target_id)
 
                 if existing_chat_id:
                     print(f"ℹ️ Чат с пользователем {target_id} уже существует (ID: {existing_chat_id})")
-                    continue  # Пропускаем создание дубликата
+                    continue
 
-                # 2. Если нет — создаем новый
-                new_chat = self.chat_repo.create_chat(chat_type=ChatType.private)
-                self.chat_repo.add_participant(new_chat.id, creator_id)
-                self.chat_repo.add_participant(new_chat.id, target_id)
+                    # 2. Создаем новый приватный чат
+                # ВАЖНО: передаем None или пустую строку в title, так как это private
+                # Аргументы: title, chat_type
+                new_chat = self.chat_repo.create_chat(
+                    title=None,
+                    chat_type=chat_type.value  # .value, так как в репозитории ожидается str
+                )
+
+                # Добавляем участников (используем is_admin из предыдущего шага)
+                self.chat_repo.add_participant(new_chat.id, creator_id, is_admin=True)
+                self.chat_repo.add_participant(new_chat.id, target_id, is_admin=True)
+
                 created_chats.append(new_chat)
 
             self.session.commit()
             return created_chats
 
-        else:  # Логика для GROUP
-            new_chat = self.chat_repo.create_chat(chat_type=ChatType.group, title=data["title"])
-            self.chat_repo.add_participant(new_chat.id, creator_id)
+        else:  # Логика для GROUP / PROJECT
+            # Исправляем порядок: сначала title, потом type
+            new_chat = self.chat_repo.create_chat(
+                title=data.get("title", "Групповой чат"),
+                chat_type=chat_type.value,
+                project_id=data.get("project_id")
+            )
+
+            # Создатель — админ
+            self.chat_repo.add_participant(new_chat.id, creator_id, is_admin=True)
+
+            # Остальные участники — не админы
             for emp_id in data["participants"]:
-                self.chat_repo.add_participant(new_chat.id, emp_id)
+                if int(emp_id) != int(creator_id):
+                    self.chat_repo.add_participant(new_chat.id, emp_id, is_admin=False)
 
             self.session.commit()
             return [new_chat]
@@ -214,3 +238,22 @@ class ChatService:
 
         # Возвращаем готовый DTO для отображения в интерфейсе
         return self._prepare_message_dto(msg_orm)
+
+    def delete_chat(self, chat_id: int) -> bool:
+        success = self.chat_repo.delete_chat(chat_id)
+        if success:
+            self.session.commit()
+        return success
+
+    def update_chat_participants(self, chat_id: int, added_ids: list[int], removed_ids: list[int]):
+        try:
+            if added_ids:
+                self.chat_repo.add_participants(chat_id, added_ids)
+            if removed_ids:
+                self.chat_repo.remove_participants(chat_id, removed_ids)
+            self.session.commit()
+            return True
+        except Exception as e:
+            self.session.rollback()
+            print(f"Error updating participants: {e}")
+            return False
