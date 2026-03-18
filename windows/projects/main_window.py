@@ -322,7 +322,7 @@ class MainWindow(QMainWindow):
             'other_tasks': 2,
             'gantt': 3,
             'analytics': 4,
-            'chat': 5,
+            'chat.py': 5,
             'overtime': 6,
             'settings': 7,
             'archive': 8  # 👈 ДОБАВЛЯЕМ архив
@@ -440,7 +440,7 @@ class MainWindow(QMainWindow):
             'other_tasks': 2,
             'gantt': 3,
             'analytics': 4,
-            'chat': 5,
+            'chat.py': 5,
             'overtime': 6,
             'settings': 7
         }
