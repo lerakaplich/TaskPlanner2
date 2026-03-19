@@ -47,6 +47,12 @@ class ChatMessage(Base):
     content: Mapped[str] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(default=datetime.now)
     updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    reads = relationship("MessageRead", viewonly=True)
+
+    @property
+    def is_edited(self) -> bool:
+        """Сообщение считается отредактированным, если дата обновления заполнена"""
+        return self.updated_at is not None
 
     # НОВЫЕ ПОЛЯ
     reply_to_id: Mapped[Optional[int]] = mapped_column(ForeignKey("chat_messages.id", ondelete="SET NULL"))

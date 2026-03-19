@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from repositories.chat_repo import ChatRepo
 from repositories.external_employee_repo import ExternalEmployeeRepo
 from models.schemas.chat_dto import MessageReadDTO, ChatReadDTO
-from models.chat import ChatType
+from models.chat import ChatType, ChatMessage
 
 
 class ChatService:
@@ -36,15 +36,17 @@ class ChatService:
             ))
         return dtos
 
-    def load_history(self, chat_id: int, current_user_id: int) -> List[MessageReadDTO]:
-        # Вызываем метод репозитория (который мы добавим ниже)
-        messages = self.chat_repo.get_messages(chat_id, current_user_id)
+    def load_history(self, chat_id: int, current_user_id: int, limit: int = 50, offset: int = 0) -> List[
+        MessageReadDTO]:
+        messages = self.chat_repo.get_messages(chat_id, current_user_id, limit, offset)
         dtos = []
 
         for m in messages:
+            # Создаем DTO (здесь заполняются текст, дата, автор)
             dto = self._prepare_message_dto(m)
 
-            # 3. Дополнительно проверяем статус прочтения (как и было)
+            # Устанавливаем статус прочтения (проверяем наличие записей в MessageRead)
+            # Убедитесь, что метод is_message_read_by_anyone возвращает True/False
             dto.is_read = self.chat_repo.is_message_read_by_anyone(m.id, m.sender_id)
 
             dtos.append(dto)
@@ -97,6 +99,47 @@ class ChatService:
         )
         dto.reply_sender_name = reply_sender_name  # Передаем в DTO
         return dto
+
+    def _to_message_dto(self, msg: ChatMessage, user_id: int) -> MessageReadDTO:
+        is_read_by_me = any(r.user_id == user_id for r in msg.reads) if hasattr(msg, 'reads') else False
+
+        # Ответы
+        reply_text = None
+        reply_sender_name = None
+        if msg.replied_to_message:
+            reply_text = msg.replied_to_message.content
+            reply_sender_name = self.emp_repo.get_full_name(msg.replied_to_message.sender_id)
+
+        # Пересылка
+        forward_name = None
+        if msg.forward_from_id:
+            forward_name = self.emp_repo.get_full_name(msg.forward_from_id)
+
+        return MessageReadDTO(
+            id=msg.id,
+            chat_id=msg.chat_id,
+            sender_id=msg.sender_id,
+            sender_name=self.emp_repo.get_full_name(msg.sender_id),
+            content=msg.content,
+            created_at=msg.created_at,
+            time_display=msg.created_at.strftime("%H:%M"),
+            is_read=is_read_by_me,
+            is_edited=msg.is_edited,  # Это @property в модели ChatMessage
+            is_deleted=msg.is_deleted,
+            reply_to_id=msg.reply_to_id,
+            reply_text=reply_text,
+            reply_sender_name=reply_sender_name,
+            forward_from_name=forward_name
+        )
+
+    def get_first_unread_offset(self, chat_id: int, user_id: int) -> int:
+        """Находит позицию первого непрочитанного сообщения"""
+        unread_count = self.chat_repo.get_unread_count(chat_id, user_id)
+        if unread_count == 0:
+            return 0  # Все прочитано, берем последние 50
+
+        # Если есть непрочитанные, берем их с небольшим запасом старых сообщений (например, 10 сверху)
+        return max(0, unread_count - 10)
 
     def forward_message(self, message_id: int, to_chat_id: int, current_user_id: int):
         """Пересылка сообщения в другой чат"""
@@ -197,6 +240,23 @@ class ChatService:
     def get_chat_messages(self, chat_id: int, current_user_id: int) -> List[MessageReadDTO]:
         messages = self.chat_repo.get_messages(chat_id, current_user_id)
         return [self._prepare_message_dto(m) for m in messages]
+
+    def get_chat_details(self, chat_id: int):
+        """Метод сервиса: получает данные из репозитория и обогащает именами"""
+        chat = self.chat_repo.get_chat_with_participants(chat_id)
+        if not chat:
+            return None
+
+        # Наполняем объекты участников ФИО
+        for p in chat.participants:
+            # Используем ваш emp_repo для получения данных сотрудника
+            emp = self.emp_repo.get_by_id(p.employee_id)
+            if emp:
+                p.full_name = f"{emp.last_name} {emp.first_name}"
+            else:
+                p.full_name = f"Сотрудник #{p.employee_id}"
+
+        return chat
 
     def get_message_by_id(self, message_id: int) -> Optional[MessageReadDTO]:
         """Получает сообщение из БД и превращает его в DTO для UI"""

@@ -55,11 +55,28 @@ class ChatView(QWidget):
         right_layout.setContentsMargins(0, 0, 0, 0)
         right_layout.setSpacing(0)
 
-        # Заголовок чата
+        # --- Заголовок чата (Header) ---
+        self.header_container = QFrame()
+        self.header_container.setFixedHeight(60)
+        self.header_container.setStyleSheet("background-color: white; border-bottom: 1px solid #e0e0e0;")
+        header_layout = QHBoxLayout(self.header_container)
+        header_layout.setContentsMargins(15, 0, 15, 0)
+
         self.chat_header = QLabel("Выберите чат...")
-        self.chat_header.setFixedHeight(60)
         self.chat_header.setFont(QFont("Arial", 11, QFont.Weight.Bold))
-        self.chat_header.setStyleSheet("padding: 15px; border-bottom: 1px solid #e0e0e0; background-color: white;")
+
+        # Добавляем кнопку настроек
+        self.btn_chat_info = QPushButton("⋮")
+        self.btn_chat_info.setFixedSize(35, 35)
+        self.btn_chat_info.setVisible(False)  # Скрыта, пока чат не выбран
+        self.btn_chat_info.setStyleSheet("""
+            QPushButton { border: none; background: transparent; font-size: 20px; border-radius: 17px; }
+            QPushButton:hover { background-color: #f0f2f5; }
+        """)
+
+        header_layout.addWidget(self.chat_header)
+        header_layout.addStretch()
+        header_layout.addWidget(self.btn_chat_info)
 
         # Область сообщений
         self.scroll_container = QWidget()
@@ -206,7 +223,7 @@ class ChatView(QWidget):
         stack_layout.addWidget(self.selection_toolbar)
 
         # Сборка правой панели
-        right_layout.addWidget(self.chat_header)
+        right_layout.addWidget(self.header_container)
         right_layout.addWidget(self.scroll_container)
         right_layout.addWidget(self.edit_panel)
         right_layout.addWidget(self.input_container)

@@ -127,7 +127,7 @@ class ChatMessageWidget(QWidget):
         """Обновляет визуальное состояние галочек"""
         self.is_read = status
         # Проверяем, существует ли статусная метка (она есть только у 'mine' сообщений)
-        if hasattr(self, 'status_lbl') and self.status_lbl:
+        if self.is_read and self.status_lbl:
             icon = "✓✓" if status else "✓"
             color = "#34B7F1" if status else "gray"
             self.status_lbl.setText(icon)

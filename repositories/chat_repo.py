@@ -3,9 +3,11 @@ from typing import List, Optional
 from sqlalchemy import select, and_, update, delete
 from sqlalchemy.dialects.postgresql.dml import insert
 from sqlalchemy.orm import Session
+from sqlalchemy.sql.functions import func
+
 from models.chat import Chat, ChatMessage, ChatParticipant, ChatType, MessageRead, DeletedMessage
 from models.employees import ExternalEmployee
-
+from sqlalchemy.orm import selectinload
 
 class ChatRepo:
     def __init__(self, session: Session):
@@ -39,6 +41,9 @@ class ChatRepo:
         result = self.session.execute(sql, {"u1": user_a, "u2": user_b}).fetchone()
         return result[0] if result else None
 
+    def get_chat_by_id(self, chat_id: int) -> Optional[Chat]:
+        return self.session.get(Chat, chat_id)
+
     def create_chat(self, title: str, chat_type: str, project_id: Optional[int] = None) -> Chat:
         """Создает запись чата и возвращает объект"""
         chat = Chat(
@@ -50,6 +55,17 @@ class ChatRepo:
         self.session.add(chat)
         self.session.flush()  # Получаем ID без фиксации транзакции
         return chat
+
+    def get_chat_with_participants(self, chat_id: int) -> Optional[Chat]:
+        """Возвращает чат с предзагруженными участниками"""
+        stmt = (
+            select(Chat)
+            .options(
+                selectinload(Chat.participants)
+            )
+            .where(Chat.id == chat_id)
+        )
+        return self.session.scalar(stmt)
 
     def add_participant(self, chat_id: int, employee_id: int, is_admin: bool = False):
         """Добавляет участника в чат"""
@@ -83,9 +99,9 @@ class ChatRepo:
         stmt = update(Chat).where(Chat.id == chat_id).values(title=title)
         self.session.execute(stmt)
 
-    def remove_participant(self, chat_id: int, employee_id: int):
+    def remove_participant(self, chat_id: int, emp_id: int):
         stmt = delete(ChatParticipant).where(
-            and_(ChatParticipant.chat_id == chat_id, ChatParticipant.employee_id == employee_id)
+            and_(ChatParticipant.chat_id == chat_id, ChatParticipant.employee_id == emp_id)
         )
         self.session.execute(stmt)
 
@@ -155,18 +171,44 @@ class ChatRepo:
         ).limit(1)
         return self.session.scalar(stmt) is not None
 
-    def get_messages(self, chat_id: int, user_id: int):
-        # Те сообщения, которые юзер скрыл лично
+    def get_messages(self, chat_id: int, user_id: int, limit: int = 50, offset: int = 0) -> List[ChatMessage]:
         hidden_ids = select(DeletedMessage.message_id).where(DeletedMessage.user_id == user_id)
 
         stmt = (
             select(ChatMessage)
-            .where(ChatMessage.chat_id == chat_id)
-            .where(ChatMessage.id.not_in(hidden_ids))  # Не показываем скрытые лично
-            .where(ChatMessage.is_deleted == False)  # Не показываем удаленные для всех
-            .order_by(ChatMessage.created_at.asc())
+            .options(selectinload(ChatMessage.reads))  # ПРЕДЗАГРУЗКА прочтений
+            .where(
+                and_(
+                    ChatMessage.chat_id == chat_id,
+                    ChatMessage.id.not_in(hidden_ids)
+                )
+            )
+            .order_by(ChatMessage.created_at.desc())
+            .limit(limit)
+            .offset(offset)
         )
-        return self.session.scalars(stmt).all()
+        messages = list(self.session.scalars(stmt))
+        return messages[::-1]
+
+    def get_chat_messages_count(self, chat_id: int, user_id: int) -> int:
+        """Общее количество доступных сообщений в чате"""
+        hidden_ids = select(DeletedMessage.message_id).where(DeletedMessage.user_id == user_id)
+        stmt = select(func.count(ChatMessage.id)).where(
+            and_(ChatMessage.chat_id == chat_id, ChatMessage.id.not_in(hidden_ids))
+        )
+        return self.session.execute(stmt).scalar() or 0
+
+    def get_unread_count(self, chat_id: int, user_id: int) -> int:
+        """Считает количество непрочитанных пользователем чужих сообщений"""
+        read_subquery = select(MessageRead.message_id).where(MessageRead.user_id == user_id)
+        stmt = select(func.count(ChatMessage.id)).where(
+            and_(
+                ChatMessage.chat_id == chat_id,
+                ChatMessage.sender_id != user_id,
+                ChatMessage.id.not_in(read_subquery)
+            )
+        )
+        return self.session.execute(stmt).scalar() or 0
 
     def update_message_content(self, message_id: int, new_content: str):
         try:
@@ -227,3 +269,10 @@ class ChatRepo:
             print(f"Ошибка скрытия сообщения: {e}")
             self.session.rollback()
             return False
+
+    def update_participant_role(self, chat_id: int, emp_id: int, is_admin: bool):
+        stmt = update(ChatParticipant).where(
+            and_(ChatParticipant.chat_id == chat_id, ChatParticipant.employee_id == emp_id)
+        ).values(is_admin=is_admin)
+        self.session.execute(stmt)
+        self.session.commit()
