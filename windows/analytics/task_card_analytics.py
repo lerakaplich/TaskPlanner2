@@ -27,74 +27,23 @@ class TaskCard(QFrame):
         'archived': 'Архивировано',
         'overdue': 'Просрочена'
     }
-    DEFAULT_CREATOR_NAMES = {
-        1: "Иван Иванов",
-        2: "Анна Петрова",
-        3: "Алексей Сидоров"
-    }
 
-    def __init__(self, task_data, compact=False, show_theme=False, show_project=False,
-                 check_overdue=False, creator_names=None, parent=None):
+    def __init__(self, task_data, compact=False, show_theme=False, show_project=False, parent=None):
         super().__init__(parent)
         self.task = task_data
         self.compact = compact
         self.show_theme = show_theme
-        self.show_project = show_project      # теперь параметр определён
-        self.check_overdue = check_overdue
-        self.creator_names = creator_names or self.DEFAULT_CREATOR_NAMES
+        self.show_project = show_project
         self._init_ui()
 
-    # ---------- Вспомогательные методы ----------
-    @staticmethod
-    def parse_date(date_str):
-        if not date_str:
-            return None
-        for fmt in ("%d.%m.%Y", "%Y-%m-%d"):
-            try:
-                return datetime.strptime(date_str, fmt).date()
-            except ValueError:
-                pass
-        return None
-
-    @staticmethod
-    def format_date(date_str):
-        date = TaskCard.parse_date(date_str)
-        return date.strftime("%d.%m.%Y") if date else (date_str or "—")
-
-    def calculate_kpi(self, created_str, completed_str, due_str):
-        created = self.parse_date(created_str)
-        completed = self.parse_date(completed_str)
-        due = self.parse_date(due_str)
-        if not all([created, completed, due]):
-            return None
-        planned = (due - created).days
-        actual = (completed - created).days
-        if actual <= 0:
-            return float('inf')
-        return planned / actual
-
-    def _get_creator_display(self):
-        creator_raw = self.task.get("creator") or self.task.get("creator_id")
-        if creator_raw is None:
-            return "неизвестно"
-        if isinstance(creator_raw, int):
-            return self.creator_names.get(creator_raw, str(creator_raw))
-        return creator_raw
-
-    def _is_overdue(self):
-        if not self.check_overdue:
-            return False
-        due_str = self.task.get("due_date")
-        status = self.task.get("status", "").lower()
-        completed_statuses = ("completed", "archived", "выполнено", "архивировано")
-        if due_str and status not in completed_statuses:
-            due_date = self.parse_date(due_str)
-            if due_date and due_date < datetime.now().date():
-                return True
-        return False
-
     def _init_ui(self):
-        overdue = self._is_overdue()
+        # Данные теперь приходят от сервиса в готовом виде
+        # Ожидаемые ключи в self.task:
+        # 'is_overdue' (bool), 'priority' (str), 'status' (str), 'title' (str),
+        # 'project_name' (str), 'tags_list' (list), 'created_at_str' (str),
+        # 'due_date_str' (str), 'completed_at_str' (str), 'creator_name' (str),
+        # 'kpi_value' (str/None)
+        overdue = self.task.get("is_overdue", False)
         priority = self.task.get("priority", "medium")
         status = self.task.get("status", "").lower()
 
@@ -135,13 +84,13 @@ class TaskCard(QFrame):
 
         # --- Проект (если нужно) ---
         if self.show_project:
-            project = self.task.get('project', '—')
+            project = self.task.get('project_name', '—')
             project_label = QLabel(f"Проект: {project}")
             project_label.setStyleSheet(f"color: #555; font-size: {font_size_normal};")
             layout.addWidget(project_label)
 
         # --- Теги ---
-        tags = self.task.get("tags", [])
+        tags = self.task.get("tags_list", [])
         tags_str = ", ".join(tags) if tags else "нет"
         tags_label = QLabel(f"Теги: {tags_str}")
         tags_label.setStyleSheet(f"color: #555; font-size: {font_size_normal};")
@@ -155,12 +104,12 @@ class TaskCard(QFrame):
         layout.addWidget(prio_label)
 
         # --- Дата создания ---
-        created_label = QLabel(f"Дата создания: {self.format_date(self.task.get('created_at'))}")
+        created_label = QLabel(f"Дата создания: {self.task.get('created_at_str', '—')}")
         created_label.setStyleSheet(f"font-size: {font_size_normal};")
         layout.addWidget(created_label)
 
         # --- Дедлайн ---
-        due_display = self.format_date(self.task.get("due_date")) or "Нет"
+        due_display = self.task.get("due_date_str", "Нет")
         due_text = f"Дедлайн: {due_display}"
         if overdue:
             due_text += " (просрочена)"
@@ -172,9 +121,9 @@ class TaskCard(QFrame):
         layout.addWidget(due_label)
 
         # --- Дата выполнения (если есть) ---
-        completed_at = self.task.get("completed_at")
+        completed_at = self.task.get("completed_at_str")
         if completed_at:
-            completed_label = QLabel(f"Дата выполнения: {self.format_date(completed_at)}")
+            completed_label = QLabel(f"Дата выполнения: {completed_at}")
             completed_label.setStyleSheet(f"font-size: {font_size_normal};")
             layout.addWidget(completed_label)
 
@@ -185,19 +134,15 @@ class TaskCard(QFrame):
         layout.addWidget(status_label)
 
         # --- Создатель ---
-        creator_label = QLabel(f"Создатель: {self._get_creator_display()}")
-        creator_label.setStyleSheet(f"font-size: {font_size_normal};")
-        layout.addWidget(creator_label)
+        creator_name = self.task.get("creator_name", "неизвестно")
+        creator_lbl = QLabel(f"Создатель: {creator_name}")
+        creator_lbl.setStyleSheet(f"font-size: {font_size_normal};")
+        layout.addWidget(creator_lbl)
 
         # --- КПД (только для завершённых задач) ---
         if status in ("completed", "archived"):
-            kpi = self.calculate_kpi(
-                self.task.get("created_at"),
-                self.task.get("completed_at"),
-                self.task.get("due_date")
-            )
-            if kpi is not None:
-                kpi_text = "∞" if kpi == float('inf') else f"{kpi:.2f}"
-                kpi_label = QLabel(f"КПД: {kpi_text}")
-                kpi_label.setStyleSheet(f"font-weight: bold; color: #27ae60; font-size: {font_size_normal};")
-                layout.addWidget(kpi_label)
+            kpi_val = self.task.get("kpi_value")
+            if kpi_val is not None:
+                kpi_lbl = QLabel(f"КПД: {kpi_val}")
+                kpi_lbl.setStyleSheet(f"font-weight: bold; color: #27ae60; font-size: {font_size_normal};")
+                layout.addWidget(kpi_lbl)
