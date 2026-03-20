@@ -8,6 +8,7 @@ from models.schemas.chat_dto import MessageReadDTO, MessageEditDTO, MessageDelet
 from windows.chat.chat_forward_dialog import ForwardDialog
 from windows.chat.chat_message_widget import ChatMessageWidget
 from windows.chat.chat_messages_separator import NewMessagesSeparator
+from windows.chat.chat_settings_dialog import ChatSettingsDialog
 from windows.chat.chat_view import ChatView
 
 
@@ -26,6 +27,12 @@ class ChatPage(QWidget):
         self.editing_message_id = None
         self.reply_message_id = None  # Добавляем это
         self.sio = sio
+
+        self.offset_old = 0  # Сколько пропустили сверху (старые)
+        self.offset_new = 0  # Сколько пропустили снизу (новые)
+        self.loading = False  # Флаг, чтобы не спамить запросами
+        self.current_offset = 0
+        self.all_messages_loaded = False
 
         self.selection_mode = False
         self.selected_messages = set()
@@ -65,6 +72,7 @@ class ChatPage(QWidget):
         # Подключаем кнопки из новой панели мультивыбора
         self.ui.btn_cancel_sel.clicked.connect(self.exit_selection_mode)
         self.ui.btn_forward_sel.clicked.connect(self.forward_selected_messages)
+        self.ui.btn_chat_info.clicked.connect(self.open_chat_settings)
 
         self.message_edited_signal.connect(self.process_message_edit)
         self.message_deleted_signal.connect(self.process_message_delete)
@@ -81,13 +89,22 @@ class ChatPage(QWidget):
         self.load_chat_list()
 
     def on_socket_message(self, data):
-        print(f"DEBUG: Получены данные от сокета: {data}") # Посмотрите, что тут прилетает!
         try:
             msg_dto = MessageReadDTO.model_validate(data)
-            if msg_dto.chat_id == self.current_chat_id:
+            if msg_dto.chat_id != self.current_chat_id:
+                return
+
+            # Если мы в самом низу истории (просмотрены все новые)
+            if self.all_new_loaded:
                 self.new_message_signal.emit(msg_dto)
+            else:
+                # Мы где-то в середине истории. Сообщение в БД уже есть,
+                # но в UI не лезем, чтобы не скроллить экран.
+                # Просто инкрементируем счетчик на кнопке "Вниз"
+                self.increment_unread_on_button()
+
         except Exception as e:
-            print(f"❌ Ошибка валидации DTO: {e}")
+            print(f"❌ Ошибка сокета: {e}")
 
     def on_socket_message_edited(self, data):
         try:
@@ -105,6 +122,23 @@ class ChatPage(QWidget):
         if chat_id == self.current_chat_id:
             # Теперь и для 'everyone', и для 'me' просто удаляем виджет с экрана
             self.remove_message_from_ui(msg_id)
+
+    def increment_unread_on_button(self):
+        """Увеличивает число непрочитанных на кнопке скролла вниз"""
+        if not hasattr(self, 'unread_below_count'):
+            self.unread_below_count = 0
+
+        self.unread_below_count += 1
+        self.ui.btn_scroll_down.setText(f"↓ ({self.unread_below_count})")
+        self.ui.btn_scroll_down.setVisible(True)
+        # Можно добавить стиль, чтобы кнопка мигала или стала красной
+        self.ui.btn_scroll_down.setStyleSheet("background-color: #D22730; color: white; border-radius: 15px;")
+
+    def reset_unread_on_button(self):
+        """Сбрасывает счетчик при прокрутке в самый низ"""
+        self.unread_below_count = 0
+        self.ui.btn_scroll_down.setText("↓")
+        self.ui.btn_scroll_down.setStyleSheet("")  # Возвращаем дефолтный стиль
 
     def update_widget_visually_deleted(self, message_id):
         """Находит виджет сообщения и помечает его удаленным (серым)"""
@@ -144,15 +178,15 @@ class ChatPage(QWidget):
                 break
 
     def on_messages_read_update(self, data):
-        # data = {"message_ids": [101, 102], "chat_id": 5}
         if data.get("chat_id") != self.current_chat_id:
             return
 
         target_ids = data.get("message_ids", [])
-        for i in range(self.messages_layout.count()):
-            widget = self.messages_layout.itemAt(i).widget()
-            if isinstance(widget, ChatMessageWidget) and widget.message_id in target_ids:
-                # Вызываем метод, который мы добавили в ChatMessageWidget в прошлом шаге
+        # Используем эффективный поиск через findChildren
+        widgets = self.ui.messages_container.findChildren(ChatMessageWidget)
+        for widget in widgets:
+            if widget.message_id in target_ids:
+                # Вызываем метод, который красит галочки в синий
                 if hasattr(widget, 'set_read_status'):
                     widget.set_read_status(True)
 
@@ -215,38 +249,49 @@ class ChatPage(QWidget):
 
         # Сначала грузим историю, позиционируемся,
         # а пометку "прочитано" сделает наш таймер видимости (check_visible_messages)
+        self.ui.btn_chat_info.setVisible(True)
         self.refresh_messages()
 
     def refresh_messages(self):
-        """Загрузка истории с разделителем новых сообщений"""
+        """Первоначальная загрузка при входе в чат"""
+        if not self.current_chat_id: return
         self.clear_messages_layout()
-        self.already_marked_read.clear()
 
-        # Переменная для хранения ссылки на разделитель, чтобы потом его удалить
-        self.new_messages_separator = None
+        # 1. Находим, сколько всего сообщений пропустить, чтобы встать на первое непрочитанное
+        unread_count = self.service.chat_repo.get_unread_count(self.current_chat_id, self.current_user_id)
 
-        self.ui.scroll_area.setUpdatesEnabled(False)
+        # Если непрочитанных нет — грузим последние 50 (offset=0)
+        # Если есть — грузим так, чтобы непрочитанные были внизу экрана (offset = unread_count)
+        start_offset = max(0, unread_count - 10)
 
-        # Используем правильный метод загрузки истории из вашего сервиса
-        messages = self.service.load_history(self.current_chat_id, self.current_user_id)
-        first_unread_widget = None
+        self.offset_old = start_offset
+        self.offset_new = start_offset
+        self.all_old_loaded = False
+        self.all_new_loaded = (start_offset == 0)  # Если начали с 0, то новых внизу нет
 
+        # 2. Грузим первую порцию
+        messages = self.service.load_history(
+            self.current_chat_id, self.current_user_id, limit=50, offset=self.offset_old
+        )
+
+        if not messages: return
+
+        # 3. Рендерим с разделителем
+        separator_widget = None
         for msg in messages:
-            # Если это первое непрочитанное чужое сообщение — ставим разделитель
-            if not msg.is_read and not first_unread_widget and msg.sender_id != self.current_user_id:
-                self.new_messages_separator = NewMessagesSeparator()
-                self.messages_layout.addWidget(self.new_messages_separator)
+            # Вставляем разделитель перед первым непрочитанным чужим сообщением
+            if not msg.is_read and msg.sender_id != self.current_user_id and not separator_widget:
+                separator_widget = NewMessagesSeparator()
+                self.messages_layout.addWidget(separator_widget)
 
-            widget = self.append_message_to_ui(msg, force_scroll=False)
+            self.append_message_to_ui(msg, force_scroll=False)
 
-            if not msg.is_read and not first_unread_widget and msg.sender_id != self.current_user_id:
-                first_unread_widget = widget
+        # 4. Сдвигаем указатель: мы загрузили сообщения, значит новые сообщения теперь "дальше" по офсету
+        self.offset_old += len(messages)
 
-        self.ui.scroll_area.setUpdatesEnabled(True)
-
-        if first_unread_widget:
-            # Скроллим так, чтобы было видно и разделитель, и сообщение
-            QTimer.singleShot(300, lambda: self.ui.scroll_area.ensureWidgetVisible(first_unread_widget, 0, 120))
+        # 5. Позиционирование
+        if separator_widget:
+            QTimer.singleShot(100, lambda: self.ui.scroll_area.ensureWidgetVisible(separator_widget))
         else:
             self.scroll_to_bottom(force=True)
 
@@ -259,37 +304,17 @@ class ChatPage(QWidget):
 
     def append_message_to_ui(self, msg_dto: MessageReadDTO, force_scroll=None) -> ChatMessageWidget | None:
         try:
-            is_mine = (msg_dto.sender_id == self.current_user_id)
+            # Используем общую логику создания, чтобы не дублировать код
+            msg_widget = self._create_message_widget(msg_dto)
 
-            msg_widget = ChatMessageWidget(
-                message_id=msg_dto.id,
-                text=msg_dto.content,
-                sender_name=msg_dto.sender_name,
-                time_str=msg_dto.time_display,
-                is_mine=is_mine,
-                is_read=msg_dto.is_read,
-                is_edited=msg_dto.is_edited,
-                reply_to_id=msg_dto.reply_to_id,
-                reply_text=msg_dto.reply_text,
-                reply_sender_name=getattr(msg_dto, 'reply_sender_name', None),
-                forward_from_name=getattr(msg_dto, 'forward_from_name', None),
-                parent=self.ui.messages_container
-            )
-
-            msg_widget.action_triggered.connect(self.handle_message_action)
-
-            # ДОБАВЬ ВОТ ЭТО:
-            if hasattr(msg_widget, 'toggled'):
-                msg_widget.toggled.connect(self.on_message_toggled)
-
-            # Если мы уже в режиме выбора, новое сообщение должно сразу показать чекбокс
+            # Если мы в режиме выбора, новое сообщение должно сразу показать чекбокс
             if getattr(self, 'selection_mode', False):
                 msg_widget.set_selection_mode(True)
 
-            # Просто добавляем в конец, AlignTop сам все прижмет кверху
             self.messages_layout.addWidget(msg_widget)
 
-            # Умный скролл (обновленная логика из прошлого шага)
+            # Умный скролл
+            is_mine = (msg_dto.sender_id == self.current_user_id)
             if force_scroll is False:
                 pass
             elif force_scroll is True or (
@@ -299,8 +324,42 @@ class ChatPage(QWidget):
             return msg_widget
 
         except Exception as e:
-            print(f"❌ Ошибка отрисовки: {e}")
+            print(f"❌ Ошибка отрисовки сообщения: {e}")
             return None
+
+    def prepend_message_to_ui(self, msg: MessageReadDTO):
+        """Вставляет виджет в начало списка (сверху)"""
+        widget = self._create_message_widget(msg)
+        self.ui.messages_layout.insertWidget(0, widget)
+
+    def _create_message_widget(self, msg: MessageReadDTO):
+        """Вспомогательный метод создания виджета из DTO с полной поддержкой всех статусов"""
+        is_mine = (msg.sender_id == self.current_user_id)
+        is_read_val = getattr(msg, 'is_read', False)
+        is_edited_val = getattr(msg, 'is_edited', False)
+
+        widget = ChatMessageWidget(
+            message_id=msg.id,
+            text=msg.content,
+            sender_name=msg.sender_name,
+            time_str=msg.time_display,
+            is_mine=is_mine,
+            # ВОТ ТУТ КРИТИЧНО: передаем состояние из БД
+            is_read=is_read_val,
+            is_edited=is_edited_val,
+            reply_to_id=getattr(msg, 'reply_to_id', None),
+            reply_text=getattr(msg, 'reply_text', None),
+            reply_sender_name=getattr(msg, 'reply_sender_name', None),
+            forward_from_name=getattr(msg, 'forward_from_name', None),
+            parent=self.ui.messages_container
+        )
+
+        # Подключаем сигналы
+        widget.action_triggered.connect(self.handle_message_action)
+        if hasattr(widget, 'toggled'):
+            widget.toggled.connect(self.on_message_toggled)
+
+        return widget
 
     def send_message(self):
         text = self.ui.message_input.toPlainText().strip()
@@ -378,6 +437,28 @@ class ChatPage(QWidget):
             data = dialog.get_data()
             self.service.create_new_chat(self.current_user_id, data)
             self.load_chat_list()
+
+    def open_chat_settings(self):
+        if not self.current_chat_id:
+            return
+
+        dialog = ChatSettingsDialog(
+            chat_id=self.current_chat_id,
+            service=self.service,
+            current_user_id=self.current_user_id,
+            parent=self
+        )
+        if dialog.exec():
+            # 1. Обновляем список слева (там может измениться имя)
+            self.load_chat_list()
+
+            # 2. Обновляем заголовок текущего открытого чата
+            # Ищем актуальное имя в списке (после load_chat_list данные в базе обновились)
+            for i in range(self.ui.chat_list.count()):
+                item = self.ui.chat_list.item(i)
+                if item.data(Qt.ItemDataRole.UserRole) == self.current_chat_id:
+                    self.ui.chat_header.setText(item.text())
+                    break
 
     def handle_message_action(self, action_type, message_id):
         """Обработка действий из контекстного меню сообщения"""
@@ -471,25 +552,82 @@ class ChatPage(QWidget):
             print(f"❌ Ошибка в ChatPage при пересылке: {e}")
 
     def scroll_to_bottom(self, force=False):
-        """
-        Универсальный метод прокрутки вниз.
-        :param force: Если True, игнорирует положение пользователя и крутит вниз в любом случае.
-        """
-        v_bar = self.ui.scroll_area.verticalScrollBar()
+        # Если мы были в середине истории и нажимаем "Вниз"
+        if not self.all_new_loaded and force:
+            self.refresh_messages() # Перезагружаем "хвост" чата
+            self.reset_unread_on_button()
+            return
 
-        # Если кнопка "Вниз" скрыта (значит мы внизу) ИЛИ это наше сообщение (force=True)
+        v_bar = self.ui.scroll_area.verticalScrollBar()
         if force or not self.ui.btn_scroll_down.isVisible():
-            # Используем QTimer, так как макс. значение скролла обновится только после отрисовки виджета
             QTimer.singleShot(50, lambda: v_bar.setValue(v_bar.maximum()))
+            self.reset_unread_on_button()
 
     def handle_scroll(self, value):
-        """Отслеживает положение скролла для показа кнопки 'Вниз'"""
         v_bar = self.ui.scroll_area.verticalScrollBar()
-        # Разница между максимумом и текущим положением
         dist_from_bottom = v_bar.maximum() - value
 
-        # Показываем кнопку, если отмотали вверх более чем на 150px
-        self.ui.btn_scroll_down.setVisible(dist_from_bottom > 150)
+        # 1. Если мы почти в самом низу (менее 10px до края)
+        if dist_from_bottom < 10:
+            if getattr(self, 'unread_below_count', 0) > 0:
+                self.reset_unread_on_button()
+            self.ui.btn_scroll_down.setVisible(False)
+            self.all_new_loaded = True
+        else:
+            # Показываем кнопку, только если прокрутили выше чем на 150px
+            self.ui.btn_scroll_down.setVisible(dist_from_bottom > 150)
+
+        if self.loading: return
+
+        # ПОДГРУЗКА ВВЕРХ (Старые сообщения)
+        if value <= 50 and not self.all_old_loaded:
+            self.load_more_old()
+
+        # ПОДГРУЗКА ВНИЗ (Новые сообщения, если мы были в середине истории)
+        if value >= v_bar.maximum() - 50 and not self.all_new_loaded:
+            self.load_more_new()
+
+    def load_more_old(self):
+        """Подгрузка истории вверх"""
+        self.loading = True
+        old_max = self.ui.scroll_area.verticalScrollBar().maximum()
+
+        messages = self.service.load_history(
+            self.current_chat_id, self.current_user_id, limit=50, offset=self.offset_old
+        )
+
+        if not messages:
+            self.all_old_loaded = True
+        else:
+            for msg in reversed(messages):
+                self.prepend_message_to_ui(msg)
+            self.offset_old += len(messages)
+
+        # Чтобы скролл не дергался
+        QTimer.singleShot(0, lambda: self.adjust_scroll_after_load(old_max))
+        self.loading = False
+
+    def load_more_new(self):
+        """Подгрузка истории вниз (если зашли через непрочитанные)"""
+        if self.offset_new <= 0:
+            self.all_new_loaded = True
+            return
+
+        self.loading = True
+        # Берем сообщения, которые "ниже" текущего окна
+        limit = min(50, self.offset_new)
+        self.offset_new -= limit
+
+        messages = self.service.load_history(
+            self.current_chat_id, self.current_user_id, limit=limit, offset=self.offset_new
+        )
+
+        for msg in messages:
+            self.append_message_to_ui(msg, force_scroll=False)
+
+        if self.offset_new <= 0:
+            self.all_new_loaded = True
+        self.loading = False
 
     def scroll_to_message(self, message_id: int):
         # 1. Ищем нужный виджет среди дочерних элементов layout'а сообщений
@@ -511,6 +649,11 @@ class ChatPage(QWidget):
 
             # 3. Эффект выделения (как в TG — мигнуть цветом)
             target_widget.highlight()
+
+    def adjust_scroll_after_load(self, old_max):
+        """Чтобы экран не прыгал при подгрузке вверх"""
+        new_max = self.ui.scroll_area.verticalScrollBar().maximum()
+        self.ui.scroll_area.verticalScrollBar().setValue(new_max - old_max)
 
     def start_editing(self, message_id, original_text):
         """Вызывается при нажатии 'Редактировать' в контекстном меню"""

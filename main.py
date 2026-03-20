@@ -7,6 +7,8 @@ from sqlalchemy import select, text
 from windows.projects.main_window import MainWindow
 from database import test_connections, get_tasks_session  # 👈 ЗАМЕНЯЕМ get_employees_session на get_tasks_session
 from models.employees import ExternalEmployee
+from utils.error_handler import setup_exception_hook
+from utils.socket_manager import connect_to_server, sio
 
 
 class UserSelectDialog(QDialog):
@@ -235,11 +237,14 @@ class UserSelectDialog(QDialog):
 
 def main():
     """Главная функция приложения"""
+    setup_exception_hook()
 
     # Проверка БД
     test_connections()
 
     app = QApplication(sys.argv)
+    # Запускаем подключение
+    connect_to_server("http://localhost:8081")
 
     # Показываем диалог выбора пользователя
     user_dialog = UserSelectDialog()
@@ -248,6 +253,11 @@ def main():
         selected_user = user_dialog.get_selected_user()
 
         if selected_user:
+            user_id = selected_user["id"]  # <--- Сохраняем ID
+
+            # 🔥 ВОТ ТУТ АВТОРИЗУЕМ ПОЛЬЗОВАТЕЛЯ НА СЕРВЕРЕ 🔥
+            # Это заполнит тот самый user_sid_map на сервере
+            sio.emit("auth_user", {"user_id": user_id})
             print(f"\n✅ Вход выполнен: {selected_user['last_name']} {selected_user['first_name']}")
             print(f"   Роль: {selected_user.get('rights', 'user')}")
             if selected_user.get('position'):
@@ -258,7 +268,8 @@ def main():
 
             window = MainWindow(
                 session=session,
-                user_id=selected_user["id"]
+                user_id=selected_user["id"],
+                sio=sio
             )
             window.show()
 

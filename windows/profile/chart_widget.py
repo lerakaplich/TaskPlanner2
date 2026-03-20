@@ -3,7 +3,7 @@
 import os
 from PyQt6 import uic
 from PyQt6.QtWidgets import QWidget, QMessageBox, QVBoxLayout
-from PyQt6.QtCore import pyqtSignal, QTimer, Qt
+from PyQt6.QtCore import pyqtSignal, QTimer, Qt, QRect
 from PyQt6.QtGui import QPainter, QColor, QBrush, QPen, QFont
 
 from services.profile_service import ProfileService
