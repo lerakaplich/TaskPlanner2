@@ -53,6 +53,10 @@ class ChatPage(QWidget):
         self.sio.on('new_message', self.on_socket_message)
         self.sio.on('message_edited', self.on_socket_message_edited)
         self.sio.on('message_deleted', self.on_socket_message_deleted)
+        self.sio.on('update_chat_list', self.on_remote_chat_update)
+        self.sio.on('chat_info_updated', self.on_chat_info_updated)
+        self.sio.on('chat_added_manual', lambda data: self.load_chat_list())
+        self.sio.on('chat_deleted', self.on_chat_deleted_by_admin)
 
         # Таймер для проверки видимых сообщений (раз в 500мс, чтобы не грузить процессор)
         self.read_tracker_timer = QTimer()
@@ -122,6 +126,30 @@ class ChatPage(QWidget):
         if chat_id == self.current_chat_id:
             # Теперь и для 'everyone', и для 'me' просто удаляем виджет с экрана
             self.remove_message_from_ui(msg_id)
+
+    def on_remote_chat_update(self, data):
+        """Вызывается сокетом, когда произошли изменения в чатах пользователя"""
+        # Важно: операции с UI в PyQt должны быть в основном потоке.
+        # Если используете стороннюю библиотеку сокетов, лучше обернуть в сигнал.
+        QTimer.singleShot(0, self.load_chat_list)
+
+    def on_chat_info_updated(self, data):
+        """Обновляет название в списке и в заголовке если чат открыт"""
+        # Перегружаем список чатов слева
+        self.load_chat_list()
+
+        # Если этот чат сейчас открыт — меняем заголовок сверху
+        if self.current_chat_id == data['chat_id']:
+            self.ui.chat_header.setText(data['new_title'])
+
+    def on_chat_deleted_by_admin(self, data):
+        """Вызывается, когда пользователя исключили из чата"""
+        chat_id = data['chat_id']
+        self.load_chat_list()  # Убираем из списка
+
+        if self.current_chat_id == chat_id:
+            QMessageBox.warning(self, "Внимание", "Вы были исключены из этого чата или он был удален.")
+            self.close_current_chat()  # Метод для очистки окна сообщений
 
     def increment_unread_on_button(self):
         """Увеличивает число непрочитанных на кнопке скролла вниз"""
@@ -218,22 +246,21 @@ class ChatPage(QWidget):
             })
 
     def load_chat_list(self):
-        """Загрузка универсального списка чатов (проекты, группы, личные)"""
+        # Запоминаем, какой чат был открыт
+        old_id = self.current_chat_id
+
         self.ui.chat_list.clear()
-        try:
-            # Используем обновленный ChatService
-            chats = self.service.get_user_chats(self.current_user_id)
+        chats = self.service.get_user_chats(self.current_user_id)
 
-            for chat in chats:
-                # Иконка зависит от типа чата
-                icon = "📁" if chat.type == "project" else "👥" if chat.type == "group" else "👤"
-                item = QListWidgetItem(f"{icon} {chat.display_name}")
-                item.setData(Qt.ItemDataRole.UserRole, chat.id)
-                self.ui.chat_list.addItem(item)
+        for chat in chats:
+            item = QListWidgetItem(chat.display_name)
+            item.setData(Qt.ItemDataRole.UserRole, chat.id)
+            # Можно добавить иконку в зависимости от типа чата (private/group)
+            self.ui.chat_list.addItem(item)
 
-            print(f"✅ Загружено чатов: {len(chats)}")
-        except Exception as e:
-            print(f"❌ Ошибка загрузки списка чатов: {e}")
+            # Если это был наш открытый чат, выделяем его обратно
+            if chat.id == old_id:
+                item.setSelected(True)
 
     def on_chat_selected(self, item):
         new_chat_id = item.data(Qt.ItemDataRole.UserRole)
@@ -448,17 +475,30 @@ class ChatPage(QWidget):
             current_user_id=self.current_user_id,
             parent=self
         )
-        if dialog.exec():
-            # 1. Обновляем список слева (там может измениться имя)
-            self.load_chat_list()
+        # ВАЖНО: подключаем к существующему методу load_chat_list
+        dialog.chats_changed.connect(self.load_chat_list)
+        dialog.exec()
 
-            # 2. Обновляем заголовок текущего открытого чата
-            # Ищем актуальное имя в списке (после load_chat_list данные в базе обновились)
-            for i in range(self.ui.chat_list.count()):
-                item = self.ui.chat_list.item(i)
-                if item.data(Qt.ItemDataRole.UserRole) == self.current_chat_id:
-                    self.ui.chat_header.setText(item.text())
-                    break
+    def close_current_chat(self):
+        """Очищает интерфейс и сбрасывает состояние текущего чата"""
+        self.current_chat_id = None
+
+        # Сбрасываем заголовок
+        self.ui.chat_header.setText("Выберите чат...")
+
+        # Скрываем кнопку настроек и поле ввода
+        self.ui.btn_chat_info.setVisible(False)
+        self.ui.input_container.setVisible(False)
+
+        # Очищаем сообщения
+        while self.ui.messages_layout.count():
+            item = self.ui.messages_layout.takeAt(0)
+            widget = item.widget()
+            if widget:
+                widget.deleteLater()
+
+        # Снимаем выделение в списке слева
+        self.ui.chat_list.clearSelection()
 
     def handle_message_action(self, action_type, message_id):
         """Обработка действий из контекстного меню сообщения"""

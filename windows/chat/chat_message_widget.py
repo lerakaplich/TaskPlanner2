@@ -13,6 +13,7 @@ class ChatMessageWidget(QWidget):
                  reply_to_id=None, reply_text=None, reply_sender_name=None,
                  forward_from_name=None, parent=None):
         super().__init__(parent)
+        self.status_lbl = None
         self.message_id = message_id
         self.text = text
         self.sender_name = sender_name

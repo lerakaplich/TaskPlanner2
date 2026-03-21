@@ -20,13 +20,25 @@ async def connect(sid, environ):
     # На сервере sid и environ ОБЯЗАТЕЛЬНЫ
     print(f"Socket connected: {sid}")
 
+
 @sio.event
 async def auth_user(sid, data):
-    """Событие, которое клиент шлет сразу после входа"""
     user_id = data.get("user_id")
     if user_id:
         user_sid_map[user_id] = sid
         print(f"🔑 Пользователь {user_id} привязан к сокету {sid}")
+
+        # АВТОМАТИЧЕСКИЙ ВХОД В КОМНАТЫ
+        with TasksSessionLocal() as session:
+            service = ChatService(session)
+            # Получаем список всех чатов пользователя
+            user_chats = service.get_user_chats(user_id)
+
+            for chat in user_chats:
+                room_name = f"chat_{chat.id}"
+                await sio.enter_room(sid, room_name)
+                print(f"  └─ User {user_id} авто-вход в {room_name}")
+
         print(f"Текущие онлайн: {user_sid_map}")
 
 @sio.event
@@ -66,28 +78,33 @@ async def delete_chat(sid, data):
 
 @sio.event
 async def update_participants(sid, data):
-    # data = {"chat_id": 1, "added_users": [12], "removed_users": [3]}
     chat_id = data['chat_id']
     added = data.get('added_users', [])
     removed = data.get('removed_users', [])
 
-    with TasksSessionLocal() as session:
-        service = ChatService(session)
-        if service.update_chat_participants(chat_id, added, removed):
-            # 1. Рассылаем системное уведомление в комнату чата
-            await sio.emit("participants_updated", {
-                "chat_id": chat_id,
-                "added": added,
-                "removed": removed
-            }, room=f"chat_{chat_id}")
+    try:
+        with TasksSessionLocal() as session:
+            service = ChatService(session)
+            if service.update_chat_participants(chat_id, added, removed):
+                # 1. Рассылаем уведомление тем, кто уже в чате
+                await sio.emit("participants_updated", data, room=f"chat_{chat_id}")
 
-            # 2. Тем, кого добавили, шлем 'chat_created', чтобы у них появился чат в списке
-            # (нужно будет получить инфо о чате через сервис)
-            # 3. Тем, кого удалили, шлем 'chat_deleted' для этого ID
-            for uid in removed:
-                target_sid = user_sid_map.get(uid)
-                if target_sid:
-                    await sio.emit("chat_deleted", {"chat_id": chat_id}, to=target_sid)
+                # 2. Тем, кого добавили: отправляем 'chat_created' с данными чата
+                if added:
+                    for uid in added:
+                        target_sid = user_sid_map.get(uid)
+                        if target_sid:
+                            await sio.enter_room(target_sid, f"chat_{chat_id}")
+                            # Шлем ему сигнал обновить список чатов
+                            await sio.emit("chat_added_manual", {"id": chat_id}, to=target_sid)
+
+                # 3. Тем, кого удалили: шлем сигнал на удаление из списка
+                for uid in removed:
+                    target_sid = user_sid_map.get(uid)
+                    if target_sid:
+                        await sio.emit("chat_deleted", {"chat_id": chat_id}, to=target_sid)
+    except Exception as e:
+        print(f"❌ Ошибка в update_participants: {e}")
 
 @sio.event
 async def send_chat_msg(sid, data):
@@ -203,6 +220,18 @@ async def leave_chat(sid, data):
     chat_id = data.get("chat_id")
     # ОБЯЗАТЕЛЬНО await!
     await sio.leave_room(sid, f"chat_{chat_id}")
+
+
+@sio.event
+async def update_chat_settings(sid, data):
+    chat_id = data.get('chat_id')
+    new_title = data.get('new_title')
+
+    # Рассылаем всем в комнате f"chat_{chat_id}"
+    await sio.emit("chat_info_updated", {
+        "chat_id": chat_id,
+        "new_title": new_title
+    }, room=f"chat_{chat_id}")
 
 
 if __name__ == "__main__":
