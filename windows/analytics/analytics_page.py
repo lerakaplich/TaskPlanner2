@@ -1,3 +1,5 @@
+# windows/analytics/analytics_page.py
+
 import os
 import sys
 
@@ -11,31 +13,31 @@ from PyQt6.uic import loadUi
 
 from windows.analytics.employees.employee_card import EmployeeCard
 from windows.analytics.projects.project_card_analytics import ProjectCard
-from windows.analytics.theme.theme_card import ThemeCard# новый импорт
+from windows.analytics.theme.theme_card import ThemeCard
 
 
 class AnalyticsPage(QWidget):
-    def __init__(self, service=None, parent=None):  # 👈 ДОБАВЛЯЕМ service
+    def __init__(self, service=None, parent=None):
         super().__init__(parent)
 
         ui_path = os.path.join(
-            os.path.dirname(__file__),  # windows/analytics/employees/
-            "..", "..",   # поднимаемся до корня проекта
-            "ui", "analytics"  # спускаемся в нужную подпапку ui
+            os.path.dirname(__file__),
+            "..", "..",
+            "ui", "analytics"
         )
         uic.loadUi(os.path.join(ui_path, "analytics_page.ui"), self)
 
-        # Сохраняем сервис, если он нужен для загрузки реальных данных
+        # Сохраняем сервис
         self.service = service
 
         self.test_employees = self.create_test_employees()
         self.test_tasks = self.create_test_tasks()
         self.populate_employees_tab()
         self.populate_themes_tab()
-        self.populate_projects_tab()   # новая вкладка
+        self.populate_projects_tab()
 
     def create_test_employees(self):
-        """Создаёт список сотрудников (без изменений)."""
+        """Создаёт список сотрудников."""
         employees = [
             {
                 "id": 1,
@@ -192,7 +194,7 @@ class AnalyticsPage(QWidget):
         return result
 
     def create_test_tasks(self):
-        """Создаёт общий список задач (без изменений)."""
+        """Создаёт общий список задач."""
         tasks = []
         employee_names = {
             1: "Иван Иванов",
@@ -213,13 +215,64 @@ class AnalyticsPage(QWidget):
                     tasks.append(task_copy)
         return tasks
 
-    def get_all_tags(self):
-        """Собирает все уникальные теги из задач (без изменений)."""
-        tags = set()
+    def get_theme_stats(self):
+        """Собирает статистику по темам из задач."""
+        themes = {}
+
         for task in self.test_tasks:
-            for tag in task.get("tags", []):
-                tags.add(tag)
-        return sorted(tags)
+            tags = task.get("tags", [])
+            for tag in tags:
+                if tag not in themes:
+                    themes[tag] = {
+                        "theme_name": tag,
+                        "task_count": 0,
+                        "employee_stats": {},
+                        "project_stats": {}
+                    }
+
+                themes[tag]["task_count"] += 1
+
+                # Статистика по сотрудникам
+                assigned_to = task.get("assigned_to")
+                if assigned_to:
+                    if assigned_to not in themes[tag]["employee_stats"]:
+                        # Находим имя сотрудника
+                        emp_name = "Неизвестно"
+                        for emp in self.test_employees:
+                            if emp["id"] == assigned_to:
+                                emp_name = emp["name"]
+                                break
+                        themes[tag]["employee_stats"][assigned_to] = {
+                            "employee_id": assigned_to,
+                            "employee_name": emp_name,
+                            "task_count": 0,
+                            "completed_count": 0
+                        }
+
+                    themes[tag]["employee_stats"][assigned_to]["task_count"] += 1
+                    if task.get("status") == "completed":
+                        themes[tag]["employee_stats"][assigned_to]["completed_count"] += 1
+
+                # Статистика по проектам
+                project_name = task.get("project")
+                if project_name:
+                    if project_name not in themes[tag]["project_stats"]:
+                        themes[tag]["project_stats"][project_name] = {
+                            "project_name": project_name,
+                            "task_count": 0,
+                            "completed_count": 0
+                        }
+
+                    themes[tag]["project_stats"][project_name]["task_count"] += 1
+                    if task.get("status") == "completed":
+                        themes[tag]["project_stats"][project_name]["completed_count"] += 1
+
+        # Преобразуем словари в списки для удобства
+        for theme in themes.values():
+            theme["employee_stats"] = list(theme["employee_stats"].values())
+            theme["project_stats"] = list(theme["project_stats"].values())
+
+        return list(themes.values())
 
     def populate_themes_tab(self):
         """Заполняет вкладку 'Темы'."""
@@ -246,28 +299,31 @@ class AnalyticsPage(QWidget):
         grid.setHorizontalSpacing(15)
         grid.setVerticalSpacing(15)
 
-        tags = self.get_all_tags()
+        # 👇 ИСПРАВЛЕНО: Получаем статистику по темам вместо простого списка тегов
+        theme_stats = self.get_theme_stats()
+
         row = col = 0
         max_cols = 3
-        for tag in tags:
-            tag_tasks = [t for t in self.test_tasks if tag in t.get("tags", [])]
-            card = ThemeCard(tag, tag_tasks)
+
+        for theme_data in theme_stats:
+            # 👇 Теперь передаем словарь с данными темы, а не строку
+            card = ThemeCard(theme_data)
             grid.addWidget(card, row, col, alignment=Qt.AlignmentFlag.AlignTop)
             col += 1
             if col >= max_cols:
                 col = 0
                 row += 1
+
         grid.setRowStretch(row + 1, 1)
 
         scroll.setWidget(container)
 
         layout = QVBoxLayout(themes_tab)
-        layout.setContentsMargins(15, 15, 15, 15)  # единые отступы
+        layout.setContentsMargins(15, 15, 15, 15)
         layout.addWidget(scroll)
 
     def populate_employees_tab(self):
         """Заполняет вкладку 'Сотрудники'."""
-        # Получаем вкладку Сотрудники
         tab_widget = self.findChild(QTabWidget, "tabWidget")
         employees_tab = None
         for i in range(tab_widget.count()):
@@ -278,7 +334,6 @@ class AnalyticsPage(QWidget):
         if employees_tab is None:
             return
 
-        # Очищаем и создаем скролл с отступами (как в проектах)
         old_layout = employees_tab.layout()
         if old_layout:
             QWidget().setLayout(old_layout)
@@ -292,7 +347,6 @@ class AnalyticsPage(QWidget):
         grid.setHorizontalSpacing(15)
         grid.setVerticalSpacing(15)
 
-        # Добавляем карточки
         row = col = 0
         max_cols = 3
         for emp_data in self.test_employees:
@@ -307,7 +361,7 @@ class AnalyticsPage(QWidget):
         scroll.setWidget(container)
 
         layout = QVBoxLayout(employees_tab)
-        layout.setContentsMargins(15, 15, 15, 15)  # единые отступы
+        layout.setContentsMargins(15, 15, 15, 15)
         layout.addWidget(scroll)
 
     def create_test_projects(self):
@@ -375,7 +429,6 @@ class AnalyticsPage(QWidget):
             projects_tab = QWidget()
             tab_widget.addTab(projects_tab, "Проекты")
 
-        # Очищаем содержимое вкладки
         old_layout = projects_tab.layout()
         if old_layout:
             while old_layout.count():
@@ -384,7 +437,6 @@ class AnalyticsPage(QWidget):
                     item.widget().deleteLater()
             QWidget().setLayout(old_layout)
 
-        # Создаём скролл область
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setStyleSheet("""
@@ -397,20 +449,15 @@ class AnalyticsPage(QWidget):
             }
         """)
 
-        # Контейнер для карточек
         container = QWidget()
         container.setStyleSheet("background-color: transparent;")
 
-        # Сетка для карточек
         grid = QGridLayout(container)
         grid.setHorizontalSpacing(15)
         grid.setVerticalSpacing(15)
-        # grid.setContentsMargins(0, 0, 0, 0)  <-- УДАЛИТЕ ЭТУ СТРОКУ!
 
-        # Получаем данные проектов
         projects = self.create_test_projects()
 
-        # Добавляем карточки в сетку
         row = col = 0
         max_cols = 3
 
@@ -427,7 +474,6 @@ class AnalyticsPage(QWidget):
 
         scroll.setWidget(container)
 
-        # Основной layout вкладки с отступами
         layout = QVBoxLayout(projects_tab)
         layout.setContentsMargins(15, 15, 15, 15)
         layout.addWidget(scroll)

@@ -20,12 +20,18 @@ from windows.profile.profile_page import ProfilePage
 from windows.projects.project_card import ProjectCard
 from windows.projects.project_edit_dialog import ProjectEditDialog
 from services.overtime_service import OvertimeService
+from services.chat_service import ChatService
+from windows.settings.settings_page import SettingsPage
+
 
 class MainWindow(QMainWindow):
 
-    def __init__(self, session, user_id):
+    # windows/projects/main_window.py - обновленный __init__
+
+    def __init__(self, session, user_id, socket_client=None):  # Добавлен socket_client с значением по умолчанию
         super().__init__()
         self.current_user_id = user_id
+        self.socket_client = socket_client  # Сохраняем socket_client
         # 👇 ДОБАВЛЯЕМ СЛОВАРЬ current_user
         self.current_user = self.get_user_by_id(session, user_id)
         self.session = session
@@ -66,7 +72,88 @@ class MainWindow(QMainWindow):
         self.setup_initial_state()
         self.update_profile_button()  # 👈 ДОБАВЛЯЕМ ОБНОВЛЕНИЕ КНОПКИ
 
+        # 👇 ДОБАВЛЯЕМ: Подключаем сигналы сокета
+        self.setup_socket_handlers()
+
         self.showMaximized()
+
+    def setup_socket_handlers(self):
+        """Настройка обработчиков сокет-событий"""
+        if not self.socket_client:
+            print("⚠️ Socket client not available")
+            return
+
+        # Подключаем сигналы сокета к соответствующим методам
+        self.socket_client.connected.connect(self.on_socket_connected)
+        self.socket_client.disconnected.connect(self.on_socket_disconnected)
+        self.socket_client.auth_success.connect(self.on_auth_success)
+        self.socket_client.new_message.connect(self.on_new_message)
+        self.socket_client.chat_created.connect(self.on_chat_created)
+        self.socket_client.chat_deleted.connect(self.on_chat_deleted)
+
+        print("✅ Socket handlers configured")
+
+    def on_socket_connected(self):
+        """Обработчик подключения к серверу"""
+        print("✅ Socket connected in MainWindow")
+        # Если пользователь уже авторизован, отправляем повторную аутентификацию
+        if hasattr(self, 'current_user_id') and self.current_user_id:
+            self.socket_client.authenticate(self.current_user_id)
+
+    def on_socket_disconnected(self):
+        """Обработчик отключения от сервера"""
+        print("⚠️ Socket disconnected in MainWindow")
+        # Можно показать уведомление пользователю
+
+    def on_auth_success(self, data):
+        """Обработчик успешной аутентификации"""
+        print(f"✅ Socket auth success for user {data.get('user_id')}")
+        # При успешной аутентификации можно запросить список онлайн пользователей
+        self.socket_client.get_online_users()
+
+        # Присоединяемся к комнатам чатов пользователя
+        self.join_user_chat_rooms()
+
+    def on_new_message(self, data):
+        """Обработчик нового сообщения"""
+        print(f"📨 New message in chat {data.get('chat_id')}")
+        # Здесь можно показать уведомление о новом сообщении
+        # если текущая страница не является чатом с этим ID
+        self.show_message_notification(data)
+
+    def on_chat_created(self, data):
+        """Обработчик создания нового чата"""
+        print(f"📢 New chat created: {data.get('id')}")
+        # Обновляем список чатов, если страница чата открыта
+
+    def on_chat_deleted(self, data):
+        """Обработчик удаления чата"""
+        print(f"🗑️ Chat deleted: {data.get('chat_id')}")
+        # Обновляем список чатов, если страница чата открыта
+
+    def join_user_chat_rooms(self):
+        """Присоединение к комнатам чатов пользователя"""
+        try:
+            from services.chat_service import ChatService
+            chat_service = ChatService(self.session)
+            user_chats = chat_service.get_user_chats(self.current_user_id)
+
+            for chat in user_chats:
+                self.socket_client.join_chat_room(chat.id)
+                print(f"👥 Joined chat room: {chat.id}")
+        except Exception as e:
+            print(f"❌ Error joining chat rooms: {e}")
+
+    def show_message_notification(self, message_data):
+        """Показать уведомление о новом сообщении"""
+        # Здесь можно реализовать показ всплывающего уведомления
+        # Например, через QSystemTrayIcon или кастомный виджет
+        sender_name = message_data.get('sender_name', 'Unknown')
+        chat_id = message_data.get('chat_id')
+        content = message_data.get('content', '')[:50]
+
+        print(f"🔔 Notification: {sender_name}: {content}")
+        # TODO: Добавить визуальное уведомление
 
     def get_user_by_id(self, session, user_id):
         """Получает данные пользователя по ID из БД"""
@@ -122,8 +209,6 @@ class MainWindow(QMainWindow):
             if full_name:
                 self.btnProfile.setToolTip(full_name)
 
-    # ... остальные методы без изменений ...
-
     def init_archive_page(self):
         """Инициализация страницы архива"""
         self.archive_page_instance = ArchivePage()
@@ -174,6 +259,9 @@ class MainWindow(QMainWindow):
         archive_service = ArchiveService(self.session)
         self.archive_page_instance = ArchivePage(service=archive_service)
         self._replace_in_stack("archivePage", self.archive_page_instance)
+
+        self.settings_page_instance = SettingsPage()
+        self._replace_in_stack("settingsPage", self.settings_page_instance)
 
         # Профиль
         self.profile_page_instance = ProfilePage(service=self.project_service)
@@ -335,6 +423,12 @@ class MainWindow(QMainWindow):
         if page_index == 8 and hasattr(self, 'archive_page_instance'):
             print("📦 Обновляем страницу архива")
             self.archive_page_instance.show_projects_list()
+
+        # 👇 Если переключаемся на страницу настроек, можно обновить данные
+        if page_index == 7 and hasattr(self, 'settings_page_instance'):
+            print("⚙️ Открываем страницу настроек")
+            # Здесь можно добавить обновление данных настроек, если нужно
+            # Например: self.settings_page_instance.refresh_all_tabs()
 
         self.contentStack.setCurrentIndex(page_index)
 

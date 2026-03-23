@@ -9,7 +9,7 @@ from PyQt6.QtCore import Qt, pyqtSignal, QPoint
 from PyQt6.QtGui import QFont, QDragEnterEvent, QDropEvent
 
 from database import get_tasks_session
-from services.tasks_service import TasksService  # 👈 ИЗМЕНЕНО: TasksService вместо OtherTasksService
+from services.tasks_service import TasksService
 from windows.other_tasks.others_task_card import OthersTaskCard
 from windows.other_tasks.task_dialog import TaskDialog
 from PyQt6 import uic
@@ -20,26 +20,25 @@ from windows.shared.kanban_column import KanbanColumn
 class OthersTasksPage(QWidget):
     taskUpdated = pyqtSignal()
 
-    def __init__(self, parent=None, current_user=None, project_id=2):
+    def __init__(self, parent=None, current_user=None, project_id=None):
         super().__init__(parent)
 
-        self.current_user = current_user or {"id": 1, "last_name": "Копейкина", "first_name": "Виктория", "middle_name": "Анатольевна"}
-        self.project_id = project_id
+        self.current_user = current_user or {"id": 1, "last_name": "Копейкина", "first_name": "Виктория",
+                                             "middle_name": "Анатольевна"}
 
         # Загружаем UI
         ui_path = os.path.join(os.path.dirname(__file__), "..", "..", "ui", "other_tasks")
         uic.loadUi(os.path.join(ui_path, "others_tasks_page.ui"), self)
 
-        self.columns = {}  # id -> widget
-        self.column_widgets = []  # список виджетов колонок
+        self.columns = {}  # name -> widget
+        self.column_widgets = []
 
-        # Инициализация сервиса
+        # Инициализация сервиса - РЕЖИМ "others" (чужие задачи)
         self.db_session = get_tasks_session()
         self.service = TasksService(
-            self.db_session,
-            project_id=self.project_id,
+            db_session=self.db_session,
             current_user=self.current_user,
-            mode="others"
+            mode="others"  # 👈 КЛЮЧЕВОЕ: только чужие задачи
         )
 
         # Настройка UI
@@ -60,9 +59,8 @@ class OthersTasksPage(QWidget):
     # Настройка UI
     # =====================================================
 
-    # Заменить метод setup_kanban:
     def setup_kanban(self):
-        """Создает колонки канбан-доски."""
+        """Создает колонки канбан-доски из ВСЕХ проектов"""
         self.clear_layout(self.kanbanLayout)
 
         column_data = self.service.get_column_data()
@@ -86,12 +84,11 @@ class OthersTasksPage(QWidget):
         self.column_widgets.clear()
 
         for col in sorted(column_data, key=lambda x: x["position"]):
-            column_widget = KanbanColumn(col)  # 👈 Используем общий класс
-            self.columns[col["id"]] = column_widget
+            column_widget = KanbanColumn(col)
+            self.columns[col["name"]] = column_widget
             self.column_widgets.append(column_widget)
             splitter.addWidget(column_widget)
 
-        # Устанавливаем начальные размеры
         sizes = self.service.get_initial_sizes(len(column_data), self.width() - 50)
         if sizes:
             splitter.setSizes(sizes)
@@ -114,8 +111,14 @@ class OthersTasksPage(QWidget):
     # =====================================================
 
     def load_tasks(self):
-        """Загружает задачи из сервиса."""
+        """Загружает задачи (только чужие)"""
         tasks = self.service.load_tasks()
+
+        print(f"\n📊 Загрузка чужих задач: {len(tasks)}")
+        for task in tasks:
+            print(
+                f"  - {task.get('title')} (проект: {task.get('project_name')}, статус: {task.get('status')}, автор: {task.get('created_by_name')})")
+
         self.clear_all_columns()
 
         for task in tasks:
@@ -123,25 +126,35 @@ class OthersTasksPage(QWidget):
 
         self.update_statistics()
 
+    # windows/other_tasks/others_tasks_page.py - исправленный add_task_card
+
     def add_task_card(self, task_data: Dict):
         """Добавляет карточку задачи в колонку."""
+        # 👇 УБИРАЕМ ЭТУ ПРОВЕРКУ, так как она уже сделана в сервисе
+        # if task_data.get("created_by") == self.current_user.get("id"):
+        #     return
+
+        print(f"📋 Добавляем задачу в колонку: {task_data.get('title')} -> {task_data.get('status')}")
+
         card = self.create_task_card(task_data)
         self.connect_task_card_signals(card)
 
-        column_id = task_data.get("column_id")
-        if column_id in self.columns:
-            column = self.columns[column_id]
-            column.tasks_layout.insertWidget(
-                column.tasks_layout.count() - 1,
-                card
-            )
+        column_name = task_data.get("status")
+        if column_name in self.columns:
+            column = self.columns[column_name]
+            column.add_task(card)
+            print(f"  ✅ Добавлено в колонку '{column_name}'")
+        else:
+            print(f"  ❌ Колонка '{column_name}' не найдена!")
+            print(f"  Доступные колонки: {list(self.columns.keys())}")
 
     def create_task_card(self, task_data: Dict) -> QWidget:
-        """Создает карточку задачи (может быть переопределено в наследниках)."""
-        return OthersTaskCard(task_data, service=self.service, is_creator=True)
+        """Создает карточку задачи."""
+        # is_creator = task_data.get("created_by") == self.current_user.get("id")
+        return OthersTaskCard(task_data, service=self.service, is_creator=False)
 
     def connect_task_card_signals(self, card):
-        """Подключает сигналы карточки (может быть переопределено)."""
+        """Подключает сигналы карточки."""
         card.editRequested.connect(self.edit_task)
         card.deleteRequested.connect(self.delete_task)
         card.archiveRequested.connect(self.archive_task)
@@ -149,43 +162,10 @@ class OthersTasksPage(QWidget):
         card.returnToWorkRequested.connect(self.return_to_work)
         card.moveToDoneColumn.connect(self.move_to_done)
 
-    def move_task_card(self, task_id: int, from_column: str, to_column: str):
-        """Перемещает карточку между колонками."""
-        card = None
-        source_column = None
-
-        for col in self.column_widgets:
-            layout = col.tasks_layout
-            for i in range(layout.count()):
-                w = layout.itemAt(i).widget()
-                if w and hasattr(w, 'task_data') and w.task_data["id"] == task_id:
-                    card = w
-                    source_column = col
-                    layout.takeAt(i)
-                    break
-            if card:
-                break
-
-        target_column = None
-        for col in self.column_widgets:
-            if col.column_name == to_column:
-                target_column = col
-                break
-
-        if card and target_column:
-            target_column.tasks_layout.insertWidget(
-                target_column.tasks_layout.count() - 1,
-                card
-            )
-
     def clear_all_columns(self):
         """Очищает все колонки от карточек."""
         for column in self.column_widgets:
-            layout = column.tasks_layout
-            while layout.count() > 1:
-                item = layout.takeAt(0)
-                if item and item.widget():
-                    item.widget().deleteLater()
+            column.clear_tasks()
 
     # =====================================================
     # CRUD операции
@@ -197,7 +177,7 @@ class OthersTasksPage(QWidget):
 
         dialog = TaskDialog(self, mode="create", current_user=self.current_user)
         dialog.set_service(self.service)
-        dialog.task_saved.connect(self.on_task_saved)  # 👈 Подключаем сигнал
+        dialog.task_saved.connect(self.on_task_saved)
 
         dialog.exec()
 
@@ -209,7 +189,7 @@ class OthersTasksPage(QWidget):
 
         dialog = TaskDialog(self, task_data=task, mode="edit", current_user=self.current_user)
         dialog.set_service(self.service)
-        dialog.task_saved.connect(self.on_task_updated)  # 👈 Подключаем сигнал для обновления
+        dialog.task_saved.connect(self.on_task_updated)
 
         dialog.exec()
 
@@ -274,39 +254,35 @@ class OthersTasksPage(QWidget):
     def update_task_card(self, updated_task: Dict):
         """Обновляет карточку задачи."""
         for column in self.column_widgets:
-            layout = column.tasks_layout
-            for i in range(layout.count()):
-                w = layout.itemAt(i).widget()
-                if w and hasattr(w, 'task_data') and w.task_data["id"] == updated_task["id"]:
-                    if w.task_data["status"] != updated_task["status"]:
-                        self.move_task_card(
-                            updated_task["id"],
-                            w.task_data["status"],
-                            updated_task["status"]
-                        )
-                    w.update_task_data(updated_task)
+            for card in column.get_tasks():
+                if hasattr(card, 'task_data') and card.task_data["id"] == updated_task["id"]:
+                    if card.task_data["status"] != updated_task["status"]:
+                        # Перемещаем в другую колонку
+                        column.remove_task(card)
+                        new_column = self.columns.get(updated_task["status"])
+                        if new_column:
+                            new_column.add_task(card)
+                    card.update_task_data(updated_task)
                     return
 
     def remove_task_card(self, task_id: int):
         """Удаляет карточку из UI."""
         for column in self.column_widgets:
-            layout = column.tasks_layout
-            for i in range(layout.count()):
-                w = layout.itemAt(i).widget()
-                if w and hasattr(w, 'task_data') and w.task_data["id"] == task_id:
-                    w.deleteLater()
+            for card in column.get_tasks():
+                if hasattr(card, 'task_data') and card.task_data["id"] == task_id:
+                    column.remove_task(card)
                     return
 
     # =====================================================
-    # Действия с задачами (заглушки)
+    # Действия с задачами
     # =====================================================
 
     def move_to_done(self, task_id: int):
         """Перемещает в 'Выполнено'."""
-        result = self.service.move_task(task_id, "Выполнен")
+        result = self.service.move_task(task_id, "Готово")
         if result:
             old_column, task = result
-            self.move_task_card(task_id, old_column, "Выполнен")
+            self.update_task_card(task)
             self.update_statistics()
             self.taskUpdated.emit()
 
@@ -327,9 +303,10 @@ class OthersTasksPage(QWidget):
         """Обновляет статистику."""
         stats = self.service.get_statistics_for_display()
 
+        # Обновляем счетчики в колонках
         for column in self.column_widgets:
-            count = stats["column_counts"].get(column.column_name, 0)
-            column.count_label.setText(str(count))
+            tasks_count = len(column.get_tasks())
+            column.update_count(tasks_count)
 
         if hasattr(self, 'totalTasksLabel'):
             self.totalTasksLabel.setText(f"📊 Всего задач: {stats['total']}")
@@ -349,17 +326,18 @@ class OthersTasksPage(QWidget):
 
         all_tasks = []
         for column in self.column_widgets:
-            layout = column.tasks_layout
-            for i in range(layout.count()):
-                w = layout.itemAt(i).widget()
-                if w and hasattr(w, 'task_data'):
-                    all_tasks.append(w.task_data)
+            for card in column.get_tasks():
+                all_tasks.append(card.task_data)
 
         filtered = self.service.filter_tasks_by_priority(all_tasks, priority)
 
-        self.clear_all_columns()
-        for task in filtered:
-            self.add_task_card(task)
+        filtered_ids = {t["id"] for t in filtered}
+        for column in self.column_widgets:
+            for card in column.get_tasks():
+                if card.task_data["id"] in filtered_ids:
+                    card.show()
+                else:
+                    card.hide()
 
     # =====================================================
     # Drag & Drop
@@ -387,7 +365,7 @@ class OthersTasksPage(QWidget):
         result = self.service.move_task(data["id"], target.column_name)
         if result:
             old_column, task = result
-            self.move_task_card(data["id"], old_column, task["status"])
+            self.update_task_card(task)
             self.update_statistics()
             self.taskUpdated.emit()
 
@@ -404,3 +382,32 @@ class OthersTasksPage(QWidget):
     def closeEvent(self, event):
         self.db_session.close()
         super().closeEvent(event)
+
+    def move_task_card(self, task_id: int, from_column: str, to_column: str):
+        """Перемещает карточку между колонками."""
+        card = None
+        source_column = None
+
+        for col in self.column_widgets:
+            layout = col.tasks_layout
+            for i in range(layout.count()):
+                w = layout.itemAt(i).widget()
+                if w and hasattr(w, 'task_data') and w.task_data["id"] == task_id:
+                    card = w
+                    source_column = col
+                    layout.takeAt(i)
+                    break
+            if card:
+                break
+
+        target_column = None
+        for col in self.column_widgets:
+            if col.column_name == to_column:
+                target_column = col
+                break
+
+        if card and target_column:
+            target_column.tasks_layout.insertWidget(
+                target_column.tasks_layout.count() - 1,
+                card
+            )

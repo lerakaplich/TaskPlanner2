@@ -1,9 +1,12 @@
+# windows/analytics/theme/employees_stats_view.py
+
 from datetime import datetime
 from PyQt6.QtWidgets import QWidget, QVBoxLayout, QLineEdit, QTableWidget, QTableWidgetItem, QHeaderView
 from PyQt6.QtCore import Qt
 
+
 class EmployeesStatsView(QWidget):
-    def __init__(self, theme_name, tasks, stats_data, parent=None):
+    def __init__(self, theme_name, stats_data, parent=None):  # Убрали лишний параметр 'tasks'
         super().__init__(parent)
         self.theme_name = theme_name
         self.all_stats = stats_data  # Готовый список от сервиса
@@ -35,17 +38,37 @@ class EmployeesStatsView(QWidget):
         # 1. Отключаем сортировку перед очисткой и заполнением
         self.table.setSortingEnabled(False)
         self.table.setRowCount(0)
+
+        # Проверяем, что all_stats - это список
+        if not isinstance(self.all_stats, list):
+            print(f"⚠️ EmployeesStatsView: all_stats is not a list, it's {type(self.all_stats)}")
+            # Пытаемся преобразовать, если это словарь
+            if isinstance(self.all_stats, dict):
+                self.all_stats = list(self.all_stats.values())
+            else:
+                self.table.setSortingEnabled(True)
+                return
+
         for row, stat in enumerate(self.all_stats):
-            if filter_text.lower() not in stat["employee"].lower():
+            # Проверяем, что stat - это словарь
+            if not isinstance(stat, dict):
+                print(f"⚠️ EmployeesStatsView: stat is not a dict, it's {type(stat)}")
                 continue
+
+            employee_name = stat.get("employee_name", stat.get("employee", "Неизвестно"))
+
+            if filter_text.lower() not in employee_name.lower():
+                continue
+
             self.table.insertRow(row)
-            self.table.setItem(row, 0, QTableWidgetItem(stat["employee"]))
-            self.table.setItem(row, 1, QTableWidgetItem(str(stat['avg_kpi'])))
-            self.table.setItem(row, 2, QTableWidgetItem(str(stat["completed"])))
-            self.table.setItem(row, 3, QTableWidgetItem(str(stat["low"])))
-            self.table.setItem(row, 4, QTableWidgetItem(str(stat["medium"])))
-            self.table.setItem(row, 5, QTableWidgetItem(str(stat["high"])))
-            self.table.setItem(row, 6, QTableWidgetItem(str(stat["critical"])))
+            self.table.setItem(row, 0, QTableWidgetItem(employee_name))
+            self.table.setItem(row, 1, QTableWidgetItem(str(stat.get('avg_kpi', 0))))
+            self.table.setItem(row, 2, QTableWidgetItem(str(stat.get("completed", 0))))
+            self.table.setItem(row, 3, QTableWidgetItem(str(stat.get("low", 0))))
+            self.table.setItem(row, 4, QTableWidgetItem(str(stat.get("medium", 0))))
+            self.table.setItem(row, 5, QTableWidgetItem(str(stat.get("high", 0))))
+            self.table.setItem(row, 6, QTableWidgetItem(str(stat.get("critical", 0))))
+
         # 2. Включаем сортировку обратно
         self.table.setSortingEnabled(True)
 

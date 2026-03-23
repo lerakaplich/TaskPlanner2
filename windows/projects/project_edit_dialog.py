@@ -41,8 +41,10 @@ class ProjectEditDialog(BaseProjectDialog):
         """Переопределяем загрузку данных для редактирования"""
         super().load_project_data()
 
-        # Дополнительная логика для редактирования
-        # Например, можно проверить, что администраторы являются также участниками
+        # Загружаем настройки колонок из проекта
+        if 'column_visibility' in self.project_data:
+            self.load_column_visibility(self.project_data['column_visibility'])
+
         self._ensure_admins_in_participants()
 
     def _ensure_admins_in_participants(self):
@@ -64,18 +66,15 @@ class ProjectEditDialog(BaseProjectDialog):
         # Добавляем администраторов в участники, если их там нет
         for admin_id in admin_ids:
             if admin_id not in participant_ids:
-                # Создаем заглушку для администратора
                 admin_stub = self._create_employee_stub(admin_id)
                 self.participants.append(admin_stub)
 
-        # Обновляем текст на кнопках
         self.update_participants_button_text()
         self.update_admins_button_text()
 
     def validate_and_accept(self):
         """Проверка данных и закрытие диалога"""
         if self.validate_input():
-            # Дополнительная проверка для редактирования
             if self.has_changes():
                 self.accept()
             else:
@@ -101,7 +100,12 @@ class ProjectEditDialog(BaseProjectDialog):
         if original.get('is_active') != current['is_active']:
             return True
 
-        # Сравниваем участников (по ID)
+        # Сравниваем настройки колонок
+        original_columns = original.get('column_visibility', {})
+        if original_columns != current['column_visibility']:
+            return True
+
+        # Сравниваем участников
         original_participants = self._extract_ids(original.get('participants', []))
         current_participants = self._extract_ids(self.participants)
         if set(original_participants) != set(current_participants):
@@ -139,54 +143,3 @@ class ProjectEditDialog(BaseProjectDialog):
                                                      QDate.currentDate().toString("dd.MM.yyyy"))
 
         return data
-
-    # Добавьте этот метод в класс ProjectEditDialog в project_edit_dialog.py
-
-    def _format_employee_name(self, emp):
-        """Форматирование имени сотрудника для отображения"""
-        if isinstance(emp, dict):
-            first_name = emp.get('first_name', '')
-            last_name = emp.get('last_name', '')
-            if first_name and last_name:
-                return f"{last_name} {first_name[0]}."
-            else:
-                return f"ID: {emp.get('id', '')}"
-        else:
-            return f"ID: {emp}"
-
-
-# Для тестирования
-if __name__ == "__main__":
-    from PyQt6.QtWidgets import QApplication
-
-    app = QApplication(sys.argv)
-    app.setStyle("Fusion")
-
-    # Тестовые данные для редактирования (разные форматы)
-    test_project = {
-        'id': 1,
-        'name': 'Task Planner',
-        'description': 'Планировщик задач для команды',
-        'is_active': True,
-        'created_date': '01.02.2026',
-        'participants': [1, 2, 3],  # Только ID
-        'admins': [1]  # Только ID
-    }
-
-    dialog = ProjectEditDialog(test_project)
-
-    if dialog.exec() == QDialog.DialogCode.Accepted:
-        data = dialog.get_project_data()
-        print("\n" + "=" * 50)
-        print("ОБНОВЛЕННЫЕ ДАННЫЕ ПРОЕКТА:")
-        print("=" * 50)
-        print(f"ID: {data['id']}")
-        print(f"Название: {data['name']}")
-        print(f"Описание: {data['description']}")
-        print(f"Активен: {data['is_active']}")
-        print(f"Создан: {data['created_date']}")
-        print(f"ID участников: {data['participants_ids'] or 'не выбраны'}")
-        print(f"ID администраторов: {data['admins_ids'] or 'не выбраны'}")
-        print("=" * 50)
-
-    sys.exit(app.exec())

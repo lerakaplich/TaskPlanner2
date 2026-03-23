@@ -1,0 +1,625 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>SettingsPage</class>
+ <widget class="QWidget" name="SettingsPage">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>1487</width>
+    <height>800</height>
+   </rect>
+  </property>
+  <property name="windowTitle">
+   <string>Настройки</string>
+  </property>
+  <property name="styleSheet">
+   <string notr="true">QWidget {
+    background-color: #F5F5F7;
+    font-family: 'Segoe UI', Arial;
+}
+
+/* Вкладки */
+QTabBar::tab {
+    background-color: white;
+    color: #666;
+    padding: 12px 20px;
+    margin-right: 2px;
+    border-top-left-radius: 8px;
+    border-top-right-radius: 8px;
+    border: 1px solid #E0E0E0;
+    border-bottom: none;
+    font-weight: bold;
+    font-size: 14px;
+    min-width: 120px;
+}
+
+QTabBar::tab:selected {
+    background-color: #1B232A;
+    color: white;
+    border-color: #1B232A;
+}
+
+QTabBar::tab:hover:!selected {
+    background-color: #F0F0F0;
+    border-color: #ccab6e;
+}
+
+QTabWidget::pane {
+    background-color: white;
+    border: 1px solid #E0E0E0;
+    border-radius: 0px 8px 8px 8px;
+    margin-top: -1px;
+}
+
+QTabWidget::tab-bar {
+    alignment: left;
+}
+
+/* Кнопки */
+QPushButton {
+    min-height: 41px;
+    max-height: 41px;
+    border: none;
+    border-radius: 10px;
+    font-weight: bold;
+    padding: 0px 16px;
+}
+
+QPushButton#btnAdd {
+    background-color: #ccab6e;
+    color: white;
+    font-size: 16px;
+}
+QPushButton#btnAdd:hover {
+    background-color: #998664;
+}
+QPushButton#btnAdd:pressed {
+    background-color: #7a6a50;
+}
+
+QPushButton#btnEdit {
+    background-color: #1B232A;
+    color: white;
+    font-size: 14px;
+    min-width: 80px;
+}
+QPushButton#btnEdit:hover {
+    background-color: #D9D9D6;
+    color: black;
+}
+QPushButton#btnEdit:pressed {
+    background-color: #B8B8B5;
+}
+
+QPushButton#btnDelete {
+    background-color: #1B232A;
+    color: white;
+    font-size: 14px;
+    min-width: 80px;
+}
+QPushButton#btnDelete:hover {
+    background-color: #D9D9D6;
+    color: black;
+}
+QPushButton#btnDelete:pressed {
+    background-color: #B8B8B5;
+}
+
+QPushButton#btnSave {
+    background-color: #1B232A;
+    color: white;
+    font-size: 14px;
+}
+QPushButton#btnSave:hover {
+    background-color: #D9D9D6;
+    color: black;
+}
+QPushButton#btnSave:pressed {
+    background-color: #B8B8B5;
+}
+
+QPushButton#btnCancel {
+    background-color: #1B232A;
+    color: white;
+    font-size: 14px;
+}
+QPushButton#btnCancel:hover {
+    background-color: #D9D9D6;
+    color: black;
+}
+QPushButton#btnCancel:pressed {
+    background-color: #B8B8B5;
+}
+
+/* Поля ввода */
+QLineEdit, QTextEdit, QComboBox {
+    border: 2px solid #E0E0E0;
+    border-radius: 8px;
+    padding: 8px 12px;
+    font-size: 14px;
+    background-color: white;
+    min-height: 41px;
+}
+
+QLineEdit:focus, QTextEdit:focus, QComboBox:focus {
+    border: 2px solid #ccab6e;
+}
+
+QComboBox::drop-down {
+    border: none;
+    padding-right: 10px;
+}
+
+/* Заголовки */
+QLabel#titleLabel {
+    font-size: 24px;
+    font-weight: bold;
+    color: #1B232A;
+    padding: 10px 0;
+}
+
+QLabel {
+    font-size: 14px;
+    font-weight: normal;
+    color: #333;
+}
+
+QLabel#sectionTitle {
+    font-size: 16px;
+    font-weight: bold;
+    color: #1B232A;
+    padding: 5px 0;
+}
+
+/* Фреймы */
+QFrame#headerFrame, QFrame#contentFrame {
+    background-color: transparent;
+}
+
+QFrame#toolsFrame {
+    background-color: white;
+    border-radius: 10px;
+    border: 1px solid #E0E0E0;
+    padding: 15px;
+}
+
+QFrame#itemFrame {
+    background-color: #F8F9FA;
+    border-radius: 8px;
+    border: 1px solid #E0E0E0;
+    padding: 12px;
+}
+
+QFrame#itemFrame:hover {
+    border-color: #ccab6e;
+    background-color: #F0F0F0;
+}
+
+/* Таблица */
+QTableWidget {
+    background-color: white;
+    border: 1px solid #E0E0E0;
+    border-radius: 8px;
+    gridline-color: #E0E0E0;
+    font-size: 14px;
+}
+
+QTableWidget::item {
+    padding: 8px;
+    border-bottom: 1px solid #F0F0F0;
+}
+
+QTableWidget::item:selected {
+    background-color: #ccab6e;
+    color: white;
+}
+
+QHeaderView::section {
+    background-color: #F5F5F7;
+    padding: 8px;
+    border: none;
+    border-bottom: 2px solid #E0E0E0;
+    font-weight: bold;
+    font-size: 14px;
+    color: #1B232A;
+}
+
+/* Скроллбары */
+QScrollArea {
+    border: none;
+    background-color: transparent;
+}
+
+QScrollBar:vertical {
+    background: #F5F5F5;
+    width: 8px;
+    border-radius: 4px;
+}
+
+QScrollBar::handle:vertical {
+    background: #C1C1C1;
+    border-radius: 4px;
+    min-height: 20px;
+}
+
+QScrollBar:horizontal {
+    border: none;
+    background: #F5F5F5;
+    height: 8px;
+    margin: 0px;
+    border-radius: 4px;
+}
+
+QScrollBar::handle:horizontal {
+    background: #c1c1c1;
+    border-radius: 4px;
+    min-width: 20px;
+}
+
+QScrollBar::add-line, QScrollBar::sub-line {
+    border: none;
+    background: none;
+}</string>
+  </property>
+  <layout class="QVBoxLayout" name="verticalLayout">
+   <item>
+    <widget class="QFrame" name="headerFrame">
+     <property name="maximumSize">
+      <size>
+       <width>16777215</width>
+       <height>70</height>
+      </size>
+     </property>
+     <layout class="QHBoxLayout" name="horizontalLayout">
+      <item>
+       <widget class="QLabel" name="titleLabel">
+        <property name="text">
+         <string>Настройки</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <spacer name="horizontalSpacer">
+        <property name="orientation">
+         <enum>Qt::Orientation::Horizontal</enum>
+        </property>
+        <property name="sizeHint" stdset="0">
+         <size>
+          <width>40</width>
+          <height>20</height>
+         </size>
+        </property>
+       </spacer>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <item>
+    <widget class="QTabWidget" name="tabWidget">
+     <property name="currentIndex">
+      <number>3</number>
+     </property>
+     <widget class="QWidget" name="tabHashtags">
+      <attribute name="title">
+       <string>Хэштеги</string>
+      </attribute>
+      <layout class="QVBoxLayout" name="verticalLayoutHashtags">
+       <item>
+        <widget class="QFrame" name="toolsFrameHashtags">
+         <property name="maximumSize">
+          <size>
+           <width>16777215</width>
+           <height>80</height>
+          </size>
+         </property>
+         <layout class="QHBoxLayout" name="horizontalLayoutHashtags">
+          <item>
+           <spacer name="horizontalSpacer_3">
+            <property name="orientation">
+             <enum>Qt::Orientation::Horizontal</enum>
+            </property>
+            <property name="sizeHint" stdset="0">
+             <size>
+              <width>40</width>
+              <height>20</height>
+             </size>
+            </property>
+           </spacer>
+          </item>
+          <item>
+           <widget class="QPushButton" name="btnAddHashtag">
+            <property name="minimumSize">
+             <size>
+              <width>150</width>
+              <height>41</height>
+             </size>
+            </property>
+            <property name="text">
+             <string>+ Добавить хэштег</string>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </widget>
+       </item>
+       <item>
+        <widget class="QScrollArea" name="scrollAreaHashtags">
+         <property name="widgetResizable">
+          <bool>true</bool>
+         </property>
+         <widget class="QWidget" name="scrollAreaWidgetContentsHashtags">
+          <property name="geometry">
+           <rect>
+            <x>0</x>
+            <y>0</y>
+            <width>74</width>
+            <height>30</height>
+           </rect>
+          </property>
+          <layout class="QGridLayout" name="gridLayoutHashtags">
+           <property name="leftMargin">
+            <number>15</number>
+           </property>
+           <property name="topMargin">
+            <number>15</number>
+           </property>
+           <property name="rightMargin">
+            <number>15</number>
+           </property>
+           <property name="bottomMargin">
+            <number>15</number>
+           </property>
+           <property name="spacing">
+            <number>15</number>
+           </property>
+          </layout>
+         </widget>
+        </widget>
+       </item>
+      </layout>
+     </widget>
+     <widget class="QWidget" name="tabEmployees">
+      <attribute name="title">
+       <string>Сотрудники</string>
+      </attribute>
+      <layout class="QVBoxLayout" name="verticalLayoutEmployees">
+       <item>
+        <widget class="QFrame" name="toolsFrameEmployees">
+         <property name="maximumSize">
+          <size>
+           <width>16777215</width>
+           <height>80</height>
+          </size>
+         </property>
+         <layout class="QHBoxLayout" name="horizontalLayoutEmployees">
+          <item>
+           <spacer name="horizontalSpacer_2">
+            <property name="orientation">
+             <enum>Qt::Orientation::Horizontal</enum>
+            </property>
+            <property name="sizeHint" stdset="0">
+             <size>
+              <width>40</width>
+              <height>20</height>
+             </size>
+            </property>
+           </spacer>
+          </item>
+          <item>
+           <widget class="QPushButton" name="btnAddEmployee">
+            <property name="minimumSize">
+             <size>
+              <width>160</width>
+              <height>41</height>
+             </size>
+            </property>
+            <property name="text">
+             <string>+ Добавить сотрудника</string>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </widget>
+       </item>
+       <item>
+        <widget class="QScrollArea" name="scrollAreaEmployees">
+         <property name="widgetResizable">
+          <bool>true</bool>
+         </property>
+         <widget class="QWidget" name="scrollAreaWidgetContentsEmployees">
+          <property name="geometry">
+           <rect>
+            <x>0</x>
+            <y>0</y>
+            <width>74</width>
+            <height>30</height>
+           </rect>
+          </property>
+          <layout class="QGridLayout" name="gridLayoutEmployees">
+           <property name="leftMargin">
+            <number>15</number>
+           </property>
+           <property name="topMargin">
+            <number>15</number>
+           </property>
+           <property name="rightMargin">
+            <number>15</number>
+           </property>
+           <property name="bottomMargin">
+            <number>15</number>
+           </property>
+           <property name="spacing">
+            <number>15</number>
+           </property>
+          </layout>
+         </widget>
+        </widget>
+       </item>
+      </layout>
+     </widget>
+     <widget class="QWidget" name="tabDepartments">
+      <attribute name="title">
+       <string>Отделы</string>
+      </attribute>
+      <layout class="QVBoxLayout" name="verticalLayoutDepartments">
+       <item>
+        <widget class="QFrame" name="toolsFrameDepartments">
+         <property name="maximumSize">
+          <size>
+           <width>16777215</width>
+           <height>80</height>
+          </size>
+         </property>
+         <layout class="QHBoxLayout" name="horizontalLayoutDepartments">
+          <item>
+           <spacer name="horizontalSpacer_4">
+            <property name="orientation">
+             <enum>Qt::Orientation::Horizontal</enum>
+            </property>
+            <property name="sizeHint" stdset="0">
+             <size>
+              <width>40</width>
+              <height>20</height>
+             </size>
+            </property>
+           </spacer>
+          </item>
+          <item>
+           <widget class="QPushButton" name="btnAddDepartment">
+            <property name="minimumSize">
+             <size>
+              <width>150</width>
+              <height>41</height>
+             </size>
+            </property>
+            <property name="text">
+             <string>+ Добавить отдел</string>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </widget>
+       </item>
+       <item>
+        <widget class="QScrollArea" name="scrollAreaDepartments">
+         <property name="widgetResizable">
+          <bool>true</bool>
+         </property>
+         <widget class="QWidget" name="scrollAreaWidgetContentsDepartments">
+          <property name="geometry">
+           <rect>
+            <x>0</x>
+            <y>0</y>
+            <width>74</width>
+            <height>30</height>
+           </rect>
+          </property>
+          <layout class="QGridLayout" name="gridLayoutDepartments">
+           <property name="leftMargin">
+            <number>15</number>
+           </property>
+           <property name="topMargin">
+            <number>15</number>
+           </property>
+           <property name="rightMargin">
+            <number>15</number>
+           </property>
+           <property name="bottomMargin">
+            <number>15</number>
+           </property>
+           <property name="spacing">
+            <number>15</number>
+           </property>
+          </layout>
+         </widget>
+        </widget>
+       </item>
+      </layout>
+     </widget>
+     <widget class="QWidget" name="tabSubdivisions">
+      <attribute name="title">
+       <string>Подразделения</string>
+      </attribute>
+      <layout class="QVBoxLayout" name="verticalLayoutSubdivisions">
+       <item>
+        <widget class="QFrame" name="toolsFrameSubdivisions">
+         <property name="maximumSize">
+          <size>
+           <width>16777215</width>
+           <height>80</height>
+          </size>
+         </property>
+         <layout class="QHBoxLayout" name="horizontalLayoutSubdivisions">
+          <item>
+           <spacer name="horizontalSpacer_5">
+            <property name="orientation">
+             <enum>Qt::Orientation::Horizontal</enum>
+            </property>
+            <property name="sizeHint" stdset="0">
+             <size>
+              <width>40</width>
+              <height>20</height>
+             </size>
+            </property>
+           </spacer>
+          </item>
+          <item>
+           <widget class="QPushButton" name="btnAddSubdivision">
+            <property name="minimumSize">
+             <size>
+              <width>180</width>
+              <height>41</height>
+             </size>
+            </property>
+            <property name="text">
+             <string>+ Добавить подразделение</string>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </widget>
+       </item>
+       <item>
+        <widget class="QScrollArea" name="scrollAreaSubdivisions">
+         <property name="widgetResizable">
+          <bool>true</bool>
+         </property>
+         <widget class="QWidget" name="scrollAreaWidgetContentsSubdivisions">
+          <property name="geometry">
+           <rect>
+            <x>0</x>
+            <y>0</y>
+            <width>1449</width>
+            <height>578</height>
+           </rect>
+          </property>
+          <layout class="QGridLayout" name="gridLayoutSubdivisions">
+           <property name="leftMargin">
+            <number>15</number>
+           </property>
+           <property name="topMargin">
+            <number>15</number>
+           </property>
+           <property name="rightMargin">
+            <number>15</number>
+           </property>
+           <property name="bottomMargin">
+            <number>15</number>
+           </property>
+           <property name="spacing">
+            <number>15</number>
+           </property>
+          </layout>
+         </widget>
+        </widget>
+       </item>
+      </layout>
+     </widget>
+    </widget>
+   </item>
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>
