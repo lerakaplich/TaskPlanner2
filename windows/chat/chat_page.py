@@ -1,7 +1,7 @@
 # windows/chat/chat_page.py
 from typing import Optional
 
-from PyQt6.QtWidgets import QWidget, QListWidgetItem, QVBoxLayout, QMessageBox
+from PyQt6.QtWidgets import QWidget, QListWidgetItem, QVBoxLayout, QMessageBox, QApplication
 from PyQt6.QtCore import Qt, pyqtSignal, QTimer
 
 from models.schemas.chat_dto import MessageReadDTO, MessageEditDTO, MessageDeleteDTO
@@ -55,6 +55,7 @@ class ChatPage(QWidget):
         self.sio.on('message_deleted', self.on_socket_message_deleted)
         self.sio.on('update_chat_list', self.on_remote_chat_update)
         self.sio.on('chat_info_updated', self.on_chat_info_updated)
+        self.sio.on('participant_role_changed', self.on_participant_role_changed)
         self.sio.on('chat_added_manual', lambda data: self.load_chat_list())
         self.sio.on('chat_deleted', self.on_chat_deleted_by_admin)
 
@@ -141,6 +142,14 @@ class ChatPage(QWidget):
         # Если этот чат сейчас открыт — меняем заголовок сверху
         if self.current_chat_id == data['chat_id']:
             self.ui.chat_header.setText(data['new_title'])
+
+    def on_participant_role_changed(self, data):
+        chat_id = data.get('chat_id')
+        # Ищем среди всех открытых окон наше окно настроек
+        for widget in QApplication.topLevelWidgets():
+            if isinstance(widget, ChatSettingsDialog) and widget.chat_id == chat_id:
+                # Вызываем обновление через сигнал (потокобезопасно)
+                widget.request_refresh.emit()
 
     def on_chat_deleted_by_admin(self, data):
         """Вызывается, когда пользователя исключили из чата"""
@@ -246,21 +255,43 @@ class ChatPage(QWidget):
             })
 
     def load_chat_list(self):
-        # Запоминаем, какой чат был открыт
+        # 1. Запоминаем, какой чат был открыт, чтобы не потерять фокус
         old_id = self.current_chat_id
 
+        # 2. ОЧИСТКА: clear() в QListWidget работает хорошо,
+        # но добавим блокировку сигналов на время обновления, чтобы не триггерить лишние события
+        self.ui.chat_list.blockSignals(True)
         self.ui.chat_list.clear()
+
+        # 3. СБРОС КЭША: Обновляем сессию, чтобы подтянулись новые названия чатов и актуальный список
+        if hasattr(self.service, 'session'):
+            self.service.session.expire_all()
+
+        # 4. ПОЛУЧЕНИЕ ДАННЫХ
         chats = self.service.get_user_chats(self.current_user_id)
 
         for chat in chats:
-            item = QListWidgetItem(chat.display_name)
+            # Используем название из базы (которое мы только что обновили в настройках)
+            display_name = chat.title if chat.title else f"Чат {chat.id}"
+
+            item = QListWidgetItem(display_name)
             item.setData(Qt.ItemDataRole.UserRole, chat.id)
-            # Можно добавить иконку в зависимости от типа чата (private/group)
+
+            # Визуальное отличие типов чатов
+            if chat.type == "private":
+                item.setToolTip("Личный чат")
+            elif chat.type == "project":
+                item.setText(f"🏗 {display_name}")  # Пример с иконкой
+
             self.ui.chat_list.addItem(item)
 
-            # Если это был наш открытый чат, выделяем его обратно
+            # 5. Возвращаем выделение
             if chat.id == old_id:
                 item.setSelected(True)
+                self.ui.chat_list.setCurrentItem(item)
+
+        # Разблокируем сигналы
+        self.ui.chat_list.blockSignals(False)
 
     def on_chat_selected(self, item):
         new_chat_id = item.data(Qt.ItemDataRole.UserRole)

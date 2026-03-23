@@ -106,6 +106,23 @@ async def update_participants(sid, data):
     except Exception as e:
         print(f"❌ Ошибка в update_participants: {e}")
 
+
+@sio.event
+async def change_participant_role(sid, data):
+    chat_id = data['chat_id']
+    target_uid = data['target_user_id']
+    is_admin = data['is_admin']
+
+    with TasksSessionLocal() as session:
+        service = ChatService(session)
+        if service.set_participant_admin(chat_id, target_uid, is_admin):
+            # Рассылаем ВСЕМ в комнату чата
+            await sio.emit("participant_role_changed", {
+                "chat_id": chat_id,
+                "user_id": target_uid,
+                "is_admin": is_admin
+            }, room=f"chat_{chat_id}")
+
 @sio.event
 async def send_chat_msg(sid, data):
     try:

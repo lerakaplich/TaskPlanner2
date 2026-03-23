@@ -100,6 +100,7 @@ class ParticipantWidget(QFrame):
 class ChatSettingsDialog(QDialog):
     action_requested = pyqtSignal(str, int)  # (тип действия, id сотрудника)
     chats_changed = pyqtSignal()
+    request_refresh = pyqtSignal()
 
     def __init__(self, chat_id, service, current_user_id, parent=None):
         super().__init__(parent)
@@ -116,7 +117,7 @@ class ChatSettingsDialog(QDialog):
         # Проверка прав админа
         self.is_i_admin = any(p.employee_id == current_user_id and p.is_admin
                               for p in self.chat_data.participants)
-
+        self.request_refresh.connect(self.refresh_participants_list)
         self.init_ui()
 
     def init_ui(self):
@@ -237,42 +238,97 @@ class ChatSettingsDialog(QDialog):
         self.refresh_participants_list()
 
     def refresh_participants_list(self):
-        """Очищает скролл и заново создает виджеты участников"""
-        # Очистка лейаута
+        # 1. ОЧИСТКА: Удаляем все старые виджеты из layout перед перерисовкой
+        # Без этого списка они будут дублироваться бесконечно
         while self.participants_layout.count():
             item = self.participants_layout.takeAt(0)
-            if item.widget():
-                item.widget().deleteLater()
+            widget = item.widget()
+            if widget:
+                widget.deleteLater()
 
-        # Сортировка: сначала админы, потом по алфавиту
-        sorted_participants = sorted(
+        # 2. Обновляем данные из БД
+        self.chat_data = self.service.get_chat_details(self.chat_id)
+        if not self.chat_data:
+            return
+
+        # 3. Ищем себя и обновляем права
+        me = next((p for p in self.chat_data.participants
+                   if p.employee_id == self.current_user_id), None)
+        self.is_i_admin = me.is_admin if me else False
+
+        # 4. Применяем права к кнопкам (скрываем/показываем)
+        self.apply_permissions()
+
+        # 5. Сортировка
+        sorted_list = sorted(
             self.chat_data.participants,
-            key=lambda p: (not p.is_admin, p.full_name)
+            key=lambda p: (not p.is_admin, getattr(p, 'full_name', f"ID {p.employee_id}").lower())
         )
 
-        # Создание виджетов
-        for p in sorted_participants:
-            w = ParticipantWidget(p, self.current_user_id, self.is_i_admin)
-            # Подключаем сигнал контекстного меню к методам диалога
-            w.action_requested.connect(self.handle_participant_action)
-            self.participants_layout.addWidget(w)
+        # 6. Создаем новые виджеты
+        for p in sorted_list:
+            # Убеждаемся, что full_name есть (для корректного отображения)
+            if not hasattr(p, 'full_name') or not p.full_name:
+                emp = self.service.emp_repo.get_by_id(p.employee_id)
+                p.full_name = f"{emp.last_name} {emp.first_name}" if emp else f"ID {p.employee_id}"
+
+            # Создаем виджет, передавая СВЕЖИЙ статус is_i_admin
+            pw = ParticipantWidget(p, self.current_user_id, self.is_i_admin)
+            pw.action_requested.connect(self.handle_participant_action)
+            self.participants_layout.addWidget(pw)
+
+    def apply_permissions(self):
+        """Метод для включения/выключения кнопок в зависимости от self.is_i_admin"""
+        can_edit = self.is_i_admin and self.chat_data.type != "private"
+
+        self.title_edit.setEnabled(can_edit)
+
+        # Кнопка добавления
+        if hasattr(self, 'add_emp_btn'):
+            self.add_emp_btn.setVisible(can_edit)
+            self.add_emp_btn.setEnabled(can_edit)
+
+        # Кнопка сохранения
+        if hasattr(self, 'save_btn'):
+            # Если мы создавали кнопку в init_ui только для админа,
+            # она может не существовать у обычного пользователя.
+            self.save_btn.setVisible(self.is_i_admin)
+            self.save_btn.setEnabled(self.is_i_admin)
 
     def save_changes(self):
-        new_title = self.title_edit.text().strip()
-        if not new_title: return
+        """Сохранение настроек чата (Название и т.д.)"""
+        try:
+            # 1. Проверка прав в реальном времени
+            if not self.service.is_user_admin(self.chat_id, self.current_user_id):
+                QMessageBox.critical(self, "Доступ запрещен", "Ваши права администратора были отозваны.")
+                self.reject()
+                return
 
-        # 1. Обновляем в базе данных
-        if self.service.update_chat_settings(self.chat_id, new_title):
+            new_title = self.title_edit.text().strip()
+            if not new_title:
+                QMessageBox.warning(self, "Внимание", "Название чата не может быть пустым.")
+                return
 
-            # 2. Отправляем в сокет, чтобы сервер разослал это ВСЕМ в комнате
-            if hasattr(self.parent(), 'sio'):
-                self.parent().sio.emit('update_chat_settings', {
-                    "chat_id": self.chat_id,
-                    "new_title": new_title
-                })
+            # 2. Если название изменилось — шлем событие на сервер
+            if new_title != self.chat_data.title:
+                # Находим родительское окно (ChatPage), чтобы отправить через его сокет
+                parent_page = self.parent()
+                if hasattr(parent_page, 'sio'):
+                    parent_page.sio.emit('update_chat_settings', {
+                        'chat_id': self.chat_id,
+                        'new_title': new_title
+                    })
 
-            self.chats_changed.emit()
+                # Обновляем локально, чтобы не ждать ответа для закрытия
+                self.chat_data.title = new_title
+                self.chats_changed.emit()  # Сигнал для обновления списка чатов слева
+
+            QMessageBox.information(self, "Успех", "Настройки сохранены.")
             self.accept()
+
+        except Exception as e:
+            print(f"❌ Ошибка при сохранении: {e}")
+            QMessageBox.warning(self, "Ошибка", f"не удалось сохранить изменения: {e}")
 
     def handle_participant_action(self, action_type, emp_id):
         """Централизованная обработка действий из контекстного меню участника"""
@@ -282,18 +338,24 @@ class ChatSettingsDialog(QDialog):
             self.kick_user(emp_id)
 
     def toggle_admin(self, emp_id):
-        """Смена прав администратора через сервис"""
+        # Находим текущий статус, чтобы инвертировать его
         participant = next((p for p in self.chat_data.participants if p.employee_id == emp_id), None)
         if not participant: return
 
         new_status = not participant.is_admin
 
-        # Вызываем сервис
         if self.service.set_participant_admin(self.chat_id, emp_id, new_status):
-            # Обновляем локальные данные и UI
-            participant.is_admin = new_status
+            # 1. Оповещаем сервер
+            if hasattr(self.parent(), 'sio'):
+                self.parent().sio.emit('change_participant_role', {
+                    "chat_id": self.chat_id,
+                    "target_user_id": emp_id,
+                    "is_admin": new_status
+                })
+
+            # 2. Обновляем локальные данные (используем сервис, чтобы подтянулись full_name)
+            self.chat_data = self.service.get_chat_details(self.chat_id)
             self.refresh_participants_list()
-            print(f"✅ Статус админа для {emp_id} изменен на {new_status}")
 
     def kick_user(self, emp_id):
         """Исключение пользователя через сервис"""

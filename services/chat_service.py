@@ -12,6 +12,12 @@ class ChatService:
         self.chat_repo = ChatRepo(db_session)
         self.emp_repo = ExternalEmployeeRepo(db_session)
 
+    def is_user_admin(self, chat_id: int, user_id: int) -> bool:
+        """Проверяет, является ли пользователь администратором чата (без кэша)"""
+        self.session.expire_all()
+        participant = self.chat_repo.get_participant(chat_id, user_id)
+        return participant.is_admin if participant else False
+
     def get_user_chats(self, user_id: int) -> List[ChatReadDTO]:
         """Загружает список чатов для отображения в левой панели"""
         chats = self.chat_repo.get_chats_for_user(user_id)
@@ -243,6 +249,7 @@ class ChatService:
 
     def get_chat_details(self, chat_id: int):
         """Метод сервиса: получает данные из репозитория и обогащает именами"""
+        self.session.expire_all()
         chat = self.chat_repo.get_chat_with_participants(chat_id)
         if not chat:
             return None
