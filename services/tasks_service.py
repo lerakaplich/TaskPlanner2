@@ -30,6 +30,280 @@ class TasksService:
         self.current_user = current_user
         self.mode = mode  # my | others | all
 
+        # services/tasks_service.py - добавьте эти методы в класс TasksService
+
+        def get_all_tags(self, project_id: int = None) -> List[Dict]:
+            """
+            Возвращает список всех тегов.
+            Если project_id указан, возвращает теги только для этого проекта.
+            """
+            from sqlalchemy import select
+            from models.tasks import Tag
+
+            stmt = select(Tag)
+            if project_id:
+                stmt = stmt.where(Tag.project_id == project_id)
+            stmt = stmt.order_by(Tag.name)
+
+            tags = list(self.db_session.scalars(stmt))
+            return [{"id": tag.id, "name": tag.name} for tag in tags]
+
+        def get_project_tags(self, project_id: int) -> List[Dict]:
+            """Возвращает теги для конкретного проекта"""
+            return self.get_all_tags(project_id)
+
+        def create_tag(self, project_id: int, tag_name: str) -> Optional[Dict]:
+            """Создает новый тег"""
+            from models.tasks import Tag
+
+            # Проверяем, существует ли уже такой тег в проекте
+            existing = self.db_session.scalar(
+                select(Tag).where(
+                    Tag.project_id == project_id,
+                    Tag.name == tag_name
+                )
+            )
+
+            if existing:
+                return {"id": existing.id, "name": existing.name}
+
+            tag = Tag(project_id=project_id, name=tag_name)
+            self.db_session.add(tag)
+            self.db_session.flush()
+
+            return {"id": tag.id, "name": tag.name}
+
+        def add_tags_to_task(self, task_id: int, tag_names: List[str]) -> List[str]:
+            """
+            Добавляет теги к задаче.
+            Возвращает список добавленных тегов.
+            """
+            from models.tasks import TaskTag, Tag
+            from sqlalchemy import select
+
+            # Получаем задачу
+            task = self.repo.get_by_id(task_id)
+            if not task:
+                return []
+
+            added_tags = []
+
+            for tag_name in tag_names:
+                # Ищем или создаем тег
+                tag = self.db_session.scalar(
+                    select(Tag).where(
+                        Tag.project_id == task.project_id,
+                        Tag.name == tag_name
+                    )
+                )
+
+                if not tag:
+                    tag = Tag(project_id=task.project_id, name=tag_name)
+                    self.db_session.add(tag)
+                    self.db_session.flush()
+
+                # Добавляем связь, если её нет
+                existing = self.db_session.scalar(
+                    select(TaskTag).where(
+                        TaskTag.task_id == task_id,
+                        TaskTag.tag_id == tag.id
+                    )
+                )
+
+                if not existing:
+                    task_tag = TaskTag(task_id=task_id, tag_id=tag.id)
+                    self.db_session.add(task_tag)
+                    added_tags.append(tag_name)
+
+            return added_tags
+
+        def update_task_tags(self, task_id: int, tag_names: List[str]) -> List[str]:
+            """
+            Обновляет теги задачи: удаляет старые, добавляет новые.
+            Возвращает список текущих тегов задачи.
+            """
+            from models.tasks import TaskTag, Tag
+            from sqlalchemy import select, delete
+
+            # Получаем задачу
+            task = self.repo.get_by_id(task_id)
+            if not task:
+                return []
+
+            # Удаляем все существующие связи
+            stmt = delete(TaskTag).where(TaskTag.task_id == task_id)
+            self.db_session.execute(stmt)
+
+            # Добавляем новые теги
+            for tag_name in tag_names:
+                # Ищем или создаем тег
+                tag = self.db_session.scalar(
+                    select(Tag).where(
+                        Tag.project_id == task.project_id,
+                        Tag.name == tag_name
+                    )
+                )
+
+                if not tag:
+                    tag = Tag(project_id=task.project_id, name=tag_name)
+                    self.db_session.add(tag)
+                    self.db_session.flush()
+
+                # Добавляем связь
+                task_tag = TaskTag(task_id=task_id, tag_id=tag.id)
+                self.db_session.add(task_tag)
+
+            return tag_names
+
+        def get_task_tags(self, task_id: int) -> List[str]:
+            """Возвращает список названий тегов для задачи"""
+            from sqlalchemy import select
+            from models.tasks import TaskTag, Tag
+
+            stmt = (
+                select(Tag.name)
+                .join(TaskTag, Tag.id == TaskTag.tag_id)
+                .where(TaskTag.task_id == task_id)
+            )
+
+            return list(self.db_session.scalars(stmt))
+
+    def get_all_tags(self, project_id: int = None) -> List[Dict]:
+        """
+        Возвращает список всех тегов.
+        Если project_id указан, возвращает теги только для этого проекта.
+        """
+        from sqlalchemy import select
+        from models.tasks import Tag
+
+        stmt = select(Tag)
+        if project_id:
+            stmt = stmt.where(Tag.project_id == project_id)
+        stmt = stmt.order_by(Tag.name)
+
+        tags = list(self.db_session.scalars(stmt))
+        return [{"id": tag.id, "name": tag.name} for tag in tags]
+
+    def get_project_tags(self, project_id: int) -> List[Dict]:
+        """Возвращает теги для конкретного проекта"""
+        return self.get_all_tags(project_id)
+
+    def create_tag(self, project_id: int, tag_name: str) -> Optional[Dict]:
+        """Создает новый тег"""
+        from models.tasks import Tag
+
+        # Проверяем, существует ли уже такой тег в проекте
+        existing = self.db_session.scalar(
+            select(Tag).where(
+                Tag.project_id == project_id,
+                Tag.name == tag_name
+            )
+        )
+
+        if existing:
+            return {"id": existing.id, "name": existing.name}
+
+        tag = Tag(project_id=project_id, name=tag_name)
+        self.db_session.add(tag)
+        self.db_session.flush()
+
+        return {"id": tag.id, "name": tag.name}
+
+    def add_tags_to_task(self, task_id: int, tag_names: List[str]) -> List[str]:
+        """
+        Добавляет теги к задаче.
+        Возвращает список добавленных тегов.
+        """
+        from models.tasks import TaskTag, Tag
+        from sqlalchemy import select
+
+        # Получаем задачу
+        task = self.repo.get_by_id(task_id)
+        if not task:
+            return []
+
+        added_tags = []
+
+        for tag_name in tag_names:
+            # Ищем или создаем тег
+            tag = self.db_session.scalar(
+                select(Tag).where(
+                    Tag.project_id == task.project_id,
+                    Tag.name == tag_name
+                )
+            )
+
+            if not tag:
+                tag = Tag(project_id=task.project_id, name=tag_name)
+                self.db_session.add(tag)
+                self.db_session.flush()
+
+            # Добавляем связь, если её нет
+            existing = self.db_session.scalar(
+                select(TaskTag).where(
+                    TaskTag.task_id == task_id,
+                    TaskTag.tag_id == tag.id
+                )
+            )
+
+            if not existing:
+                task_tag = TaskTag(task_id=task_id, tag_id=tag.id)
+                self.db_session.add(task_tag)
+                added_tags.append(tag_name)
+
+        return added_tags
+
+    def update_task_tags(self, task_id: int, tag_names: List[str]) -> List[str]:
+        """
+        Обновляет теги задачи: удаляет старые, добавляет новые.
+        Возвращает список текущих тегов задачи.
+        """
+        from models.tasks import TaskTag, Tag
+        from sqlalchemy import select, delete
+
+        # Получаем задачу
+        task = self.repo.get_by_id(task_id)
+        if not task:
+            return []
+
+        # Удаляем все существующие связи
+        stmt = delete(TaskTag).where(TaskTag.task_id == task_id)
+        self.db_session.execute(stmt)
+
+        # Добавляем новые теги
+        for tag_name in tag_names:
+            # Ищем или создаем тег
+            tag = self.db_session.scalar(
+                select(Tag).where(
+                    Tag.project_id == task.project_id,
+                    Tag.name == tag_name
+                )
+            )
+
+            if not tag:
+                tag = Tag(project_id=task.project_id, name=tag_name)
+                self.db_session.add(tag)
+                self.db_session.flush()
+
+            # Добавляем связь
+            task_tag = TaskTag(task_id=task_id, tag_id=tag.id)
+            self.db_session.add(task_tag)
+
+        return tag_names
+
+    def get_task_tags(self, task_id: int) -> List[str]:
+        """Возвращает список названий тегов для задачи"""
+        from sqlalchemy import select
+        from models.tasks import TaskTag, Tag
+
+        stmt = (
+            select(Tag.name)
+            .join(TaskTag, Tag.id == TaskTag.tag_id)
+            .where(TaskTag.task_id == task_id)
+        )
+
+        return list(self.db_session.scalars(stmt))
+
     # =====================================================
     # Загрузка задач из всех проектов
     # =====================================================
@@ -234,6 +508,12 @@ class TasksService:
 
         try:
             new_task = self.repo.create(**task_data)
+
+            # Добавляем теги, если они есть
+            tags = data.get("tags", [])
+            if tags:
+                self.update_task_tags(new_task.id, tags)
+
             self.db_session.commit()
             return self._task_to_dict(new_task)
         except Exception as e:
@@ -271,6 +551,10 @@ class TasksService:
             new_column = self._get_column_by_name(updated_data["status"])
             if new_column and task.column_id != new_column.id:
                 task.column_id = new_column.id
+
+        # Обновляем теги, если они есть
+        if "tags" in updated_data:
+            self.update_task_tags(task_id, updated_data["tags"])
 
         task.updated_at = datetime.now()
         self.db_session.commit()
@@ -555,7 +839,7 @@ class TasksService:
         """Обрабатывает данные формы для создания/обновления задачи."""
         priority_map = self.get_reverse_priority_map()
 
-        return {
+        result = {
             "title": form_data["title"],
             "description": form_data.get("description", ""),
             "project_id": form_data["project_id"],
@@ -564,7 +848,10 @@ class TasksService:
             "status": form_data["status"],
             "deadline": form_data.get("due_date"),
             "created_by": current_user.get("id"),
+            "tags": form_data.get("tags", [])  # Добавляем теги
         }
+
+        return result
 
     def prepare_dialog_data(self, mode: str, task_data: Optional[Dict] = None) -> Dict:
         """Подготавливает данные для диалога."""
@@ -580,7 +867,8 @@ class TasksService:
                 {"text": "Средний", "value": "medium"},
                 {"text": "Высокий", "value": "high"},
                 {"text": "Критический", "value": "critical"}
-            ]
+            ],
+            "tags": self.get_all_tags()  # Добавляем теги
         }
 
         if mode == "edit" and task_data:

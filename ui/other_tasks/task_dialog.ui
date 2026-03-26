@@ -142,18 +142,18 @@
     </widget>
    </item>
    <item>
-    <layout class="QVBoxLayout" name="assigneeLayout">
-     <property name="spacing">
-      <number>5</number>
+    <widget class="QComboBox" name="comboBoxTag">
+     <property name="placeholderText">
+      <string>Выберите теги</string>
      </property>
-     <item>
-      <widget class="QComboBox" name="comboBoxAssignee">
-       <property name="placeholderText">
-        <string>Выберите исполнителя</string>
-       </property>
-      </widget>
-     </item>
-    </layout>
+    </widget>
+   </item>
+   <item>
+    <widget class="QComboBox" name="comboBoxAssignee">
+     <property name="placeholderText">
+      <string>Выберите исполнителя</string>
+     </property>
+    </widget>
    </item>
    <item>
     <layout class="QHBoxLayout" name="optionsLayout">
@@ -283,7 +283,7 @@
      <item>
       <widget class="QLabel" name="createdByLabel">
        <property name="styleSheet">
-        <string notr="true">color: #2c3e50; font-size: 13px; font-style: italic; padding: 5px;</string>
+        <string notr="true">color: #2c3e50; font-size: 13px; font-style: italic;</string>
        </property>
        <property name="text">
         <string>Создатель: Иванов И.И.</string>
@@ -293,7 +293,7 @@
      <item>
       <widget class="QLabel" name="createdAtLabel">
        <property name="styleSheet">
-        <string notr="true">color: #2c3e50; font-size: 13px; font-style: italic; padding: 5px;</string>
+        <string notr="true">color: #2c3e50; font-size: 13px; font-style: italic; </string>
        </property>
        <property name="text">
         <string>Создано: 20.01.2026</string>
@@ -303,7 +303,7 @@
      <item>
       <widget class="QLabel" name="updatedAtLabel">
        <property name="styleSheet">
-        <string notr="true">color: #2c3e50; font-size: 13px; font-style: italic; padding: 5px;</string>
+        <string notr="true">color: #2c3e50; font-size: 13px; font-style: italic; </string>
        </property>
        <property name="text">
         <string>Изменено: 25.01.2026</string>

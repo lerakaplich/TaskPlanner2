@@ -12,7 +12,7 @@ from utils.socket_manager import SocketClient, get_socket_client
 from windows.projects.main_window import MainWindow
 
 SERVER_CONFIG = {
-    "host": "192.168.43.32",  # Замените на IP вашего сервера
+    "host": "10.123.104.152",  # Замените на IP вашего сервера
     "port": 8081,
     "protocol": "http"  # или https если настроен SSL
 }
