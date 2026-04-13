@@ -1,5 +1,3 @@
-import datetime
-import os
 import os
 import sys
 
@@ -9,9 +7,12 @@ from PyQt6.QtWidgets import QMessageBox
 
 from database import get_tasks_session
 from services.analytics_service import AnalyticsService
+from services.chat_service import ChatService
+from services.overtime_service import OvertimeService
 from services.projects_service import ProjectsService
 from windows.analytics.analytics_page import AnalyticsPage
 from windows.archive.archive_page import ArchivePage
+from windows.chat.chat_page import ChatPage
 from windows.gantt.gantt_chart import GanttChartWidget
 from windows.my_tasks.my_tasks_page import MyTasksPage
 from windows.other_tasks.others_tasks_page import OthersTasksPage
@@ -19,14 +20,10 @@ from windows.overtime.overtime_page import OvertimePage
 from windows.profile.profile_page import ProfilePage
 from windows.projects.project_card import ProjectCard
 from windows.projects.project_edit_dialog import ProjectEditDialog
-from services.overtime_service import OvertimeService
-from services.chat_service import ChatService
 from windows.settings.settings_page import SettingsPage
 
 
 class MainWindow(QMainWindow):
-
-    # windows/projects/main_window.py - обновленный __init__
 
     def __init__(self, session, user_id, socket_client=None):  # Добавлен socket_client с значением по умолчанию
         super().__init__()
@@ -45,6 +42,7 @@ class MainWindow(QMainWindow):
         self.project_service = ProjectsService(session)
         self.analytics_service = AnalyticsService(session)
         self.overtime_service = OvertimeService(session)
+        self.chat_service = ChatService(self.session)
 
         # Устанавливаем текущего пользователя в сервисах
         self.project_service.set_current_user_id(user_id)
@@ -77,34 +75,6 @@ class MainWindow(QMainWindow):
 
         self.showMaximized()
 
-    def setup_socket_handlers(self):
-        """Настройка обработчиков сокет-событий"""
-        if not self.socket_client:
-            print("⚠️ Socket client not available")
-            return
-
-        # Подключаем сигналы сокета к соответствующим методам
-        self.socket_client.connected.connect(self.on_socket_connected)
-        self.socket_client.disconnected.connect(self.on_socket_disconnected)
-        self.socket_client.auth_success.connect(self.on_auth_success)
-        self.socket_client.new_message.connect(self.on_new_message)
-        self.socket_client.chat_created.connect(self.on_chat_created)
-        self.socket_client.chat_deleted.connect(self.on_chat_deleted)
-
-        print("✅ Socket handlers configured")
-
-    def on_socket_connected(self):
-        """Обработчик подключения к серверу"""
-        print("✅ Socket connected in MainWindow")
-        # Если пользователь уже авторизован, отправляем повторную аутентификацию
-        if hasattr(self, 'current_user_id') and self.current_user_id:
-            self.socket_client.authenticate(self.current_user_id)
-
-    def on_socket_disconnected(self):
-        """Обработчик отключения от сервера"""
-        print("⚠️ Socket disconnected in MainWindow")
-        # Можно показать уведомление пользователю
-
     def on_auth_success(self, data):
         """Обработчик успешной аутентификации"""
         print(f"✅ Socket auth success for user {data.get('user_id')}")
@@ -121,29 +91,6 @@ class MainWindow(QMainWindow):
         # если текущая страница не является чатом с этим ID
         self.show_message_notification(data)
 
-    def on_chat_created(self, data):
-        """Обработчик создания нового чата"""
-        print(f"📢 New chat created: {data.get('id')}")
-        # Обновляем список чатов, если страница чата открыта
-
-    def on_chat_deleted(self, data):
-        """Обработчик удаления чата"""
-        print(f"🗑️ Chat deleted: {data.get('chat_id')}")
-        # Обновляем список чатов, если страница чата открыта
-
-    def join_user_chat_rooms(self):
-        """Присоединение к комнатам чатов пользователя"""
-        try:
-            from services.chat_service import ChatService
-            chat_service = ChatService(self.session)
-            user_chats = chat_service.get_user_chats(self.current_user_id)
-
-            for chat in user_chats:
-                self.socket_client.join_chat_room(chat.id)
-                print(f"👥 Joined chat room: {chat.id}")
-        except Exception as e:
-            print(f"❌ Error joining chat rooms: {e}")
-
     def show_message_notification(self, message_data):
         """Показать уведомление о новом сообщении"""
         # Здесь можно реализовать показ всплывающего уведомления
@@ -154,6 +101,70 @@ class MainWindow(QMainWindow):
 
         print(f"🔔 Notification: {sender_name}: {content}")
         # TODO: Добавить визуальное уведомление
+
+    def on_chat_created(self, data):
+        """Обработчик создания нового чата"""
+        print(f"📢 New chat created: {data.get('id')}")
+        # Обновляем список чатов, если страница чата открыта
+
+    def on_chat_deleted(self, data):
+        """Обработчик удаления чата"""
+        print(f"🗑️ Chat deleted: {data.get('chat_id')}")
+        # Обновляем список чатов, если страница чата открыта
+
+    def on_socket_connected(self):
+        """Обработчик подключения к серверу"""
+        print("✅ Socket connected in MainWindow")
+        # Если пользователь уже авторизован, отправляем повторную аутентификацию
+        if hasattr(self, 'current_user_id') and self.current_user_id:
+            self.socket_client.authenticate(self.current_user_id)
+
+    def on_socket_disconnected(self):
+        """Обработчик отключения от сервера"""
+        print("⚠️ Socket disconnected in MainWindow")
+        # Можно показать уведомление пользователю
+
+    def setup_socket_handlers(self):
+        """Настройка обработчиков сокет-событий"""
+        if not self.socket_client:
+            print("⚠️ Socket client not available")
+            return
+
+        # Подключаем сигналы сокета к соответствующим методам
+        self.socket_client.connected.connect(self.on_socket_connected)
+        self.socket_client.disconnected.connect(self.on_socket_disconnected)
+        self.socket_client.auth_success.connect(self.on_auth_success)
+        self.socket_client.new_message.connect(self.on_new_message)
+        self.socket_client.chat_created.connect(self.on_chat_created)
+        self.socket_client.chat_deleted.connect(self.on_chat_deleted)
+
+        print("✅ Socket handlers configured")
+
+    def update_profile_button(self):
+        """Обновляет текст на кнопке профиля с Фамилией И.О."""
+        if hasattr(self, 'btnProfile'):
+            last_name = self.current_user.get('last_name', '')
+            first_name = self.current_user.get('first_name', '')
+            middle_name = self.current_user.get('middle_name', '')
+
+            # Формируем Фамилию и инициалы
+            if last_name and first_name:
+                # Берем первую букву имени и отчества
+                first_initial = first_name[0] + '.' if first_name else ''
+                middle_initial = middle_name[0] + '.' if middle_name else ''
+
+                # Формат: "Фамилия И.О."
+                display_name = f"{last_name} {first_initial}{middle_initial}"
+            else:
+                # Если данных нет, используем логин или ID
+                display_name = f"User {self.current_user.get('id', '')}"
+
+            self.btnProfile.setText(display_name)
+
+            # Добавляем тултип с полным именем
+            full_name = f"{last_name} {first_name} {middle_name}".strip()
+            if full_name:
+                self.btnProfile.setToolTip(full_name)
 
     def get_user_by_id(self, session, user_id):
         """Получает данные пользователя по ID из БД"""
@@ -186,28 +197,6 @@ class MainWindow(QMainWindow):
             'middle_name': '',
             'rights': 'user'
         }
-
-    def update_profile_button(self):
-        """Обновляет текст на кнопке профиля с Фамилией И.О."""
-        if hasattr(self, 'btnProfile'):
-            last_name = self.current_user.get('last_name', '')
-            first_name = self.current_user.get('first_name', '')
-            middle_name = self.current_user.get('middle_name', '')
-
-            # Формируем Фамилию и инициалы
-            if last_name and first_name:
-                first_initial = first_name[0] + '.' if first_name else ''
-                middle_initial = middle_name[0] + '.' if middle_name else ''
-                display_name = f"{last_name} {first_initial}{middle_initial}"
-            else:
-                display_name = f"User {self.current_user.get('id', '')}"
-
-            self.btnProfile.setText(display_name)
-
-            # Добавляем тултип с полным именем
-            full_name = f"{last_name} {first_name} {middle_name}".strip()
-            if full_name:
-                self.btnProfile.setToolTip(full_name)
 
     def init_archive_page(self):
         """Инициализация страницы архива"""
@@ -250,6 +239,17 @@ class MainWindow(QMainWindow):
         self.analytics_page_instance = AnalyticsPage(service=self.analytics_service)
         self._replace_in_stack("analyticsPage", self.analytics_page_instance)
 
+        # Инициализация Чата
+
+        self.chat_page_instance = ChatPage(
+            session=self.session,
+            service=self.chat_service,
+            projects_service=self.project_service,
+            current_user_id=self.current_user_id,
+            sio=self.socket_client  # ✅ ПРАВИЛЬНО
+        )
+        self._replace_in_stack("chatPage", self.chat_page_instance)
+
         # Переработки
         self.overtime_page_instance = OvertimePage(service=self.overtime_service)
         self._replace_in_stack("overtimePage", self.overtime_page_instance)
@@ -270,171 +270,57 @@ class MainWindow(QMainWindow):
     def refresh_projects_view(self):
         """
         Финальная версия: Обновление списка проектов из БД и перерисовка UI.
+        Связывает ProjectsService (данные) с MainWindow (интерфейс).
         """
-        print("\n🔄 Начало refresh_projects_view")
-        print(
-            f"📊 Текущие фильтры: search='{self.current_search_query}', status='{self.current_status_filter}', owner_filter={self.current_owner_filter}")
-
         # 1. Очистка старых карточек и освобождение памяти
+        # Используем deleteLater(), чтобы Qt безопасно удалил виджеты из памяти
         if hasattr(self, 'project_cards') and self.project_cards:
-            print(f"📊 Очищаем {len(self.project_cards)} старых карточек")
-            cards_to_remove = self.project_cards.copy()
-            self.project_cards = []
+            for card in self.project_cards:
+                self.projectsGrid.removeWidget(card)
+                card.deleteLater()
 
-            for card in cards_to_remove:
-                try:
-                    print(f"  - Удаляем карточку проекта {getattr(card, 'project_id', 'unknown')}")
-                    self.projectsGrid.removeWidget(card)
-                    card.deleteLater()
-                except Exception as e:
-                    print(f"❌ Ошибка при удалении карточки: {e}")
-            print("✅ Очистка завершена")
+        # Инициализируем/обнуляем список активных карточек
+        self.project_cards = []
 
         # 2. Получение данных от сервиса
+        # Мы передаем текущие значения фильтров, которые обновились
+        # в методах search_projects и filter_projects
         try:
-            print("📊 Запрашиваем проекты из сервиса...")
             projects_dtos = self.project_service.get_projects_for_cards(
                 search_query=self.current_search_query,
                 status_filter=self.current_status_filter,
-                owner_filter=self.current_owner_filter
+                owner_filter=self.current_owner_filter  # 👈 ДОБАВЛЯЕМ
             )
-            print(f"📊 Получено {len(projects_dtos)} проектов из сервиса")
-
-            # Выводим первые несколько проектов для отладки
-            for i, dto in enumerate(projects_dtos[:3]):
-                print(f"  Проект {i + 1}: ID={dto.id}, name={dto.name}, is_archived={dto.is_archived}")
-
         except Exception as e:
-            print(f"❌ Критическая ошибка при загрузке проектов: {e}")
-            import traceback
-            traceback.print_exc()
+            print(f"Критическая ошибка при загрузке проектов: {e}")
             return
 
         # 3. Генерация виджетов (карточек) на основе DTO
-        print("📊 Создаем новые карточки...")
-        for i, dto in enumerate(projects_dtos):
-            try:
-                print(f"  - Создаем карточку {i + 1} для проекта {dto.id}")
-                card = ProjectCard(project_id=dto.id, project_data=dto)
+        for dto in projects_dtos:
+            card = ProjectCard(project_id=dto.id, project_data=dto)
 
-                # Соединяем сигналы карточки с методами-контроллерами главного окна
-                card.edit_clicked.connect(self.edit_project)
-                card.open_clicked.connect(self.open_project)
-                card.archive_clicked.connect(self.archive_project)
+            # Соединяем сигналы карточки с методами-контроллерами главного окна
+            # Это позволяет каждой карточке знать, что делать при нажатии кнопок
+            card.edit_clicked.connect(self.edit_project)  # Вызывает диалог редактирования
+            card.open_clicked.connect(self.open_project)  # Открывает Канбан-доску
 
-                self.project_cards.append(card)
-                print(f"    ✅ Карточка создана")
-            except Exception as e:
-                print(f"❌ Ошибка при создании карточки для проекта {dto.id}: {e}")
-                import traceback
-                traceback.print_exc()
+            # Сохраняем ссылку на карточку для управления сеткой
+            self.project_cards.append(card)
 
-        print(f"📊 Создано {len(self.project_cards)} карточек")
+        # 4. Обработка пустого состояния (Optional)
+        # Если проектов нет, можно показать заглушку (Label "Ничего не найдено")
+        if not self.project_cards:
+            # Здесь могла бы быть логика отображения сообщения о пустом списке
+            pass
 
-        # 4. Перерисовка сетки
-        print("📊 Перерисовываем сетку...")
+        # 5. Перерисовка сетки (Responsive Layout)
+        # Сбрасываем current_columns, чтобы метод adjust_card_columns
+        # гарантированно пересчитал позиции всех новых карточек
         self.current_columns = -1
         self.adjust_card_columns()
 
-        print(f"✅ UI обновлен: отображено {len(self.project_cards)} проектов.")
-
-    def archive_project(self, project_id: int) -> bool:
-        """
-        Архивирует проект (устанавливает is_archived = True)
-        """
-        print(f"\n🔍 АРХИВАЦИЯ: Начало архивации проекта {project_id}")
-        try:
-            # Запоминаем имя проекта для уведомления
-            project_name = ""
-            for card in self.project_cards:
-                if card.project_id == project_id:
-                    project_name = card.projectTitle.text()
-                    break
-
-            # Архивируем проект
-            result = self.project_service.archive_project(project_id)
-
-            if result:
-                print(f"✅ АРХИВАЦИЯ: Проект {project_id} успешно архивирован")
-                print(f"📊 Текущий фильтр до архивации: {self.current_status_filter}")
-
-                # 👇 ИСПРАВЛЕНО: Устанавливаем фильтр "Активные" принудительно
-                if hasattr(self, 'filterCombo'):
-                    self.filterCombo.blockSignals(True)
-
-                    # Находим индекс пункта "Активные"
-                    index = self.filterCombo.findText("Активные")
-                    if index >= 0:
-                        print(f"📊 Принудительно переключаем фильтр на: Активные")
-                        self.filterCombo.setCurrentIndex(index)
-                        # ЯВНО устанавливаем current_status_filter
-                        self.current_status_filter = "Активные"
-                        self.current_owner_filter = False
-
-                    self.filterCombo.blockSignals(False)
-
-                # Обновляем отображение проектов
-                self.refresh_projects_view()
-
-                # 👇 ВАЖНО: Обновляем страницу архива, если она существует
-                if hasattr(self, 'archive_page_instance'):
-                    print(f"📦 Обновляем страницу архива после архивации")
-                    self.archive_page_instance.show_projects_list()
-
-                # Показываем уведомление
-                QMessageBox.information(
-                    self,
-                    "Архивация",
-                    f"Проект '{project_name}' перемещён в архив.\n\n"
-                    "Чтобы увидеть архивные проекты, нажмите кнопку 📦 Архив в левом меню."
-                )
-
-                return True
-            else:
-                print(f"❌ АРХИВАЦИЯ: Не удалось архивировать проект {project_id}")
-                QMessageBox.warning(self, "Ошибка", "Не удалось архивировать проект")
-                return False
-
-        except Exception as e:
-            print(f"❌ АРХИВАЦИЯ: Ошибка при архивации проекта: {e}")
-            import traceback
-            traceback.print_exc()
-            QMessageBox.critical(self, "Ошибка", f"Ошибка при архивации: {str(e)}")
-            return False
-
-    def switch_page(self, page_index):
-        """Переключение между основными страницами (0–7)"""
-        page_map = {
-            'main': 0,
-            'my_tasks': 1,
-            'other_tasks': 2,
-            'gantt': 3,
-            'analytics': 4,
-            'chat.py': 5,
-            'overtime': 6,
-            'settings': 7,
-            'archive': 8  # 👈 ДОБАВЛЯЕМ архив
-        }
-
-        if isinstance(page_index, str):
-            page_index = page_map.get(page_index, 0)
-
-        # 👇 Если переключаемся на страницу архива, обновляем её
-        if page_index == 8 and hasattr(self, 'archive_page_instance'):
-            print("📦 Обновляем страницу архива")
-            self.archive_page_instance.show_projects_list()
-
-        # 👇 Если переключаемся на страницу настроек, можно обновить данные
-        if page_index == 7 and hasattr(self, 'settings_page_instance'):
-            print("⚙️ Открываем страницу настроек")
-            # Здесь можно добавить обновление данных настроек, если нужно
-            # Например: self.settings_page_instance.refresh_all_tabs()
-
-        self.contentStack.setCurrentIndex(page_index)
-
-        # Обновляем состояние кнопок навигации
-        for i, btn in enumerate(self.nav_buttons):
-            btn.setChecked(i == page_index)
+        # Логируем для отладки
+        print(f"UI обновлен: отображено {len(self.project_cards)} проектов.")
 
     def connect_signals(self):
         """
@@ -491,29 +377,17 @@ class MainWindow(QMainWindow):
         if hasattr(self, 'btnProfile'):
             self.btnProfile.clicked.connect(self.show_profile)
 
-        # Для кнопки архива - показываем архив
-        if hasattr(self.leftPanel, 'btnArchive'):
-            self.leftPanel.btnArchive.clicked.connect(self.show_archive)
-
         # Общий сигнал для обновления данных при переключении на главную страницу
         # (Чтобы данные всегда были актуальны при возврате в список проектов)
         self.contentStack.currentChanged.connect(self.on_stack_page_changed)
-
-    def show_archive(self):
-        """Показать страницу архива"""
-        print("📦 Открываем страницу архива")
-
-        # Переключаем на страницу архива (индекс 8)
-        self.switch_page(8)
-
-        # Обновляем страницу архива
-        if hasattr(self, 'archive_page_instance'):
-            self.archive_page_instance.show_projects_list()
 
     def on_stack_page_changed(self, index):
         """Дополнительный обработчик смены страницы в StackedWidget"""
         if index == 0:  # Если вернулись на страницу списка проектов
             self.refresh_projects_view()
+        elif index == 5:  # Индекс страницы чата
+            if hasattr(self, 'chat_page_instance'):
+                self.chat_page_instance.load_chat_list()
 
     def _replace_in_stack(self, object_name, new_widget):
         """Вспомогательный метод для замены виджетов"""
@@ -534,7 +408,7 @@ class MainWindow(QMainWindow):
             'other_tasks': 2,
             'gantt': 3,
             'analytics': 4,
-            'chat.py': 5,
+            'chat': 5,
             'overtime': 6,
             'settings': 7
         }
@@ -694,7 +568,6 @@ class MainWindow(QMainWindow):
                 self.refresh_projects_view()
                 QMessageBox.information(self, "Успех", "Проект обновлен")
 
-
     def resizeEvent(self, event):
         """Обработка изменения размера окна для адаптивности"""
         super().resizeEvent(event)
@@ -853,26 +726,112 @@ class MainWindow(QMainWindow):
 
     def filter_projects(self, filter_text):
         """Вызывается при выборе фильтра (Все, Активные, Архив, Мои проекты)"""
-        print(f"📊 Выбран фильтр: {filter_text}")
-
-        # 👇 ВАЖНО: Сначала сбрасываем оба фильтра
-        self.current_owner_filter = False
-        self.current_status_filter = "Все"  # Значение по умолчанию
+        print(f"📊 Выбран фильтр: {filter_text}")  # 👈 ОТЛАДКА
 
         if filter_text == "Мои проекты":
             self.current_owner_filter = True
-            self.current_status_filter = "Все"  # Показываем все мои проекты (и активные, и архивные)
+            self.current_status_filter = "Все"  # Сбрасываем статусный фильтр
         else:
             self.current_owner_filter = False
-            self.current_status_filter = filter_text  # "Активные", "Архив" или "Все"
+            self.current_status_filter = filter_text
 
-        print(f"📊 Установлены фильтры: status='{self.current_status_filter}', owner_filter={self.current_owner_filter}")
         self.refresh_projects_view()
 
     def show_notifications(self):
         """Показать уведомления"""
         print("Показать уведомления...")
 
+    def join_user_chat_rooms(self):
+        """Присоединение к комнатам чатов пользователя"""
+        try:
+            from services.chat_service import ChatService
+            chat_service = ChatService(self.session)
+            user_chats = chat_service.get_user_chats(self.current_user_id)
+
+            print(f"📋 Найдено чатов для пользователя {self.current_user_id}: {len(user_chats)}")
+
+            for chat in user_chats:
+                self.socket_client.join_chat_room(chat.id)
+                print(f"👥 Joined chat room: {chat.id}")
+        except Exception as e:
+            print(f"❌ Error joining chat rooms: {e}")
+            import traceback
+            traceback.print_exc()
+
+    def archive_project(self, project_id: int) -> bool:
+        """
+        Архивирует проект (устанавливает is_archived = True)
+        """
+        print(f"\n🔍 АРХИВАЦИЯ: Начало архивации проекта {project_id}")
+        try:
+            # Запоминаем имя проекта для уведомления
+            project_name = ""
+            for card in self.project_cards:
+                if card.project_id == project_id:
+                    project_name = card.projectTitle.text()
+                    break
+
+            # Архивируем проект
+            result = self.project_service.archive_project(project_id)
+
+            if result:
+                print(f"✅ АРХИВАЦИЯ: Проект {project_id} успешно архивирован")
+                print(f"📊 Текущий фильтр до архивации: {self.current_status_filter}")
+
+                # 👇 ИСПРАВЛЕНО: Устанавливаем фильтр "Активные" принудительно
+                if hasattr(self, 'filterCombo'):
+                    self.filterCombo.blockSignals(True)
+
+                    # Находим индекс пункта "Активные"
+                    index = self.filterCombo.findText("Активные")
+                    if index >= 0:
+                        print(f"📊 Принудительно переключаем фильтр на: Активные")
+                        self.filterCombo.setCurrentIndex(index)
+                        # ЯВНО устанавливаем current_status_filter
+                        self.current_status_filter = "Активные"
+                        self.current_owner_filter = False
+
+                    self.filterCombo.blockSignals(False)
+
+                # Обновляем отображение проектов
+                self.refresh_projects_view()
+
+                # 👇 ВАЖНО: Обновляем страницу архива, если она существует
+                if hasattr(self, 'archive_page_instance'):
+                    print(f"📦 Обновляем страницу архива после архивации")
+                    self.archive_page_instance.show_projects_list()
+
+                # Показываем уведомление
+                QMessageBox.information(
+                    self,
+                    "Архивация",
+                    f"Проект '{project_name}' перемещён в архив.\n\n"
+                    "Чтобы увидеть архивные проекты, нажмите кнопку 📦 Архив в левом меню."
+                )
+
+                return True
+            else:
+                print(f"❌ АРХИВАЦИЯ: Не удалось архивировать проект {project_id}")
+                QMessageBox.warning(self, "Ошибка", "Не удалось архивировать проект")
+                return False
+
+        except Exception as e:
+            print(f"❌ АРХИВАЦИЯ: Ошибка при архивации проекта: {e}")
+            import traceback
+            traceback.print_exc()
+            QMessageBox.critical(self, "Ошибка", f"Ошибка при архивации: {str(e)}")
+            return False
+
+    def show_archive(self):
+        """Показать страницу архива"""
+        print("📦 Открываем страницу архива")
+
+        # Переключаем на страницу архива (индекс 8)
+        self.switch_page(8)
+
+        # Обновляем страницу архива
+        if hasattr(self, 'archive_page_instance'):
+            self.archive_page_instance.show_projects_list()
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)

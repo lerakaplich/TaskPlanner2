@@ -433,18 +433,5 @@ def get_socket_client():
         _socket_client_instance = SocketClient()
     return _socket_client_instance
 
-
-def connect_to_server(url="http://localhost:8081"):
-    """
-    Функция для обратной совместимости
-    Подключается к серверу используя глобальный экземпляр
-
-    Args:
-        url (str): URL сервера
-    """
-    client = get_socket_client()
-    client.connect_to_server(url)
-
-
 # Для обратной совместимости - создаем глобальный экземпляр sio
 sio = get_socket_client().sio if get_socket_client() else None

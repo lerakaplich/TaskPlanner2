@@ -50,9 +50,9 @@ class ChatPage(QWidget):
         self.new_message_signal.connect(self.append_message_to_ui)
 
         # Настраиваем обработчик сокета
-        self.sio.on('new_message', self.on_socket_message)
-        self.sio.on('message_edited', self.on_socket_message_edited)
-        self.sio.on('message_deleted', self.on_socket_message_deleted)
+        self.sio.sio.on('new_message', self.on_socket_message)
+        self.sio.sio.on('message_edited', self.on_socket_message_edited)
+        self.sio.sio.on('message_deleted', self.on_socket_message_deleted)
 
         # Таймер для проверки видимых сообщений (раз в 500мс, чтобы не грузить процессор)
         self.read_tracker_timer = QTimer()
@@ -61,7 +61,7 @@ class ChatPage(QWidget):
         # Список ID, которые мы уже отправили как "прочитанные", чтобы не слать дубли
         self.already_marked_read = set()
 
-        self.sio.on('messages_read_update', self.on_messages_read_update)
+        self.sio.sio.on('messages_read_update', self.on_messages_read_update)
 
         # Привязываем события
         self.ui.chat_list.itemClicked.connect(self.on_chat_selected)

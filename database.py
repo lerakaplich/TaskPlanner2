@@ -11,7 +11,7 @@ DB_TASKS = {
     "user": "postgres",
     "password": "admin",
     "database": "taskplanner",
-    "host": "localhost",
+    "host": "192.168.43.32",
     "port": 5432,
     "options": "-c search_path=foreign_data,public"  # поиск в foreign_data и public
 }

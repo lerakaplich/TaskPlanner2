@@ -1,25 +1,15 @@
 import sys
-
+from PyQt6.QtWidgets import QApplication, QDialog, QVBoxLayout, QHBoxLayout, QLabel, QComboBox, QPushButton, QMessageBox
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QFont
-from PyQt6.QtWidgets import QApplication, QDialog, QMessageBox, QVBoxLayout, QLabel, QComboBox, QHBoxLayout, QPushButton
 from sqlalchemy import select, text
 
-from database import get_tasks_session
+from windows.projects.main_window import MainWindow
+from database import test_connections, get_tasks_session  # 👈 ЗАМЕНЯЕМ get_employees_session на get_tasks_session
 from models.employees import ExternalEmployee
 from utils.error_handler import setup_exception_hook
-from utils.socket_manager import SocketClient, get_socket_client
-from windows.projects.main_window import MainWindow
+from utils.socket_manager import get_socket_client
 
-SERVER_CONFIG = {
-    "host": "10.123.104.152",  # Замените на IP вашего сервера
-    "port": 8081,
-    "protocol": "http"  # или https если настроен SSL
-}
-
-def get_server_url():
-    """Получить полный URL сервера"""
-    return f"{SERVER_CONFIG['protocol']}://{SERVER_CONFIG['host']}:{SERVER_CONFIG['port']}"
 
 class UserSelectDialog(QDialog):
     """Диалог выбора пользователя при входе"""
@@ -245,71 +235,20 @@ class UserSelectDialog(QDialog):
         return self.selected_user
 
 
-def check_server_connection():
-    """Проверка подключения к серверу"""
-    import requests
-    try:
-        response = requests.get(f"{get_server_url()}/health", timeout=5)
-        if response.status_code == 200:
-            data = response.json()
-            print(f"✅ Сервер доступен. Онлайн пользователей: {data.get('online_users', 0)}")
-            return True
-    except Exception as e:
-        print(f"❌ Сервер недоступен: {e}")
-        return False
-
-
 def main():
-    """Главная функция клиентского приложения"""
+    """Главная функция приложения"""
     setup_exception_hook()
 
-    print("=" * 50)
-    print("📱 TaskPlanner Client")
-    print(f"🌐 Сервер: {get_server_url()}")
-    print("=" * 50)
-
-    # Проверяем подключение к серверу
-    if not check_server_connection():
-        reply = QMessageBox.question(
-            None,
-            "Сервер недоступен",
-            "Не удалось подключиться к серверу. Хотите продолжить в автономном режиме?",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
-        )
-        if reply == QMessageBox.StandardButton.No:
-            sys.exit(1)
-        print("⚠️ Продолжение в автономном режиме")
-
-    # Проверка локальной БД
-    try:
-        from database import test_connections
-        test_connections()
-    except Exception as e:
-        print(f"❌ Ошибка подключения к БД: {e}")
-        QMessageBox.critical(None, "Ошибка БД", f"Не удалось подключиться к базе данных:\n{e}")
-        sys.exit(1)
+    # Проверка БД
+    test_connections()
 
     app = QApplication(sys.argv)
 
-    # Создаем сокет клиент
-    socket_client = get_socket_client()
-
-    # Подключаемся к серверу
-    def on_connected():
-        print("✅ Подключено к серверу")
-
-    def on_disconnected():
-        print("⚠️ Отключено от сервера")
-        # Можно показать уведомление пользователю
-
-    socket_client.connected.connect(on_connected)
-    socket_client.disconnected.connect(on_disconnected)
-
     # Запускаем подключение
-    socket_client.connect_to_server(get_server_url())
+    socket_client = get_socket_client()
+    socket_client.connect_to_server("http://localhost:8081")
 
-    # Показываем диалог входа
-    from main import UserSelectDialog  # ваш существующий класс
+    # Показываем диалог выбора пользователя
     user_dialog = UserSelectDialog()
 
     if user_dialog.exec() == QDialog.DialogCode.Accepted:
@@ -318,9 +257,8 @@ def main():
         if selected_user:
             user_id = selected_user["id"]
 
-            # Авторизуемся на сервере
-            socket_client.authenticate(user_id)
-
+            # Аутентификация пользователя на сервере
+            socket_client.authenticate(user_id)  # ← ИСПОЛЬЗУЕМ МЕТОД authenticate
             print(f"\n✅ Вход выполнен: {selected_user['last_name']} {selected_user['first_name']}")
             print(f"   Роль: {selected_user.get('rights', 'user')}")
             if selected_user.get('position'):
@@ -332,18 +270,18 @@ def main():
             window = MainWindow(
                 session=session,
                 user_id=selected_user["id"],
-                socket_client=socket_client  # Это теперь будет работать!
+                socket_client=socket_client  # ← ПРАВИЛЬНОЕ ИМЯ
             )
             window.show()
 
             sys.exit(app.exec())
         else:
-            QMessageBox.warning(None, "Ошибка", "Пользователь не выбран")
+            print("❌ Пользователь не выбран")
+            QMessageBox.warning(None, "Ошибка", "Пользователь не выбран. Приложение будет закрыто.")
             sys.exit(1)
     else:
         print("❌ Вход отменен")
         sys.exit(0)
-
 
 if __name__ == "__main__":
     main()

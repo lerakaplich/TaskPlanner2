@@ -67,6 +67,16 @@ class ChatRepo:
         )
         return self.session.scalar(stmt)
 
+    def get_participant(self, chat_id: int, employee_id: int) -> Optional[ChatParticipant]:
+        """Получить объект участника чата для проверки его свойств (например, is_admin)"""
+        stmt = select(ChatParticipant).where(
+            and_(
+                ChatParticipant.chat_id == chat_id,
+                ChatParticipant.employee_id == employee_id
+            )
+        )
+        return self.session.scalar(stmt)
+
     def add_participant(self, chat_id: int, employee_id: int, is_admin: bool = False):
         """Добавляет участника в чат"""
         try:

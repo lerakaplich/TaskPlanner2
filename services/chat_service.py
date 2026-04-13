@@ -12,6 +12,12 @@ class ChatService:
         self.chat_repo = ChatRepo(db_session)
         self.emp_repo = ExternalEmployeeRepo(db_session)
 
+    def is_user_admin(self, chat_id: int, user_id: int) -> bool:
+        """Проверяет, является ли пользователь администратором чата (без кэша)"""
+        self.session.expire_all()
+        participant = self.chat_repo.get_participant(chat_id, user_id)
+        return participant.is_admin if participant else False
+
     def get_user_chats(self, user_id: int) -> List[ChatReadDTO]:
         """Загружает список чатов для отображения в левой панели"""
         chats = self.chat_repo.get_chats_for_user(user_id)
@@ -243,13 +249,12 @@ class ChatService:
 
     def get_chat_details(self, chat_id: int):
         """Метод сервиса: получает данные из репозитория и обогащает именами"""
+        self.session.expire_all()
         chat = self.chat_repo.get_chat_with_participants(chat_id)
         if not chat:
             return None
 
-        # Наполняем объекты участников ФИО
         for p in chat.participants:
-            # Используем ваш emp_repo для получения данных сотрудника
             emp = self.emp_repo.get_by_id(p.employee_id)
             if emp:
                 p.full_name = f"{emp.last_name} {emp.first_name}"
@@ -305,6 +310,12 @@ class ChatService:
             self.session.commit()
         return success
 
+    def add_participant_to_chat(self, chat_id: int, employee_id: int) -> bool:
+        """Добавляет одного участника в чат через сервис"""
+        # Метод repo.add_participant у вас уже делает commit внутри,
+        # что не совсем стандартно для паттерна репозитория, но работать будет.
+        return self.chat_repo.add_participant(chat_id, employee_id, is_admin=False)
+
     def update_chat_participants(self, chat_id: int, added_ids: list[int], removed_ids: list[int]):
         try:
             if added_ids:
@@ -316,4 +327,37 @@ class ChatService:
         except Exception as e:
             self.session.rollback()
             print(f"Error updating participants: {e}")
+            return False
+
+    def update_chat_settings(self, chat_id: int, new_title: str) -> bool:
+        """Обновляет основную информацию о чате (название)"""
+        try:
+            self.chat_repo.update_chat_info(chat_id, new_title)
+            self.session.commit()
+            return True
+        except Exception as e:
+            self.session.rollback()
+            print(f"❌ Ошибка при обновлении настроек чата: {e}")
+            return False
+
+    def set_participant_admin(self, chat_id: int, emp_id: int, is_admin: bool) -> bool:
+        """Изменяет роль участника (админ/не админ)"""
+        try:
+            self.chat_repo.update_participant_role(chat_id, emp_id, is_admin)
+            self.session.commit()
+            return True
+        except Exception as e:
+            self.session.rollback()
+            print(f"❌ Ошибка при изменении роли: {e}")
+            return False
+
+    def kick_user(self, chat_id: int, emp_id: int) -> bool:
+        """Исключает пользователя из чата"""
+        try:
+            self.chat_repo.remove_participant(chat_id, emp_id)
+            self.session.commit()
+            return True
+        except Exception as e:
+            self.session.rollback()
+            print(f"❌ Ошибка при исключении пользователя: {e}")
             return False
