@@ -1,7 +1,7 @@
 # models/employees.py
 
 from datetime import datetime, date, time
-from typing import Optional
+from typing import Optional, List
 
 from sqlalchemy import (
     String,
@@ -129,3 +129,53 @@ class EmployeeNote(Base):
 
     # relationship
     employee: Mapped["LocalEmployee"] = relationship()
+
+class DepartmentFDW(Base):
+    __tablename__ = "departments"
+    __table_args__ = {"schema": "foreign_data"}
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    number: Mapped[int]
+    name: Mapped[str]
+    boss: Mapped[Optional[str]]
+    phone_number: Mapped[Optional[str]]
+    division_id: Mapped[Optional[int]]
+    organization_id: Mapped[Optional[int]]
+
+
+class DivisionFDW(Base):
+    __tablename__ = "divisions"
+    __table_args__ = {"schema": "foreign_data"}
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    number: Mapped[int]
+    name: Mapped[str]
+    boss: Mapped[Optional[str]]
+    phone_number: Mapped[Optional[str]]
+    workshop_code: Mapped[Optional[str]]
+    organization_id: Mapped[Optional[int]]
+
+class Department(Base):
+    __tablename__ = "departments"
+    __table_args__ = {"schema": "public"}
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    number: Mapped[int]
+    name: Mapped[str]
+    boss: Mapped[Optional[str]]
+    phone_number: Mapped[Optional[str]]
+    division_id: Mapped[int]
+    organization_id: Mapped[int]
+
+
+class Division(Base):
+    __tablename__ = "divisions"
+    __table_args__ = {"schema": "public"}
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    number: Mapped[int]
+    name: Mapped[str]
+    boss: Mapped[Optional[str]]
+    phone_number: Mapped[Optional[str]]
+    workshop_code: Mapped[Optional[str]]
+    organization_id: Mapped[int]

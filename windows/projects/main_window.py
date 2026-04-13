@@ -260,7 +260,7 @@ class MainWindow(QMainWindow):
         self.archive_page_instance = ArchivePage(service=archive_service)
         self._replace_in_stack("archivePage", self.archive_page_instance)
 
-        self.settings_page_instance = SettingsPage()
+        self.settings_page_instance = SettingsPage(session=self.session)  # ← ПЕРЕДАЁМ SESSION
         self._replace_in_stack("settingsPage", self.settings_page_instance)
 
         # Профиль

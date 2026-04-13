@@ -10,6 +10,12 @@
     <height>280</height>
    </rect>
   </property>
+  <property name="maximumSize">
+   <size>
+    <width>16777215</width>
+    <height>280</height>
+   </size>
+  </property>
   <property name="styleSheet">
    <string notr="true">QFrame#DepartmentCard {
     background-color: white;
@@ -22,6 +28,7 @@ QFrame#DepartmentCard:hover {
     border: 2px solid #ccab6e;
 }
 QLabel {
+    background-color: white;
     color: #333;
     font-size: 14px;
 }
@@ -29,6 +36,7 @@ QLabel#nameLabel {
     font-size: 18px;
     font-weight: bold;
     color: #1B232A;
+    background-color: white;
 }
 QLabel#numberLabel {
     font-size: 14px;
@@ -42,9 +50,11 @@ QLabel#sectionLabel {
     font-size: 13px;
     color: #666;
     font-weight: bold;
+    background-color: white;
 }
 QLabel#valueLabel {
     color: #1B232A;
+    background-color: white;
 }
 QLabel#bossLabel {
     background-color: #F0F0F0;
@@ -192,6 +202,9 @@ QLabel#bossLabel {
      </item>
      <item>
       <widget class="QLabel" name="valueLabel">
+       <property name="styleSheet">
+        <string notr="true">background-color: white;</string>
+       </property>
        <property name="text">
         <string>+375 (17) 123-45-67</string>
        </property>
@@ -215,19 +228,6 @@ QLabel#bossLabel {
    <item>
     <layout class="QHBoxLayout" name="buttonsLayout">
      <item>
-      <spacer name="horizontalSpacer_4">
-       <property name="orientation">
-        <enum>Qt::Orientation::Horizontal</enum>
-       </property>
-       <property name="sizeHint" stdset="0">
-        <size>
-         <width>40</width>
-         <height>20</height>
-        </size>
-       </property>
-      </spacer>
-     </item>
-     <item>
       <widget class="QPushButton" name="editButton">
        <property name="maximumSize">
         <size>
@@ -244,13 +244,18 @@ QLabel#bossLabel {
     color: white;
     border: none;
     border-radius: 6px;
-    padding: 6px 12px;
+    padding: 0px 12px;   /* вертикальный padding убрали */
     font-size: 12px;
+    min-height: 28px;
+    max-height: 28px;
 }
 QPushButton:hover {
-    background-color: #D9D9D6;
-    color: black;
-}</string>
+    background-color: #09131B;
+}
+QPushButton:pressed {
+    background-color: #030B12;
+}
+</string>
        </property>
        <property name="text">
         <string>Редактировать</string>
@@ -274,11 +279,10 @@ QPushButton:hover {
     color: white;
     border: none;
     border-radius: 6px;
-    padding: 6px 12px;
+    padding: 0px 12px;   /* вертикальный padding убрали */
     font-size: 12px;
-}
-QPushButton:hover {
-    background-color: #6a1e29;
+    min-height: 28px;
+    max-height: 28px;
 }
 QPushButton:hover {
     background-color: #862633;
@@ -286,6 +290,7 @@ QPushButton:hover {
 QPushButton:pressed {
     background-color: #6a1e29;
 }
+
 </string>
        </property>
        <property name="text">

@@ -1,0 +1,444 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>TagDialog</class>
+ <widget class="QDialog" name="TagDialog">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>550</width>
+    <height>321</height>
+   </rect>
+  </property>
+  <property name="minimumSize">
+   <size>
+    <width>450</width>
+    <height>320</height>
+   </size>
+  </property>
+  <property name="maximumSize">
+   <size>
+    <width>550</width>
+    <height>321</height>
+   </size>
+  </property>
+  <property name="windowTitle">
+   <string>Добавление хэштега</string>
+  </property>
+  <property name="styleSheet">
+   <string notr="true">
+    QDialog {
+        background-color: #f8f9fa;
+        font-family: 'Segoe UI', Arial, sans-serif;
+    }
+
+    QLabel {
+        color: #2c3e50;
+        font-size: 13px;
+        font-weight: 500;
+    }
+
+    QLabel[required=&quot;true&quot;] {
+        color: #D22730;
+    }
+
+    QLineEdit {
+        background-color: white;
+        border: 2px solid #e9ecef;
+        border-radius: 8px;
+        padding: 8px 12px;
+        font-size: 14px;
+        color: #2c3e50;
+        min-height: 20px;
+    }
+
+    QLineEdit:focus {
+        border: 2px solid #D22730;
+        background-color: #fff5f5;
+    }
+
+    QLineEdit:hover {
+        border: 2px solid #ccab6e;
+        background-color: #fffaf0;
+    }
+
+    QGroupBox {
+        font-weight: bold;
+        border: 2px solid #e9ecef;
+        border-radius: 8px;
+        margin-top: 10px;
+        padding-top: 10px;
+    }
+
+    QGroupBox::title {
+        subcontrol-origin: margin;
+        left: 10px;
+        padding: 0 5px 0 5px;
+        color: #D22730;
+    }
+
+    QComboBox {
+        border: 2px solid #E0E0E0;
+        border-radius: 8px;
+        padding: 0px 16px;
+        font-size: 14px;
+        background-color: white;
+        min-height: 35px;
+        max-height: 35px;
+        text-align: left;
+		color: black;
+    }
+
+    QComboBox:hover {
+        border: 2px solid #ccab6e;
+    }
+
+    QComboBox::drop-down {
+        border: none;
+        width: 30px;
+    }
+
+    QComboBox::down-arrow {
+        image: none;
+        border-left: 6px solid transparent;
+        border-right: 6px solid transparent;
+        border-top: 6px solid #D22730;
+        width: 0;
+        height: 0;
+    }
+
+    QComboBox QAbstractItemView {
+        border-radius: 8px;
+        background-color: white;
+        selection-background-color: #D22730;
+        selection-color: white;
+        outline: none;
+        padding: 4px;
+    }
+
+    QPushButton {
+        background-color: #1B232A;
+        color: white;
+        border: none;
+        border-radius: 6px;
+        padding: 0px 12px;
+        font-size: 12px;
+        min-height: 28px;
+        max-height: 28px;
+    }
+
+    QPushButton:hover {
+        background-color: #09131B;
+    }
+
+    QPushButton:pressed {
+        background-color: #030B12;
+    }
+
+    QPushButton[primary=&quot;true&quot;] {
+        background-color: #D22730;
+        color: white;
+        border-radius: 10px;
+        font-weight: bold;
+        font-size: 16px;
+        border: none;
+        padding: 12px 30px;
+        min-width: 150px;
+    }
+
+    QPushButton[primary=&quot;true&quot;]:hover {
+        background-color: #862633;
+        border: 2px solid #ccab6e;
+    }
+
+    QPushButton[primary=&quot;true&quot;]:pressed {
+        background-color: #6a1e29;
+    }
+    QScrollBar:vertical {
+        background: #F5F5F5;
+        width: 8px;
+        border-radius: 4px;
+    }
+    QScrollBar::handle:vertical {
+        background: #C1C1C1;
+        border-radius: 4px;
+        min-height: 20px;
+    }
+    QScrollBar:horizontal {
+        border: none;
+        background: #F5F5F5;
+        height: 8px;
+        margin: 0px;
+        border-radius: 4px;
+    }
+    QScrollBar::handle:horizontal {
+        background: #c1c1c1;
+        border-radius: 4px;
+        min-width: 20px;
+    }
+    QScrollBar::add-line, QScrollBar::sub-line {
+        border: none;
+        background: none;
+    }
+   </string>
+  </property>
+  <layout class="QVBoxLayout" name="verticalLayoutMain">
+   <property name="spacing">
+    <number>20</number>
+   </property>
+   <property name="leftMargin">
+    <number>20</number>
+   </property>
+   <property name="topMargin">
+    <number>20</number>
+   </property>
+   <property name="rightMargin">
+    <number>20</number>
+   </property>
+   <property name="bottomMargin">
+    <number>20</number>
+   </property>
+   <item>
+    <widget class="QLabel" name="titleLabel">
+     <property name="styleSheet">
+      <string notr="true">font-size: 24px; font-weight: bold; color: #D22730; margin-bottom: 10px;</string>
+     </property>
+     <property name="text">
+      <string>Добавление нового хэштега</string>
+     </property>
+     <property name="alignment">
+      <set>Qt::AlignmentFlag::AlignCenter</set>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <widget class="QGroupBox" name="groupBoxTagInfo">
+     <property name="title">
+      <string>Информация о хэштеге</string>
+     </property>
+     <layout class="QVBoxLayout" name="verticalLayoutTagInfo">
+      <property name="spacing">
+       <number>15</number>
+      </property>
+      <property name="leftMargin">
+       <number>15</number>
+      </property>
+      <property name="topMargin">
+       <number>15</number>
+      </property>
+      <property name="rightMargin">
+       <number>15</number>
+      </property>
+      <property name="bottomMargin">
+       <number>15</number>
+      </property>
+      <item>
+       <layout class="QHBoxLayout" name="horizontalLayoutName">
+        <property name="spacing">
+         <number>10</number>
+        </property>
+        <item>
+         <widget class="QLabel" name="labelName">
+          <property name="minimumSize">
+           <size>
+            <width>120</width>
+            <height>0</height>
+           </size>
+          </property>
+          <property name="maximumSize">
+           <size>
+            <width>50</width>
+            <height>16777215</height>
+           </size>
+          </property>
+          <property name="text">
+           <string>Название хэштега *</string>
+          </property>
+          <property name="required" stdset="0">
+           <bool>true</bool>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QLineEdit" name="lineEditName">
+          <property name="minimumSize">
+           <size>
+            <width>250</width>
+            <height>40</height>
+           </size>
+          </property>
+          <property name="placeholderText">
+           <string>Введите название хэштега (без #)</string>
+          </property>
+         </widget>
+        </item>
+       </layout>
+      </item>
+      <item>
+       <layout class="QHBoxLayout" name="horizontalLayoutColor">
+        <property name="spacing">
+         <number>10</number>
+        </property>
+        <item>
+         <widget class="QLabel" name="labelColor">
+          <property name="minimumSize">
+           <size>
+            <width>120</width>
+            <height>0</height>
+           </size>
+          </property>
+          <property name="maximumSize">
+           <size>
+            <width>50</width>
+            <height>16777215</height>
+           </size>
+          </property>
+          <property name="text">
+           <string>Цвет хэштега *</string>
+          </property>
+          <property name="required" stdset="0">
+           <bool>true</bool>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <layout class="QHBoxLayout" name="colorSelectionLayout">
+          <property name="spacing">
+           <number>8</number>
+          </property>
+          <item>
+           <widget class="QFrame" name="colorIndicator">
+            <property name="minimumSize">
+             <size>
+              <width>32</width>
+              <height>32</height>
+             </size>
+            </property>
+            <property name="maximumSize">
+             <size>
+              <width>32</width>
+              <height>32</height>
+             </size>
+            </property>
+            <property name="cursor">
+             <cursorShape>PointingHandCursor</cursorShape>
+            </property>
+            <property name="toolTip">
+             <string>Нажмите для выбора цвета</string>
+            </property>
+            <property name="styleSheet">
+             <string notr="true">
+              border-radius: 16px;
+              background-color: #ccab6e;
+              border: 2px solid #E0E0E0;
+             </string>
+            </property>
+            <property name="frameShape">
+             <enum>QFrame::Shape::StyledPanel</enum>
+            </property>
+            <property name="frameShadow">
+             <enum>QFrame::Shadow::Raised</enum>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QComboBox" name="comboBoxColor">
+            <property name="minimumSize">
+             <size>
+              <width>200</width>
+              <height>39</height>
+             </size>
+            </property>
+            <property name="currentIndex">
+             <number>0</number>
+            </property>
+            <item>
+             <property name="text">
+              <string>Золотой (#ccab6e)</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>Красный (#D22730)</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>Синий (#3498db)</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>Зеленый (#2ecc71)</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>Фиолетовый (#9b59b6)</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>Оранжевый (#e67e22)</string>
+             </property>
+            </item>
+           </widget>
+          </item>
+         </layout>
+        </item>
+       </layout>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <item>
+    <widget class="QPushButton" name="btnSave">
+     <property name="minimumSize">
+      <size>
+       <width>210</width>
+       <height>52</height>
+      </size>
+     </property>
+     <property name="maximumSize">
+      <size>
+       <width>16777215</width>
+       <height>52</height>
+      </size>
+     </property>
+     <property name="cursor">
+      <cursorShape>PointingHandCursor</cursorShape>
+     </property>
+     <property name="styleSheet">
+      <string notr="true">
+         QPushButton {
+             background-color: #D22730;
+             color: white;
+             border-radius: 10px;
+             font-weight: bold;
+             font-size: 16px;
+             border: none;
+             padding: 12px 30px;
+             min-width: 150px;
+         }
+         QPushButton:hover {
+             background-color: #862633;
+             border: 2px solid #ccab6e;
+         }
+         QPushButton:pressed {
+             background-color: #6a1e29;
+         }
+        </string>
+     </property>
+     <property name="text">
+      <string>Сохранить</string>
+     </property>
+     <property name="primary" stdset="0">
+      <bool>true</bool>
+     </property>
+    </widget>
+   </item>
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>

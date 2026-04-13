@@ -1,24 +1,30 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <ui version="4.0">
- <class>TagCard</class>
- <widget class="QFrame" name="TagCard">
+ <class>ColumnCard</class>
+ <widget class="QFrame" name="ColumnCard">
   <property name="geometry">
    <rect>
     <x>0</x>
     <y>0</y>
     <width>800</width>
-    <height>102</height>
+    <height>110</height>
    </rect>
   </property>
+  <property name="maximumSize">
+   <size>
+    <width>16777215</width>
+    <height>110</height>
+   </size>
+  </property>
   <property name="styleSheet">
-   <string notr="true">QFrame#TagCard {
+   <string notr="true">QFrame#ColumnCard {
     background-color: white;
     border: 1px solid #E0E0E0;
     border-radius: 10px;
     margin: 5px 0px;
     padding: 15px;
 }
-QFrame#TagCard:hover {
+QFrame#ColumnCard:hover {
     border: 2px solid #ccab6e;
 }
 QLabel {
@@ -31,7 +37,7 @@ QLabel#nameLabel {
     font-size: 18px;
     font-weight: bold;
 }
-QLabel#countLabel {
+QLabel#positionLabel {
     background-color: white;
     font-size: 13px;
     color: #666;
@@ -73,7 +79,7 @@ border: 1px solid #E0E0E0;</string>
      <item>
       <widget class="QLabel" name="nameLabel">
        <property name="text">
-        <string>#проект</string>
+        <string>К выполнению</string>
        </property>
       </widget>
      </item>
@@ -91,9 +97,44 @@ border: 1px solid #E0E0E0;</string>
       </spacer>
      </item>
      <item>
-      <widget class="QLabel" name="countLabel">
+      <widget class="QLabel" name="positionLabel">
+       <property name="maximumSize">
+        <size>
+         <width>16777215</width>
+         <height>36</height>
+        </size>
+       </property>
        <property name="text">
-        <string>использований: 15</string>
+        <string>Позиция: 1</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <spacer name="horizontalSpacer_3">
+       <property name="orientation">
+        <enum>Qt::Orientation::Horizontal</enum>
+       </property>
+       <property name="sizeHint" stdset="0">
+        <size>
+         <width>40</width>
+         <height>20</height>
+        </size>
+       </property>
+      </spacer>
+     </item>
+     <item>
+      <widget class="QCheckBox" name="doneCheckBox">
+       <property name="maximumSize">
+        <size>
+         <width>16777215</width>
+         <height>36</height>
+        </size>
+       </property>
+       <property name="styleSheet">
+        <string notr="true">QCheckBox { font-size: 13px; background-color: white; color: black;}</string>
+       </property>
+       <property name="text">
+        <string>Колонка «Готово»</string>
        </property>
       </widget>
      </item>
@@ -125,17 +166,13 @@ border: 1px solid #E0E0E0;</string>
     color: white;
     border: none;
     border-radius: 6px;
-    padding: 0px 12px;   /* вертикальный padding убрали */
+    padding: 0px 12px;
     font-size: 12px;
     min-height: 28px;
     max-height: 28px;
 }
-QPushButton:hover {
-    background-color: #09131B;
-}
-QPushButton:pressed {
-    background-color: #030B12;
-}</string>
+QPushButton:hover { background-color: #09131B; }
+QPushButton:pressed { background-color: #030B12; }</string>
        </property>
        <property name="text">
         <string>Редактировать</string>
@@ -159,19 +196,13 @@ QPushButton:pressed {
     color: white;
     border: none;
     border-radius: 6px;
-    padding: 0px 12px;   /* вертикальный padding убрали */
+    padding: 0px 12px;
     font-size: 12px;
     min-height: 28px;
     max-height: 28px;
 }
-QPushButton:hover {
-    background-color: #862633;
-}
-QPushButton:pressed {
-    background-color: #6a1e29;
-}
-
-</string>
+QPushButton:hover { background-color: #862633; }
+QPushButton:pressed { background-color: #6a1e29; }</string>
        </property>
        <property name="text">
         <string>Удалить</string>

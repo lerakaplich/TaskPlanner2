@@ -38,11 +38,10 @@ class EmployeeCard(QFrame):
         first_name = self.employee_data.get('first_name', '')
         middle_name = self.employee_data.get('middle_name', '')
 
-        fio_parts = [last_name, first_name, middle_name]
-        fio = ' '.join(part for part in fio_parts if part)
+        fio = ' '.join(part for part in [last_name, first_name, middle_name] if part)
         self.nameLabel.setText(fio)
 
-        # Роль
+        # === РОЛЬ (главное исправление) ===
         rights = self.employee_data.get('rights', 'user')
         role_text = {
             'superadmin': 'Суперадминистратор',
@@ -52,21 +51,26 @@ class EmployeeCard(QFrame):
 
         self.roleLabel.setText(role_text)
 
-        # Цвет роли
         role_colors = {
             'superadmin': '#D22730',  # красный
             'admin': '#ccab6e',  # золотой
-            'user': '#1B232A'  # темно-серый
+            'user': '#1B232A'  # тёмно-серый
         }
+
         self.roleLabel.setStyleSheet(f"""
             QLabel#roleLabel {{
                 background-color: {role_colors.get(rights, '#1B232A')};
                 color: white;
-                padding: 3px 10px;
+                padding: 4px 14px;
                 border-radius: 12px;
                 font-weight: bold;
+                min-height: 17px;     /* фиксированная высота */
+                max-height: 17px;
             }}
         """)
+
+        # Жёстко фиксируем высоту плашки — теперь все роли будут одинакового размера
+        self.roleLabel.setFixedHeight(28)
 
         # Должность
         position = self.employee_data.get('position', '—')
@@ -77,11 +81,7 @@ class EmployeeCard(QFrame):
         dept_name = '—'
         if self.employee_data.get('department'):
             dept = self.employee_data['department']
-            if isinstance(dept, dict):
-                dept_name = dept.get('name', '—')
-            else:
-                dept_name = str(dept)
-
+            dept_name = dept.get('name', str(dept)) if isinstance(dept, dict) else str(dept)
         if hasattr(self, 'departmentValue'):
             self.departmentValue.setText(dept_name)
 
@@ -89,42 +89,22 @@ class EmployeeCard(QFrame):
         div_name = '—'
         if self.employee_data.get('division'):
             div = self.employee_data['division']
-            if isinstance(div, dict):
-                div_name = div.get('name', '—')
-            else:
-                div_name = str(div)
-
+            div_name = div.get('name', str(div)) if isinstance(div, dict) else str(div)
         if hasattr(self, 'divisionValue'):
             self.divisionValue.setText(div_name)
 
         # Мобильный телефон
         phone = self.employee_data.get('phone_number', '')
-        if phone and hasattr(self, 'mobilePhoneValue'):
-            self.mobilePhoneValue.setText(phone)
-            self.mobilePhoneValue.setVisible(True)
+        if hasattr(self, 'mobilePhoneValue'):
+            self.mobilePhoneValue.setText(phone if phone else '—')
+            self.mobilePhoneValue.setVisible(bool(phone))
             if hasattr(self, 'mobilePhoneLabel'):
-                self.mobilePhoneLabel.setVisible(True)
-        else:
-            if hasattr(self, 'mobilePhoneValue'):
-                self.mobilePhoneValue.setVisible(False)
-            if hasattr(self, 'mobilePhoneLabel'):
-                self.mobilePhoneLabel.setVisible(False)
-
-        # Рабочий телефон (пока нет в данных)
-        if hasattr(self, 'workPhoneValue'):
-            self.workPhoneValue.setVisible(False)
-        if hasattr(self, 'workPhoneLabel'):
-            self.workPhoneLabel.setVisible(False)
+                self.mobilePhoneLabel.setVisible(bool(phone))
 
         # Email
         email = self.employee_data.get('email', '')
-        if email and hasattr(self, 'emailValue'):
-            self.emailValue.setText(email)
-            self.emailValue.setVisible(True)
+        if hasattr(self, 'emailValue'):
+            self.emailValue.setText(email if email else '—')
+            self.emailValue.setVisible(bool(email))
             if hasattr(self, 'emailLabel'):
-                self.emailLabel.setVisible(True)
-        else:
-            if hasattr(self, 'emailValue'):
-                self.emailValue.setVisible(False)
-            if hasattr(self, 'emailLabel'):
-                self.emailLabel.setVisible(False)
+                self.emailLabel.setVisible(bool(email))

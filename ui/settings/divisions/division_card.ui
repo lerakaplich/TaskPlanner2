@@ -22,10 +22,12 @@ QFrame#DivisionCard:hover {
     border: 2px solid #ccab6e;
 }
 QLabel {
+    background-color: white;
     color: #333;
     font-size: 14px;
 }
 QLabel#nameLabel {
+    background-color: white;
     font-size: 18px;
     font-weight: bold;
     color: #1B232A;
@@ -39,11 +41,13 @@ QLabel#numberLabel {
     border-radius: 12px;
 }
 QLabel#codeSectionLabel, QLabel#bossSectionLabel, QLabel#phoneSectionLabel {
+    background-color: white;
     font-size: 13px;
     color: #666;
     font-weight: bold;
 }
 QLabel#codeValue, QLabel#bossValue, QLabel#phoneValue {
+    background-color: white;
     color: #1B232A;
 }
 QLabel#codeValue {
@@ -197,19 +201,6 @@ QLabel#codeValue {
    <item>
     <layout class="QHBoxLayout" name="buttonsLayout">
      <item>
-      <spacer name="horizontalSpacer_5">
-       <property name="orientation">
-        <enum>Qt::Orientation::Horizontal</enum>
-       </property>
-       <property name="sizeHint" stdset="0">
-        <size>
-         <width>40</width>
-         <height>20</height>
-        </size>
-       </property>
-      </spacer>
-     </item>
-     <item>
       <widget class="QPushButton" name="editButton">
        <property name="maximumSize">
         <size>
@@ -226,15 +217,16 @@ QLabel#codeValue {
     color: white;
     border: none;
     border-radius: 6px;
-    padding: 6px 12px;
+    padding: 0px 12px;   /* вертикальный padding убрали */
     font-size: 12px;
+    min-height: 28px;
+    max-height: 28px;
 }
 QPushButton:hover {
-    background-color: #D9D9D6;
-    color: black;
+    background-color: #09131B;
 }
 QPushButton:pressed {
-    background-color: #B8B8B5;
+    background-color: #030B12;
 }</string>
        </property>
        <property name="text">
@@ -259,15 +251,19 @@ QPushButton:pressed {
     color: white;
     border: none;
     border-radius: 6px;
-    padding: 6px 12px;
+    padding: 0px 12px;   /* вертикальный padding убрали */
     font-size: 12px;
+    min-height: 28px;
+    max-height: 28px;
 }
 QPushButton:hover {
     background-color: #862633;
 }
 QPushButton:pressed {
     background-color: #6a1e29;
-}</string>
+}
+
+</string>
        </property>
        <property name="text">
         <string>Удалить</string>
