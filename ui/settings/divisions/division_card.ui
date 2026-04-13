@@ -85,9 +85,6 @@ QLabel#codeValue {
      </item>
      <item>
       <spacer name="horizontalSpacer">
-       <property name="orientation">
-        <enum>Qt::Orientation::Horizontal</enum>
-       </property>
        <property name="sizeHint" stdset="0">
         <size>
          <width>40</width>
@@ -110,7 +107,7 @@ QLabel#codeValue {
      <item>
       <widget class="QLabel" name="codeSectionLabel">
        <property name="text">
-        <string>Код цеха:</string>
+        <string>Расшифровка:</string>
        </property>
       </widget>
      </item>
@@ -123,9 +120,6 @@ QLabel#codeValue {
      </item>
      <item>
       <spacer name="horizontalSpacer_2">
-       <property name="orientation">
-        <enum>Qt::Orientation::Horizontal</enum>
-       </property>
        <property name="sizeHint" stdset="0">
         <size>
          <width>40</width>
@@ -154,9 +148,6 @@ QLabel#codeValue {
      </item>
      <item>
       <spacer name="horizontalSpacer_3">
-       <property name="orientation">
-        <enum>Qt::Orientation::Horizontal</enum>
-       </property>
        <property name="sizeHint" stdset="0">
         <size>
          <width>40</width>
@@ -185,9 +176,6 @@ QLabel#codeValue {
      </item>
      <item>
       <spacer name="horizontalSpacer_4">
-       <property name="orientation">
-        <enum>Qt::Orientation::Horizontal</enum>
-       </property>
        <property name="sizeHint" stdset="0">
         <size>
          <width>40</width>

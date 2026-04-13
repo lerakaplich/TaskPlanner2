@@ -197,8 +197,8 @@ class EmployeeService:
             new_division = Division(
                 number=next_number,
                 name=data.get('name'),
-                phone_number=data.get('phone_number'),  # ← ИСПРАВЛЕНО: было 'phone', стало 'phone_number'
-                workshop_code=data.get('workshop_code', ''),
+                phone_number=data.get('phone_number'),
+                workshop_code=data.get('workshop_code', ''),  # ← расшифровка
                 boss=data.get('boss', ''),
                 organization_id=1
             )
@@ -212,9 +212,10 @@ class EmployeeService:
                 'id': new_division.id,
                 'number': new_division.number,
                 'name': new_division.name,
-                'phone_number': new_division.phone_number,  # ← ИСПРАВЛЕНО
-                'workshop_code': new_division.workshop_code,
+                'phone_number': new_division.phone_number,
+                'workshop_code': new_division.workshop_code,  # ← расшифровка
                 'boss': new_division.boss,
+                'description': data.get('description', '')  # ← добавляем description
             }
 
         except Exception as e:
@@ -234,7 +235,6 @@ class EmployeeService:
         try:
             from models.employees import Division
 
-            # Ищем подразделение
             division = db_session.get(Division, division_id)
             if not division:
                 print(f"❌ Подразделение {division_id} не найдено в public.divisions")
@@ -245,9 +245,9 @@ class EmployeeService:
                 division.name = data['name']
             if 'number' in data:
                 division.number = data['number']
-            if 'phone_number' in data:  # ← ИСПРАВЛЕНО: было 'phone', стало 'phone_number'
+            if 'phone_number' in data:
                 division.phone_number = data['phone_number']
-            if 'workshop_code' in data:
+            if 'workshop_code' in data:  # ← расшифровка
                 division.workshop_code = data['workshop_code']
             if 'boss' in data:
                 division.boss = data['boss']

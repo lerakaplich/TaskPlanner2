@@ -47,10 +47,10 @@ class DivisionCard(QFrame):
             else:
                 self.numberLabel.setVisible(False)
 
-        # Код цеха
+        # Расшифровка (workshop_code) - это текст из textEditDescription
         workshop_code = self.division_data.get('workshop_code', '')
         if hasattr(self, 'codeValue') and hasattr(self, 'codeSectionLabel'):
-            if workshop_code:
+            if workshop_code and workshop_code.strip():
                 self.codeValue.setText(workshop_code)
                 self.codeValue.setVisible(True)
                 self.codeSectionLabel.setVisible(True)

@@ -340,33 +340,15 @@ class DivisionDialog(QDialog):
         else:
             self.comboHeads.setEditText("▼ Выберите руководителей")
 
-    def load_division_data(self):
-        """Загрузка данных подразделения для редактирования"""
-        self.lineEditName.setText(self.division_data.get("name", ""))
-        self.lineEditNumber.setText(str(self.division_data.get("number", "")))
-        self.lineEditPhone.setText(self.division_data.get("phone", ""))
-        self.textEditDescription.setText(self.division_data.get("description", ""))
-
-        saved_ids = self.division_data.get("heads", [])
-        print(f"📋 Загружаем сохраненных руководителей: {saved_ids}")
-
-        selected_count = 0
-        for cb in self.head_checkboxes:
-            if cb.property("employee_id") in saved_ids:
-                cb.setChecked(True)
-                selected_count += 1
-        print(f"✅ Выбрано {selected_count} руководителей из сохраненных")
-
-        self.update_selected_heads_text()
-
     def save_division(self):
         """Сохранение подразделения"""
         name = self.lineEditName.text().strip()
         number = self.lineEditNumber.text().strip()
         phone = self.lineEditPhone.text().strip()
         description = self.textEditDescription.toPlainText().strip()
-        workshop_code = getattr(self, 'lineEditWorkshopCode', None)
-        workshop_code_value = workshop_code.text().strip() if workshop_code else ""
+
+        # ВАЖНО: workshop_code = description (расшифровка)
+        workshop_code_value = description  # ← Берем из textEditDescription
 
         # Валидация
         if not name:
@@ -389,15 +371,16 @@ class DivisionDialog(QDialog):
         selected_names = [cb.property("employee_name") for cb in self.head_checkboxes if cb.isChecked()]
 
         print(f"💾 Сохраняем подразделение: {name}")
+        print(f"   Расшифровка (workshop_code): '{workshop_code_value}'")
         print(f"   Выбранные руководители (ID): {selected_heads}")
         print(f"   Выбранные руководители (имена): {selected_names}")
 
         division_info = {
             "name": name,
             "number": int(number),
-            "phone_number": phone,  # ← ИСПРАВЛЕНО: было 'phone', стало 'phone_number'
-            "description": description,
-            "workshop_code": workshop_code_value,
+            "phone_number": phone,
+            "description": description,  # Сохраняем description как есть
+            "workshop_code": workshop_code_value,  # workshop_code = description
             "heads": selected_heads,
             "heads_names": selected_names,
             "boss": ", ".join(selected_names) if selected_names else ""
@@ -408,6 +391,34 @@ class DivisionDialog(QDialog):
 
         self.division_saved.emit(division_info)
         self.accept()
+
+    def load_division_data(self):
+        """Загрузка данных подразделения для редактирования"""
+        self.lineEditName.setText(self.division_data.get("name", ""))
+        self.lineEditNumber.setText(str(self.division_data.get("number", "")))
+        self.lineEditPhone.setText(self.division_data.get("phone_number", ""))
+
+        # Загружаем описание (которое является расшифровкой)
+        description = self.division_data.get("description", "")
+        workshop_code = self.division_data.get("workshop_code", "")
+
+        # Если есть workshop_code, но нет description, используем workshop_code
+        if not description and workshop_code:
+            description = workshop_code
+
+        self.textEditDescription.setText(description)
+
+        saved_ids = self.division_data.get("heads", [])
+        print(f"📋 Загружаем сохраненных руководителей: {saved_ids}")
+
+        selected_count = 0
+        for cb in self.head_checkboxes:
+            if cb.property("employee_id") in saved_ids:
+                cb.setChecked(True)
+                selected_count += 1
+        print(f"✅ Выбрано {selected_count} руководителей из сохраненных")
+
+        self.update_selected_heads_text()
 
     def setup_keyboard_navigation(self):
         """Навигация по полям с помощью стрелок ↑ ↓"""
