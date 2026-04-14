@@ -19,6 +19,8 @@ from windows.profile.edit_profile import EditProfileDialog
 from windows.profile.projects_page import ProjectsPage
 
 
+# windows/profile/profile_page.py - исправленный фрагмент
+
 class ProfilePage(QWidget):
     """Страница профиля сотрудника"""
 
@@ -35,12 +37,12 @@ class ProfilePage(QWidget):
         if not self.employee_id and current_user:
             self.employee_id = current_user.get('id')
 
-        # Используем переданный сервис или создаем новый
-        if service:
-            self.profile_service = ProfileService(session=service.session)
-        else:
-            self.profile_service = ProfileService()
+        # Создаем сервис профиля (с правильной сессией)
+        from database import get_tasks_session
+        session = get_tasks_session()
+        self.profile_service = ProfileService(session=session)
 
+        # Если передан current_user, устанавливаем его в сервис
         if current_user:
             self.profile_service.set_current_user(current_user)
 
@@ -63,17 +65,17 @@ class ProfilePage(QWidget):
         else:
             print("⚠️ Не указан ID сотрудника")
 
-    # ---------- DATA ----------
-
     def load_employee(self):
         """Загрузка данных сотрудника через сервис"""
         if self.employee_id:
+            print(f"📊 Загрузка профиля для сотрудника ID: {self.employee_id}")
             self.employee_data = self.profile_service.get_employee_profile(
                 self.employee_id
             )
+            print(f"📊 Получены данные: {self.employee_data.get('last_name')} {self.employee_data.get('first_name')}")
             self.update_ui_from_data()
         else:
-            print("⚠️ Не указан ID сотрудника")
+            print("⚠️ Не указан ID сотрудника для загрузки профиля")
 
     # ---------- UI ----------
 

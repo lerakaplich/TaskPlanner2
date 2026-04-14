@@ -240,13 +240,12 @@ class MainWindow(QMainWindow):
         self._replace_in_stack("analyticsPage", self.analytics_page_instance)
 
         # Инициализация Чата
-
         self.chat_page_instance = ChatPage(
             session=self.session,
             service=self.chat_service,
             projects_service=self.project_service,
             current_user_id=self.current_user_id,
-            sio=self.socket_client  # ✅ ПРАВИЛЬНО
+            sio=self.socket_client
         )
         self._replace_in_stack("chatPage", self.chat_page_instance)
 
@@ -254,72 +253,83 @@ class MainWindow(QMainWindow):
         self.overtime_page_instance = OvertimePage(service=self.overtime_service)
         self._replace_in_stack("overtimePage", self.overtime_page_instance)
 
-        # 👇 ИСПРАВЛЕНО: Создаем ArchiveService с той же сессией
+        # Архив
         from services.archive_service import ArchiveService
         archive_service = ArchiveService(self.session)
         self.archive_page_instance = ArchivePage(service=archive_service)
         self._replace_in_stack("archivePage", self.archive_page_instance)
 
-        self.settings_page_instance = SettingsPage(session=self.session)  # ← ПЕРЕДАЁМ SESSION
+        # Настройки
+        self.settings_page_instance = SettingsPage(session=self.session)
         self._replace_in_stack("settingsPage", self.settings_page_instance)
 
-        # Профиль
-        self.profile_page_instance = ProfilePage(service=self.project_service)
-        self.contentStack.addWidget(self.profile_page_instance)
+        # 👇 ПРОФИЛЬ - ИСПРАВЛЕНО: передаем текущего пользователя
+        self.profile_page_instance = ProfilePage(
+            employee_id=self.current_user_id,
+            current_user=self.current_user,
+            parent=self,
+            service=self.project_service  # или можно передать None, тогда создаст свой
+        )
+        # Добавляем в стек, но не заменяем существующий (если есть)
+        if not self.findChild(QWidget, "profilePage"):
+            self.contentStack.addWidget(self.profile_page_instance)
+        else:
+            self._replace_in_stack("profilePage", self.profile_page_instance)
+
+    def show_profile(self):
+        """Показать страницу профиля"""
+        if hasattr(self, 'profile_page_instance'):
+            # Обновляем данные профиля для текущего пользователя
+            self.profile_page_instance.employee_id = self.current_user.get('id')
+            self.profile_page_instance.current_user = self.current_user
+            self.profile_page_instance.load_employee()
+            # Обновляем график
+            if hasattr(self.profile_page_instance, 'chart_widget'):
+                self.profile_page_instance.chart_widget.load_data(self.current_user.get('id'))
+        else:
+            # Если страница профиля не создана, создаем заново
+            from windows.profile.profile_page import ProfilePage
+            self.profile_page_instance = ProfilePage(
+                employee_id=self.current_user.get('id'),
+                current_user=self.current_user,
+                parent=self
+            )
+            self.contentStack.addWidget(self.profile_page_instance)
+
+        self.contentStack.setCurrentWidget(self.profile_page_instance)
 
     def refresh_projects_view(self):
-        """
-        Финальная версия: Обновление списка проектов из БД и перерисовка UI.
-        Связывает ProjectsService (данные) с MainWindow (интерфейс).
-        """
-        # 1. Очистка старых карточек и освобождение памяти
-        # Используем deleteLater(), чтобы Qt безопасно удалил виджеты из памяти
+        """Обновление списка проектов из БД и перерисовка UI."""
+        # 1. Очистка старых карточек
         if hasattr(self, 'project_cards') and self.project_cards:
             for card in self.project_cards:
                 self.projectsGrid.removeWidget(card)
                 card.deleteLater()
 
-        # Инициализируем/обнуляем список активных карточек
         self.project_cards = []
 
-        # 2. Получение данных от сервиса
-        # Мы передаем текущие значения фильтров, которые обновились
-        # в методах search_projects и filter_projects
         try:
             projects_dtos = self.project_service.get_projects_for_cards(
                 search_query=self.current_search_query,
                 status_filter=self.current_status_filter,
-                owner_filter=self.current_owner_filter  # 👈 ДОБАВЛЯЕМ
+                owner_filter=self.current_owner_filter
             )
         except Exception as e:
             print(f"Критическая ошибка при загрузке проектов: {e}")
             return
 
-        # 3. Генерация виджетов (карточек) на основе DTO
         for dto in projects_dtos:
             card = ProjectCard(project_id=dto.id, project_data=dto)
 
-            # Соединяем сигналы карточки с методами-контроллерами главного окна
-            # Это позволяет каждой карточке знать, что делать при нажатии кнопок
-            card.edit_clicked.connect(self.edit_project)  # Вызывает диалог редактирования
-            card.open_clicked.connect(self.open_project)  # Открывает Канбан-доску
+            # Подключаем сигналы
+            card.edit_clicked.connect(self.edit_project)
+            card.open_clicked.connect(self.open_project)
+            card.archive_clicked.connect(self.archive_project)  # 👈 ДОБАВИТЬ ЭТУ СТРОКУ
 
-            # Сохраняем ссылку на карточку для управления сеткой
             self.project_cards.append(card)
 
-        # 4. Обработка пустого состояния (Optional)
-        # Если проектов нет, можно показать заглушку (Label "Ничего не найдено")
-        if not self.project_cards:
-            # Здесь могла бы быть логика отображения сообщения о пустом списке
-            pass
-
-        # 5. Перерисовка сетки (Responsive Layout)
-        # Сбрасываем current_columns, чтобы метод adjust_card_columns
-        # гарантированно пересчитал позиции всех новых карточек
         self.current_columns = -1
         self.adjust_card_columns()
-
-        # Логируем для отладки
         print(f"UI обновлен: отображено {len(self.project_cards)} проектов.")
 
     def connect_signals(self):
@@ -421,16 +431,6 @@ class MainWindow(QMainWindow):
         # Обновляем состояние кнопок навигации
         for i, btn in enumerate(self.nav_buttons):
             btn.setChecked(i == page_index)
-
-    def show_profile(self):
-        """Показать страницу профиля"""
-        if hasattr(self, 'profile_page_instance'):
-            # Обновляем данные профиля для текущего пользователя
-            self.profile_page_instance.employee_id = self.current_user.get('id')
-            self.profile_page_instance.current_user = self.current_user
-            self.profile_page_instance.load_employee()
-
-        self.contentStack.setCurrentWidget(self.profile_page_instance)
 
     def setup_initial_state(self):
         """Начальная настройка интерфейса"""
