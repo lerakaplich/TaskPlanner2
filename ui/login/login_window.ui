@@ -1,0 +1,603 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>LoginDialog</class>
+ <widget class="QDialog" name="LoginDialog">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>1400</width>
+    <height>900</height>
+   </rect>
+  </property>
+  <property name="minimumSize">
+   <size>
+    <width>1200</width>
+    <height>700</height>
+   </size>
+  </property>
+  <property name="windowTitle">
+   <string>TaskPlanner — Авторизация</string>
+  </property>
+  <property name="styleSheet">
+   <string notr="true">QDialog {
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+        stop:0 #f8f5ed, stop:1 #f0e9d9);
+}</string>
+  </property>
+
+  <layout class="QVBoxLayout" name="mainLayout">
+   <property name="spacing">
+    <number>30</number>
+   </property>
+   <property name="leftMargin">
+    <number>80</number>
+   </property>
+   <property name="topMargin">
+    <number>50</number>
+   </property>
+   <property name="rightMargin">
+    <number>80</number>
+   </property>
+   <property name="bottomMargin">
+    <number>50</number>
+   </property>
+
+   <!-- Заголовок TaskPlanner -->
+   <item>
+    <widget class="QLabel" name="titleLabel">
+     <property name="font">
+      <font>
+       <family>Segoe UI</family>
+       <pointsize>72</pointsize>
+       <bold>true</bold>
+      </font>
+     </property>
+     <property name="styleSheet">
+      <string notr="true">color: #ccab6e; letter-spacing: -3px;</string>
+     </property>
+     <property name="text">
+      <string>TaskPlanner</string>
+     </property>
+     <property name="alignment">
+      <set>Qt::AlignmentFlag::AlignCenter</set>
+     </property>
+    </widget>
+   </item>
+
+   <!-- Основная горизонтальная раскладка -->
+   <item>
+    <layout class="QHBoxLayout" name="contentLayout">
+     <property name="spacing">
+      <number>60</number>
+     </property>
+
+     <!-- ====================== ЛЕВАЯ ПАНЕЛЬ ====================== -->
+     <item>
+      <layout class="QVBoxLayout" name="leftPanel">
+       <property name="spacing">
+        <number>0</number>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignmentFlag::AlignCenter</set>
+       </property>
+
+       <!-- Воздух сверху -->
+       <item>
+        <spacer name="leftTopSpacer">
+         <property name="orientation">
+          <enum>Qt::Vertical</enum>
+         </property>
+         <property name="sizeType">
+          <enum>QSizePolicy::Expanding</enum>
+         </property>
+         <property name="sizeHint" stdset="0">
+          <size>
+           <width>20</width>
+           <height>0</height>
+          </size>
+         </property>
+        </spacer>
+       </item>
+
+       <!-- Чекбокс-иконка -->
+       <item>
+        <widget class="QLabel" name="checkboxImageLabel">
+         <property name="text">
+          <string/>
+         </property>
+         <property name="minimumSize">
+          <size>
+           <width>180</width>
+           <height>180</height>
+          </size>
+         </property>
+         <property name="alignment">
+          <set>Qt::AlignmentFlag::AlignCenter</set>
+         </property>
+        </widget>
+       </item>
+
+       <!-- Промежуток между иконками -->
+       <item>
+        <spacer name="leftMiddleSpacer">
+         <property name="orientation">
+          <enum>Qt::Vertical</enum>
+         </property>
+         <property name="sizeType">
+          <enum>QSizePolicy::Expanding</enum>
+         </property>
+         <property name="sizeHint" stdset="0">
+          <size>
+           <width>20</width>
+           <height>0</height>
+          </size>
+         </property>
+        </spacer>
+       </item>
+
+       <!-- QR-код -->
+       <item>
+        <widget class="QLabel" name="qrImageLabel">
+         <property name="text">
+          <string/>
+         </property>
+         <property name="minimumSize">
+          <size>
+           <width>260</width>
+           <height>260</height>
+          </size>
+         </property>
+         <property name="alignment">
+          <set>Qt::AlignmentFlag::AlignCenter</set>
+         </property>
+        </widget>
+       </item>
+
+       <!-- Воздух снизу -->
+       <item>
+        <spacer name="leftBottomSpacer">
+         <property name="orientation">
+          <enum>Qt::Vertical</enum>
+         </property>
+         <property name="sizeType">
+          <enum>QSizePolicy::Expanding</enum>
+         </property>
+         <property name="sizeHint" stdset="0">
+          <size>
+           <width>20</width>
+           <height>0</height>
+          </size>
+         </property>
+        </spacer>
+       </item>
+      </layout>
+     </item>
+
+     <!-- ====================== ЦЕНТРАЛЬНАЯ КАРТОЧКА ====================== -->
+     <item>
+      <widget class="QFrame" name="authFrame">
+       <property name="maximumSize">
+        <size>
+         <width>620</width>
+         <height>16777215</height>
+        </size>
+       </property>
+       <property name="styleSheet">
+        <string notr="true">QFrame#authFrame {
+    background-color: #ffffff;
+    border-radius: 32px;
+    border: 1px solid #e8e2d4;
+}</string>
+       </property>
+       <property name="frameShape">
+        <enum>QFrame::Shape::StyledPanel</enum>
+       </property>
+       <property name="frameShadow">
+        <enum>QFrame::Shadow::Raised</enum>
+       </property>
+       <layout class="QVBoxLayout" name="frameLayout">
+        <property name="spacing">
+         <number>32</number>
+        </property>
+        <property name="leftMargin">
+         <number>65</number>
+        </property>
+        <property name="topMargin">
+         <number>65</number>
+        </property>
+        <property name="rightMargin">
+         <number>65</number>
+        </property>
+        <property name="bottomMargin">
+         <number>65</number>
+        </property>
+
+        <item>
+         <widget class="QLabel" name="authTitle">
+          <property name="font">
+           <font>
+            <family>Segoe UI</family>
+            <pointsize>32</pointsize>
+            <bold>true</bold>
+           </font>
+          </property>
+          <property name="styleSheet">
+           <string notr="true">color: #D22730;</string>
+          </property>
+          <property name="text">
+           <string>Авторизация</string>
+          </property>
+          <property name="alignment">
+           <set>Qt::AlignmentFlag::AlignCenter</set>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QLineEdit" name="phoneInput">
+          <property name="styleSheet">
+           <string notr="true">QLineEdit {
+    font-size: 20px;
+    padding: 10px 28px;
+    border: 2px solid #e8e2d4;
+    border-radius: 18px;
+    background-color: #ffffff;
+}
+QLineEdit:focus {
+    border: 2px solid #D22730;
+    background-color: #fffaf0;
+}</string>
+          </property>
+          <property name="inputMask">
+           <string>+375 (99) 999-99-99</string>
+          </property>
+          <property name="placeholderText">
+           <string>Номер телефона</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <layout class="QHBoxLayout" name="passwordContainer">
+          <item>
+           <widget class="QLineEdit" name="passwordInput">
+            <property name="styleSheet">
+             <string notr="true">QLineEdit {
+    font-size: 20px;
+    padding: 10px 28px;
+    border: 2px solid #e8e2d4;
+    border-radius: 18px;
+    background-color: #ffffff;
+    padding-right: 60px;
+}
+QLineEdit:focus {
+    border: 2px solid #D22730;
+    background-color: #fffaf0;
+}</string>
+            </property>
+            <property name="echoMode">
+             <enum>QLineEdit::EchoMode::Password</enum>
+            </property>
+            <property name="placeholderText">
+             <string>Пароль</string>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </item>
+        <item>
+         <layout class="QHBoxLayout" name="rememberContainer">
+          <item>
+           <widget class="QCheckBox" name="rememberCheckbox">
+            <property name="styleSheet">
+             <string notr="true">QCheckBox {
+    font-size: 16px;
+    color: #666;
+    spacing: 10px;
+}
+QCheckBox::indicator {
+    width: 20px;
+    height: 20px;
+    border-radius: 5px;
+    border: 2px solid #ccab6e;
+    background-color: #ffffff;
+}
+QCheckBox::indicator:checked {
+    background-color: #D22730;
+    border-color: #D22730;
+}</string>
+            </property>
+            <property name="text">
+             <string>Запомнить меня</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <spacer name="rememberSpacer">
+            <property name="orientation">
+             <enum>Qt::Horizontal</enum>
+            </property>
+            <property name="sizeHint" stdset="0">
+             <size>
+              <width>40</width>
+              <height>20</height>
+             </size>
+            </property>
+           </spacer>
+          </item>
+          <item>
+           <widget class="QPushButton" name="forgotPasswordBtn">
+            <property name="cursor">
+             <cursorShape>PointingHandCursor</cursorShape>
+            </property>
+            <property name="styleSheet">
+             <string notr="true">QPushButton {
+    background: transparent;
+    color: #D22730;
+    border: none;
+    font-size: 16px;
+    font-weight: 600;
+    text-decoration: underline;
+    padding: 6px 0;
+}
+QPushButton:hover {
+    color: #862633;
+}</string>
+            </property>
+            <property name="text">
+             <string>Забыли пароль?</string>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </item>
+        <item>
+         <widget class="QPushButton" name="loginBtn">
+          <property name="cursor">
+           <cursorShape>PointingHandCursor</cursorShape>
+          </property>
+          <property name="styleSheet">
+           <string notr="true">QPushButton {
+    background-color: #D22730;
+    color: white;
+    border-radius: 18px;
+    font-weight: bold;
+    font-size: 22px;
+    padding: 10px;
+    border: none;
+}
+QPushButton:hover {
+    background-color: #862633;
+}
+QPushButton:pressed {
+    background-color: #6a1e29;
+}</string>
+          </property>
+          <property name="text">
+           <string>Войти</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QPushButton" name="requestBtn">
+          <property name="cursor">
+           <cursorShape>PointingHandCursor</cursorShape>
+          </property>
+          <property name="styleSheet">
+           <string notr="true">QPushButton {
+    background: transparent;
+    color: #ccab6e;
+    border: none;
+    font-size: 16px;
+    font-weight: 600;
+    text-decoration: underline;
+    padding: 6px 0;
+}
+QPushButton:hover {
+    color: #998664;
+}
+QPushButton:pressed {
+    color: #7a6a50;
+}</string>
+          </property>
+          <property name="text">
+           <string>Нет аккаунта? Отправить заявку администратору</string>
+          </property>
+         </widget>
+        </item>
+       </layout>
+      </widget>
+     </item>
+
+     <!-- ====================== ПРАВАЯ ПАНЕЛЬ ====================== -->
+     <item>
+      <layout class="QVBoxLayout" name="rightPanel">
+       <property name="spacing">
+        <number>0</number>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignmentFlag::AlignCenter</set>
+       </property>
+
+       <!-- Воздух сверху -->
+       <item>
+        <spacer name="rightTopSpacer">
+         <property name="orientation">
+          <enum>Qt::Vertical</enum>
+         </property>
+         <property name="sizeType">
+          <enum>QSizePolicy::Expanding</enum>
+         </property>
+         <property name="sizeHint" stdset="0">
+          <size>
+           <width>20</width>
+           <height>0</height>
+          </size>
+         </property>
+        </spacer>
+       </item>
+
+       <!-- Часы -->
+       <item>
+        <widget class="QLabel" name="clockImageLabel">
+         <property name="text">
+          <string/>
+         </property>
+         <property name="minimumSize">
+          <size>
+           <width>180</width>
+           <height>180</height>
+          </size>
+         </property>
+         <property name="alignment">
+          <set>Qt::AlignmentFlag::AlignCenter</set>
+         </property>
+        </widget>
+       </item>
+
+       <!-- Промежуток 1 -->
+       <item>
+        <spacer name="rightMiddle1Spacer">
+         <property name="orientation">
+          <enum>Qt::Vertical</enum>
+         </property>
+         <property name="sizeType">
+          <enum>QSizePolicy::Expanding</enum>
+         </property>
+         <property name="sizeHint" stdset="0">
+          <size>
+           <width>20</width>
+           <height>0</height>
+          </size>
+         </property>
+        </spacer>
+       </item>
+
+       <!-- Шестерёнка -->
+       <item>
+        <widget class="QLabel" name="gearImageLabel">
+         <property name="text">
+          <string/>
+         </property>
+         <property name="minimumSize">
+          <size>
+           <width>180</width>
+           <height>180</height>
+          </size>
+         </property>
+         <property name="alignment">
+          <set>Qt::AlignmentFlag::AlignCenter</set>
+         </property>
+        </widget>
+       </item>
+
+       <!-- Промежуток 2 -->
+       <item>
+        <spacer name="rightMiddle2Spacer">
+         <property name="orientation">
+          <enum>Qt::Vertical</enum>
+         </property>
+         <property name="sizeType">
+          <enum>QSizePolicy::Expanding</enum>
+         </property>
+         <property name="sizeHint" stdset="0">
+          <size>
+           <width>20</width>
+           <height>0</height>
+          </size>
+         </property>
+        </spacer>
+       </item>
+
+       <!-- Слоган -->
+       <item>
+        <widget class="QLabel" name="sloganLabel">
+         <property name="font">
+          <font>
+           <family>Segoe UI</family>
+           <pointsize>24</pointsize>
+           <italic>true</italic>
+          </font>
+         </property>
+         <property name="styleSheet">
+          <string notr="true">color: #1e40af; background: transparent; letter-spacing: 1px; font-weight: 500;</string>
+         </property>
+         <property name="text">
+          <string>Ваша команда заговорит на языке продуктивности</string>
+         </property>
+         <property name="alignment">
+          <set>Qt::AlignmentFlag::AlignCenter</set>
+         </property>
+         <property name="wordWrap">
+          <bool>true</bool>
+         </property>
+        </widget>
+       </item>
+
+       <!-- Воздух снизу -->
+       <item>
+        <spacer name="rightBottomSpacer">
+         <property name="orientation">
+          <enum>Qt::Vertical</enum>
+         </property>
+         <property name="sizeType">
+          <enum>QSizePolicy::Expanding</enum>
+         </property>
+         <property name="sizeHint" stdset="0">
+          <size>
+           <width>20</width>
+           <height>0</height>
+          </size>
+         </property>
+        </spacer>
+       </item>
+      </layout>
+     </item>
+    </layout>
+   </item>
+
+   <!-- Нижний логотип -->
+   <item>
+    <layout class="QHBoxLayout" name="logoLayout">
+     <item>
+      <spacer name="logoLeftSpacer">
+       <property name="orientation">
+        <enum>Qt::Horizontal</enum>
+       </property>
+       <property name="sizeHint" stdset="0">
+        <size>
+         <width>40</width>
+         <height>20</height>
+        </size>
+       </property>
+      </spacer>
+     </item>
+     <item>
+      <widget class="QLabel" name="logoLabel">
+       <property name="text">
+        <string/>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignmentFlag::AlignCenter</set>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <spacer name="logoRightSpacer">
+       <property name="orientation">
+        <enum>Qt::Horizontal</enum>
+       </property>
+       <property name="sizeHint" stdset="0">
+        <size>
+         <width>40</width>
+         <height>20</height>
+        </size>
+       </property>
+      </spacer>
+     </item>
+    </layout>
+   </item>
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>
