@@ -147,7 +147,7 @@ class EmployeeService:
                     'id': div.id,
                     'number': div.number,
                     'name': div.name,
-                    'boss': div.boss,
+                    'boss': div.boss,  # ← это строка с ID через запятую
                     'phone_number': div.phone_number,
                     'workshop_code': div.workshop_code,
                 })
@@ -194,12 +194,18 @@ class EmployeeService:
             max_number = db_session.query(Division.number).order_by(Division.number.desc()).first()
             next_number = (max_number[0] + 1) if max_number else 1
 
+            # Получаем boss строку из данных
+            boss_value = data.get('boss', '')
+            if not boss_value and data.get('heads'):
+                # Если передан список heads, преобразуем в строку
+                boss_value = ','.join(str(hid) for hid in data.get('heads', []))
+
             new_division = Division(
                 number=next_number,
                 name=data.get('name'),
                 phone_number=data.get('phone_number'),
-                workshop_code=data.get('workshop_code', ''),  # ← расшифровка
-                boss=data.get('boss', ''),
+                workshop_code=data.get('workshop_code', ''),
+                boss=boss_value,  # ← строка с ID через запятую
                 organization_id=1
             )
 
@@ -213,9 +219,9 @@ class EmployeeService:
                 'number': new_division.number,
                 'name': new_division.name,
                 'phone_number': new_division.phone_number,
-                'workshop_code': new_division.workshop_code,  # ← расшифровка
-                'boss': new_division.boss,
-                'description': data.get('description', '')  # ← добавляем description
+                'workshop_code': new_division.workshop_code,
+                'boss': new_division.boss,  # ← возвращаем строку
+                'description': data.get('description', '')
             }
 
         except Exception as e:
@@ -247,10 +253,10 @@ class EmployeeService:
                 division.number = data['number']
             if 'phone_number' in data:
                 division.phone_number = data['phone_number']
-            if 'workshop_code' in data:  # ← расшифровка
+            if 'workshop_code' in data:
                 division.workshop_code = data['workshop_code']
             if 'boss' in data:
-                division.boss = data['boss']
+                division.boss = data['boss']  # ← сохраняем как строку с ID через запятую
 
             db_session.commit()
             print(f"✅ Подразделение {division_id} обновлено в БД employees (public.divisions)")

@@ -17,8 +17,10 @@ class DivisionsTab(BaseTab):
         self.divisions = []
         self.session = None
         self.employee_service = None
+        self.all_employees = []
 
-        self.hide_filters()
+        # Скрываем фильтры (отделы и подразделения) - делаем это ДО загрузки UI
+        # Но так как UI уже загружен в base_tab, используем hide_filters
 
         if self.btnAdd:
             self.btnAdd.setText("Добавить подразделение")
@@ -27,6 +29,70 @@ class DivisionsTab(BaseTab):
 
         # Подключаем сигнал удаления
         self.item_deleted.connect(self.delete_item)
+
+        # Скрываем фильтры после того, как все элементы инициализированы
+        # Используем QTimer, чтобы гарантировать, что UI полностью загружен
+        from PyQt6.QtCore import QTimer
+        QTimer.singleShot(0, self.hide_filters_forced)
+
+    def hide_filters_forced(self):
+        """Принудительное скрытие фильтров"""
+        # Скрываем фильтры через родительский метод
+        self.hide_filters()
+
+        # Дополнительно скрываем и отключаем их
+        if hasattr(self, 'filterDepartment') and self.filterDepartment:
+            self.filterDepartment.setVisible(False)
+            # Убираем из layout, чтобы не занимал место
+            if self.filterDepartment.parent() and hasattr(self.filterDepartment.parent(), 'layout'):
+                layout = self.filterDepartment.parent().layout()
+                if layout:
+                    layout.removeWidget(self.filterDepartment)
+
+        if hasattr(self, 'filterSubDepartment') and self.filterSubDepartment:
+            self.filterSubDepartment.setVisible(False)
+            # Убираем из layout, чтобы не занимал место
+            if self.filterSubDepartment.parent() and hasattr(self.filterSubDepartment.parent(), 'layout'):
+                layout = self.filterSubDepartment.parent().layout()
+                if layout:
+                    layout.removeWidget(self.filterSubDepartment)
+
+        # Также скрываем лейблы фильтров, если они есть
+        if hasattr(self, 'labelDepartment') and self.labelDepartment:
+            self.labelDepartment.setVisible(False)
+        if hasattr(self, 'labelSubDepartment') and self.labelSubDepartment:
+            self.labelSubDepartment.setVisible(False)
+
+    def set_employees(self, employees: list):
+        """Установка списка сотрудников для отображения имён"""
+        self.all_employees = employees
+        # Обновляем карточки, если они уже созданы
+        self.refresh_cards()
+
+    def _get_employee_name(self, employee_id: int) -> str:
+        """Получить ФИО сотрудника по ID"""
+        for emp in self.all_employees:
+            if emp.get('id') == employee_id:
+                last_name = emp.get('last_name', '')
+                first_name = emp.get('first_name', '')
+                middle_name = emp.get('middle_name', '')
+
+                full_name = f"{last_name} {first_name}"
+                if middle_name:
+                    full_name += f" {middle_name}"
+                return full_name
+        return str(employee_id)
+
+    def refresh_cards(self):
+        self.clear_cards()
+
+        for i, division in enumerate(self.divisions):
+            card = DivisionCard(division, employee_resolver=self._get_employee_name)
+            card.edit_clicked.connect(self.on_edit_clicked)
+            card.delete_clicked.connect(self.on_delete_clicked)
+            self.add_card_to_grid(card, i)
+
+        self.set_last_row_stretch()
 
     def set_session(self, session):
         """Установка сессии БД"""
@@ -63,17 +129,6 @@ class DivisionsTab(BaseTab):
     def load_data(self, divisions: list):
         self.divisions = divisions
         self.refresh_cards()
-
-    def refresh_cards(self):
-        self.clear_cards()
-
-        for i, division in enumerate(self.divisions):
-            card = DivisionCard(division)
-            card.edit_clicked.connect(self.on_edit_clicked)
-            card.delete_clicked.connect(self.on_delete_clicked)
-            self.add_card_to_grid(card, i)
-
-        self.set_last_row_stretch()
 
     def on_edit_clicked(self, division_id: int):
         division = next((d for d in self.divisions if d.get('id') == division_id), None)

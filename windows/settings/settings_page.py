@@ -139,10 +139,13 @@ class SettingsPage(QWidget):
         print(f"📊 Загружено отделов из БД: {len(self.all_departments)}")
         self.departments_tab.load_data(self.all_departments)
 
-        # 👇 ДОБАВЛЯЕМ: Загружаем подразделения
+        # Загружаем подразделения
         self.all_divisions = employee_service.get_all_divisions()
         print(f"📊 Загружено подразделений из БД: {len(self.all_divisions)}")
         self.divisions_tab.load_data(self.all_divisions)
+
+        # ← ДОБАВЬТЕ: Передаём список сотрудников для отображения имён
+        self.divisions_tab.set_employees(self.all_employees)
 
         # Настраиваем фильтры
         self.employees_tab.load_filter_data(self.all_departments, self.all_divisions)
