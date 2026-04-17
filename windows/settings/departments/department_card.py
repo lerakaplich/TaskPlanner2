@@ -10,10 +10,11 @@ class DepartmentCard(QFrame):
     edit_clicked = pyqtSignal(int)  # id отдела
     delete_clicked = pyqtSignal(int)  # id отдела
 
-    def __init__(self, department_data, parent=None):
+    def __init__(self, department_data, employee_resolver=None, parent=None):
         super().__init__(parent)
         self.department_data = department_data
         self.department_id = department_data.get('id', 0)
+        self._get_employee_name = employee_resolver or (lambda x: str(x))
 
         # Загрузка UI
         ui_path = os.path.join(
@@ -23,7 +24,7 @@ class DepartmentCard(QFrame):
         )
         uic.loadUi(ui_path, self)
 
-        self.boss_labels = []  # для хранения созданных label руководителей
+        self.boss_labels = []
         self.fill_data()
         self.connect_signals()
 
@@ -32,12 +33,33 @@ class DepartmentCard(QFrame):
         self.editButton.clicked.connect(lambda: self.edit_clicked.emit(self.department_id))
         self.deleteButton.clicked.connect(lambda: self.delete_clicked.emit(self.department_id))
 
+    def _parse_boss_ids(self, boss_field) -> list:
+        """Парсит поле boss и возвращает список ID сотрудников"""
+        if not boss_field:
+            return []
+
+        if isinstance(boss_field, str):
+            # Проверяем, содержит ли строка только цифры и запятые
+            if all(c.isdigit() or c == ',' or c.isspace() for c in boss_field):
+                ids = []
+                for part in boss_field.split(','):
+                    part = part.strip()
+                    if part and part.isdigit():
+                        ids.append(int(part))
+                return ids
+            else:
+                return []
+        elif isinstance(boss_field, (int, float)):
+            return [int(boss_field)]
+        elif isinstance(boss_field, list):
+            return boss_field
+        return []
+
     def clear_bosses_container(self):
         """Очистка контейнера с руководителями"""
         if hasattr(self, 'bossesContainer'):
             layout = self.bossesContainer.layout()
             if layout:
-                # Удаляем все виджеты из layout
                 while layout.count():
                     item = layout.takeAt(0)
                     if item.widget():
@@ -79,46 +101,47 @@ class DepartmentCard(QFrame):
 
         # Подразделение
         division = self.department_data.get('division', '—')
-        if hasattr(self, 'divisionValue') and hasattr(self, 'divisionSectionLabel'):
+        if hasattr(self, 'divisionValueLabel') and hasattr(self, 'divisionSectionLabel'):
             if division and division != '—':
                 if isinstance(division, dict):
                     division = division.get('name', '—')
-                self.divisionValue.setText(division)
-                self.divisionValue.setVisible(True)
+                self.divisionValueLabel.setText(division)
+                self.divisionValueLabel.setVisible(True)
                 self.divisionSectionLabel.setVisible(True)
             else:
-                self.divisionValue.setVisible(False)
+                self.divisionValueLabel.setVisible(False)
                 self.divisionSectionLabel.setVisible(False)
 
-        # Руководители
+        # Руководители - преобразуем ID в ФИО
         self.clear_bosses_container()
 
-        bosses = []
-        # Проверяем разные возможные форматы хранения руководителей
-        if 'bosses' in self.department_data and self.department_data['bosses']:
-            bosses = self.department_data['bosses']
-        elif 'boss' in self.department_data and self.department_data['boss']:
-            bosses = [self.department_data['boss']]
+        boss_field = self.department_data.get('boss', '')
+        boss_ids = self._parse_boss_ids(boss_field)
 
-        if hasattr(self, 'bossesSectionLabel') and hasattr(self, 'bossesContainer'):
-            if bosses:
-                self.bossesSectionLabel.setVisible(True)
-                self.bossesContainer.setVisible(True)
-                for boss in bosses:
-                    self.add_boss_label(boss)
-            else:
-                self.bossesSectionLabel.setVisible(False)
-                self.bossesContainer.setVisible(False)
+        boss_names = []
+        for emp_id in boss_ids:
+            emp_name = self._get_employee_name(emp_id)
+            if emp_name and emp_name != str(emp_id):
+                boss_names.append(emp_name)
+
+        # Скрываем/показываем секцию руководителей
+        if hasattr(self, 'bossesSectionLabel'):
+            self.bossesSectionLabel.setVisible(len(boss_names) > 0)
+
+        if hasattr(self, 'bossesContainer'):
+            self.bossesContainer.setVisible(len(boss_names) > 0)
+            for boss in boss_names:
+                self.add_boss_label(boss)
 
         # Телефон
         phone = self.department_data.get('phone_number', '')
-        if hasattr(self, 'phoneValue') and hasattr(self, 'phoneSectionLabel'):
+        if hasattr(self, 'phoneValueLabel') and hasattr(self, 'phoneSectionLabel'):
             if phone:
-                self.phoneValue.setText(phone)
-                self.phoneValue.setVisible(True)
+                self.phoneValueLabel.setText(phone)
+                self.phoneValueLabel.setVisible(True)
                 self.phoneSectionLabel.setVisible(True)
             else:
-                self.phoneValue.setVisible(False)
+                self.phoneValueLabel.setVisible(False)
                 self.phoneSectionLabel.setVisible(False)
 
     def get_bosses(self):

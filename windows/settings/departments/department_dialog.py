@@ -2,8 +2,9 @@ import sys
 import os
 from pathlib import Path
 from PyQt6 import QtWidgets, QtCore, uic
-from PyQt6.QtWidgets import QDialog, QVBoxLayout, QScrollArea, QWidget, QPushButton, QLineEdit, QLabel, QMessageBox
-from PyQt6.QtCore import pyqtSignal, Qt, QEvent
+from PyQt6.QtWidgets import QDialog, QVBoxLayout, QScrollArea, QWidget, QPushButton, QLineEdit, QLabel, QMessageBox, \
+    QHBoxLayout, QComboBox
+from PyQt6.QtCore import pyqtSignal, Qt, QEvent, QTimer
 
 
 class DepartmentDialog(QDialog):
@@ -15,6 +16,8 @@ class DepartmentDialog(QDialog):
         self.session = session
         self.department_data = department_data
         self.employees = []
+        self.divisions = []
+        self.selected_manager_ids = set()  # Храним выбранные ID руководителей
 
         script_dir = Path(__file__).resolve().parent
         ui_path = script_dir.parent.parent.parent / "ui" / "settings" / "departments" / "department_dialog.ui"
@@ -28,11 +31,14 @@ class DepartmentDialog(QDialog):
 
         self.init_ui()
 
-        # Загружаем реальных сотрудников
+        # Загружаем данные из БД
         self.load_real_employees()
+        self.load_divisions()
 
         self.setup_managers_combo()
+        self.setup_divisions_combo()
 
+        # Загружаем сохранённых руководителей после создания чекбоксов
         if self.department_data:
             self.load_department_data()
 
@@ -66,8 +72,37 @@ class DepartmentDialog(QDialog):
             print(f"❌ Ошибка загрузки сотрудников: {e}")
             self.employees = self.get_test_employees()
 
+    def load_divisions(self):
+        """Загрузка подразделений из БД"""
+        try:
+            if self.session:
+                from services.employee_service import EmployeeService
+                employee_service = EmployeeService(self.session)
+                real_divisions = employee_service.get_all_divisions()
+
+                self.divisions = []
+                for div in real_divisions:
+                    self.divisions.append({
+                        "id": div['id'],
+                        "name": div['name'],
+                        "number": div.get('number', '')
+                    })
+
+                print(f"✅ Загружено {len(self.divisions)} подразделений для выбора")
+            else:
+                self.divisions = self.get_test_divisions()
+        except Exception as e:
+            print(f"❌ Ошибка загрузки подразделений: {e}")
+            self.divisions = self.get_test_divisions()
+
+    def get_test_divisions(self):
+        return [
+            {"id": 1, "name": "Северное подразделение", "number": 1},
+            {"id": 2, "name": "Южное подразделение", "number": 2},
+            {"id": 3, "name": "Центральное подразделение", "number": 3},
+        ]
+
     def get_test_employees(self):
-        """Тестовые данные (запасной вариант)"""
         return [
             {"id": 1, "full_name": "Иванов Иван Иванович", "position": "Директор"},
             {"id": 2, "full_name": "Петров Петр Петрович", "position": "Заместитель директора"},
@@ -89,6 +124,15 @@ class DepartmentDialog(QDialog):
             self.setWindowTitle("Добавление отдела")
             self.titleLabel.setText("Добавление нового отдела")
 
+    def setup_divisions_combo(self):
+        self.comboBoxDivision.clear()
+        self.comboBoxDivision.addItem("— Выберите подразделение —", None)
+        for div in self.divisions:
+            display_text = f"{div['name']}"
+            if div.get('number'):
+                display_text += f" (№{div['number']})"
+            self.comboBoxDivision.addItem(display_text, div['id'])
+
     def setup_managers_combo(self):
         """Создаём popup с поиском и чекбоксами"""
         self.managers_widget = QWidget()
@@ -99,23 +143,12 @@ class DepartmentDialog(QDialog):
         # Строка поиска
         self.search_line = QLineEdit()
         self.search_line.setPlaceholderText("Поиск по имени или должности...")
-        self.search_line.textChanged.connect(self.filter_employees)
+        self.search_line.textChanged.connect(self.on_search_text_changed)
         self.search_line.setMinimumHeight(32)
         self.managers_layout.addWidget(self.search_line)
 
-        # Чекбоксы
-        self.manager_checkboxes = []
-        for emp in self.employees:
-            cb = QtWidgets.QCheckBox(f"{emp['full_name']} — {emp['position']}")
-            cb.setProperty("employee_id", emp['id'])
-            cb.setProperty("employee_name", emp['full_name'])
-            cb.setProperty("full_text", f"{emp['full_name']} {emp['position']}".lower())
-            cb.stateChanged.connect(self.update_selected_managers_text)
-            self.managers_layout.addWidget(cb)
-            self.manager_checkboxes.append(cb)
-
         # Кнопки Выбрать всех / Снять всех
-        btn_layout = QtWidgets.QHBoxLayout()
+        btn_layout = QHBoxLayout()
         select_all_btn = QPushButton("Выбрать всех")
         clear_all_btn = QPushButton("Снять выделение")
 
@@ -125,7 +158,35 @@ class DepartmentDialog(QDialog):
         btn_layout.addWidget(select_all_btn)
         btn_layout.addWidget(clear_all_btn)
         self.managers_layout.addLayout(btn_layout)
-        self.managers_layout.addStretch()
+
+        # Контейнер для чекбоксов
+        self.checkboxes_container = QWidget()
+        self.checkboxes_layout = QVBoxLayout(self.checkboxes_container)
+        self.checkboxes_layout.setSpacing(8)
+        self.checkboxes_layout.setContentsMargins(0, 0, 0, 0)
+        self.managers_layout.addWidget(self.checkboxes_container)
+
+        print(f"📋 Создаем чекбоксы для {len(self.employees)} сотрудников")
+
+        # Сохраняем все чекбоксы в словарь по ID
+        self.checkboxes_by_id = {}
+        self.checkboxes_list = []
+
+        for emp in self.employees:
+            cb_text = f"{emp['full_name']} — {emp['position']}"
+            cb = QtWidgets.QCheckBox(cb_text)
+            cb.setProperty("employee_id", emp['id'])
+            cb.setProperty("employee_name", emp['full_name'])
+            cb.setProperty("full_text", f"{emp['full_name']} {emp['position']}".lower())
+            # Подключаем сигнал с сохранением ID
+            cb.toggled.connect(lambda checked, eid=emp['id']: self.on_checkbox_toggled(eid, checked))
+            self.checkboxes_by_id[emp['id']] = cb
+            self.checkboxes_list.append(cb)
+
+        # Добавляем чекбоксы в layout
+        for cb in self.checkboxes_list:
+            self.checkboxes_layout.addWidget(cb)
+        self.checkboxes_layout.addStretch()
 
         # ScrollArea
         scroll_area = QScrollArea()
@@ -223,35 +284,87 @@ class DepartmentDialog(QDialog):
         line_edit.setReadOnly(True)
         line_edit.setCursor(Qt.CursorShape.PointingHandCursor)
 
-        self.comboManagers.mousePressEvent = self.show_managers_popup
+        self.heads_popup = self.popup
 
         self.update_selected_managers_text()
 
-    def filter_employees(self, text):
-        """Фильтрация списка сотрудников"""
-        text = text.lower().strip()
-        for cb in self.manager_checkboxes:
-            full_text = cb.property("full_text")
-            cb.setVisible(text in full_text if text else True)
+        self.comboManagers.installEventFilter(self)
+        line_edit.installEventFilter(self)
 
-    def show_managers_popup(self, event):
-        pos = self.comboManagers.mapToGlobal(QtCore.QPoint(0, self.comboManagers.height() + 4))
-        self.popup.move(pos)
-        self.popup.show()
+        print("✅ Popup для выбора руководителей настроен")
+
+    def on_checkbox_toggled(self, employee_id: int, checked: bool):
+        """Обработчик изменения состояния чекбокса"""
+        if checked:
+            self.selected_manager_ids.add(employee_id)
+        else:
+            self.selected_manager_ids.discard(employee_id)
+        self.update_selected_managers_text()
+
+    def update_checkboxes_visibility(self):
+        """Обновляет видимость чекбоксов на основе поискового запроса"""
+        search_text = self.search_line.text().lower().strip()
+        for cb in self.checkboxes_list:
+            full_text = cb.property("full_text")
+            is_visible = not search_text or search_text in full_text
+            cb.setVisible(is_visible)
+
+    def on_search_text_changed(self, text):
+        """Обработчик изменения текста поиска"""
+        self.update_checkboxes_visibility()
+
+    def eventFilter(self, obj, event):
+        if event.type() == QEvent.Type.MouseButtonPress:
+            if obj == self.comboManagers or obj == self.comboManagers.lineEdit():
+                print("🖱️ Клик по комбобоксу!")
+                # Обновляем видимость перед показом
+                self.update_checkboxes_visibility()
+                pos = self.comboManagers.mapToGlobal(QtCore.QPoint(0, self.comboManagers.height()))
+                self.heads_popup.move(pos)
+                self.heads_popup.show()
+                return True
+
+        if event.type() == QEvent.Type.KeyPress:
+            key = event.key()
+            try:
+                current_index = self.fields.index(obj)
+            except (ValueError, AttributeError):
+                return super().eventFilter(obj, event)
+
+            if key == Qt.Key.Key_Down:
+                next_index = (current_index + 1) % len(self.fields)
+                next_widget = self.fields[next_index]
+                if next_widget:
+                    next_widget.setFocus()
+                return True
+            elif key == Qt.Key.Key_Up:
+                prev_index = (current_index - 1) % len(self.fields)
+                prev_widget = self.fields[prev_index]
+                if prev_widget:
+                    prev_widget.setFocus()
+                return True
+
+        return super().eventFilter(obj, event)
 
     def select_all_managers(self):
-        for cb in self.manager_checkboxes:
+        """Выбрать всех видимых руководителей"""
+        for cb in self.checkboxes_list:
             if cb.isVisible():
                 cb.setChecked(True)
+        self.update_selected_managers_text()
 
     def clear_all_managers(self):
-        for cb in self.manager_checkboxes:
+        """Снять выделение со всех руководителей"""
+        for cb in self.checkboxes_list:
             cb.setChecked(False)
+        self.update_selected_managers_text()
 
     def update_selected_managers_text(self):
+        """Обновление текста в комбобоксе с выбранными руководителями"""
         selected = []
-        for cb in self.manager_checkboxes:
-            if cb.isChecked():
+        for emp_id in self.selected_manager_ids:
+            cb = self.checkboxes_by_id.get(emp_id)
+            if cb:
                 name = cb.property("employee_name")
                 if name:
                     parts = name.split()
@@ -270,13 +383,36 @@ class DepartmentDialog(QDialog):
             self.comboManagers.setEditText("▼ Выберите руководителей")
 
     def load_department_data(self):
+        """Загрузка данных отдела для редактирования"""
         self.lineEditName.setText(self.department_data.get("name", ""))
         self.lineEditNumber.setText(str(self.department_data.get("number", "")))
-        self.lineEditPhone.setText(self.department_data.get("phone", ""))
 
-        saved_ids = self.department_data.get("managers", [])
-        for cb in self.manager_checkboxes:
-            if cb.property("employee_id") in saved_ids:
+        phone = self.department_data.get("phone_number", "") or self.department_data.get("phone", "")
+        self.lineEditPhone.setText(phone)
+
+        division_id = self.department_data.get("division_id")
+        if division_id:
+            index = self.comboBoxDivision.findData(division_id)
+            if index >= 0:
+                self.comboBoxDivision.setCurrentIndex(index)
+
+        boss_field = self.department_data.get("boss", "")
+        saved_ids = []
+
+        if boss_field and isinstance(boss_field, str):
+            for part in boss_field.split(','):
+                part = part.strip()
+                if part and part.isdigit():
+                    saved_ids.append(int(part))
+
+        print(f"📋 Загружаем сохраненных руководителей из boss='{boss_field}': {saved_ids}")
+
+        # Устанавливаем выбранных руководителей
+        self.selected_manager_ids.clear()
+        for emp_id in saved_ids:
+            self.selected_manager_ids.add(emp_id)
+            cb = self.checkboxes_by_id.get(emp_id)
+            if cb:
                 cb.setChecked(True)
 
         self.update_selected_managers_text()
@@ -285,24 +421,44 @@ class DepartmentDialog(QDialog):
         name = self.lineEditName.text().strip()
         number = self.lineEditNumber.text().strip()
         phone = self.lineEditPhone.text().strip()
+        division_id = self.comboBoxDivision.currentData()
 
         if not name:
-            QtWidgets.QMessageBox.warning(self, "Ошибка", "Название отдела обязательно!")
+            QMessageBox.warning(self, "Ошибка", "Название отдела обязательно!")
+            return
+        if not number:
+            QMessageBox.warning(self, "Ошибка", "Номер отдела обязателен!")
             return
         if not number.isdigit():
-            QtWidgets.QMessageBox.warning(self, "Ошибка", "Номер отдела должен быть числом!")
+            QMessageBox.warning(self, "Ошибка", "Номер отдела должен быть числом!")
             return
         if not phone:
-            QtWidgets.QMessageBox.warning(self, "Ошибка", "Укажите номер телефона!")
+            QMessageBox.warning(self, "Ошибка", "Укажите номер телефона!")
+            return
+        if not division_id:
+            QMessageBox.warning(self, "Ошибка", "Выберите подразделение!")
             return
 
-        selected_managers = [cb.property("employee_id") for cb in self.manager_checkboxes if cb.isChecked()]
-        selected_names = [cb.property("employee_name") for cb in self.manager_checkboxes if cb.isChecked()]
+        selected_managers = list(self.selected_manager_ids)
+        selected_names = []
+        for emp_id in selected_managers:
+            cb = self.checkboxes_by_id.get(emp_id)
+            if cb:
+                selected_names.append(cb.property("employee_name"))
+
+        boss_string = ','.join(str(hid) for hid in selected_managers) if selected_managers else ""
+
+        print(f"💾 Сохраняем отдел: {name}")
+        print(f"   Подразделение ID: {division_id}")
+        print(f"   Выбранные руководители (ID): {selected_managers}")
+        print(f"   Boss строка: '{boss_string}'")
 
         department_info = {
             "name": name,
             "number": int(number),
             "phone": phone,
+            "division_id": division_id,
+            "boss": boss_string,
             "managers": selected_managers,
             "managers_names": selected_names
         }
@@ -314,40 +470,13 @@ class DepartmentDialog(QDialog):
         self.accept()
 
     def setup_keyboard_navigation(self):
-        """Навигация по полям с помощью стрелок ↑ ↓"""
         self.fields = [
             self.lineEditName,
             self.lineEditNumber,
             self.lineEditPhone,
+            self.comboBoxDivision,
             self.comboManagers,
         ]
-
         for widget in self.fields:
             if widget is not None:
                 widget.installEventFilter(self)
-
-    def eventFilter(self, obj, event):
-        """Обработка стрелок Вверх и Вниз"""
-        if event.type() == QEvent.Type.KeyPress:
-            key = event.key()
-
-            try:
-                current_index = self.fields.index(obj)
-            except (ValueError, AttributeError):
-                return super().eventFilter(obj, event)
-
-            if key == Qt.Key.Key_Down:
-                next_index = (current_index + 1) % len(self.fields)
-                next_widget = self.fields[next_index]
-                if next_widget:
-                    next_widget.setFocus()
-                return True
-
-            elif key == Qt.Key.Key_Up:
-                prev_index = (current_index - 1) % len(self.fields)
-                prev_widget = self.fields[prev_index]
-                if prev_widget:
-                    prev_widget.setFocus()
-                return True
-
-        return super().eventFilter(obj, event)

@@ -41,7 +41,7 @@ class EmployeeCard(QFrame):
         fio = ' '.join(part for part in [last_name, first_name, middle_name] if part)
         self.nameLabel.setText(fio)
 
-        # === РОЛЬ (главное исправление) ===
+        # === РОЛЬ ===
         rights = self.employee_data.get('rights', 'user')
         role_text = {
             'superadmin': 'Суперадминистратор',
@@ -64,12 +64,8 @@ class EmployeeCard(QFrame):
                 padding: 4px 14px;
                 border-radius: 12px;
                 font-weight: bold;
-                min-height: 17px;     /* фиксированная высота */
-                max-height: 17px;
             }}
         """)
-
-        # Жёстко фиксируем высоту плашки — теперь все роли будут одинакового размера
         self.roleLabel.setFixedHeight(28)
 
         # Должность
@@ -82,16 +78,40 @@ class EmployeeCard(QFrame):
         if self.employee_data.get('department'):
             dept = self.employee_data['department']
             dept_name = dept.get('name', str(dept)) if isinstance(dept, dict) else str(dept)
+        elif self.employee_data.get('department_id'):
+            dept_id = self.employee_data.get('department_id')
+            if hasattr(self, 'parent') and hasattr(self.parent(), 'get_department_name'):
+                dept_name = self.parent().get_department_name(dept_id)
+            else:
+                dept_name = f"Отдел ID: {dept_id}"
+        elif self.employee_data.get('department_name'):
+            dept_name = self.employee_data.get('department_name')
+
         if hasattr(self, 'departmentValue'):
             self.departmentValue.setText(dept_name)
+            if hasattr(self, 'departmentSectionLabel'):
+                self.departmentSectionLabel.setVisible(dept_name != '—')
+            self.departmentValue.setVisible(dept_name != '—')
 
         # Подразделение
         div_name = '—'
         if self.employee_data.get('division'):
             div = self.employee_data['division']
             div_name = div.get('name', str(div)) if isinstance(div, dict) else str(div)
+        elif self.employee_data.get('division_id'):
+            div_id = self.employee_data.get('division_id')
+            if hasattr(self, 'parent') and hasattr(self.parent(), 'get_division_name'):
+                div_name = self.parent().get_division_name(div_id)
+            else:
+                div_name = f"Подразделение ID: {div_id}"
+        elif self.employee_data.get('division_name'):
+            div_name = self.employee_data.get('division_name')
+
         if hasattr(self, 'divisionValue'):
             self.divisionValue.setText(div_name)
+            if hasattr(self, 'divisionSectionLabel'):
+                self.divisionSectionLabel.setVisible(div_name != '—')
+            self.divisionValue.setVisible(div_name != '—')
 
         # Мобильный телефон
         phone = self.employee_data.get('phone_number', '')
@@ -100,6 +120,14 @@ class EmployeeCard(QFrame):
             self.mobilePhoneValue.setVisible(bool(phone))
             if hasattr(self, 'mobilePhoneLabel'):
                 self.mobilePhoneLabel.setVisible(bool(phone))
+
+        # Рабочий телефон
+        work_phone = self.employee_data.get('work_number', '')
+        if hasattr(self, 'workPhoneValue'):
+            self.workPhoneValue.setText(work_phone if work_phone else '—')
+            self.workPhoneValue.setVisible(bool(work_phone))
+            if hasattr(self, 'workPhoneLabel'):
+                self.workPhoneLabel.setVisible(bool(work_phone))
 
         # Email
         email = self.employee_data.get('email', '')

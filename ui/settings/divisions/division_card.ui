@@ -85,6 +85,9 @@ QLabel#codeValue {
      </item>
      <item>
       <spacer name="horizontalSpacer">
+       <property name="orientation">
+        <enum>Qt::Vertical</enum>
+       </property>
        <property name="sizeHint" stdset="0">
         <size>
          <width>40</width>
@@ -95,6 +98,18 @@ QLabel#codeValue {
      </item>
      <item>
       <widget class="QLabel" name="numberLabel">
+       <property name="sizePolicy">
+        <sizepolicy hsizetype="Minimum" vsizetype="Preferred">
+         <horstretch>0</horstretch>
+         <verstretch>0</verstretch>
+        </sizepolicy>
+       </property>
+       <property name="maximumSize">
+        <size>
+         <width>60</width>
+         <height>16777215</height>
+        </size>
+       </property>
        <property name="text">
         <string>№ 1</string>
        </property>
@@ -106,6 +121,12 @@ QLabel#codeValue {
     <layout class="QHBoxLayout" name="codeLayout">
      <item>
       <widget class="QLabel" name="codeSectionLabel">
+       <property name="maximumSize">
+        <size>
+         <width>100</width>
+         <height>16777215</height>
+        </size>
+       </property>
        <property name="text">
         <string>Расшифровка:</string>
        </property>
@@ -116,10 +137,16 @@ QLabel#codeValue {
        <property name="text">
         <string>С-001</string>
        </property>
+       <property name="alignment">
+        <set>Qt::AlignLeading|Qt::AlignLeft|Qt::AlignVCenter</set>
+       </property>
       </widget>
      </item>
      <item>
       <spacer name="horizontalSpacer_2">
+       <property name="orientation">
+        <enum>Qt::Vertical</enum>
+       </property>
        <property name="sizeHint" stdset="0">
         <size>
          <width>40</width>
@@ -134,6 +161,12 @@ QLabel#codeValue {
     <layout class="QHBoxLayout" name="bossLayout">
      <item>
       <widget class="QLabel" name="bossSectionLabel">
+       <property name="maximumSize">
+        <size>
+         <width>100</width>
+         <height>16777215</height>
+        </size>
+       </property>
        <property name="text">
         <string>Руководитель:</string>
        </property>
@@ -148,6 +181,9 @@ QLabel#codeValue {
      </item>
      <item>
       <spacer name="horizontalSpacer_3">
+       <property name="orientation">
+        <enum>Qt::Vertical</enum>
+       </property>
        <property name="sizeHint" stdset="0">
         <size>
          <width>40</width>
@@ -162,6 +198,12 @@ QLabel#codeValue {
     <layout class="QHBoxLayout" name="phoneLayout">
      <item>
       <widget class="QLabel" name="phoneSectionLabel">
+       <property name="maximumSize">
+        <size>
+         <width>100</width>
+         <height>16777215</height>
+        </size>
+       </property>
        <property name="text">
         <string>Телефон:</string>
        </property>
@@ -176,6 +218,9 @@ QLabel#codeValue {
      </item>
      <item>
       <spacer name="horizontalSpacer_4">
+       <property name="orientation">
+        <enum>Qt::Vertical</enum>
+       </property>
        <property name="sizeHint" stdset="0">
         <size>
          <width>40</width>

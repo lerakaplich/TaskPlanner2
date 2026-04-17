@@ -46,14 +46,20 @@ QLabel#numberLabel {
     padding: 3px 10px;
     border-radius: 12px;
 }
-QLabel#sectionLabel {
+QLabel#divisionSectionLabel {
     font-size: 13px;
     color: #666;
     font-weight: bold;
     background-color: white;
 }
-QLabel#valueLabel {
+QLabel#divisionValueLabel {
     color: #1B232A;
+    background-color: white;
+}
+QLabel#bossesSectionLabel {
+    font-size: 13px;
+    color: #666;
+    font-weight: bold;
     background-color: white;
 }
 QLabel#bossLabel {
@@ -62,6 +68,16 @@ QLabel#bossLabel {
     border-radius: 12px;
     font-size: 12px;
     color: #1B232A;
+}
+QLabel#phoneSectionLabel {
+    font-size: 13px;
+    color: #666;
+    font-weight: bold;
+    background-color: white;
+}
+QLabel#phoneValueLabel {
+    color: #1B232A;
+    background-color: white;
 }</string>
   </property>
   <layout class="QVBoxLayout" name="verticalLayout">
@@ -114,14 +130,14 @@ QLabel#bossLabel {
    <item>
     <layout class="QHBoxLayout" name="divisionLayout">
      <item>
-      <widget class="QLabel" name="sectionLabel">
+      <widget class="QLabel" name="divisionSectionLabel">
        <property name="text">
         <string>Подразделение:</string>
        </property>
       </widget>
      </item>
      <item>
-      <widget class="QLabel" name="valueLabel">
+      <widget class="QLabel" name="divisionValueLabel">
        <property name="text">
         <string>Северное подразделение</string>
        </property>
@@ -148,7 +164,7 @@ QLabel#bossLabel {
       <number>5</number>
      </property>
      <item>
-      <widget class="QLabel" name="sectionLabel">
+      <widget class="QLabel" name="bossesSectionLabel">
        <property name="text">
         <string>Руководители:</string>
        </property>
@@ -172,20 +188,6 @@ QLabel#bossLabel {
         <property name="bottomMargin">
          <number>0</number>
         </property>
-        <item>
-         <widget class="QLabel" name="bossLabel">
-          <property name="text">
-           <string>Иванов И.И.</string>
-          </property>
-         </widget>
-        </item>
-        <item>
-         <widget class="QLabel" name="bossLabel">
-          <property name="text">
-           <string>Петров П.П.</string>
-          </property>
-         </widget>
-        </item>
        </layout>
       </widget>
      </item>
@@ -194,14 +196,14 @@ QLabel#bossLabel {
    <item>
     <layout class="QHBoxLayout" name="phoneLayout">
      <item>
-      <widget class="QLabel" name="sectionLabel">
+      <widget class="QLabel" name="phoneSectionLabel">
        <property name="text">
         <string>Телефон:</string>
        </property>
       </widget>
      </item>
      <item>
-      <widget class="QLabel" name="valueLabel">
+      <widget class="QLabel" name="phoneValueLabel">
        <property name="styleSheet">
         <string notr="true">background-color: white;</string>
        </property>
@@ -244,7 +246,7 @@ QLabel#bossLabel {
     color: white;
     border: none;
     border-radius: 6px;
-    padding: 0px 12px;   /* вертикальный padding убрали */
+    padding: 0px 12px;
     font-size: 12px;
     min-height: 28px;
     max-height: 28px;
@@ -279,7 +281,7 @@ QPushButton:pressed {
     color: white;
     border: none;
     border-radius: 6px;
-    padding: 0px 12px;   /* вертикальный padding убрали */
+    padding: 0px 12px;
     font-size: 12px;
     min-height: 28px;
     max-height: 28px;

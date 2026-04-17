@@ -99,7 +99,7 @@ class EmployeeService:
                     'number': dept.number,
                     'name': dept.name,
                     'boss': dept.boss,
-                    'phone_number': dept.phone_number,
+                    'phone_number': dept.phone_number,  # ← убедитесь, что ключ 'phone_number'
                     'division_id': dept.division_id,
                 }
                 # Получаем название подразделения
@@ -328,7 +328,7 @@ class EmployeeService:
                 'id': new_department.id,
                 'number': new_department.number,
                 'name': new_department.name,
-                'phone': new_department.phone_number,
+                'phone_number': new_department.phone_number,  # ← исправлено: 'phone_number' вместо 'phone'
                 'boss': new_department.boss,
                 'division_id': new_department.division_id,
             }
@@ -452,6 +452,226 @@ class EmployeeService:
         finally:
             db_session.close()
 
+    def has_employees_in_department(self, department_id: int) -> bool:
+        """Проверяет, есть ли сотрудники в отделе"""
+        try:
+            from models.employees import ExternalEmployee
+            stmt = select(ExternalEmployee).where(ExternalEmployee.department_id == department_id)
+            count = len(self.session.scalars(stmt).all())
+            return count > 0
+        except Exception as e:
+            print(f"❌ Ошибка при проверке сотрудников в отделе: {e}")
+            return False
+
+    def delete_department_cascade(self, department_id: int) -> bool:
+        """Каскадное удаление отдела со всеми сотрудниками"""
+        db_session = self._get_employees_db_session()
+        try:
+            from models.employees import Department, LocalEmployee
+
+            # 1. Удаляем сотрудников (обновляем department_id = NULL)
+            try:
+                db_session.query(LocalEmployee).filter(LocalEmployee.department_id == department_id).delete()
+            except Exception as e:
+                print(f"⚠️ Не удалось удалить сотрудников: {e}")
+
+            # 2. Удаляем отдел
+            department = db_session.get(Department, department_id)
+            if department:
+                db_session.delete(department)
+
+            db_session.commit()
+            print(f"✅ Каскадное удаление отдела {department_id} выполнено")
+            return True
+
+        except Exception as e:
+            db_session.rollback()
+            print(f"❌ Ошибка при каскадном удалении отдела: {e}")
+            import traceback
+            traceback.print_exc()
+            return False
+        finally:
+            db_session.close()
+
+    def reassign_department_employees(self, old_department_id: int, new_department_id: int) -> bool:
+        """Переназначение сотрудников из одного отдела в другой"""
+        db_session = self._get_employees_db_session()
+        try:
+            from models.employees import LocalEmployee
+
+            # Обновляем сотрудников
+            db_session.query(LocalEmployee).filter(LocalEmployee.department_id == old_department_id).update(
+                {'department_id': new_department_id}
+            )
+
+            db_session.commit()
+            print(f"✅ Переназначены сотрудники с {old_department_id} на {new_department_id}")
+            return True
+
+        except Exception as e:
+            db_session.rollback()
+            print(f"❌ Ошибка при переназначении сотрудников: {e}")
+            import traceback
+            traceback.print_exc()
+            return False
+        finally:
+            db_session.close()
+
+    def create_employee_in_db(self, data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """
+        Создание сотрудника в базе employees (схема public)
+        """
+        db_session = self._get_employees_db_session()
+        try:
+            from models.employees import LocalEmployee
+
+            # Получаем следующий номер
+            max_number = db_session.query(LocalEmployee.number).order_by(LocalEmployee.number.desc()).first()
+            next_number = (max_number[0] + 1) if max_number else 1
+
+            new_employee = LocalEmployee(
+                number=next_number,
+                last_name=data.get('last_name'),
+                first_name=data.get('first_name'),
+                middle_name=data.get('middle_name'),
+                position=data.get('position'),
+                rights=data.get('rights', 'user'),
+                phone_number=data.get('phone_number'),
+                work_number=data.get('work_number'),
+                email=data.get('email'),
+                birth_date=data.get('birth_date'),
+                department_id=data.get('department_id'),
+                division_id=data.get('division_id'),
+                organization_id=1
+            )
+
+            db_session.add(new_employee)
+            db_session.commit()
+            db_session.refresh(new_employee)
+
+            print(f"✅ Сотрудник создан с ID: {new_employee.id}")
+
+            # Получаем названия отдела и подразделения
+            department_name = self._get_department_name(data.get('department_id'))
+            division_name = self._get_division_name(data.get('division_id'))
+
+            return {
+                'id': new_employee.id,
+                'number': new_employee.number,
+                'last_name': new_employee.last_name,
+                'first_name': new_employee.first_name,
+                'middle_name': new_employee.middle_name,
+                'position': new_employee.position,
+                'rights': new_employee.rights,
+                'phone_number': new_employee.phone_number,
+                'work_number': new_employee.work_number,
+                'email': new_employee.email,
+                'birth_date': new_employee.birth_date,
+                'department_id': new_employee.department_id,
+                'division_id': new_employee.division_id,
+                'department': department_name,
+                'division': division_name
+            }
+
+        except Exception as e:
+            db_session.rollback()
+            print(f"❌ Ошибка при создании сотрудника: {e}")
+            import traceback
+            traceback.print_exc()
+            return None
+        finally:
+            db_session.close()
+
+    def update_employee_in_db(self, employee_id: int, data: Dict[str, Any]) -> bool:
+        """
+        Обновление сотрудника в базе employees (схема public)
+        """
+        db_session = self._get_employees_db_session()
+        try:
+            from models.employees import LocalEmployee
+
+            employee = db_session.get(LocalEmployee, employee_id)
+            if not employee:
+                print(f"❌ Сотрудник {employee_id} не найден в public.employees")
+                return False
+
+            if 'last_name' in data:
+                employee.last_name = data['last_name']
+            if 'first_name' in data:
+                employee.first_name = data['first_name']
+            if 'middle_name' in data:
+                employee.middle_name = data['middle_name']
+            if 'position' in data:
+                employee.position = data['position']
+            if 'rights' in data:
+                employee.rights = data['rights']
+            if 'phone_number' in data:
+                employee.phone_number = data['phone_number']
+            if 'work_number' in data:
+                employee.work_number = data['work_number']
+            if 'email' in data:
+                employee.email = data['email']
+            if 'birth_date' in data:
+                employee.birth_date = data['birth_date']
+            if 'department_id' in data:
+                employee.department_id = data['department_id']
+            if 'division_id' in data:
+                employee.division_id = data['division_id']
+
+            db_session.commit()
+            print(f"✅ Сотрудник {employee_id} обновлён в БД employees (public.employees)")
+            return True
+
+        except Exception as e:
+            db_session.rollback()
+            print(f"❌ Ошибка при обновлении сотрудника: {e}")
+            import traceback
+            traceback.print_exc()
+            return False
+        finally:
+            db_session.close()
+
+    def delete_employee_in_db(self, employee_id: int) -> bool:
+        """
+        Удаление сотрудника из базы employees (схема public)
+        """
+        db_session = self._get_employees_db_session()
+        try:
+            from models.employees import LocalEmployee
+
+            employee = db_session.get(LocalEmployee, employee_id)
+            if employee:
+                db_session.delete(employee)
+                db_session.commit()
+                print(f"✅ Сотрудник {employee_id} удалён из БД employees (public.employees)")
+                return True
+            else:
+                print(f"❌ Сотрудник {employee_id} не найден в public.employees")
+                return False
+
+        except Exception as e:
+            db_session.rollback()
+            print(f"❌ Ошибка при удалении сотрудника: {e}")
+            import traceback
+            traceback.print_exc()
+            return False
+        finally:
+            db_session.close()
+
+    def _get_department_name(self, department_id: int) -> str:
+        """Получить название отдела по ID"""
+        if not department_id:
+            return ''
+        dept = self.session.get(DepartmentFDW, department_id)
+        return dept.name if dept else ''
+
+    def _get_division_name(self, division_id: int) -> str:
+        """Получить название подразделения по ID"""
+        if not division_id:
+            return ''
+        div = self.session.get(DivisionFDW, division_id)
+        return div.name if div else ''
+
     def update_department_in_db(self, department_id: int, data: Dict[str, Any]) -> bool:
         """
         Обновление отдела в базе employees (схема public)
@@ -469,8 +689,11 @@ class EmployeeService:
                 department.name = data['name']
             if 'number' in data:
                 department.number = data['number']
+            # Поддерживаем оба варианта ключа: 'phone' и 'phone_number'
             if 'phone' in data:
                 department.phone_number = data['phone']
+            if 'phone_number' in data:
+                department.phone_number = data['phone_number']
             if 'boss' in data:
                 department.boss = data['boss']
             if 'division_id' in data:

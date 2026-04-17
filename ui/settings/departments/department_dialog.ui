@@ -205,9 +205,6 @@
      <property name="text">
       <string>Добавление нового отдела</string>
      </property>
-     <property name="alignment">
-      <set>Qt::AlignmentFlag::AlignCenter</set>
-     </property>
     </widget>
    </item>
    <item>
@@ -229,8 +226,8 @@
        <rect>
         <x>0</x>
         <y>0</y>
-        <width>558</width>
-        <height>348</height>
+        <width>550</width>
+        <height>363</height>
        </rect>
       </property>
       <layout class="QVBoxLayout" name="verticalLayoutScroll">
@@ -276,40 +273,6 @@
           <property name="spacing">
            <number>10</number>
           </property>
-          <item row="0" column="0">
-           <widget class="QLabel" name="labelName">
-            <property name="text">
-             <string>Название отдела *</string>
-            </property>
-            <property name="required" stdset="0">
-             <bool>true</bool>
-            </property>
-           </widget>
-          </item>
-          <item row="0" column="1">
-           <widget class="QLineEdit" name="lineEditName">
-            <property name="placeholderText">
-             <string>Введите название отдела</string>
-            </property>
-           </widget>
-          </item>
-          <item row="1" column="0">
-           <widget class="QLabel" name="labelNumber">
-            <property name="text">
-             <string>Номер отдела *</string>
-            </property>
-            <property name="required" stdset="0">
-             <bool>true</bool>
-            </property>
-           </widget>
-          </item>
-          <item row="1" column="1">
-           <widget class="QLineEdit" name="lineEditNumber">
-            <property name="placeholderText">
-             <string>Введите номер отдела</string>
-            </property>
-           </widget>
-          </item>
           <item row="2" column="0">
            <widget class="QLabel" name="labelPhone">
             <property name="text">
@@ -326,6 +289,53 @@
              <string>+7 (XXX) XXX-XX-XX</string>
             </property>
            </widget>
+          </item>
+          <item row="0" column="0">
+           <widget class="QLabel" name="labelName">
+            <property name="text">
+             <string>Название отдела *</string>
+            </property>
+            <property name="required" stdset="0">
+             <bool>true</bool>
+            </property>
+           </widget>
+          </item>
+          <item row="1" column="0">
+           <widget class="QLabel" name="labelNumber">
+            <property name="text">
+             <string>Номер отдела *</string>
+            </property>
+            <property name="required" stdset="0">
+             <bool>true</bool>
+            </property>
+           </widget>
+          </item>
+          <item row="0" column="1">
+           <widget class="QLineEdit" name="lineEditName">
+            <property name="placeholderText">
+             <string>Введите название отдела</string>
+            </property>
+           </widget>
+          </item>
+          <item row="1" column="1">
+           <widget class="QLineEdit" name="lineEditNumber">
+            <property name="placeholderText">
+             <string>Введите номер отдела</string>
+            </property>
+           </widget>
+          </item>
+          <item row="3" column="0">
+           <widget class="QLabel" name="labelDivision">
+            <property name="text">
+             <string>Подразделение *</string>
+            </property>
+            <property name="required" stdset="0">
+             <bool>true</bool>
+            </property>
+           </widget>
+          </item>
+          <item row="3" column="1">
+           <widget class="QComboBox" name="comboBoxDivision"/>
           </item>
          </layout>
         </widget>
@@ -368,7 +378,7 @@
             <property name="editable">
              <bool>true</bool>
             </property>
-            <property name="placeholderText">
+            <property name="placeholderText" stdset="0">
              <string>Выберите руководителей</string>
             </property>
            </widget>

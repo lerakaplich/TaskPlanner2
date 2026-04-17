@@ -76,8 +76,9 @@ class SettingsPage(QWidget):
         if hasattr(self, 'session') and self.session:
             employee_service = EmployeeService(self.session)
             self.employees_tab.set_employee_service(employee_service)
+            self.employees_tab.set_session(self.session)  # ← ДОБАВЬТЕ ЭТУ СТРОКУ
 
-            # 👇 ДОБАВЛЯЕМ: Передаём session во вкладки отделов и подразделений
+            # Передаём session во вкладки отделов и подразделений
             self.departments_tab.set_session(self.session)
             self.divisions_tab.set_session(self.session)
 
@@ -134,23 +135,26 @@ class SettingsPage(QWidget):
         print(f"📊 Загружено сотрудников из БД: {len(self.all_employees)}")
         self.employees_tab.load_data(self.all_employees)
 
-        # 👇 ДОБАВЛЯЕМ: Загружаем отделы
+        # Загружаем отделы
         self.all_departments = employee_service.get_all_departments()
         print(f"📊 Загружено отделов из БД: {len(self.all_departments)}")
         self.departments_tab.load_data(self.all_departments)
 
-        # Загружаем подразделения
-        self.all_divisions = employee_service.get_all_divisions()
-        print(f"📊 Загружено подразделений из БД: {len(self.all_divisions)}")
-        self.divisions_tab.load_data(self.all_divisions)
+        # Передаём список сотрудников и подразделений для отображения имён и фильтрации
+        self.departments_tab.set_employees(self.all_employees)
 
-        # ← ДОБАВЬТЕ: Передаём список сотрудников для отображения имён
+        # Загружаем подразделения для фильтрации отделов
+        self.all_divisions = employee_service.get_all_divisions()
+        self.departments_tab.all_divisions = self.all_divisions
+        self.departments_tab.load_division_filters()
+
+        # Загружаем подразделения для вкладки подразделений
+        self.divisions_tab.load_data(self.all_divisions)
         self.divisions_tab.set_employees(self.all_employees)
 
         # Настраиваем фильтры
         self.employees_tab.load_filter_data(self.all_departments, self.all_divisions)
 
-    # Добавьте метод:
     def on_division_deleted(self, item_type: str, division_id: int):
         """Обработка удаления подразделения"""
         if item_type == "division":
