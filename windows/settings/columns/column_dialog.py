@@ -1,3 +1,5 @@
+# windows/settings/columns/column_dialog.py
+
 import os
 import sys
 
@@ -12,18 +14,17 @@ class ColumnDialog(QDialog):
     """Диалог добавления/редактирования колонки доски задач"""
     column_saved = pyqtSignal(dict)  # Сигнал при сохранении колонки
 
-    # Тестовые данные проектов (пока нет БД)
-    TEST_PROJECTS = [
-        {'id': 1, 'name': 'CRM Система'},
-        {'id': 2, 'name': 'Мобильное приложение'},
-        {'id': 3, 'name': 'Сайт компании'},
-        {'id': 4, 'name': 'ERP система'},
-    ]
-
-    def __init__(self, column_data=None, project_id=None, parent=None):
+    def __init__(self, column_data=None, project_id=None, is_template_mode=True, parent=None):
+        """
+        Args:
+            column_data: данные колонки (для редактирования)
+            project_id: ID проекта (только для режима проекта)
+            is_template_mode: True - работа с шаблонами, False - работа с колонками проекта
+        """
         super().__init__(parent)
         self.column_data = column_data or {}
         self.project_id = project_id or self.column_data.get('project_id')
+        self.is_template_mode = is_template_mode
         self.is_edit_mode = bool(column_data and column_data.get('id'))
         self.current_color = self.column_data.get('color', '#ccab6e')
         self.is_done_column = self.column_data.get('is_done_column', False)
@@ -45,12 +46,41 @@ class ColumnDialog(QDialog):
         """Настройка UI элементов"""
         # Устанавливаем заголовок в зависимости от режима
         if self.is_edit_mode:
-            self.setWindowTitle("Редактирование колонки")
-            if hasattr(self, 'titleLabel'):
-                self.titleLabel.setText("Редактирование колонки")
+            if self.is_template_mode:
+                self.setWindowTitle("Редактирование шаблона колонки")
+                if hasattr(self, 'titleLabel'):
+                    self.titleLabel.setText("Редактирование шаблона колонки")
+            else:
+                self.setWindowTitle("Редактирование колонки проекта")
+                if hasattr(self, 'titleLabel'):
+                    self.titleLabel.setText("Редактирование колонки проекта")
+        else:
+            if self.is_template_mode:
+                self.setWindowTitle("Добавление шаблона колонки")
+                if hasattr(self, 'titleLabel'):
+                    self.titleLabel.setText("Добавление шаблона колонки")
+            else:
+                self.setWindowTitle("Добавление колонки в проект")
+                if hasattr(self, 'titleLabel'):
+                    self.titleLabel.setText("Добавление колонки в проект")
+
+        # Скрываем/показываем элементы в зависимости от режима
+        if self.is_template_mode:
+            # В режиме шаблона не показываем привязку к проекту
+            if hasattr(self, 'projectFrame'):
+                self.projectFrame.hide()
+        else:
+            # В режиме проекта показываем информацию о проекте
+            if hasattr(self, 'projectFrame'):
+                self.projectFrame.show()
+            if hasattr(self, 'projectLabel') and self.project_id:
+                # Здесь можно подставить название проекта
+                self.projectLabel.setText(f"Проект ID: {self.project_id}")
+
         # Настройка валидации для поля ввода
         if hasattr(self, 'lineEditName'):
             self.lineEditName.setMaxLength(100)
+
         # Настройка цветного кружочка
         if hasattr(self, 'colorIndicator'):
             self.colorIndicator.setFixedSize(32, 32)
@@ -78,15 +108,16 @@ class ColumnDialog(QDialog):
             self.lineEditName.textChanged.connect(self.update_preview)
         if hasattr(self, 'checkBoxIsDone'):
             self.checkBoxIsDone.stateChanged.connect(self.on_done_checkbox_changed)
+
     def fill_data(self):
         """Заполнение полей данными при редактировании"""
         # Название колонки
         if hasattr(self, 'lineEditName'):
             name = self.column_data.get('name', '')
             self.lineEditName.setText(name)
+
         # Выбор цвета
         if hasattr(self, 'comboBoxColor'):
-            # Находим индекс цвета в комбобоксе
             color_index = -1
             for i in range(self.comboBoxColor.count()):
                 item_text = self.comboBoxColor.itemText(i)
@@ -96,49 +127,59 @@ class ColumnDialog(QDialog):
             if color_index >= 0:
                 self.comboBoxColor.setCurrentIndex(color_index)
             else:
-                # Добавляем текущий цвет в комбобокс, если его там нет
                 color_name = self.get_color_name(self.current_color)
                 self.comboBoxColor.addItem(f"{color_name} ({self.current_color})")
                 self.comboBoxColor.setCurrentIndex(self.comboBoxColor.count() - 1)
+
         # Чекбокс "Готовая колонка"
         if hasattr(self, 'checkBoxIsDone'):
             self.checkBoxIsDone.setChecked(self.is_done_column)
+
         # Обновляем предпросмотр
         self.update_preview()
         self.update_color_indicator(self.current_color)
         self.update_done_badge(self.is_done_column)
+
     def on_save_clicked(self):
         """Обработка сохранения колонки"""
         # Валидация
         if not self.validate():
             return
+
         # Сбор данных
         column_name = self.lineEditName.text().strip()
-        # Проверяем, что проект выбран
-        if not self.project_id:
+
+        # В режиме проекта проверяем, что проект выбран
+        if not self.is_template_mode and not self.project_id:
             QMessageBox.warning(
                 self,
                 "Ошибка",
                 "Не выбран проект для колонки."
             )
             return
+
         # Формируем данные для сохранения
         column_data = {
             'id': self.column_data.get('id', None),
-            'project_id': self.project_id,
             'name': column_name,
             'color': self.current_color,
             'is_done_column': self.is_done_column,
             'position': self.column_data.get('position', 0)
         }
+
+        # Добавляем project_id только если это не режим шаблона
+        if not self.is_template_mode:
+            column_data['project_id'] = self.project_id
+
         # Отправляем сигнал
         self.column_saved.emit(column_data)
         self.accept()
+
     def validate(self):
         """Валидация введенных данных"""
-        # Проверка названия
         if not hasattr(self, 'lineEditName'):
             return False
+
         name = self.lineEditName.text().strip()
         if not name:
             QMessageBox.warning(
@@ -147,7 +188,7 @@ class ColumnDialog(QDialog):
                 "Пожалуйста, введите название колонки."
             )
             return False
-        # Проверка длины
+
         if len(name) < 1:
             QMessageBox.warning(
                 self,
@@ -155,6 +196,7 @@ class ColumnDialog(QDialog):
                 "Название колонки должно содержать хотя бы 1 символ."
             )
             return False
+
         if len(name) > 100:
             QMessageBox.warning(
                 self,
@@ -162,7 +204,7 @@ class ColumnDialog(QDialog):
                 "Название колонки не должно превышать 100 символов."
             )
             return False
-        # Проверка цвета
+
         if not self.current_color:
             QMessageBox.warning(
                 self,
@@ -170,7 +212,9 @@ class ColumnDialog(QDialog):
                 "Пожалуйста, выберите цвет для колонки."
             )
             return False
+
         return True
+
     def on_color_indicator_clicked(self):
         """Открываем диалог выбора цвета по клику на кружочек"""
         dialog = ColorPickerDialog(self.current_color, self)
@@ -348,31 +392,3 @@ class ColumnDialog(QDialog):
 
         # Если клавиша не обработана — передаём дальше
         return super().eventFilter(obj, event)
-
-if __name__ == "__main__":
-    app = QApplication(sys.argv)
-
-    # === Тест 1: Создание новой колонки ===
-    dialog = ColumnDialog(project_id=1)  # Можно поменять ID проекта
-
-    # === Тест 2: Редактирование существующей колонки (раскомментируй при необходимости) ===
-    # test_column = {
-    #     'id': 10,
-    #     'project_id': 1,
-    #     'name': 'В работе',
-    #     'color': '#3498db',
-    #     'is_done_column': False,
-    #     'position': 2
-    # }
-    # dialog = ColumnDialog(column_data=test_column)
-
-    print("Открывается диалог ColumnDialog...")
-
-    if dialog.exec():
-        print("✅ Диалог закрыт с сохранением")
-        print("Сохранённые данные:")
-        print(dialog.get_column_data())
-    else:
-        print("❌ Диалог отменён пользователем")
-
-    sys.exit(app.exec())

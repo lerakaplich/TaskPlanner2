@@ -81,12 +81,14 @@ class SettingsPage(QWidget):
             # Передаём session во вкладки отделов и подразделений
             self.departments_tab.set_session(self.session)
             self.divisions_tab.set_session(self.session)
+            self.columns_tab.set_session(self.session)
 
         # Подключаем сигналы
         self.tags_tab.item_deleted.connect(self.on_item_deleted)
         self.employees_tab.item_deleted.connect(self.on_item_deleted)
         self.departments_tab.item_deleted.connect(self.on_item_deleted)
         self.divisions_tab.item_deleted.connect(self.on_item_deleted)
+        self.columns_tab.item_deleted.connect(self.on_item_deleted)  # ← Убедитесь, что это есть
         self.divisions_tab.item_deleted.connect(self.on_division_deleted)
         self.columns_tab.item_deleted.connect(self.on_item_deleted)
 
@@ -124,33 +126,36 @@ class SettingsPage(QWidget):
         print(f"Изменён {item_type}: {data}")
         self.item_edited.emit(item_type, data)
 
+    # windows/settings/settings_page.py
+
     def load_data_from_db(self):
         """Загрузка реальных данных из БД"""
         from services.employee_service import EmployeeService
+        from services.column_service import ColumnService  # ← ДОБАВИТЬ
 
         employee_service = EmployeeService(self.session)
+        column_service = ColumnService(self.session)  # ← ДОБАВИТЬ
 
         # Загружаем сотрудников
         self.all_employees = employee_service.get_all_employees()
-        print(f"📊 Загружено сотрудников из БД: {len(self.all_employees)}")
         self.employees_tab.load_data(self.all_employees)
 
         # Загружаем отделы
         self.all_departments = employee_service.get_all_departments()
-        print(f"📊 Загружено отделов из БД: {len(self.all_departments)}")
         self.departments_tab.load_data(self.all_departments)
-
-        # Передаём список сотрудников и подразделений для отображения имён и фильтрации
         self.departments_tab.set_employees(self.all_employees)
 
-        # Загружаем подразделения для фильтрации отделов
+        # Загружаем подразделения
         self.all_divisions = employee_service.get_all_divisions()
         self.departments_tab.all_divisions = self.all_divisions
         self.departments_tab.load_division_filters()
-
-        # Загружаем подразделения для вкладки подразделений
         self.divisions_tab.load_data(self.all_divisions)
         self.divisions_tab.set_employees(self.all_employees)
+
+        # Загружаем колонки (шаблоны)  ← ДОБАВИТЬ ЭТУ СЕКЦИЮ
+        self.all_columns = column_service.get_template_columns()
+        print(f"📊 Загружено шаблонов колонок из БД: {len(self.all_columns)}")
+        self.columns_tab.load_data(self.all_columns)
 
         # Настраиваем фильтры
         self.employees_tab.load_filter_data(self.all_departments, self.all_divisions)

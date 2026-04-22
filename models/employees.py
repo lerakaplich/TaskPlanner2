@@ -100,6 +100,7 @@ class LocalEmployee(Base):
     position: Mapped[Optional[str]]
     rights: Mapped[Optional[str]]
     phone_number: Mapped[Optional[str]]
+    work_number: Mapped[Optional[str]] = mapped_column(String(50))  # ← ДОБАВИТЬ ЭТУ СТРОКУ
     email: Mapped[Optional[str]]
     chat_id: Mapped[Optional[int]] = mapped_column(BigInteger)
     birth_date: Mapped[Optional[date]]

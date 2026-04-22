@@ -55,7 +55,12 @@ class EmployeesTab(BaseTab):
             # Сохраняем в БД
             new_employee = self.employee_service.create_employee_in_db(employee_data)
             if new_employee:
-                self.employees.append(new_employee)
+                # ЗАГРУЖАЕМ СВЕЖИЕ ДАННЫЕ ИЗ БД (с названиями отдела и подразделения)
+                fresh_employee = self.employee_service.get_employee_by_id(new_employee['id'])
+                if fresh_employee:
+                    self.employees.append(fresh_employee)
+                else:
+                    self.employees.append(new_employee)
                 self.refresh_cards()
                 self.employee_added.emit(new_employee)
                 QMessageBox.information(self, "Успех",
@@ -83,18 +88,22 @@ class EmployeesTab(BaseTab):
             # Обновляем в БД
             success = self.employee_service.update_employee_in_db(employee_id, employee_data)
             if success:
-                # Обновляем локальный список
-                for i, emp in enumerate(self.employees):
-                    if emp.get('id') == employee_id:
-                        employee_data['id'] = employee_id
-                        self.employees[i] = employee_data
-                        break
-                self.refresh_cards()
-                self.employee_updated.emit(employee_data)
-                QMessageBox.information(self, "Успех", "Сотрудник обновлён")
+                # Обновляем локальный список - ЗАГРУЖАЕМ СВЕЖИЕ ДАННЫЕ ИЗ БД
+                updated_employee = self.employee_service.get_employee_by_id(employee_id)
+                if updated_employee:
+                    for i, emp in enumerate(self.employees):
+                        if emp.get('id') == employee_id:
+                            self.employees[i] = updated_employee
+                            break
+                    self.refresh_cards()
+                    self.employee_updated.emit(updated_employee)
+                    QMessageBox.information(self, "Успех", "Сотрудник обновлён")
+                else:
+                    QMessageBox.warning(self, "Ошибка", "Не удалось загрузить обновлённые данные")
             else:
                 QMessageBox.warning(self, "Ошибка", "Не удалось обновить сотрудника в БД")
         else:
+            # Fallback для тестовых данных
             for i, emp in enumerate(self.employees):
                 if emp.get('id') == employee_id:
                     employee_data['id'] = employee_id
@@ -171,14 +180,49 @@ class EmployeesTab(BaseTab):
                 return div.get('name', '—')
         return '—'
 
+    # windows/settings/employees/employees_tab.py
+
     def refresh_cards(self, filtered_employees=None):
         employees_to_show = filtered_employees if filtered_employees is not None else self.employees
         self.clear_cards()
         for i, employee in enumerate(employees_to_show):
-            card = EmployeeCard(employee)
-            # Передаём методы для получения названий
-            card.get_department_name = self.get_department_name
-            card.get_division_name = self.get_division_name
+            # Добавляем названия отдела и подразделения в данные сотрудника
+            employee_with_names = employee.copy() if isinstance(employee, dict) else {}
+
+            # Получаем название отдела
+            dept_id = employee.get('department_id')
+            if dept_id and dept_id != '—':
+                dept_name = self.get_department_name(dept_id)
+                employee_with_names['department_name'] = dept_name
+            elif employee.get('department'):
+                dept = employee['department']
+                if isinstance(dept, dict):
+                    employee_with_names['department_name'] = dept.get('name', str(dept))
+                else:
+                    employee_with_names['department_name'] = str(dept)
+            else:
+                employee_with_names['department_name'] = employee.get('department_name', '—')
+
+            # Получаем название подразделения
+            div_id = employee.get('division_id')
+            if div_id and div_id != '—':
+                div_name = self.get_division_name(div_id)
+                employee_with_names['division_name'] = div_name
+            elif employee.get('division'):
+                div = employee['division']
+                if isinstance(div, dict):
+                    employee_with_names['division_name'] = div.get('name', str(div))
+                else:
+                    employee_with_names['division_name'] = str(div)
+            else:
+                employee_with_names['division_name'] = employee.get('division_name', '—')
+
+            # Копируем остальные поля
+            for key, value in employee.items():
+                if key not in employee_with_names:
+                    employee_with_names[key] = value
+
+            card = EmployeeCard(employee_with_names)
             card.edit_clicked.connect(self.on_edit_clicked)
             card.delete_clicked.connect(self.on_delete_clicked)
             self.add_card_to_grid(card, i)

@@ -47,20 +47,29 @@ class Project(Base):
 # =========================
 # board_columns
 # =========================
+
 class BoardColumn(Base):
     __tablename__ = "board_columns"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    project_id: Mapped[int] = mapped_column(
-        ForeignKey("projects.id", ondelete="CASCADE")
+    project_id: Mapped[Optional[int]] = mapped_column(  # ← может быть NULL для шаблонов
+        ForeignKey("projects.id", ondelete="CASCADE"),
+        nullable=True
     )
-    name: Mapped[str]
-    color: Mapped[str] = mapped_column(default="#ffffff")
+    name: Mapped[str] = mapped_column(String(100))
+    color: Mapped[str] = mapped_column(default="#ccab6e")
     position: Mapped[int]
     is_done_column: Mapped[bool] = mapped_column(default=False)
-    created_at: Mapped[datetime]
+    created_at: Mapped[datetime] = mapped_column(default=datetime.now)
 
-    project: Mapped["Project"] = relationship(back_populates="columns")
+    # Шаблонная колонка (не привязана к проекту)
+    is_template: Mapped[bool] = mapped_column(default=False)
+
+    # Для сортировки шаблонов
+    template_order: Mapped[Optional[int]] = mapped_column(default=None)
+
+    # relationships
+    project: Mapped[Optional["Project"]] = relationship(back_populates="columns")
     tasks: Mapped[List["Task"]] = relationship(
         back_populates="column",
         cascade="all, delete-orphan"

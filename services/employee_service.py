@@ -57,12 +57,15 @@ class EmployeeService:
             'birth_date': employee.birth_date,
             'department_id': employee.department_id,
             'division_id': employee.division_id,
+            'department_name': '—',  # ← ДОБАВИТЬ
+            'division_name': '—',  # ← ДОБАВИТЬ
         }
 
         # Получаем информацию об отделе через FDW
         if employee.department_id:
             dept = self.session.get(DepartmentFDW, employee.department_id)
             if dept:
+                result['department_name'] = dept.name  # ← ДОБАВИТЬ
                 result['department'] = {
                     'id': dept.id,
                     'number': dept.number,
@@ -75,6 +78,7 @@ class EmployeeService:
         if employee.division_id:
             div = self.session.get(DivisionFDW, employee.division_id)
             if div:
+                result['division_name'] = div.name  # ← ДОБАВИТЬ
                 result['division'] = {
                     'id': div.id,
                     'number': div.number,
@@ -738,6 +742,8 @@ class EmployeeService:
             return False
         finally:
             db_session.close()
+
+
 
     def search_employees(self, query: str) -> List[Dict[str, Any]]:
         """Поиск сотрудников"""

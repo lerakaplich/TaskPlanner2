@@ -60,12 +60,17 @@ class ProjectRepo:
     # =========================
     # Columns
     # =========================
-    def add_column(self, project_id: int, name: str, position: int) -> BoardColumn:
+    # repositories/project_repo.py
+
+    def add_column(self, project_id: int, name: str, position: int, color: str = "#ccab6e",
+                   is_done_column: bool = False) -> BoardColumn:
         """Добавляет колонку в проект"""
         column = BoardColumn(
             project_id=project_id,
             name=name,
             position=position,
+            color=color,  # ← ДОБАВИТЬ
+            is_done_column=is_done_column,  # ← ДОБАВИТЬ
             created_at=datetime.now()
         )
         self.session.add(column)

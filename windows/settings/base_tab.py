@@ -76,6 +76,8 @@ class BaseTab(QWidget):
             self.tools_frame.updateGeometry()
 
     # ====================== ЕДИНЫЙ МЕТОД УДАЛЕНИЯ ======================
+    # windows/settings/base_tab.py
+
     def confirm_delete(self, title: str, message: str, item_type: str, item_id: int):
         """
         Показывает красивое диалоговое окно удаления с золотой и красной кнопками
@@ -94,7 +96,6 @@ class BaseTab(QWidget):
         layout.setContentsMargins(30, 25, 30, 25)
         layout.setSpacing(20)
 
-        # Текст сообщения
         label = QLabel(message)
         label.setWordWrap(True)
         label.setStyleSheet("""
@@ -105,11 +106,9 @@ class BaseTab(QWidget):
         label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(label)
 
-        # Кнопки
         btn_layout = QHBoxLayout()
         btn_layout.setSpacing(15)
 
-        # Кнопка "Нет" — красная
         btn_no = QPushButton("Нет")
         btn_no.setFixedHeight(28)
         btn_no.setStyleSheet("""
@@ -129,7 +128,6 @@ class BaseTab(QWidget):
             }
         """)
 
-        # Кнопка "Да" — золотая
         btn_yes = QPushButton("Да")
         btn_yes.setFixedHeight(28)
         btn_yes.setStyleSheet("""
@@ -153,12 +151,12 @@ class BaseTab(QWidget):
         btn_layout.addWidget(btn_yes)
         layout.addLayout(btn_layout)
 
-        # Подключаем кнопки
         btn_no.clicked.connect(dialog.reject)
         btn_yes.clicked.connect(dialog.accept)
 
         if dialog.exec() == QDialog.DialogCode.Accepted:
-            self.item_deleted.emit(item_type, item_id)
+            print(f"✅ Подтверждено удаление {item_type} с ID {item_id}")
+            self.item_deleted.emit(item_type, item_id)  # ← Эмитим сигнал
 
     # ====================== ОСТАЛЬНЫЕ МЕТОДЫ ======================
     def clear_cards(self):

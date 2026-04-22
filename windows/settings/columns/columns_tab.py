@@ -1,3 +1,5 @@
+# windows/settings/columns/columns_tab.py
+
 from windows.settings.base_tab import BaseTab
 from windows.settings.columns.column_card import ColumnCard
 from PyQt6.QtWidgets import QMessageBox
@@ -6,18 +8,21 @@ from PyQt6.QtCore import pyqtSignal
 from windows.settings.columns.column_dialog import ColumnDialog
 
 
+# windows/settings/columns/columns_tab.py
+
 class ColumnsTab(BaseTab):
-    """Вкладка для управления колонками"""
+    """Вкладка для управления шаблонами колонок"""
 
     item_deleted = pyqtSignal(str, int)
-    item_edited = pyqtSignal(str, dict)      # оставляем для совместимости
+    item_edited = pyqtSignal(str, dict)
     item_color_changed = pyqtSignal(int, str)
-    item_added = pyqtSignal(str, dict)       # сигнал для добавления
+    item_added = pyqtSignal(str, dict)
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.project_id = None
         self.columns = []
+        self.column_service = None
+        self.session = None
         self.hide_filters()
 
         if self.btnAdd:
@@ -25,94 +30,121 @@ class ColumnsTab(BaseTab):
             self.btnAdd.setObjectName("btnAddColumn")
             self.btnAdd.clicked.connect(self.on_add_clicked)
 
+        # Подключаем сигнал удаления
+        self.item_deleted.connect(self.delete_item)  # ← ДОБАВИТЬ ЭТУ СТРОКУ
+
+    def set_session(self, session):
+        """Установка сессии БД"""
+        self.session = session
+        from services.column_service import ColumnService
+        self.column_service = ColumnService(session)
+
     def load_data(self, columns: list):
-        self.columns = columns
-
-        if not self.project_id and columns:
-            self.project_id = columns[0].get('project_id')
-
+        """Загрузка данных (только шаблонные колонки)"""
+        if self.column_service:
+            # Загружаем только шаблонные колонки
+            self.columns = self.column_service.get_template_columns()
+        else:
+            self.columns = columns
         self.refresh_cards()
 
-    # ==================== ДОБАВЛЕНИЕ ====================
     def on_add_clicked(self):
-        if self.project_id is None:
-            QMessageBox.warning(
-                self, "Ошибка",
-                "Не удалось определить ID проекта для добавления колонки."
-            )
-            return
-
-        dialog = ColumnDialog(project_id=self.project_id, parent=self)
+        """Открытие окна добавления шаблонной колонки"""
+        dialog = ColumnDialog(column_data=None, is_template_mode=True, parent=self)
         dialog.column_saved.connect(self.on_column_added)
         dialog.exec()
 
-    def on_column_added(self, column_data: dict):
-        """Новая колонка успешно сохранена"""
-        self.item_added.emit("column", column_data)
-
-    # ==================== РЕДАКТИРОВАНИЕ ====================
     def on_edit_clicked(self, column_id: int):
-        """Открытие диалога редактирования колонки"""
-        # Находим колонку по ID
+        """Открытие окна редактирования шаблонной колонки"""
         column = next((c for c in self.columns if c.get('id') == column_id), None)
-        if not column:
-            QMessageBox.warning(self, "Ошибка", "Колонка не найдена")
-            return
+        if column:
+            dialog = ColumnDialog(column_data=column, is_template_mode=True, parent=self)
+            dialog.column_saved.connect(lambda data: self.on_column_updated(column_id, data))
+            dialog.exec()
 
-        # Открываем диалог в режиме редактирования
-        dialog = ColumnDialog(
-            column_data=column,      # ← передаём данные для редактирования
-            project_id=self.project_id,
-            parent=self
-        )
+    def on_column_added(self, column_data: dict):
+        """Новая шаблонная колонка успешно сохранена"""
+        if self.column_service:
+            # Сохраняем в БД
+            new_column = self.column_service.create_template_column(column_data)
+            if new_column:
+                self.columns.append(new_column)
+                self.refresh_cards()
+                self.item_added.emit("column", new_column)
+                QMessageBox.information(self, "Успех", f"Колонка «{column_data.get('name')}» добавлена в шаблоны")
+            else:
+                QMessageBox.warning(self, "Ошибка", "Не удалось сохранить колонку")
+        else:
+            # Fallback для тестов
+            column_data['id'] = len(self.columns) + 1
+            self.columns.append(column_data)
+            self.refresh_cards()
+            self.item_added.emit("column", column_data)
 
-        # Подключаем сигнал сохранения
-        dialog.column_saved.connect(lambda updated_data: self.on_column_updated(column_id, updated_data))
+    def on_column_updated(self, column_id: int, column_data: dict):
+        """Обработка редактирования шаблонной колонки"""
+        if self.column_service:
+            success = self.column_service.update_template_column(column_id, column_data)
+            if success:
+                # Обновляем локальный список
+                for i, col in enumerate(self.columns):
+                    if col.get('id') == column_id:
+                        column_data['id'] = column_id
+                        self.columns[i] = column_data
+                        break
+                self.refresh_cards()
+                self.item_edited.emit("column", column_data)
+                QMessageBox.information(self, "Успех", "Колонка обновлена")
+            else:
+                QMessageBox.warning(self, "Ошибка", "Не удалось обновить колонку")
+        else:
+            # Fallback для тестов
+            for i, col in enumerate(self.columns):
+                if col.get('id') == column_id:
+                    column_data['id'] = column_id
+                    self.columns[i] = column_data
+                    break
+            self.refresh_cards()
+            self.item_edited.emit("column", column_data)
 
-        dialog.exec()
-
-    def on_column_updated(self, old_column_id: int, updated_data: dict):
-        """Обработка результата редактирования"""
-        # Обновляем данные в локальном списке
-        for i, col in enumerate(self.columns):
-            if col.get('id') == old_column_id:
-                # Сохраняем старый id, если в данных его нет
-                if updated_data.get('id') is None:
-                    updated_data['id'] = old_column_id
-                self.columns[i] = updated_data
-                break
-
-        # Перерисовываем все карточки
-        self.refresh_cards()
-
-        # Уведомляем родительское окно (если нужно обновить БД)
-        self.item_edited.emit("column", updated_data)
-
-        QMessageBox.information(
-            self,
-            "Успешно",
-            f"Колонка «{updated_data.get('name', '')}» успешно обновлена"
-        )
-
-    # ==================== УДАЛЕНИЕ И ИЗМЕНЕНИЕ ЦВЕТА ====================
     def on_delete_clicked(self, column_id: int):
-        """Удаление колонки"""
+        """Удаление шаблонной колонки - вызывается из карточки"""
         self.confirm_delete(
             title="Удаление колонки",
-            message="Вы уверены, что хотите удалить эту колонку?\nЭто действие нельзя отменить.",
+            message="Вы уверены, что хотите удалить эту колонку из шаблонов?\nЭто действие нельзя отменить.",
             item_type="column",
             item_id=column_id
         )
 
+    def delete_item(self, item_type: str, item_id: int):
+        """Обработка подтверждённого удаления - вызывается из base_tab"""
+        print(f"🗑️ delete_item вызван: item_type={item_type}, item_id={item_id}")
+
+        if item_type == "column":
+            if self.column_service:
+                success = self.column_service.delete_template_column(item_id)
+                if success:
+                    self.columns = [c for c in self.columns if c.get('id') != item_id]
+                    self.refresh_cards()
+                    QMessageBox.information(self, "Успех", "Колонка удалена из шаблонов")
+                else:
+                    QMessageBox.warning(self, "Ошибка", "Не удалось удалить колонку")
+            else:
+                self.columns = [c for c in self.columns if c.get('id') != item_id]
+                self.refresh_cards()
+
     def on_color_changed(self, column_id: int, new_color: str):
-        """Изменение цвета колонки"""
+        """Изменение цвета шаблонной колонки"""
+        if self.column_service:
+            self.column_service.update_template_column(column_id, {'color': new_color})
+
         for column in self.columns:
             if column.get('id') == column_id:
                 column['color'] = new_color
                 break
 
         self.item_color_changed.emit(column_id, new_color)
-        self.refresh_cards()   # сразу обновляем вид карточек
+        self.refresh_cards()
 
     def refresh_cards(self):
         self.clear_cards()

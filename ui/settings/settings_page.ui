@@ -268,9 +268,6 @@ QScrollBar::add-line, QScrollBar::sub-line {
       </item>
       <item>
        <spacer name="horizontalSpacer">
-        <property name="orientation">
-         <enum>Qt::Orientation::Horizontal</enum>
-        </property>
         <property name="sizeHint" stdset="0">
          <size>
           <width>40</width>
@@ -285,11 +282,11 @@ QScrollBar::add-line, QScrollBar::sub-line {
    <item>
     <widget class="QTabWidget" name="tabWidget">
      <property name="currentIndex">
-      <number>4</number>
+      <number>0</number>
      </property>
      <widget class="QWidget" name="tabHashtags">
       <attribute name="title">
-       <string>Хэштеги</string>
+       <string>Темы</string>
       </attribute>
       <layout class="QVBoxLayout" name="verticalLayoutHashtags">
        <item>
@@ -302,8 +299,8 @@ QScrollBar::add-line, QScrollBar::sub-line {
            <rect>
             <x>0</x>
             <y>0</y>
-            <width>1449</width>
-            <height>643</height>
+            <width>1451</width>
+            <height>651</height>
            </rect>
           </property>
           <layout class="QGridLayout" name="gridLayoutHashtags">
@@ -343,8 +340,8 @@ QScrollBar::add-line, QScrollBar::sub-line {
            <rect>
             <x>0</x>
             <y>0</y>
-            <width>1449</width>
-            <height>643</height>
+            <width>81</width>
+            <height>30</height>
            </rect>
           </property>
           <layout class="QGridLayout" name="gridLayoutEmployees">
@@ -384,8 +381,8 @@ QScrollBar::add-line, QScrollBar::sub-line {
            <rect>
             <x>0</x>
             <y>0</y>
-            <width>1449</width>
-            <height>643</height>
+            <width>81</width>
+            <height>30</height>
            </rect>
           </property>
           <layout class="QGridLayout" name="gridLayoutDepartments">
@@ -425,8 +422,8 @@ QScrollBar::add-line, QScrollBar::sub-line {
            <rect>
             <x>0</x>
             <y>0</y>
-            <width>1449</width>
-            <height>643</height>
+            <width>81</width>
+            <height>30</height>
            </rect>
           </property>
           <layout class="QGridLayout" name="gridLayoutSubdivisions">
@@ -466,8 +463,8 @@ QScrollBar::add-line, QScrollBar::sub-line {
            <rect>
             <x>0</x>
             <y>0</y>
-            <width>1449</width>
-            <height>643</height>
+            <width>1451</width>
+            <height>651</height>
            </rect>
           </property>
           <layout class="QGridLayout" name="gridLayoutColumns">
