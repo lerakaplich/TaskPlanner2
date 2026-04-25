@@ -1,13 +1,65 @@
-# windows/other_tasks/task_dialog.py
+# windows/other_tasks/task_dialog.py - исправленный
 
 import os
 from typing import Dict, Optional, List
 from PyQt6 import uic
-from PyQt6.QtWidgets import QDialog, QMessageBox
-from PyQt6.QtCore import QDate, QDateTime, pyqtSignal
+from PyQt6.QtWidgets import QDialog, QMessageBox, QListWidgetItem, QPushButton, QHBoxLayout, QWidget, QLabel, \
+    QVBoxLayout, QFrame
+from PyQt6.QtCore import QDate, QDateTime, pyqtSignal, Qt
 from PyQt6.QtGui import QFont
 
 from services.tasks_service import TasksService
+
+
+class TagWidget(QWidget):
+    """Виджет для отображения отдельного тега с кнопкой удаления"""
+    tag_removed = pyqtSignal(str)
+
+    def __init__(self, tag_name: str, color: str = "#ccab6e", parent=None):
+        super().__init__(parent)
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(5, 2, 5, 2)
+        layout.setSpacing(5)
+
+        self.tag_button = QPushButton(f"#{tag_name}")
+        self.tag_button.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {color}20;
+                color: {color};
+                border: 1px solid {color};
+                border-radius: 10px;
+                padding: 4px 8px;
+                font-size: 11px;
+                font-weight: bold;
+            }}
+            QPushButton:hover {{
+                background-color: {color}40;
+            }}
+        """)
+        self.tag_button.setCursor(Qt.CursorShape.PointingHandCursor)
+
+        self.remove_button = QPushButton("✕")
+        self.remove_button.setFixedSize(18, 18)
+        self.remove_button.setStyleSheet(f"""
+            QPushButton {{
+                background-color: transparent;
+                color: {color};
+                border: none;
+                font-size: 12px;
+                font-weight: bold;
+            }}
+            QPushButton:hover {{
+                color: #D22730;
+            }}
+        """)
+        self.remove_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.remove_button.clicked.connect(lambda: self.tag_removed.emit(tag_name))
+
+        layout.addWidget(self.tag_button)
+        layout.addWidget(self.remove_button)
+        layout.addStretch()
+
+        self.tag_name = tag_name
 
 
 class TaskDialog(QDialog):
@@ -27,11 +79,11 @@ class TaskDialog(QDialog):
         self.mode = mode
         self.current_user = current_user or {"id": 1, "last_name": "Копейкина", "first_name": "Виктория",
                                              "middle_name": "Анатольевна"}
-        self.selected_tags = []  # Список выбранных тегов
+        self.selected_tags = []
 
         # Загружаем UI
-        ui_path = os.path.join(os.path.dirname(__file__), "..", "..", "ui", "other_tasks")
-        uic.loadUi(os.path.join(ui_path, "task_dialog.ui"), self)
+        ui_path = os.path.join(os.path.dirname(__file__), "..", "..", "ui", "other_tasks", "task_dialog.ui")
+        uic.loadUi(ui_path, self)
 
         # Настройка UI
         self.setup_ui()
@@ -39,15 +91,127 @@ class TaskDialog(QDialog):
         if hasattr(self, 'createBtn'):
             self.createBtn.clicked.connect(self.validate_and_save)
 
-        # Настройка comboBoxTags
-        if hasattr(self, 'comboBoxTags'):
-            # Делаем comboBoxTags редактируемым для ввода новых тегов
-            self.comboBoxTags.setEditable(True)
-            self.comboBoxTags.lineEdit().returnPressed.connect(self.add_tag_from_input)
-            self.comboBoxTags.activated.connect(self.on_tag_selected)
+        # Настройка работы с тегами
+        self.setup_tags_ui()
+
+    def setup_tags_ui(self):
+        """Настраивает UI для работы с тегами"""
+        # Создаем контейнер для тегов, если его нет
+        if not hasattr(self, 'tags_container'):
+            # Создаем фрейм для тегов
+            self.tags_frame = QFrame(self)
+            self.tags_frame.setFrameShape(QFrame.Shape.StyledPanel)
+            self.tags_frame.setStyleSheet("""
+                QFrame {
+                    background-color: #f0f0f0;
+                    border-radius: 8px;
+                    border: 1px solid #e0e0e0;
+                    min-height: 50px;
+                }
+            """)
+            self.tags_container = QVBoxLayout(self.tags_frame)
+            self.tags_container.setContentsMargins(10, 10, 10, 10)
+            self.tags_container.setSpacing(8)
+
+            # Вставляем фрейм с тегами после comboBoxTag
+            if hasattr(self, 'verticalLayout'):
+                # Находим индекс comboBoxTag
+                for i in range(self.verticalLayout.count()):
+                    item = self.verticalLayout.itemAt(i)
+                    if item and item.widget() == self.comboBoxTag:
+                        self.verticalLayout.insertWidget(i + 1, self.tags_frame)
+                        break
+
+        # Очищаем контейнер
+        self.clear_tags_container()
+
+        # Настройка comboBox для выбора тегов - ИСПРАВЛЕНО ИМЯ
+        if hasattr(self, 'comboBoxTag'):
+            self.comboBoxTag.setEditable(True)
+            self.comboBoxTag.lineEdit().setPlaceholderText("Введите название темы или выберите из списка...")
+            self.comboBoxTag.lineEdit().returnPressed.connect(self.add_tag_from_input)
+            self.comboBoxTag.activated.connect(self.on_tag_selected)
+            print("✅ Настройка comboBoxTag завершена")
+
+    def clear_tags_container(self):
+        """Очищает контейнер с тегами"""
+        if hasattr(self, 'tags_container'):
+            while self.tags_container.count():
+                item = self.tags_container.takeAt(0)
+                if item.widget():
+                    item.widget().deleteLater()
+
+    def update_tags_display(self):
+        """Обновляет отображение выбранных тегов"""
+        self.clear_tags_container()
+
+        if not self.selected_tags:
+            label = QLabel("Темы не выбраны")
+            label.setStyleSheet("color: #999; font-style: italic;")
+            label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            self.tags_container.addWidget(label)
+            return
+
+        for tag_name in self.selected_tags:
+            tag_color = "#ccab6e"
+            if self.service:
+                all_tags = self.service.get_all_tags()
+                for tag in all_tags:
+                    if tag["name"] == tag_name:
+                        tag_color = tag.get("color", "#ccab6e")
+                        break
+
+            tag_widget = TagWidget(tag_name, tag_color)
+            tag_widget.tag_removed.connect(self.remove_tag)
+            self.tags_container.addWidget(tag_widget)
+
+        self.tags_container.addStretch()
+
+    def add_tag_from_input(self):
+        """Добавляет тег из поля ввода"""
+        if not hasattr(self, 'comboBoxTag'):
+            return
+
+        tag_text = self.comboBoxTag.lineEdit().text().strip()
+        if not tag_text:
+            return
+
+        if tag_text in self.selected_tags:
+            self.comboBoxTag.lineEdit().clear()
+            return
+
+        self.selected_tags.append(tag_text)
+        self.update_tags_display()
+        self.comboBoxTag.lineEdit().clear()
+
+    def on_tag_selected(self, index):
+        """Обрабатывает выбор тега из выпадающего списка"""
+        if not hasattr(self, 'comboBoxTag'):
+            return
+
+        if index < 0:
+            return
+
+        tag_name = self.comboBoxTag.itemText(index)
+        if not tag_name or tag_name == "Выберите тему или введите новую...":
+            return
+
+        if tag_name not in self.selected_tags:
+            self.selected_tags.append(tag_name)
+            self.update_tags_display()
+
+        self.comboBoxTag.setCurrentIndex(0)
+
+    def remove_tag(self, tag_name: str):
+        """Удаляет тег из списка выбранных"""
+        if tag_name in self.selected_tags:
+            self.selected_tags.remove(tag_name)
+            self.update_tags_display()
+
+    def get_selected_tags(self) -> List[str]:
+        return self.selected_tags
 
     def format_creator_name(self) -> str:
-        """Форматирует имя создателя в формате Фамилия И.О."""
         last = self.current_user.get('last_name', '')
         first = self.current_user.get('first_name', '')
         middle = self.current_user.get('middle_name', '')
@@ -59,12 +223,10 @@ class TaskDialog(QDialog):
         return "Неизвестен"
 
     def get_current_datetime_str(self) -> str:
-        """Возвращает текущую дату и время в формате ДД.ММ.ГГГГ ЧЧ:ММ"""
         now = QDateTime.currentDateTime()
         return now.toString("dd.MM.yyyy hh:mm")
 
     def setup_ui(self):
-        """Настраивает UI диалога."""
         if self.mode == "create":
             self.setWindowTitle("Создание задачи")
             if hasattr(self, 'createBtn'):
@@ -72,40 +234,31 @@ class TaskDialog(QDialog):
             if hasattr(self, 'titleLabel'):
                 self.titleLabel.setText("Создание новой задачи")
 
-            # Для создания показываем текущую дату в createdAtLabel
             if hasattr(self, 'createdAtLabel'):
                 current_datetime = self.get_current_datetime_str()
                 self.createdAtLabel.setText(f"Создано: {current_datetime}")
                 self.createdAtLabel.show()
 
-            # updatedAtLabel скрываем при создании
             if hasattr(self, 'updatedAtLabel'):
                 self.updatedAtLabel.hide()
 
-        else:  # mode == "edit"
+        else:
             self.setWindowTitle("Редактирование задачи")
             if hasattr(self, 'createBtn'):
                 self.createBtn.setText("Сохранить")
             if hasattr(self, 'titleLabel'):
                 self.titleLabel.setText("Редактирование задачи")
 
-            # При редактировании показываем оба лейбла
             if hasattr(self, 'createdAtLabel'):
                 self.createdAtLabel.show()
             if hasattr(self, 'updatedAtLabel'):
                 self.updatedAtLabel.show()
 
-        # Обновляем информацию о создателе в createdByLabel
-        self.update_creator_info()
-
-    def update_creator_info(self):
-        """Обновляет информацию о создателе в createdByLabel"""
         if hasattr(self, 'createdByLabel'):
             creator_name = self.format_creator_name()
             self.createdByLabel.setText(f"Создатель: {creator_name}")
 
     def update_dates_info(self, task_data: Dict):
-        """Обновляет информацию о датах создания и изменения"""
         if hasattr(self, 'createdAtLabel') and task_data.get('created_at'):
             self.createdAtLabel.setText(f"Создано: {task_data['created_at']}")
 
@@ -113,111 +266,55 @@ class TaskDialog(QDialog):
             self.updatedAtLabel.setText(f"Изменено: {task_data['updated_at']}")
 
     def set_service(self, service: TasksService):
-        """Устанавливает сервис и загружает данные."""
         self.service = service
         self.load_dialog_data()
 
     def load_dialog_data(self):
-        """Загружает данные для диалога через сервис."""
         if not self.service:
             return
 
         dialog_data = self.service.prepare_dialog_data(self.mode, self.task_data)
+        print(
+            f"📊 Загружено данных для диалога: проектов={len(dialog_data.get('projects', []))}, тегов={len(dialog_data.get('tags', []))}")
 
         # Загружаем проекты
         if hasattr(self, 'comboBoxProject'):
             self.comboBoxProject.clear()
             self.comboBoxProject.addItem("Выберите проект", None)
-            for project in dialog_data["projects"]:
+            for project in dialog_data.get("projects", []):
                 self.comboBoxProject.addItem(project["name"], project["id"])
 
         # Загружаем статусы
         if hasattr(self, 'comboBoxStatus'):
             self.comboBoxStatus.clear()
-            for status in dialog_data["statuses"]:
+            for status in dialog_data.get("statuses", []):
                 self.comboBoxStatus.addItem(status["name"], status["id"])
 
         # Загружаем исполнителей
         if hasattr(self, 'comboBoxAssignee'):
             self.comboBoxAssignee.clear()
             self.comboBoxAssignee.addItem("Не назначен", None)
-            for emp in dialog_data["employees"]:
+            for emp in dialog_data.get("employees", []):
                 self.comboBoxAssignee.addItem(emp["display_name"], emp["id"])
 
         # Загружаем приоритеты
         if hasattr(self, 'comboBoxPriority'):
-            self.comboBoxPriority.clear()
-            for priority in dialog_data["priorities"]:
-                self.comboBoxPriority.addItem(priority["text"])
+            # Оставляем как есть, они уже есть в UI
+            pass
 
-        # Загружаем теги
-        if hasattr(self, 'comboBoxTags') and "tags" in dialog_data:
-            self.comboBoxTags.clear()
-            self.comboBoxTags.addItem("Выберите тег или введите новый", None)
-            for tag in dialog_data["tags"]:
-                self.comboBoxTags.addItem(tag["name"], tag["id"])
+        # Загружаем теги в выпадающий список - ИСПРАВЛЕНО ИМЯ
+        if hasattr(self, 'comboBoxTag'):
+            self.comboBoxTag.clear()
+            self.comboBoxTag.addItem("Выберите тему или введите новую...", None)
+            for tag in dialog_data.get("tags", []):
+                self.comboBoxTag.addItem(tag["name"], tag["id"])
+            print(f"✅ Загружено {len(dialog_data.get('tags', []))} тегов в comboBoxTag")
 
         # Если режим редактирования - заполняем данные
         if self.mode == "edit" and "task_data" in dialog_data:
             self.fill_task_data(dialog_data["task_data"])
 
-    def add_tag_from_input(self):
-        """Добавляет тег из поля ввода"""
-        if not hasattr(self, 'comboBoxTags'):
-            return
-
-        tag_text = self.comboBoxTags.lineEdit().text().strip()
-        if not tag_text:
-            return
-
-        # Проверяем, не выбран ли уже этот тег
-        if tag_text in self.selected_tags:
-            return
-
-        # Добавляем тег в список выбранных
-        self.selected_tags.append(tag_text)
-        self.update_tags_display()
-
-        # Очищаем поле ввода
-        self.comboBoxTags.lineEdit().clear()
-
-    def on_tag_selected(self, index):
-        """Обрабатывает выбор тега из выпадающего списка"""
-        if not hasattr(self, 'comboBoxTags'):
-            return
-
-        if index <= 0:  # Пропускаем первый элемент "Выберите тег или введите новый"
-            return
-
-        tag_name = self.comboBoxTags.itemText(index)
-        tag_id = self.comboBoxTags.itemData(index)
-
-        # Добавляем тег в список выбранных
-        if tag_name not in self.selected_tags:
-            self.selected_tags.append(tag_name)
-            self.update_tags_display()
-
-        # Сбрасываем выбор comboBox
-        self.comboBoxTags.setCurrentIndex(0)
-
-    def update_tags_display(self):
-        """Обновляет отображение выбранных тегов"""
-        if not hasattr(self, 'tagsDisplayLabel'):
-            return
-
-        if self.selected_tags:
-            tags_text = ", ".join(self.selected_tags)
-            self.tagsDisplayLabel.setText(f"Теги: {tags_text}")
-            self.tagsDisplayLabel.show()
-        else:
-            self.tagsDisplayLabel.setText("Теги: не выбраны")
-
-    def get_selected_tags(self) -> List[str]:
-        """Возвращает список выбранных тегов"""
-        return self.selected_tags
-
     def fill_task_data(self, task_data: Dict):
-        """Заполняет поля формы данными задачи."""
         if hasattr(self, 'lineEditTitle'):
             self.lineEditTitle.setText(task_data.get("title", ""))
 
@@ -257,15 +354,13 @@ class TaskDialog(QDialog):
                     pass
 
         # Загружаем теги
-        if hasattr(self, 'comboBoxTags') and task_data.get("tags"):
+        if task_data.get("tags"):
             self.selected_tags = task_data["tags"].copy()
             self.update_tags_display()
 
-        # Обновляем информацию о датах
         self.update_dates_info(task_data)
 
     def collect_form_data(self) -> Dict:
-        """Собирает данные из полей формы."""
         data = {}
 
         if hasattr(self, 'lineEditTitle'):
@@ -289,13 +384,11 @@ class TaskDialog(QDialog):
         if hasattr(self, 'dateEditDeadline'):
             data["due_date"] = self.dateEditDeadline.date().toString("yyyy-MM-dd")
 
-        # Добавляем теги
         data["tags"] = self.selected_tags.copy()
 
         return data
 
     def validate_and_save(self):
-        """Валидирует и сохраняет задачу."""
         print("\n=== ОТЛАДКА: Диалог сохранения задачи ===")
 
         if not self.service:
@@ -318,14 +411,13 @@ class TaskDialog(QDialog):
             task_data = self.service.process_form_data(form_data, self.current_user)
             print(f"Подготовленные данные: {task_data}")
 
-            # Если это редактирование - добавляем ID
             if self.mode == "edit" and self.task_data:
                 task_id = self.task_data.get("id")
                 print(f"📤 Отправка сигнала task_saved с ID: {task_id}")
-                self.task_saved.emit(task_id, task_data)  # 👈 Передаем ID
+                self.task_saved.emit(task_id, task_data)
             else:
                 print("📤 Отправка сигнала task_saved для создания")
-                self.task_saved.emit(None, task_data)  # 👈 ID = None для создания
+                self.task_saved.emit(None, task_data)
 
             print("✅ Сигнал отправлен")
             self.accept()

@@ -88,12 +88,10 @@ class TagCard(QFrame):
 
     def fill_data(self):
         """Заполняем карточку при создании"""
-        # Название тега
-        name = self.tag_data.get('name', 'тег')
+        name = self.tag_data.get('name', 'тема')
         if hasattr(self, 'nameLabel'):
             self.nameLabel.setText(f"#{name}")
 
-        # Цвет
         color = self.tag_data.get('color', '#ccab6e')
         if hasattr(self, 'colorIndicator'):
             self.colorIndicator.setStyleSheet(f"""
@@ -109,10 +107,10 @@ class TagCard(QFrame):
                 font-weight: bold;
             """)
 
-        # Количество
-        count = self.tag_data.get('count', 0)
+        # Количество использований (из БД)
+        usage_count = self.tag_data.get('usage_count', 0)
         if hasattr(self, 'countLabel'):
-            self.countLabel.setText(f"использований: {count}")
+            self.countLabel.setText(f"использований: {usage_count}")
 
 
     def get_color(self):

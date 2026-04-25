@@ -76,21 +76,22 @@ class SettingsPage(QWidget):
         if hasattr(self, 'session') and self.session:
             employee_service = EmployeeService(self.session)
             self.employees_tab.set_employee_service(employee_service)
-            self.employees_tab.set_session(self.session)  # ← ДОБАВЬТЕ ЭТУ СТРОКУ
+            self.employees_tab.set_session(self.session)
 
-            # Передаём session во вкладки отделов и подразделений
+            # Передаём session во вкладки
             self.departments_tab.set_session(self.session)
             self.divisions_tab.set_session(self.session)
             self.columns_tab.set_session(self.session)
+            self.tags_tab.set_session(self.session)  # ← ДОБАВЛЯЕМ
 
         # Подключаем сигналы
-        self.tags_tab.item_deleted.connect(self.on_item_deleted)
+        self.tags_tab.item_deleted.connect(self.on_tag_deleted)  # ← ДОБАВЛЯЕМ отдельный обработчик
+        self.tags_tab.item_deleted.connect(self.on_item_deleted)  # ← можно и общий, но лучше отдельный
         self.employees_tab.item_deleted.connect(self.on_item_deleted)
         self.departments_tab.item_deleted.connect(self.on_item_deleted)
         self.divisions_tab.item_deleted.connect(self.on_item_deleted)
-        self.columns_tab.item_deleted.connect(self.on_item_deleted)  # ← Убедитесь, что это есть
-        self.divisions_tab.item_deleted.connect(self.on_division_deleted)
         self.columns_tab.item_deleted.connect(self.on_item_deleted)
+        self.divisions_tab.item_deleted.connect(self.on_division_deleted)
 
         # Подключаем сигналы добавления/обновления сотрудников
         self.employees_tab.employee_added.connect(lambda data: self.on_item_added("employee", data))
@@ -107,7 +108,7 @@ class SettingsPage(QWidget):
             self.tabWidget.addTab(self.departments_tab, "Отделы")
             self.tabWidget.addTab(self.divisions_tab, "Подразделения")
             self.tabWidget.addTab(self.columns_tab, "Колонки")
-            self.tabWidget.addTab(self.tags_tab, "Хэштеги")
+            self.tabWidget.addTab(self.tags_tab, "Темы")
 
         # Настройка фильтров
         self.setup_employees_filters()
@@ -115,6 +116,22 @@ class SettingsPage(QWidget):
         # Подключаем смену вкладки
         if hasattr(self, 'tabWidget'):
             self.tabWidget.currentChanged.connect(self.on_tab_changed)
+
+    def on_tag_deleted(self, item_type: str, tag_id: int):
+        """Обработчик удаления тега"""
+        if item_type != "tag":
+            return
+
+        from services.tag_service import TagService
+        tag_service = TagService(self.session)
+
+        if tag_service.delete_tag(tag_id):
+            # Обновляем локальный список
+            self.all_tags = [t for t in self.all_tags if t.get('id') != tag_id]
+            self.tags_tab.load_data(self.all_tags)
+            QMessageBox.information(self, "Успех", "Тема удалена")
+        else:
+            QMessageBox.warning(self, "Ошибка", "Не удалось удалить тему")
 
     def on_item_added(self, item_type: str, data: dict):
         """Обработчик добавления элемента"""
@@ -132,9 +149,11 @@ class SettingsPage(QWidget):
         """Загрузка реальных данных из БД"""
         from services.employee_service import EmployeeService
         from services.column_service import ColumnService  # ← ДОБАВИТЬ
+        from services.tag_service import TagService
 
         employee_service = EmployeeService(self.session)
         column_service = ColumnService(self.session)  # ← ДОБАВИТЬ
+        tag_service = TagService(self.session)
 
         # Загружаем сотрудников
         self.all_employees = employee_service.get_all_employees()
@@ -156,6 +175,11 @@ class SettingsPage(QWidget):
         self.all_columns = column_service.get_template_columns()
         print(f"📊 Загружено шаблонов колонок из БД: {len(self.all_columns)}")
         self.columns_tab.load_data(self.all_columns)
+
+        # Загружаем темы
+        self.all_tags = tag_service.get_all_tags()
+        print(f"📊 Загружено тем из БД: {len(self.all_tags)}")
+        self.tags_tab.set_session(self.session)  # ← Передаём сессию
 
         # Настраиваем фильтры
         self.employees_tab.load_filter_data(self.all_departments, self.all_divisions)
@@ -245,7 +269,7 @@ class SettingsPage(QWidget):
 
     def on_tab_changed(self, index: int):
         """Срабатывает при смене вкладки"""
-        tab_names = ["Сотрудники", "Отделы", "Подразделения", "Колонки", "Хэштеги"]
+        tab_names = ["Сотрудники", "Отделы", "Подразделения", "Колонки", "Темы"]
         if index < len(tab_names):
             print(f"Переключено на вкладку: {tab_names[index]}")
 

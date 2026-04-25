@@ -69,3 +69,22 @@ class BoardColumnDTO(BaseModel):
     color: str
     position: int
     is_done_column: bool
+
+class TagDTO(BaseModel):
+    """DTO для тега"""
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    project_id: int
+    name: str
+    color: str = "#ccab6e"
+    is_archived: bool = False
+    usage_count: int = 0  # Количество использований в задачах
+
+
+class TagCardDTO(BaseModel):
+    """DTO для карточки тега в настройках"""
+    id: int
+    name: str
+    color: str
+    usage_count: int = 0

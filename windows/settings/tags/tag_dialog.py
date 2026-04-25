@@ -43,9 +43,9 @@ class TagDialog(QDialog):
         """Настройка UI элементов"""
         # Устанавливаем заголовок в зависимости от режима
         if self.is_edit_mode:
-            self.setWindowTitle("Редактирование хэштега")
+            self.setWindowTitle("Редактирование темы")
             if hasattr(self, 'titleLabel'):
-                self.titleLabel.setText("Редактирование хэштега")
+                self.titleLabel.setText("Редактирование темы")
 
         # Настройка валидации для поля ввода
         if hasattr(self, 'lineEditName'):
@@ -148,7 +148,7 @@ class TagDialog(QDialog):
             QMessageBox.warning(
                 self,
                 "Ошибка валидации",
-                "Пожалуйста, введите название хэштега."
+                "Пожалуйста, введите название темы."
             )
             return False
 
@@ -157,7 +157,7 @@ class TagDialog(QDialog):
             QMessageBox.warning(
                 self,
                 "Ошибка валидации",
-                "Название хэштега должно содержать хотя бы 1 символ."
+                "Название темы должно содержать хотя бы 1 символ."
             )
             return False
 
@@ -165,7 +165,7 @@ class TagDialog(QDialog):
             QMessageBox.warning(
                 self,
                 "Ошибка валидации",
-                "Название хэштега не должно превышать 50 символов."
+                "Название темы не должно превышать 50 символов."
             )
             return False
 
@@ -177,7 +177,7 @@ class TagDialog(QDialog):
                 QMessageBox.warning(
                     self,
                     "Ошибка валидации",
-                    f"Название хэштега не может содержать символ '{char}'.\n"
+                    f"Название темы не может содержать символ '{char}'.\n"
                     "Используйте только буквы, цифры и символ подчеркивания."
                 )
                 return False
@@ -187,7 +187,7 @@ class TagDialog(QDialog):
             QMessageBox.warning(
                 self,
                 "Ошибка валидации",
-                "Пожалуйста, выберите цвет для хэштега."
+                "Пожалуйста, выберите цвет для темы."
             )
             return False
 
@@ -266,7 +266,7 @@ class TagDialog(QDialog):
         if hasattr(self, 'previewLabel') and hasattr(self, 'lineEditName'):
             name = self.lineEditName.text().strip()
             if not name:
-                name = "название_хэштега"
+                name = "название_темы"
             else:
                 # Заменяем пробелы на подчеркивания для предпросмотра
                 name = name.replace(' ', '_')
