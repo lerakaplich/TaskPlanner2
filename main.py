@@ -20,7 +20,7 @@ def main():
 
     # Запускаем подключение к сокет-серверу
     socket_client = get_socket_client()
-    socket_client.connect_to_server("http://localhost:8081")
+    socket_client.connect_to_server("http://localhost:8082")
 
     # Показываем окно авторизации
     login_window = LoginWindow()

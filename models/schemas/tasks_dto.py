@@ -1,10 +1,10 @@
-from datetime import datetime
+# models/schemas/tasks_dto.py
+from datetime import datetime, date
 from typing import Optional, List
 from pydantic import BaseModel, ConfigDict, field_validator
 from enum import Enum
 
 
-# Если хочешь не тянуть enum из SQLAlchemy
 class TaskPriority(str, Enum):
     low = "low"
     medium = "medium"
@@ -31,6 +31,19 @@ class TaskDTO(BaseModel):
     created_at: datetime
     updated_at: datetime
 
+    # Дополнительные поля для Ганта
+    start_date: Optional[date] = None
+    end_date: Optional[date] = None
+    progress: int = 0
+    parent_id: Optional[int] = None
+
+    def __post_init__(self):
+        if self.deadline:
+            if not self.start_date:
+                self.start_date = self.deadline.date()
+            if not self.end_date:
+                self.end_date = self.deadline.date()
+
 
 # =========================
 # DTO карточки задачи
@@ -47,7 +60,6 @@ class TaskCardDTO(BaseModel):
     @field_validator('priority', mode='before')
     @classmethod
     def parse_priority(cls, v):
-        # Если пришел объект SQLAlchemy Enum, берем его значение
         if hasattr(v, 'value'):
             return v.value
         return v

@@ -1,588 +1,1332 @@
-import os
+"""
+Диаграмма Ганта для системы управления проектами МАЗ
+Современный UI с поддержкой иерархии задач, drag & drop, масштабированием
+ИСПРАВЛЕННАЯ ВЕРСИЯ С РАБОЧИМ КАЛЕНДАРЕМ
+"""
+
 import sys
-from datetime import datetime, timedelta
-from typing import List, Dict
-from collections import defaultdict
+import os
+from datetime import date, datetime, timedelta
+from typing import List, Dict, Optional, Any
+from enum import Enum
+from dataclasses import dataclass, field
 
-from PyQt6 import uic
 from PyQt6.QtWidgets import (
-    QWidget, QGraphicsView, QGraphicsScene, QGraphicsRectItem,
-    QGraphicsItem, QGraphicsLineItem, QGraphicsSimpleTextItem,
-    QApplication, QMessageBox, QInputDialog, QTreeWidgetItem, QTreeWidget
+    QWidget, QVBoxLayout, QHBoxLayout, QFrame, QLabel, QPushButton,
+    QScrollArea, QApplication, QMainWindow, QComboBox, QMessageBox,
+    QSplitter, QSizePolicy, QToolButton, QMenu, QLineEdit, QDateEdit
 )
-from PyQt6.QtCore import Qt, QRectF, QPointF, pyqtSignal, QEvent
-from PyQt6.QtGui import (
-    QBrush, QPen, QColor, QFont, QPainter, QLinearGradient, QWheelEvent
-)
-from PyQt6.uic import loadUi
+from PyQt6.QtCore import Qt, QRect, QPoint, QDate, QTimer, pyqtSignal, QSize
+from PyQt6.QtGui import QPainter, QColor, QBrush, QPen, QFont, QLinearGradient, QMouseEvent, QFontDatabase
 
-# Константы
-PIXELS_PER_DAY = 40
-TASK_HEIGHT = 28
-TASK_VERTICAL_SPACING = 5
-HEADER_HEIGHT = 50
-ROW_HEIGHT = TASK_HEIGHT + TASK_VERTICAL_SPACING
+# Добавляем путь к проекту
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
-# Цвета
-COLOR_PRIMARY = "#D22730"
-COLOR_ACCENT = "#ccab6e"
-COLOR_BACKGROUND = "#1B232A"
-COLOR_SECONDARY = "#2C3640"
-COLOR_BORDER = "#3A4550"
-COLOR_COMPLETED = "#2E8B57"
-COLOR_OVERDUE = "#8B0000"
-COLOR_TEXT = "#FFFFFF"
-TODAY_COLOR = "#ccab6e"
+from models.schemas.tasks_dto import TaskDTO, TaskPriority
+from services.projects_service import ProjectsService
 
-TODAY = datetime(2026, 2, 16).date()
 
-class GanttTask:
-    def __init__(self, task_id: int, title: str, start_date: str, end_date: str,
-                 assignee: str = "", is_critical: bool = False, children=None):
-        self.id = task_id
-        self.title = title
-        self.start_date = datetime.strptime(start_date, "%Y-%m-%d").date()
-        self.end_date = datetime.strptime(end_date, "%Y-%m-%d").date()
-        self.assignee = assignee
-        self.is_critical = is_critical
-        self.dependencies = []  # [{'id': int, 'lag': int}]
-        self.children = children or []
-        self.color = COLOR_PRIMARY
+class ScaleType(Enum):
+    """Типы масштаба временной шкалы"""
+    DAY = "day"
+    WEEK = "week"
+    MONTH = "month"
+    QUARTER = "quarter"
+
+
+@dataclass
+class GanttTaskNode:
+    """Узел задачи для диаграммы Ганта с поддержкой иерархии"""
+    id: int
+    title: str
+    start_date: Optional[date]
+    end_date: Optional[date]
+    priority: TaskPriority = TaskPriority.medium
+    progress: int = 0
+    is_milestone: bool = False
+    parent_id: Optional[int] = None
+    children: List['GanttTaskNode'] = field(default_factory=list)
+    is_expanded: bool = True
+    level: int = 0
+    assigned_to_name: Optional[str] = None
+    assigned_to_id: Optional[int] = None
+    description: Optional[str] = None
 
     @property
     def duration_days(self) -> int:
-        return (self.end_date - self.start_date).days + 1
+        if self.start_date and self.end_date:
+            return (self.end_date - self.start_date).days + 1
+        return 1
 
     @property
-    def is_overdue(self) -> bool:
-        return self.end_date < TODAY and not self.is_completed
+    def color(self) -> str:
+        """Цвет задачи в зависимости от приоритета"""
+        colors = {
+            TaskPriority.critical: "#EF4444",  # Красный
+            TaskPriority.high: "#F97316",      # Оранжевый
+            TaskPriority.medium: "#F59E0B",    # Желтый
+            TaskPriority.low: "#10B981"        # Зеленый
+        }
+        return colors.get(self.priority, "#6366F1")  # Индиго по умолчанию
 
-    @property
-    def is_completed(self) -> bool:
-        return self.end_date < TODAY
 
-class GanttHeaderItem(QGraphicsRectItem):
-    def __init__(self, project_start: datetime.date, project_end: datetime.date, total_days: int):
-        super().__init__(0, 0, total_days * PIXELS_PER_DAY, HEADER_HEIGHT)
-        self.setBrush(QBrush(QColor(COLOR_SECONDARY)))
-        self.setPen(QPen(QColor(COLOR_BORDER), 1))
-        self.add_date_labels(project_start, total_days)
+class ModernScrollArea(QScrollArea):
+    """Современная скролл-область с гладким скроллингом"""
 
-    def add_date_labels(self, project_start: datetime.date, total_days: int):
-        for i in range(total_days):
-            current_date = project_start + timedelta(days=i)
-            x = i * PIXELS_PER_DAY
-            if i > 0:
-                line = QGraphicsLineItem(x, 0, x, HEADER_HEIGHT, self)
-                line.setPen(QPen(QColor(COLOR_BORDER), 1, Qt.PenStyle.DotLine))
-            if i % 5 == 0 or i == total_days - 1:
-                date_text = QGraphicsSimpleTextItem(current_date.strftime("%d.%m"), self)
-                date_text.setPos(x + 2, 5)
-                date_text.setFont(QFont("Segoe UI", 8))
-                date_text.setBrush(QBrush(QColor(COLOR_TEXT)))
-                day_text = QGraphicsSimpleTextItem(current_date.strftime("%a"), self)
-                day_text.setPos(x + 2, 25)
-                day_text.setFont(QFont("Segoe UI", 7))
-                day_text.setBrush(QBrush(QColor(COLOR_ACCENT)))
-
-class GanttResizeHandle(QGraphicsRectItem):
-    def __init__(self, side: str, parent=None):
+    def __init__(self, parent=None):
         super().__init__(parent)
-        self.side = side
-        self.setRect(0, 0, 12, TASK_HEIGHT)
-        self.setBrush(QBrush(QColor(COLOR_ACCENT)))
-        self.setPen(QPen(Qt.PenStyle.NoPen))
-        self.setOpacity(0.7)
-        self.setCursor(Qt.CursorShape.SizeHorCursor)
-        self.setAcceptHoverEvents(True)
-        self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsMovable, True)
-        self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemSendsGeometryChanges, True)
+        self.setStyleSheet("""
+            QScrollArea {
+                border: none;
+                background-color: transparent;
+            }
+            QScrollBar:vertical {
+                background: #F1F5F9;
+                width: 8px;
+                border-radius: 4px;
+            }
+            QScrollBar::handle:vertical {
+                background: #CBD5E1;
+                border-radius: 4px;
+                min-height: 30px;
+            }
+            QScrollBar::handle:vertical:hover {
+                background: #94A3B8;
+            }
+            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+                height: 0px;
+            }
+            QScrollBar:horizontal {
+                background: #F1F5F9;
+                height: 8px;
+                border-radius: 4px;
+            }
+            QScrollBar::handle:horizontal {
+                background: #CBD5E1;
+                border-radius: 4px;
+                min-width: 30px;
+            }
+            QScrollBar::handle:horizontal:hover {
+                background: #94A3B8;
+            }
+            QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {
+                width: 0px;
+            }
+        """)
 
-    def hoverEnterEvent(self, event):
-        self.setOpacity(1.0)
-        super().hoverEnterEvent(event)
 
-    def hoverLeaveEvent(self, event):
-        self.setOpacity(0.7)
-        super().hoverLeaveEvent(event)
+class TaskItemWidget(QFrame):
+    """Виджет для отображения задачи в левой панели"""
+
+    task_clicked = pyqtSignal(int)
+    task_double_clicked = pyqtSignal(int)
+    toggle_expand = pyqtSignal(int)
+
+    def __init__(self, task_node: GanttTaskNode, parent=None):
+        super().__init__(parent)
+        self.task_node = task_node
+
+        self.setup_ui()
+        self.apply_styles()
+
+    def setup_ui(self):
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(8, 12, 8, 12)
+        layout.setSpacing(10)
+
+        # Отступ для уровня вложенности
+        if self.task_node.level > 0:
+            indent = QWidget()
+            indent.setFixedSize(self.task_node.level * 20, 1)
+            layout.addWidget(indent)
+
+        # Кнопка раскрытия для родительских задач
+        if self.task_node.children:
+            self.expand_btn = QPushButton("▼" if self.task_node.is_expanded else "▶")
+            self.expand_btn.setFixedSize(22, 22)
+            self.expand_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            self.expand_btn.setStyleSheet("""
+                QPushButton {
+                    border: none;
+                    background-color: #F1F5F9;
+                    border-radius: 6px;
+                    font-size: 10px;
+                    color: #475569;
+                }
+                QPushButton:hover {
+                    background-color: #E2E8F0;
+                    color: #0F172A;
+                }
+            """)
+            self.expand_btn.clicked.connect(lambda: self.toggle_expand.emit(self.task_node.id))
+            layout.addWidget(self.expand_btn)
+        else:
+            spacer = QWidget()
+            spacer.setFixedSize(22, 22)
+            layout.addWidget(spacer)
+
+        # Иконка задачи
+        icon_label = QLabel(self.get_task_icon())
+        icon_label.setFixedWidth(28)
+        icon_label.setStyleSheet("font-size: 18px;")
+        layout.addWidget(icon_label)
+
+        # Название задачи
+        self.title_label = QLabel(self.task_node.title)
+        self.title_label.setStyleSheet("""
+            QLabel {
+                font-size: 13px;
+                font-weight: 500;
+                color: #1E293B;
+            }
+        """)
+        self.title_label.setWordWrap(True)
+        layout.addWidget(self.title_label, 1)
+
+        # Назначено
+        if self.task_node.assigned_to_name:
+            assigned_label = QLabel(f"👤 {self.task_node.assigned_to_name[:20]}")
+            assigned_label.setStyleSheet("""
+                QLabel {
+                    font-size: 10px;
+                    color: #64748B;
+                    background-color: #F1F5F9;
+                    padding: 2px 8px;
+                    border-radius: 12px;
+                }
+            """)
+            layout.addWidget(assigned_label)
+
+        # Приоритет (цветной бейдж)
+        priority_label = QLabel(self.get_priority_text())
+        priority_label.setStyleSheet(f"""
+            QLabel {{
+                background-color: {self.task_node.color}20;
+                color: {self.task_node.color};
+                font-size: 10px;
+                font-weight: 600;
+                padding: 2px 8px;
+                border-radius: 12px;
+            }}
+        """)
+        layout.addWidget(priority_label)
+
+        # Прогресс
+        if self.task_node.progress > 0:
+            progress_label = QLabel(f"{self.task_node.progress}%")
+            progress_label.setStyleSheet("""
+                QLabel {
+                    font-size: 11px;
+                    color: #475569;
+                    font-weight: 500;
+                    background-color: #F1F5F9;
+                    padding: 2px 8px;
+                    border-radius: 12px;
+                }
+            """)
+            layout.addWidget(progress_label)
+
+        # Даты
+        if self.task_node.start_date and self.task_node.end_date:
+            dates_label = QLabel(
+                f"📅 {self.task_node.start_date.strftime('%d.%m')} → {self.task_node.end_date.strftime('%d.%m')}"
+            )
+            dates_label.setStyleSheet("""
+                QLabel {
+                    font-size: 10px;
+                    color: #94A3B8;
+                }
+            """)
+            layout.addWidget(dates_label)
+
+    def get_task_icon(self) -> str:
+        """Возвращает иконку в зависимости от типа задачи"""
+        if self.task_node.children:
+            return "📁"
+        elif self.task_node.is_milestone:
+            return "⛳"
+        else:
+            return "📝"
+
+    def get_priority_text(self) -> str:
+        """Возвращает текст приоритета"""
+        priority_map = {
+            TaskPriority.critical: "КРИТ",
+            TaskPriority.high: "ВЫС",
+            TaskPriority.medium: "СР",
+            TaskPriority.low: "НИЗ"
+        }
+        return priority_map.get(self.task_node.priority, "СР")
+
+    def apply_styles(self):
+        self.setStyleSheet("""
+            QFrame {
+                background-color: white;
+                border-bottom: 1px solid #F1F5F9;
+            }
+            QFrame:hover {
+                background-color: #F8FAFC;
+            }
+        """)
+
+    def mouseDoubleClickEvent(self, event):
+        self.task_double_clicked.emit(self.task_node.id)
 
     def mousePressEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
-            parent = self.parentItem()
-            parent.old_start = parent.task.start_date
-            parent.old_end = parent.task.end_date
-        super().mousePressEvent(event)
+            self.task_clicked.emit(self.task_node.id)
 
-    def itemChange(self, change, value):
-        if change == QGraphicsItem.GraphicsItemChange.ItemPositionChange:
-            parent = self.parentItem()
-            width = parent.rect_item.rect().width()
-            target_x = width - 12 if self.side == 'right' else 0
-            delta = value.x() - target_x
-            delta_days = round(delta / PIXELS_PER_DAY)
-            new_duration = parent.task.duration_days + (delta_days if self.side == 'right' else -delta_days)
-            if new_duration < 1:
-                return QPointF(target_x, 0)
-            if self.side == 'right':
-                parent.task.end_date = parent.task.start_date + timedelta(days=new_duration - 1)
+
+class GanttBarWidget(QFrame):
+    """Виджет для отображения полосы задачи на диаграмме"""
+
+    bar_clicked = pyqtSignal(int)
+    bar_moved = pyqtSignal(int, date, date)
+    bar_resized = pyqtSignal(int, date, date)
+
+    def __init__(self, task_node: GanttTaskNode, start_date: date, end_date: date,
+                 x_pos: int, width: int, parent=None):
+        super().__init__(parent)
+        self.task_node = task_node
+        self.start_date = start_date
+        self.end_date = end_date
+        self.dragging = False
+        self.resizing_left = False
+        self.resizing_right = False
+        self.drag_start_x = 0
+        self.original_start = start_date
+        self.original_end = end_date
+        self.resize_margin = 8
+
+        self.setGeometry(x_pos, 5, max(width, 30), 40)
+        self.setToolTip(self.get_tooltip_text())
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+
+        self.apply_styles()
+
+    def apply_styles(self):
+        """Применение стилей к полосе с градиентом прогресса"""
+        progress = min(100, max(0, self.task_node.progress))
+        color = self.task_node.color
+
+        # Создаем стиль с градиентом для прогресса
+        self.setStyleSheet(f"""
+            QFrame {{
+                background-color: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                    stop:0 {color}, stop:{progress / 100} {color}, 
+                    stop:{progress / 100} #E2E8F0, stop:1 #E2E8F0);
+                border-radius: 8px;
+                border: 1px solid {color};
+            }}
+            QFrame:hover {{
+                border: 2px solid {color};
+            }}
+        """)
+
+    def get_tooltip_text(self) -> str:
+        """Возвращает HTML-подсказку с информацией о задаче"""
+        return f"""
+        <div style="padding: 8px;">
+            <b style="font-size: 14px;">{self.task_node.title}</b><br>
+            <hr style="margin: 5px 0;">
+            <b>📅 Начало:</b> {self.start_date.strftime('%d.%m.%Y')}<br>
+            <b>📅 Окончание:</b> {self.end_date.strftime('%d.%m.%Y')}<br>
+            <b>⏱ Длительность:</b> {self.task_node.duration_days} дн.<br>
+            <b>📊 Прогресс:</b> {self.task_node.progress}%<br>
+            <b>🎯 Приоритет:</b> {self.get_priority_text()}
+        </div>
+        """
+
+    def get_priority_text(self) -> str:
+        priority_map = {
+            TaskPriority.critical: "🔴 Критичный",
+            TaskPriority.high: "🟠 Высокий",
+            TaskPriority.medium: "🟡 Средний",
+            TaskPriority.low: "🟢 Низкий"
+        }
+        return priority_map.get(self.task_node.priority, "Средний")
+
+    def check_resize_zone(self, x: int) -> str:
+        """Проверяет, в какой зоне находится курсор"""
+        if x <= self.resize_margin:
+            return "left"
+        elif x >= self.width() - self.resize_margin:
+            return "right"
+        return "move"
+
+    def mousePressEvent(self, event: QMouseEvent):
+        if event.button() == Qt.MouseButton.LeftButton:
+            local_x = int(event.position().x())
+            zone = self.check_resize_zone(local_x)
+
+            if zone == "left":
+                self.resizing_left = True
+                self.setCursor(Qt.CursorShape.SizeHorCursor)
+            elif zone == "right":
+                self.resizing_right = True
+                self.setCursor(Qt.CursorShape.SizeHorCursor)
             else:
-                parent.task.start_date = parent.task.end_date - timedelta(days=new_duration - 1)
-            parent.update_position()
-            value.setX(target_x)
-            return value
-        return super().itemChange(change, value)
+                self.dragging = True
+                self.setCursor(Qt.CursorShape.ClosedHandCursor)
+
+            self.drag_start_x = int(event.globalPosition().x())
+            self.original_start = self.start_date
+            self.original_end = self.end_date
+
+    def mouseMoveEvent(self, event: QMouseEvent):
+        if self.dragging or self.resizing_left or self.resizing_right:
+            delta_x = int(event.globalPosition().x()) - self.drag_start_x
+            self.update_position_from_drag(delta_x)
+
+    def update_position_from_drag(self, delta_x: int):
+        """Обновление позиции при перетаскивании (60px = 1 день)"""
+        if abs(delta_x) < 5:
+            return
+
+        days_delta = round(delta_x / 60)
+
+        if days_delta == 0:
+            return
+
+        if self.dragging:
+            new_start = self.original_start + timedelta(days=days_delta)
+            new_end = self.original_end + timedelta(days=days_delta)
+            self.bar_moved.emit(self.task_node.id, new_start, new_end)
+        elif self.resizing_left:
+            new_start = self.original_start + timedelta(days=days_delta)
+            if new_start < self.original_end:
+                self.bar_resized.emit(self.task_node.id, new_start, self.original_end)
+        elif self.resizing_right:
+            new_end = self.original_end + timedelta(days=days_delta)
+            if new_end > self.original_start:
+                self.bar_resized.emit(self.task_node.id, self.original_start, new_end)
 
     def mouseReleaseEvent(self, event):
-        super().mouseReleaseEvent(event)
-        parent = self.parentItem()
-        if hasattr(parent, 'old_start'):
-            parent.scene().task_changed.emit(parent.task.id)
+        self.dragging = False
+        self.resizing_left = False
+        self.resizing_right = False
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
 
-class GanttTaskItem(QGraphicsItem):
-    def __init__(self, task: GanttTask, project_start: datetime.date, y_position: float):
-        super().__init__()
-        self.task = task
-        self.project_start = project_start
-        self.y_position = y_position
-        self._updating_position = False  # ← ДОБАВИТЬ
+    def mouseDoubleClickEvent(self, event):
+        self.bar_clicked.emit(self.task_node.id)
 
-        self.rect_item = QGraphicsRectItem(self)
-        self.text_item = QGraphicsSimpleTextItem(task.title, self)
 
-        self.left_handle = GanttResizeHandle('left', self)
-        self.right_handle = GanttResizeHandle('right', self)
+class TimelineHeader(QWidget):
+    """Виджет заголовка временной шкалы с современным дизайном"""
 
-        self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsMovable, True)
-        self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable, True)
-        self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemSendsGeometryChanges, True)
-        self.setAcceptHoverEvents(True)
+    def __init__(self, scale: ScaleType, start_date: date, end_date: date, parent=None):
+        super().__init__(parent)
+        self.scale = scale
+        self.start_date = start_date
+        self.end_date = end_date
+        self.setMinimumHeight(64)
+        self.setMaximumHeight(64)
+        self.setStyleSheet("""
+            background-color: white;
+            border-bottom: 1px solid #E2E8F0;
+        """)
 
-        self.update_position()
-        self.update_appearance()
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
 
-        self.text_item.setPos(5, 4)
-        font = QFont("Segoe UI", 9, QFont.Weight.Bold)
-        self.text_item.setFont(font)
-        self.text_item.setBrush(QBrush(QColor(COLOR_TEXT)))
+        total_width = self.width()
+        date_range = (self.end_date - self.start_date).days + 1
 
-    def update_position(self):
-        if self._updating_position:  # ← защита от рекурсии
+        if date_range <= 0:
             return
-        self._updating_position = True
 
-        days_from_start = (self.task.start_date - self.project_start).days
-        x = days_from_start * PIXELS_PER_DAY
-        width = self.task.duration_days * PIXELS_PER_DAY
-        self.setPos(QPointF(x, self.y_position))
-        self.rect_item.setRect(0, 0, width, TASK_HEIGHT)
-        self.left_handle.setPos(0, 0)
-        self.right_handle.setPos(width - 12, 0)
+        cell_width = total_width / date_range
 
-        self._updating_position = False
+        # Цвета для разных масштабов
+        bg_color = "#FFFFFF"
+        line_color = "#E2E8F0"
+        text_color = "#1E293B"
 
-    def itemChange(self, change, value):
-        if change == QGraphicsItem.GraphicsItemChange.ItemPositionChange:
-            if self._updating_position:  # ← пропускаем внутренние изменения
-                return value
+        # Шрифты
+        main_font = QFont("Segoe UI", 12, QFont.Weight.DemiBold)
+        sub_font = QFont("Segoe UI", 10)
 
-            new_pos = value
-            snapped_x = round(new_pos.x() / PIXELS_PER_DAY) * PIXELS_PER_DAY
-            delta_days = round((new_pos.x() - self.pos().x()) / PIXELS_PER_DAY)
-            new_start = self.task.start_date + timedelta(days=delta_days)
-            self.task.start_date = new_start
-            self.task.end_date = new_start + timedelta(days=self.task.duration_days - 1)
+        painter.fillRect(0, 0, self.width(), self.height(), QColor(bg_color))
 
-            self.update_position()  # теперь безопасно
+        # Рисуем сетку и заголовки
+        for i in range(date_range + 1):
+            x = int(i * cell_width)
+            current_date = self.start_date + timedelta(days=i)
 
-            new_pos.setX(snapped_x)
-            new_pos.setY(self.y_position)
-            return new_pos
+            # Вертикальная линия сетки
+            painter.setPen(QPen(QColor(line_color), 1))
+            painter.drawLine(x, 0, x, self.height())
 
-        return super().itemChange(change, value)
-    def mouseReleaseEvent(self, event):
-        super().mouseReleaseEvent(event)
-        if hasattr(self, 'old_start'):
-            self.scene().task_changed.emit(self.task.id)
-            del self.old_start
-            del self.old_end
+            # Текст заголовка
+            if i < date_range:
+                if self.scale == ScaleType.DAY:
+                    # День: показываем число и день недели
+                    painter.setPen(QPen(QColor(text_color), 1))
+                    painter.setFont(main_font)
+                    painter.drawText(QRect(x + 6, 10, int(cell_width) - 12, 22),
+                                     Qt.AlignmentFlag.AlignLeft,
+                                     current_date.strftime("%d"))
 
-    def boundingRect(self):
-        return QRectF(0, 0, max(1, self.rect_item.rect().width()), TASK_HEIGHT)
+                    painter.setFont(sub_font)
+                    painter.setPen(QPen(QColor("#64748B"), 1))
+                    painter.drawText(QRect(x + 6, 34, int(cell_width) - 12, 20),
+                                     Qt.AlignmentFlag.AlignLeft,
+                                     self.get_weekday_name(current_date))
 
-    def paint(self, painter, option, widget=None):
-        pass
+                elif self.scale == ScaleType.WEEK:
+                    # Неделя: показываем диапазон дат
+                    week_start = current_date - timedelta(days=current_date.weekday())
+                    week_end = week_start + timedelta(days=6)
 
-    def update_appearance(self):
-        pen = QPen(QColor(COLOR_BORDER), 1)
-        self.rect_item.setPen(pen)
-        color = QColor(COLOR_COMPLETED) if self.task.is_completed else QColor(COLOR_OVERDUE) if self.task.is_overdue else QColor(self.task.color)
-        gradient = QLinearGradient(0, 0, 0, TASK_HEIGHT)
-        gradient.setColorAt(0, color.lighter(120))
-        gradient.setColorAt(1, color)
-        self.rect_item.setBrush(QBrush(gradient))
+                    painter.setFont(main_font)
+                    painter.setPen(QPen(QColor(text_color), 1))
+                    date_range_text = f"{week_start.strftime('%d.%m')} - {week_end.strftime('%d.%m')}"
+                    painter.drawText(QRect(x + 6, 12, int(cell_width) - 12, 24),
+                                     Qt.AlignmentFlag.AlignLeft,
+                                     date_range_text)
 
-    def mousePressEvent(self, event):
-        if event.button() == Qt.MouseButton.LeftButton:
-            self.old_start = self.task.start_date
-            self.old_end = self.task.end_date
-        super().mousePressEvent(event)
+                    painter.setFont(sub_font)
+                    painter.setPen(QPen(QColor("#64748B"), 1))
+                    week_num = current_date.isocalendar()[1]
+                    painter.drawText(QRect(x + 6, 38, int(cell_width) - 12, 20),
+                                     Qt.AlignmentFlag.AlignLeft,
+                                     f"Неделя {week_num}, {current_date.year}")
 
+                elif self.scale == ScaleType.MONTH:
+                    # Месяц: название месяца и год
+                    painter.setFont(main_font)
+                    painter.setPen(QPen(QColor(text_color), 1))
+                    painter.drawText(QRect(x + 6, 12, int(cell_width) - 12, 30),
+                                     Qt.AlignmentFlag.AlignLeft,
+                                     current_date.strftime("%B %Y"))
 
-class GanttDependencyItem(QGraphicsLineItem):
-    def __init__(self, from_item: GanttTaskItem, to_item: GanttTaskItem, lag: int):
-        super().__init__()
-        self.from_item = from_item
-        self.to_item = to_item
-        self.lag = lag
-        self.original_pen = QPen(QColor(COLOR_ACCENT), 2, Qt.PenStyle.DashLine)
-        self.original_pen.setDashPattern([5, 3])
-        self.setPen(self.original_pen)
-        self.setAcceptHoverEvents(True)
-        self.update_position()
+                    painter.setFont(sub_font)
+                    painter.setPen(QPen(QColor("#64748B"), 1))
+                    # Показываем количество дней в месяце
+                    if current_date.month == 12:
+                        next_month = date(current_date.year + 1, 1, 1)
+                    else:
+                        next_month = date(current_date.year, current_date.month + 1, 1)
+                    days_in_month = (next_month - date(current_date.year, current_date.month, 1)).days
+                    painter.drawText(QRect(x + 6, 42, int(cell_width) - 12, 20),
+                                     Qt.AlignmentFlag.AlignLeft,
+                                     f"{days_in_month} дней")
 
-    def update_position(self):
-        if not self.from_item or not self.to_item:
-            return
-        start_x = self.from_item.pos().x() + self.from_item.rect_item.rect().width()
-        start_y = self.from_item.pos().y() + TASK_HEIGHT / 2
-        end_x = self.to_item.pos().x()
-        end_y = self.to_item.pos().y() + TASK_HEIGHT / 2
-        self.setLine(start_x, start_y, end_x, end_y)
+                else:  # QUARTER
+                    quarter = (current_date.month - 1) // 3 + 1
+                    painter.setFont(main_font)
+                    painter.setPen(QPen(QColor(text_color), 1))
+                    painter.drawText(QRect(x + 6, 12, int(cell_width) - 12, 30),
+                                     Qt.AlignmentFlag.AlignLeft,
+                                     f"Q{quarter} {current_date.year}")
 
-    def hoverEnterEvent(self, event):
-        self.setPen(QPen(QColor("red"), 3, Qt.PenStyle.DashLine))
-        super().hoverEnterEvent(event)
+                    painter.setFont(sub_font)
+                    painter.setPen(QPen(QColor("#64748B"), 1))
+                    # Показываем месяцы квартала
+                    quarter_months = {
+                        1: "Янв-Мар", 2: "Апр-Июн", 3: "Июл-Сен", 4: "Окт-Дек"
+                    }
+                    painter.drawText(QRect(x + 6, 42, int(cell_width) - 12, 20),
+                                     Qt.AlignmentFlag.AlignLeft,
+                                     quarter_months.get(quarter, ""))
 
-    def hoverLeaveEvent(self, event):
-        self.setPen(self.original_pen)
-        super().hoverLeaveEvent(event)
+        # Рисуем линию сегодняшней даты (красная)
+        today = date.today()
+        if self.start_date <= today <= self.end_date:
+            days_from_start = (today - self.start_date).days
+            today_x = int(days_from_start * cell_width)
 
-    def mousePressEvent(self, event):
-        if event.button() == Qt.MouseButton.LeftButton:
-            reply = QMessageBox.question(None, "Удалить связь", "Удалить эту зависимость?")
-            if reply == QMessageBox.StandardButton.Yes:
-                successor = self.to_item.task
-                successor.dependencies = [d for d in successor.dependencies if not (d['id'] == self.from_item.task.id and d.get('lag', 0) == self.lag)]
-                self.scene().widget.refresh_chart()
-        super().mousePressEvent(event)
+            painter.setPen(QPen(QColor("#EF4444"), 2))
+            painter.drawLine(today_x, 0, today_x, self.height())
 
-class GanttScene(QGraphicsScene):
-    task_changed = pyqtSignal(int)
+            # Подпись "Сегодня"
+            painter.setPen(QPen(QColor("#EF4444"), 1))
+            painter.setFont(QFont("Segoe UI", 10, QFont.Weight.Bold))
+            painter.drawText(QRect(today_x + 6, 20, 80, 24),
+                             Qt.AlignmentFlag.AlignLeft, "📅 Сегодня")
 
-    def __init__(self, widget):
-        super().__init__()
-        self.widget = widget
-        self.project_start = TODAY
-        self.project_end = TODAY + timedelta(days=30)
-        self.tasks: List[GanttTask] = []
-        self.all_tasks_dict: Dict[int, GanttTask] = {}
-        self.successors = defaultdict(list)
-        self.task_items: Dict[int, GanttTaskItem] = {}
-        self.dependency_items: List[GanttDependencyItem] = []
-        self.tree_items: Dict[int, QTreeWidgetItem] = {}
-        self.setBackgroundBrush(QBrush(QColor(COLOR_BACKGROUND)))
-
-    def collect_tasks(self):
-        self.all_tasks_dict = {}
-        def collect(t):
-            self.all_tasks_dict[t.id] = t
-            for child in t.children:
-                collect(child)
-        for root in self.tasks:
-            collect(root)
-
-    # ... (остальные методы без изменений, кроме update_scene) ...
-
-    def update_scene(self):
-
-        self.clear()
-        self.task_items.clear()
-        self.dependency_items.clear()
-
-        self.collect_tasks()
-        self.build_successors()
-
-        total_days = (self.project_end - self.project_start).days + 1
-        header = GanttHeaderItem(self.project_start, self.project_end, total_days)
-        self.addItem(header)
-
-        y = HEADER_HEIGHT
-        def add_task(task):
-            nonlocal y
-            item = GanttTaskItem(task, self.project_start, y)
-            self.addItem(item)
-            self.task_items[task.id] = item
-            y += ROW_HEIGHT
-            tree_item = self.tree_items.get(task.id)
-            if tree_item and tree_item.isExpanded():
-                for child in task.children:
-                    add_task(child)
-
-        for root in self.tasks:
-            add_task(root)
-        for task in self.all_tasks_dict.values():
-            for dep in task.dependencies:
-                pred_item = self.task_items.get(dep['id'])
-                succ_item = self.task_items.get(task.id)
-                if pred_item and succ_item:
-                    dep_item = GanttDependencyItem(pred_item, succ_item, dep.get('lag', 0))
-                    self.addItem(dep_item)
-                    self.dependency_items.append(dep_item)
-
-        if self.project_start <= TODAY <= self.project_end:
-            days = (TODAY - self.project_start).days
-            x = days * PIXELS_PER_DAY
-            line = QGraphicsLineItem(x, 0, x, y)
-            line.setPen(QPen(QColor(TODAY_COLOR), 2, Qt.PenStyle.DashLine))
-            line.setZValue(10)
-            self.addItem(line)
-            text = QGraphicsSimpleTextItem("Сегодня")
-            text.setPos(x + 5, 5)
-            text.setBrush(QBrush(QColor(TODAY_COLOR)))
-            text.setFont(QFont("Segoe UI", 10, QFont.Weight.Bold))  # ИСПРАВЛЕНО: было 10433
-            text.setZValue(10)
-            self.addItem(text)
-
-        self.setSceneRect(0, 0, total_days * PIXELS_PER_DAY + 500, y + 100)
-
-    def build_successors(self):
-        self.successors.clear()
-        for task in self.all_tasks_dict.values():
-            for dep in task.dependencies:
-                self.successors[dep['id']].append((task.id, dep.get('lag', 0)))
-
-    def get_earliest_start(self, task: GanttTask) -> datetime.date:
-        earliest = self.project_start
-        for dep in task.dependencies:
-            pred = self.all_tasks_dict.get(dep['id'])
-            if pred:
-                candidate = pred.end_date + timedelta(days=dep.get('lag', 0) + 1)
-                if candidate > earliest:
-                    earliest = candidate
-        return earliest
-
-    def propagate_delay(self, task_id: int):
-        task = self.all_tasks_dict[task_id]
-        for succ_id, lag in self.successors[task_id]:
-            succ = self.all_tasks_dict[succ_id]
-            min_start = task.end_date + timedelta(days=lag + 1)
-            if succ.start_date < min_start:
-                duration = succ.duration_days
-                succ.start_date = min_start
-                succ.end_date = min_start + timedelta(days=duration - 1)
-                item = self.task_items.get(succ_id)
-                if item:
-                    item.update_position()
-                self.propagate_delay(succ_id)
-
-    def validate_change(self, task_id: int):
-        item = self.task_items.get(task_id)
-        if not item or not hasattr(item, 'old_start'):
-            return
-        task = item.task
-        if self.widget.autoPlanningCheck.isChecked():
-            earliest = self.get_earliest_start(task)
-            if task.start_date < earliest:
-                QMessageBox.warning(None, "Ошибка", "Нарушение зависимости — изменение запрещено")
-                task.start_date = item.old_start
-                task.end_date = item.old_end
-                item.update_position()
-                del item.old_start
-                del item.old_end
-                self.update_dependencies()
-                return
-        self.propagate_delay(task_id)
-        if hasattr(item, 'old_start'):
-            del item.old_start
-            del item.old_end
-        self.update_dependencies()
-
-    def update_dependencies(self):
-        for dep in self.dependency_items:
-            dep.update_position()
+    def get_weekday_name(self, date_obj: date) -> str:
+        """Возвращает название дня недели"""
+        weekdays = ["ПН", "ВТ", "СР", "ЧТ", "ПТ", "СБ", "ВС"]
+        return weekdays[date_obj.weekday()]
 
 
 class GanttChartWidget(QWidget):
-    def __init__(self, service=None, parent=None):  # 👈 ДОБАВЛЯЕМ service
+    """Основной виджет диаграммы Ганта"""
+
+    task_selected = pyqtSignal(int)
+    task_updated = pyqtSignal(int, dict)
+
+    def __init__(self, service: ProjectsService, project_id: int = None, parent=None):
         super().__init__(parent)
-
-        ui_path = os.path.join(
-            os.path.dirname(__file__),  # windows/analytics/employees/
-            "..", "..",  # поднимаемся до корня проекта
-            "ui", "gantt"  # спускаемся в нужную подпапку ui
-        )
-        uic.loadUi(os.path.join(ui_path, "gantt_chart.ui"), self)
-
-        # Сохраняем сервис, если он нужен для загрузки реальных данных
         self.service = service
+        self.project_id = project_id
 
-        self.scene = GanttScene(self)
-        self.ganttView.setScene(self.scene)
-        self.ganttView.setDragMode(QGraphicsView.DragMode.ScrollHandDrag)
-        self.ganttView.setRenderHint(QPainter.RenderHint.Antialiasing)
-        self.linking_mode = False
-        self.pending_pred = None
-        self.ganttView.viewport().installEventFilter(self)
+        self.tasks: List[GanttTaskNode] = []
+        self.flat_tasks: List[GanttTaskNode] = []
+        self.scale = ScaleType.WEEK
+        self.start_date = date.today()
+        self.end_date = date.today() + timedelta(days=60)
+
+        self.setup_ui()
         self.connect_signals()
 
-        # Если есть сервис - загружаем реальные данные, иначе тестовые
-        if service:
-            self.load_real_data()
+        if project_id:
+            self.load_project_tasks(project_id)
         else:
-            self.load_test_data()
+            self.load_sample_data()
 
-    def load_real_data(self):
-        """Загрузка реальных данных из сервиса"""
-        # Здесь будет код загрузки данных из БД через сервис
-        # Пока оставляем тестовые данные
-        self.load_test_data()
+        # Инициализируем таймер для обновления при изменении размера
+        self.resize_timer = QTimer()
+        self.resize_timer.setSingleShot(True)
+        self.resize_timer.timeout.connect(self.refresh_display)
+
+    def setup_ui(self):
+        """Настройка пользовательского интерфейса"""
+        main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(0)
+
+        # Toolbar
+        toolbar = self.create_toolbar()
+        main_layout.addWidget(toolbar)
+
+        # Основной сплиттер
+        splitter = QSplitter(Qt.Orientation.Horizontal)
+        splitter.setHandleWidth(1)
+        splitter.setStyleSheet("""
+            QSplitter::handle {
+                background-color: #E2E8F0;
+                width: 1px;
+            }
+        """)
+
+        # Левая панель с задачами
+        self.tasks_panel = self.create_tasks_panel()
+        splitter.addWidget(self.tasks_panel)
+
+        # Правая панель с диаграммой
+        self.chart_panel = self.create_chart_panel()
+        splitter.addWidget(self.chart_panel)
+
+        splitter.setSizes([400, 1000])
+
+        main_layout.addWidget(splitter)
+
+    def create_toolbar(self) -> QFrame:
+        """Создание панели инструментов"""
+        toolbar = QFrame()
+        toolbar.setFixedHeight(56)
+        toolbar.setStyleSheet("""
+            QFrame {
+                background-color: white;
+                border-bottom: 1px solid #E2E8F0;
+            }
+        """)
+
+        layout = QHBoxLayout(toolbar)
+        layout.setContentsMargins(20, 8, 20, 8)
+        layout.setSpacing(12)
+
+        # Заголовок
+        title = QLabel("📊 Диаграмма Ганта")
+        title.setStyleSheet("font-size: 20px; font-weight: bold; color: #0F172A;")
+        layout.addWidget(title)
+
+        layout.addStretch()
+
+        # Масштаб
+        scale_container = QFrame()
+        scale_layout = QHBoxLayout(scale_container)
+        scale_layout.setContentsMargins(0, 0, 0, 0)
+        scale_layout.setSpacing(8)
+
+        scale_label = QLabel("Масштаб:")
+        scale_label.setStyleSheet("color: #64748B; font-size: 13px;")
+        scale_layout.addWidget(scale_label)
+
+        self.scale_combo = QComboBox()
+        self.scale_combo.addItems(["День", "Неделя", "Месяц", "Квартал"])
+        self.scale_combo.setCurrentIndex(1)
+        self.scale_combo.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.scale_combo.setStyleSheet("""
+            QComboBox {
+                background-color: #F8FAFC;
+                border: 1px solid #E2E8F0;
+                border-radius: 8px;
+                padding: 6px 12px;
+                font-size: 13px;
+                min-width: 100px;
+            }
+            QComboBox:hover {
+                border-color: #CBD5E1;
+                background-color: #F1F5F9;
+            }
+            QComboBox::drop-down {
+                border: none;
+                width: 20px;
+            }
+        """)
+        scale_layout.addWidget(self.scale_combo)
+        layout.addWidget(scale_container)
+
+        # Разделитель
+        separator = QFrame()
+        separator.setFixedWidth(1)
+        separator.setStyleSheet("background-color: #E2E8F0;")
+        layout.addWidget(separator)
+
+        # Кнопки управления
+        btn_style = """
+            QPushButton {
+                background-color: #F8FAFC;
+                border: 1px solid #E2E8F0;
+                border-radius: 8px;
+                padding: 6px 12px;
+                font-size: 13px;
+                font-weight: 500;
+                color: #1E293B;
+            }
+            QPushButton:hover {
+                background-color: #F1F5F9;
+                border-color: #CBD5E1;
+            }
+            QPushButton:pressed {
+                background-color: #E2E8F0;
+            }
+        """
+
+        self.btn_zoom_out = QPushButton("🔍 Уменьшить")
+        self.btn_zoom_out.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_zoom_out.setStyleSheet(btn_style)
+        layout.addWidget(self.btn_zoom_out)
+
+        self.btn_zoom_in = QPushButton("🔍 Увеличить")
+        self.btn_zoom_in.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_zoom_in.setStyleSheet(btn_style)
+        layout.addWidget(self.btn_zoom_in)
+
+        self.btn_fit = QPushButton("⟷ Вписать")
+        self.btn_fit.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_fit.setStyleSheet(btn_style)
+        layout.addWidget(self.btn_fit)
+
+        self.btn_today = QPushButton("📅 Сегодня")
+        self.btn_today.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_today.setStyleSheet(btn_style)
+        layout.addWidget(self.btn_today)
+
+        self.btn_expand_all = QPushButton("📂 Развернуть всё")
+        self.btn_expand_all.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_expand_all.setStyleSheet(btn_style)
+        layout.addWidget(self.btn_expand_all)
+
+        self.btn_collapse_all = QPushButton("📁 Свернуть всё")
+        self.btn_collapse_all.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_collapse_all.setStyleSheet(btn_style)
+        layout.addWidget(self.btn_collapse_all)
+
+        return toolbar
+
+    def create_tasks_panel(self) -> QWidget:
+        """Создание панели со списком задач"""
+        panel = QWidget()
+        panel.setStyleSheet("background-color: white;")
+
+        layout = QVBoxLayout(panel)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+
+        # Заголовок
+        header = QFrame()
+        header.setFixedHeight(64)
+        header.setStyleSheet("border-bottom: 1px solid #E2E8F0; background-color: white;")
+        header_layout = QVBoxLayout(header)
+        header_layout.setContentsMargins(16, 0, 16, 0)
+
+        header_title = QLabel("📋 Список задач")
+        header_title.setStyleSheet("font-weight: 600; font-size: 14px; color: #475569;")
+
+        header_subtitle = QLabel("Двойной клик для редактирования")
+        header_subtitle.setStyleSheet("font-size: 11px; color: #94A3B8;")
+
+        header_layout.addWidget(header_title)
+        header_layout.addWidget(header_subtitle)
+
+        layout.addWidget(header)
+
+        # Scroll area для задач
+        self.tasks_scroll = ModernScrollArea()
+        self.tasks_scroll.setWidgetResizable(True)
+
+        self.tasks_content = QWidget()
+        self.tasks_layout = QVBoxLayout(self.tasks_content)
+        self.tasks_layout.setContentsMargins(0, 0, 0, 0)
+        self.tasks_layout.setSpacing(0)
+        self.tasks_layout.addStretch()
+
+        self.tasks_scroll.setWidget(self.tasks_content)
+        layout.addWidget(self.tasks_scroll)
+
+        return panel
+
+    def create_chart_panel(self) -> QWidget:
+        """Создание панели с диаграммой"""
+        panel = QWidget()
+        panel.setStyleSheet("background-color: #F8FAFC;")
+
+        layout = QVBoxLayout(panel)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+
+        # Заголовок временной шкалы
+        self.timeline_header_container = QWidget()
+        self.timeline_header_container.setFixedHeight(64)
+        layout.addWidget(self.timeline_header_container)
+
+        # Scroll area для диаграммы
+        self.chart_scroll = ModernScrollArea()
+        self.chart_scroll.setWidgetResizable(True)
+
+        # Контейнер для содержимого диаграммы
+        self.chart_content_container = QWidget()
+        self.chart_content_layout = QVBoxLayout(self.chart_content_container)
+        self.chart_content_layout.setContentsMargins(0, 0, 0, 0)
+        self.chart_content_layout.setSpacing(0)
+
+        # Скроллируемая область для полос задач
+        self.chart_scroll_area = QWidget()
+        self.chart_scroll_layout = QVBoxLayout(self.chart_scroll_area)
+        self.chart_scroll_layout.setContentsMargins(0, 0, 0, 0)
+        self.chart_scroll_layout.setSpacing(0)
+        self.chart_scroll_layout.addStretch()
+
+        self.chart_content_layout.addWidget(self.chart_scroll_area)
+        self.chart_scroll.setWidget(self.chart_content_container)
+
+        layout.addWidget(self.chart_scroll)
+
+        return panel
 
     def connect_signals(self):
-        self.btnZoomIn.clicked.connect(self.zoom_in)
-        self.btnZoomOut.clicked.connect(self.zoom_out)
-        self.btnRefresh.clicked.connect(self.refresh_chart)
-        self.btnAddTask.clicked.connect(self.add_task_dialog)
-        self.scaleCombo.currentIndexChanged.connect(self.on_scale_changed)
-        self.btnToday.clicked.connect(self.center_on_today)
-        self.btnCreateLink.clicked.connect(self.toggle_linking_mode)
-        self.autoPlanningCheck.toggled.connect(self.refresh_chart)
-        self.taskList.expanded.connect(self.refresh_chart)
-        self.taskList.collapsed.connect(self.refresh_chart)
-        self.scene.task_changed.connect(self.scene.validate_change)
+        """Подключение сигналов"""
+        self.scale_combo.currentTextChanged.connect(self.on_scale_changed)
+        self.btn_zoom_in.clicked.connect(self.zoom_in)
+        self.btn_zoom_out.clicked.connect(self.zoom_out)
+        self.btn_fit.clicked.connect(self.fit_to_screen)
+        self.btn_today.clicked.connect(self.go_to_today)
+        self.btn_expand_all.clicked.connect(self.expand_all)
+        self.btn_collapse_all.clicked.connect(self.collapse_all)
 
-    def eventFilter(self, obj, event):
-        if obj == self.ganttView.viewport() and event.type() == QEvent.Type.MouseButtonPress and self.linking_mode:
-            pos = self.ganttView.mapToScene(event.pos())
-            item = self.scene.itemAt(pos, self.ganttView.transform())
+        # Синхронизация прокрутки
+        self.tasks_scroll.verticalScrollBar().valueChanged.connect(
+            self.chart_scroll.verticalScrollBar().setValue
+        )
+        self.chart_scroll.verticalScrollBar().valueChanged.connect(
+            self.tasks_scroll.verticalScrollBar().setValue
+        )
 
-            while item and not isinstance(item, GanttTaskItem):
-                item = item.parentItem()
-            if isinstance(item, GanttTaskItem):
-                if self.pending_pred is None:
-                    self.pending_pred = item.task.id
-                    QMessageBox.information(self, "Связь", f"Выбрана предыдущая задача: {item.task.title}")
-                else:
-                    lag, ok = QInputDialog.getInt(self, "Лаг", "Задержка (дней):", 0, 0, 30)
-                    if ok:
-                        successor = item.task
-                        successor.dependencies.append({'id': self.pending_pred, 'lag': lag})
-                        self.refresh_chart()
-                    self.pending_pred = None
-                    self.toggle_linking_mode()
-            return True
-        return super().eventFilter(obj, event)
+    def load_project_tasks(self, project_id: int):
+        """Загрузка задач проекта из сервиса"""
+        try:
+            from services.tasks_service import TasksService
+            tasks_service = TasksService(self.service.session)
+            db_tasks = tasks_service.get_project_tasks(project_id)
 
-    def toggle_linking_mode(self):
-        self.linking_mode = not self.linking_mode
-        self.btnCreateLink.setText("Отмена" if self.linking_mode else "Создать связь")
-        cursor = Qt.CursorShape.PointingHandCursor if self.linking_mode else Qt.CursorShape.ArrowCursor
-        self.ganttView.viewport().setCursor(cursor)
+            self.tasks = self.convert_to_gantt_nodes(db_tasks)
+            self.build_hierarchy()
+            self.calculate_date_range()
+            self.refresh_display()
 
-    def center_on_today(self):
-        days = (TODAY - self.scene.project_start).days
-        x = days * PIXELS_PER_DAY
-        self.ganttView.centerOn(x, self.ganttView.height() / 2)
+        except Exception as e:
+            print(f"Ошибка загрузки задач проекта: {e}")
+            self.load_sample_data()
 
-    def load_test_data(self):
-        task1 = GanttTask(1, "Проектирование архитектуры", "2026-02-01", "2026-02-05", "Иванов И.И.", True)
-        task2 = GanttTask(2, "Проектирование UI/UX", "2026-02-01", "2026-02-10", "Петрова А.С.")
-        sub1 = GanttTask(31, "Backend API", "2026-02-06", "2026-02-12", "Сидоров П.В.")
-        sub2 = GanttTask(32, "Интеграция БД", "2026-02-13", "2026-02-18", "Сидоров П.В.")
-        task3 = GanttTask(3, "Разработка бэкенда", "2026-02-06", "2026-02-18", "Сидоров П.В.", True)
-        task3.children = [sub1, sub2]
-        task3.dependencies = [{'id': 1, 'lag': 0}]
-        task4 = GanttTask(4, "Разработка фронтенда", "2026-02-11", "2026-02-22", "Козлова Е.Н.")
-        task4.dependencies = [{'id': 2, 'lag': 0}, {'id': 3, 'lag': 2}]
-        task5 = GanttTask(5, "Тестирование", "2026-02-23", "2026-02-28", "Морозов Д.В.")
-        task5.dependencies = [{'id': 4, 'lag': 0}]
-        self.scene.tasks = [task1, task2, task3, task4, task5]
-        self.scene.collect_tasks()
-        self.update_task_tree()
-        start = min(t.start_date for t in self.scene.all_tasks_dict.values())
-        end = max(t.end_date for t in self.scene.all_tasks_dict.values())
-        self.scene.project_start = start
-        self.scene.project_end = end
-        self.dateRangeLabel.setText(f"{start.strftime('%d.%m.%Y')} - {end.strftime('%d.%m.%Y')}")
+    def convert_to_gantt_nodes(self, db_tasks: List[TaskDTO]) -> List[GanttTaskNode]:
+        """Конвертация TaskDTO в GanttTaskNode"""
+        nodes = []
+        for task in db_tasks:
+            node = GanttTaskNode(
+                id=task.id,
+                title=task.title,
+                start_date=task.deadline.date() if task.deadline else None,
+                end_date=task.deadline.date() if task.deadline else None,
+                priority=task.priority,
+                progress=0,
+                parent_id=None,
+                assigned_to_id=task.assigned_to if hasattr(task, 'assigned_to') else None,
+                description=task.description if hasattr(task, 'description') else None
+            )
+            nodes.append(node)
+        return nodes
 
-        self.scene.update_scene()
-        self.update_statistics()
+    def build_hierarchy(self):
+        """Построение иерархии задач"""
+        if not self.tasks:
+            return
 
-    def update_task_tree(self):
-        self.taskList.blockSignals(True)  # ← добавьте
-        self.taskList.clear()
-        self.scene.tree_items.clear()
+        task_dict = {task.id: task for task in self.tasks}
+        root_tasks = []
 
-        def add_item(task, parent_item=None):
-            text = f"{task.title} | {task.start_date.strftime('%d.%m')}–{task.end_date.strftime('%d.%m')} | {task.assignee}"
-            item = QTreeWidgetItem()
-            item.setText(0, text)
-            item.setData(0, Qt.ItemDataRole.UserRole, task.id)
-            self.scene.tree_items[task.id] = item
-            if parent_item is None:
-                self.taskList.addTopLevelItem(item)
+        for task in self.tasks:
+            if task.parent_id and task.parent_id in task_dict:
+                parent = task_dict[task.parent_id]
+                parent.children.append(task)
             else:
-                parent_item.addChild(item)
-            item.setExpanded(True)  # по умолчанию раскрыто
-            for child in task.children:
-                add_item(child, item)
+                root_tasks.append(task)
 
-        for task in self.scene.tasks:
-            add_item(task)
+        self.tasks = root_tasks
 
-        self.taskList.blockSignals(False)  # ← добавьте
+    def load_sample_data(self):
+        """Загрузка демонстрационных данных с красивым дизайном"""
+        today = date.today()
 
-    def refresh_chart(self):
-        self.scene.update_scene()
-        self.update_task_tree()
-        self.update_statistics()
+        self.tasks = [
+            GanttTaskNode(
+                id=1,
+                title="🚀 Запуск проекта",
+                start_date=today,
+                end_date=today + timedelta(days=2),
+                priority=TaskPriority.critical,
+                progress=100,
+                is_milestone=True,
+                assigned_to_name="Алексей Смирнов"
+            ),
+            GanttTaskNode(
+                id=2,
+                title="📋 Анализ требований",
+                start_date=today,
+                end_date=today + timedelta(days=7),
+                priority=TaskPriority.high,
+                progress=80,
+                assigned_to_name="Мария Иванова",
+                children=[
+                    GanttTaskNode(
+                        id=3, title="Сбор требований",
+                        start_date=today, end_date=today + timedelta(days=3),
+                        priority=TaskPriority.high, progress=100,
+                        assigned_to_name="Мария Иванова", parent_id=2
+                    ),
+                    GanttTaskNode(
+                        id=4, title="Анализ рынка",
+                        start_date=today + timedelta(days=1), end_date=today + timedelta(days=5),
+                        priority=TaskPriority.medium, progress=60,
+                        assigned_to_name="Дмитрий Петров", parent_id=2
+                    ),
+                    GanttTaskNode(
+                        id=5, title="Составление ТЗ",
+                        start_date=today + timedelta(days=4), end_date=today + timedelta(days=7),
+                        priority=TaskPriority.high, progress=40,
+                        assigned_to_name="Мария Иванова", parent_id=2
+                    )
+                ]
+            ),
+            GanttTaskNode(
+                id=6,
+                title="🎨 Дизайн",
+                start_date=today + timedelta(days=3),
+                end_date=today + timedelta(days=12),
+                priority=TaskPriority.medium,
+                progress=50,
+                assigned_to_name="Анна Соколова",
+                children=[
+                    GanttTaskNode(
+                        id=7, title="UI/UX дизайн",
+                        start_date=today + timedelta(days=3), end_date=today + timedelta(days=9),
+                        priority=TaskPriority.medium, progress=60,
+                        assigned_to_name="Анна Соколова", parent_id=6
+                    ),
+                    GanttTaskNode(
+                        id=8, title="Создание макетов",
+                        start_date=today + timedelta(days=7), end_date=today + timedelta(days=12),
+                        priority=TaskPriority.low, progress=30,
+                        assigned_to_name="Павел Новиков", parent_id=6
+                    )
+                ]
+            ),
+            GanttTaskNode(
+                id=9,
+                title="💻 Разработка",
+                start_date=today + timedelta(days=8),
+                end_date=today + timedelta(days=28),
+                priority=TaskPriority.critical,
+                progress=20,
+                assigned_to_name="Олег Козлов",
+                children=[
+                    GanttTaskNode(
+                        id=10, title="Backend API",
+                        start_date=today + timedelta(days=8), end_date=today + timedelta(days=20),
+                        priority=TaskPriority.high, progress=25,
+                        assigned_to_name="Олег Козлов", parent_id=9
+                    ),
+                    GanttTaskNode(
+                        id=11, title="Frontend",
+                        start_date=today + timedelta(days=10), end_date=today + timedelta(days=24),
+                        priority=TaskPriority.high, progress=15,
+                        assigned_to_name="Екатерина Волкова", parent_id=9
+                    ),
+                    GanttTaskNode(
+                        id=12, title="База данных",
+                        start_date=today + timedelta(days=8), end_date=today + timedelta(days=16),
+                        priority=TaskPriority.high, progress=40,
+                        assigned_to_name="Игорь Морозов", parent_id=9
+                    )
+                ]
+            ),
+            GanttTaskNode(
+                id=13,
+                title="🧪 Тестирование",
+                start_date=today + timedelta(days=22),
+                end_date=today + timedelta(days=32),
+                priority=TaskPriority.high,
+                progress=0,
+                assigned_to_name="Светлана Орлова",
+                children=[
+                    GanttTaskNode(
+                        id=14, title="Unit тесты",
+                        start_date=today + timedelta(days=22), end_date=today + timedelta(days=27),
+                        priority=TaskPriority.medium, progress=0,
+                        assigned_to_name="Светлана Орлова", parent_id=13
+                    ),
+                    GanttTaskNode(
+                        id=15, title="Интеграционное тестирование",
+                        start_date=today + timedelta(days=27), end_date=today + timedelta(days=32),
+                        priority=TaskPriority.high, progress=0,
+                        assigned_to_name="Андрей Белов", parent_id=13
+                    )
+                ]
+            ),
+            GanttTaskNode(
+                id=16,
+                title="🚀 Релиз продукта",
+                start_date=today + timedelta(days=35),
+                end_date=today + timedelta(days=35),
+                priority=TaskPriority.critical,
+                progress=0,
+                is_milestone=True,
+                assigned_to_name="Алексей Смирнов"
+            )
+        ]
 
-    def update_statistics(self):
-        total = len(self.scene.all_tasks_dict)
-        completed = sum(1 for t in self.scene.all_tasks_dict.values() if t.is_completed)
-        overdue = sum(1 for t in self.scene.all_tasks_dict.values() if t.is_overdue)
-        self.statusLabel.setText(f"Завершено: {completed} | Просрочено: {overdue} | Всего: {total}")
+        self.calculate_date_range()
+        self.refresh_display()
+
+    def flatten_tasks(self, tasks: List[GanttTaskNode], level: int = 0) -> List[GanttTaskNode]:
+        """Разворачивает иерархию задач в плоский список"""
+        flat = []
+        for task in tasks:
+            task.level = level
+            flat.append(task)
+
+            if task.children and task.is_expanded:
+                flat.extend(self.flatten_tasks(task.children, level + 1))
+        return flat
+
+    def calculate_date_range(self):
+        """Расчет диапазона дат на основе задач"""
+        all_tasks = self.flatten_tasks(self.tasks)
+
+        if not all_tasks:
+            self.start_date = date.today()
+            self.end_date = date.today() + timedelta(days=30)
+            return
+
+        min_date = None
+        max_date = None
+
+        for task in all_tasks:
+            if task.start_date:
+                if min_date is None or task.start_date < min_date:
+                    min_date = task.start_date
+            if task.end_date:
+                if max_date is None or task.end_date > max_date:
+                    max_date = task.end_date
+
+        if min_date:
+            self.start_date = min_date - timedelta(days=5)
+        else:
+            self.start_date = date.today()
+
+        if max_date:
+            self.end_date = max_date + timedelta(days=5)
+        else:
+            self.end_date = date.today() + timedelta(days=30)
+
+    def refresh_display(self):
+        """Обновление отображения диаграммы"""
+        self.flat_tasks = self.flatten_tasks(self.tasks)
+
+        self.update_tasks_panel()
+        self.update_chart()
+        self.update_timeline_header()
+
+    def update_tasks_panel(self):
+        """Обновление панели со списком задач"""
+        # Очищаем существующие виджеты
+        while self.tasks_layout.count() > 1:
+            item = self.tasks_layout.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+
+        # Добавляем задачи
+        for task in self.flat_tasks:
+            task_widget = TaskItemWidget(task)
+            task_widget.task_clicked.connect(self.on_task_clicked)
+            task_widget.task_double_clicked.connect(self.on_task_double_clicked)
+            task_widget.toggle_expand.connect(self.toggle_task_expand)
+            self.tasks_layout.insertWidget(self.tasks_layout.count() - 1, task_widget)
+
+    def update_chart(self):
+        """Обновление диаграммы"""
+        # Очищаем существующие виджеты
+        while self.chart_scroll_layout.count() > 1:
+            item = self.chart_scroll_layout.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+
+        # Получаем ширину контейнера
+        chart_width = self.chart_scroll_area.width()
+        if chart_width <= 0:
+            chart_width = 800
+
+        date_range = (self.end_date - self.start_date).days + 1
+        if date_range <= 0:
+            return
+
+        # Рассчитываем пиксели на день
+        pixels_per_day = chart_width / date_range
+
+        # Для каждой задачи создаем полосу
+        for i, task in enumerate(self.flat_tasks):
+            if task.start_date and task.end_date:
+                days_from_start = (task.start_date - self.start_date).days
+                duration = task.duration_days
+
+                x_pos = int(days_from_start * pixels_per_day)
+                width = int(duration * pixels_per_day)
+
+                if width < 30:
+                    width = 30
+
+                # Создаем контейнер для полосы задачи
+                task_row = QWidget()
+                task_row.setFixedHeight(60)
+                task_row_layout = QVBoxLayout(task_row)
+                task_row_layout.setContentsMargins(0, 5, 0, 5)
+                task_row_layout.setSpacing(0)
+
+                bar_widget = GanttBarWidget(task, task.start_date, task.end_date, x_pos, width)
+                bar_widget.bar_clicked.connect(self.on_task_clicked)
+                bar_widget.bar_moved.connect(self.on_task_moved)
+                bar_widget.bar_resized.connect(self.on_task_resized)
+
+                task_row_layout.addWidget(bar_widget)
+                self.chart_scroll_layout.insertWidget(self.chart_scroll_layout.count() - 1, task_row)
+
+        # Обновляем минимальную ширину для скроллинга
+        self.chart_scroll_area.setMinimumWidth(int(date_range * pixels_per_day) + 100)
+
+    def update_timeline_header(self):
+        """Обновление заголовка временной шкалы"""
+        # Очищаем существующие виджеты
+        for child in self.timeline_header_container.findChildren(QWidget):
+            child.deleteLater()
+
+        layout = QVBoxLayout(self.timeline_header_container)
+        layout.setContentsMargins(0, 0, 0, 0)
+
+        # Устанавливаем размер заголовка в соответствии с шириной диаграммы
+        timeline_header = TimelineHeader(self.scale, self.start_date, self.end_date)
+
+        # Устанавливаем минимальную ширину заголовка
+        chart_width = self.chart_scroll_area.width()
+        if chart_width > 0:
+            date_range = (self.end_date - self.start_date).days + 1
+            if date_range > 0:
+                timeline_header.setMinimumWidth(int(date_range * (chart_width / date_range)) + 100)
+
+        layout.addWidget(timeline_header)
+
+    def on_scale_changed(self, scale_text: str):
+        """Обработчик изменения масштаба"""
+        scale_map = {
+            "День": ScaleType.DAY,
+            "Неделя": ScaleType.WEEK,
+            "Месяц": ScaleType.MONTH,
+            "Квартал": ScaleType.QUARTER
+        }
+        self.scale = scale_map.get(scale_text, ScaleType.WEEK)
+
+        # Корректируем диапазон дат в зависимости от масштаба
+        if self.scale == ScaleType.DAY:
+            # Для дней показываем 30 дней
+            center_date = self.start_date + (self.end_date - self.start_date) / 2
+            self.start_date = center_date - timedelta(days=15)
+            self.end_date = center_date + timedelta(days=15)
+        elif self.scale == ScaleType.WEEK:
+            # Для недель показываем 12 недель
+            center_date = self.start_date + (self.end_date - self.start_date) / 2
+            self.start_date = center_date - timedelta(days=42)
+            self.end_date = center_date + timedelta(days=42)
+        elif self.scale == ScaleType.MONTH:
+            # Для месяцев показываем 6 месяцев
+            center_date = self.start_date + (self.end_date - self.start_date) / 2
+            self.start_date = center_date - timedelta(days=90)
+            self.end_date = center_date + timedelta(days=90)
+        else:  # QUARTER
+            # Для кварталов показываем 8 кварталов
+            center_date = self.start_date + (self.end_date - self.start_date) / 2
+            self.start_date = center_date - timedelta(days=365)
+            self.end_date = center_date + timedelta(days=365)
+
+        self.refresh_display()
 
     def zoom_in(self):
-        global PIXELS_PER_DAY
-        PIXELS_PER_DAY = min(80, PIXELS_PER_DAY + 10)
-        self.refresh_chart()
+        """Увеличение масштаба"""
+        center_date = self.start_date + (self.end_date - self.start_date) / 2
+        days_range = (self.end_date - self.start_date).days
+
+        # Уменьшаем диапазон на 20%
+        new_days_range = int(days_range * 0.8)
+
+        self.start_date = center_date - timedelta(days=int(new_days_range / 2))
+        self.end_date = center_date + timedelta(days=int(new_days_range / 2))
+
+        # Гарантируем минимальный диапазон
+        if (self.end_date - self.start_date).days < 1:
+            self.end_date = self.start_date + timedelta(days=1)
+
+        self.refresh_display()
 
     def zoom_out(self):
-        global PIXELS_PER_DAY
-        PIXELS_PER_DAY = max(15, PIXELS_PER_DAY - 10)
-        self.refresh_chart()
+        """Уменьшение масштаба"""
+        center_date = self.start_date + (self.end_date - self.start_date) / 2
+        days_range = (self.end_date - self.start_date).days
 
-    def on_scale_changed(self, index):
-        global PIXELS_PER_DAY
-        text = self.scaleCombo.currentText()
-        PIXELS_PER_DAY = {"Дни": 40, "Недели": 20, "Месяцы": 10}.get(text, 40)
-        self.refresh_chart()
+        # Увеличиваем диапазон на 20%
+        new_days_range = int(days_range * 1.2)
 
-    def add_task_dialog(self):
-        title, ok = QInputDialog.getText(self, "Новая задача", "Название:")
-        if ok and title:
-            self.scene.collect_tasks()
-            new_id = max((t.id for t in self.scene.all_tasks_dict.values()), default=0) + 1
-            start = TODAY.strftime("%Y-%m-%d")
-            end = (TODAY + timedelta(days=7)).strftime("%Y-%m-%d")
-            new_task = GanttTask(new_id, title, start, end, "Новый")
-            self.scene.tasks.append(new_task)
-            self.refresh_chart()
+        self.start_date = center_date - timedelta(days=int(new_days_range / 2))
+        self.end_date = center_date + timedelta(days=int(new_days_range / 2))
 
-    def wheelEvent(self, event: QWheelEvent):
-        if event.modifiers() & Qt.KeyboardModifier.ControlModifier:
-            self.zoom_in() if event.angleDelta().y() > 0 else self.zoom_out()
-            event.accept()
-        else:
-            super().wheelEvent(event)
+        self.refresh_display()
 
-def main():
-    app = QApplication(sys.argv)
-    app.setStyle("Fusion")
-    widget = GanttChartWidget()
-    widget.show()
-    widget.resize(1600, 900)
-    sys.exit(app.exec())
+    def fit_to_screen(self):
+        """Вписать диаграмму в окно"""
+        self.calculate_date_range()
+        # Добавляем небольшой отступ
+        self.start_date = self.start_date - timedelta(days=3)
+        self.end_date = self.end_date + timedelta(days=3)
+        self.refresh_display()
 
+    def go_to_today(self):
+        """Переход к сегодняшней дате"""
+        today = date.today()
+        days_range = (self.end_date - self.start_date).days
+
+        # Центрируем на сегодняшней дате
+        self.start_date = today - timedelta(days=int(days_range / 2))
+        self.end_date = today + timedelta(days=int(days_range / 2))
+
+        self.refresh_display()
+
+    def expand_all(self):
+        """Развернуть все задачи"""
+        def expand_recursive(tasks):
+            for task in tasks:
+                task.is_expanded = True
+                if task.children:
+                    expand_recursive(task.children)
+
+        expand_recursive(self.tasks)
+        self.refresh_display()
+
+    def collapse_all(self):
+        """Свернуть все задачи"""
+        def collapse_recursive(tasks):
+            for task in tasks:
+                task.is_expanded = False
+                if task.children:
+                    collapse_recursive(task.children)
+
+        collapse_recursive(self.tasks)
+        self.refresh_display()
+
+    def toggle_task_expand(self, task_id: int):
+        """Переключение раскрытия задачи"""
+        def find_and_toggle(tasks):
+            for task in tasks:
+                if task.id == task_id:
+                    task.is_expanded = not task.is_expanded
+                    return True
+                if task.children and find_and_toggle(task.children):
+                    return True
+            return False
+
+        find_and_toggle(self.tasks)
+        self.refresh_display()
+
+    def on_task_clicked(self, task_id: int):
+        """Обработчик клика по задаче"""
+        self.task_selected.emit(task_id)
+        print(f"Выбрана задача ID: {task_id}")
+
+    def on_task_double_clicked(self, task_id: int):
+        """Обработчик двойного клика по задаче"""
+        QMessageBox.information(self, "Редактирование задачи",
+                                f"✏️ Открыть задачу {task_id} для редактирования\n\n"
+                                "Здесь можно будет изменить название, даты, приоритет и ответственного.")
+
+    def on_task_moved(self, task_id: int, new_start: date, new_end: date):
+        """Обработчик перемещения задачи"""
+        print(f"Перемещена задача {task_id}: {new_start} - {new_end}")
+        self.task_updated.emit(task_id, {
+            'start_date': new_start,
+            'end_date': new_end
+        })
+
+    def on_task_resized(self, task_id: int, new_start: date, new_end: date):
+        """Обработчик изменения размера задачи"""
+        print(f"Изменен размер задачи {task_id}: {new_start} - {new_end}")
+        self.task_updated.emit(task_id, {
+            'start_date': new_start,
+            'end_date': new_end
+        })
+
+    def resizeEvent(self, event):
+        """Обработка изменения размера окна"""
+        super().resizeEvent(event)
+        # Используем таймер для debouncing обновлений
+        self.resize_timer.start(100)
+
+
+# Для тестирования отдельно
 if __name__ == "__main__":
-    main()
+    app = QApplication(sys.argv)
+
+    # Стиль приложения
+    app.setStyle("Fusion")
+
+    # Создаем тестовый сервис
+    from unittest.mock import MagicMock
+    mock_session = MagicMock()
+    mock_service = ProjectsService(mock_session)
+
+    # Создаем виджет
+    gantt_widget = GanttChartWidget(mock_service, project_id=None)
+
+    # Создаем главное окно
+    window = QMainWindow()
+    window.setCentralWidget(gantt_widget)
+    window.setWindowTitle("📊 Диаграмма Ганта - МАЗ Project Management")
+    window.setMinimumSize(1200, 700)
+    window.resize(1400, 900)
+    window.setStyleSheet("""
+        QMainWindow {
+            background-color: #F8FAFC;
+        }
+    """)
+    window.show()
+
+    sys.exit(app.exec())

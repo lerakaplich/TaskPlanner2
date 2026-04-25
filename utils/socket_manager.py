@@ -165,7 +165,7 @@ class SocketClient(QObject):
             logger.error(f"❌ Ошибка операции: {data.get('error')}")
             self.operation_error.emit(data)
 
-    def connect_to_server(self, url="http://localhost:8081"):
+    def connect_to_server(self, url="http://localhost:8082"):
         """
         Подключение к серверу
 
