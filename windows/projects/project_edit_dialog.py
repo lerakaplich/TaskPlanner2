@@ -102,9 +102,17 @@ class ProjectEditDialog(BaseProjectDialog):
         if original.get('is_active') != current['is_active']:
             return True
 
-        # Сравниваем настройки колонок
-        original_columns = original.get('column_visibility', {})
-        if original_columns != current['column_visibility']:
+        # 👇 ИСПРАВЛЯЕМ: убираем проверку column_visibility
+        # Сравниваем выбранные колонки
+        original_columns = original.get('selected_columns_data', [])
+        current_columns = self.selected_columns_data
+        if len(original_columns) != len(current_columns):
+            return True
+
+        # Сравниваем ID колонок
+        original_col_ids = set([col.get('id') for col in original_columns if col.get('id')])
+        current_col_ids = set([col.get('id') for col in current_columns if col.get('id')])
+        if original_col_ids != current_col_ids:
             return True
 
         # Сравниваем участников
@@ -143,5 +151,9 @@ class ProjectEditDialog(BaseProjectDialog):
         data['id'] = self.project_data.get('id')
         data['created_date'] = self.project_data.get('created_date',
                                                      QDate.currentDate().toString("dd.MM.yyyy"))
+
+        # 👇 ДОБАВЛЯЕМ ВЫБРАННЫЕ КОЛОНКИ
+        data['selected_columns_data'] = self.selected_columns_data
+        data['selected_columns'] = self.selected_columns_keys
 
         return data

@@ -30,6 +30,8 @@ class ProjectsService:
     def set_current_user(self, user):
         self.current_user = user
 
+    # services/projects_service.py
+
     def get_projects_for_cards(self, search_query: str = "", status_filter: str = "Все", owner_filter: bool = False) -> \
     List[ProjectCardDTO]:
         try:
@@ -51,12 +53,9 @@ class ProjectsService:
                     member_count = len(proj.members) if hasattr(proj, 'members') else 0
                     admin_count = len([m for m in proj.members if m.is_admin]) if hasattr(proj, 'members') else 0
 
-                    # Исправленный вызов - с try/except
-                    try:
-                        columns_count = self.project_repo.get_project_columns_count(proj.id)
-                    except Exception as e:
-                        print(f"⚠️ Ошибка подсчета колонок для проекта {proj.id}: {e}")
-                        columns_count = 0
+                    # Получаем количество колонок из ID
+                    column_ids = self.project_repo.get_selected_column_ids(proj.id)
+                    columns_count = len(column_ids) if column_ids else 0
 
                     owner_name = "Не назначен"
                     if proj.owner:
@@ -113,6 +112,8 @@ class ProjectsService:
             print(f"❌ Ошибка при архивации проекта: {e}")
             return False
 
+    # services/projects_service.py
+
     def create_new_project(self, raw_data: dict, creator_id: int) -> Optional[ProjectWithMembersDTO]:
         try:
             # 1. Создаем проект
@@ -129,33 +130,18 @@ class ProjectsService:
             self.session.flush()
             print(f"✅ Проект создан в БД, ID: {project.id}")
 
-            # 2. Создаем колонки для канбан-доски и сохраняем их ID
+            # 2. Сохраняем ID выбранных шаблонных колонок (НЕ СОЗДАЕМ НОВЫЕ)
             selected_columns_data = raw_data.get('selected_columns_data', [])
-            created_columns = []
-            column_ids = []
+            column_ids = [col.get('id') for col in selected_columns_data if col.get('id')]
 
-            if selected_columns_data:
-                created_columns = self.column_service.create_project_columns_batch(
-                    project_id=project.id,
-                    columns_data=selected_columns_data
-                )
-                # Сохраняем ID созданных колонок
-                column_ids = [col['id'] for col in created_columns]
+            if column_ids:
                 self.project_repo.save_selected_column_ids(project.id, column_ids)
-                print(f"✅ Создано {len(created_columns)} колонок, ID: {column_ids}")
+                print(f"✅ Сохранены ID шаблонных колонок: {column_ids}")
             else:
-                default_columns = [
-                    {'name': 'Название проекта', 'color': '#1B232A', 'position': 0, 'is_done_column': False},
-                    {'name': 'Статус', 'color': '#ccab6e', 'position': 1, 'is_done_column': False},
-                    {'name': 'Прогресс', 'color': '#9b59b6', 'position': 2, 'is_done_column': False}
-                ]
-                created_columns = self.column_service.create_project_columns_batch(
-                    project_id=project.id,
-                    columns_data=default_columns
-                )
-                column_ids = [col['id'] for col in created_columns]
-                self.project_repo.save_selected_column_ids(project.id, column_ids)
-                print(f"✅ Создано {len(created_columns)} стандартных колонок, ID: {column_ids}")
+                # Если ничего не выбрано, используем колонки по умолчанию
+                default_column_ids = [24, 25, 26, 27]  # ID шаблонных колонок
+                self.project_repo.save_selected_column_ids(project.id, default_column_ids)
+                print(f"✅ Сохранены ID колонок по умолчанию: {default_column_ids}")
 
             # 3. Обработка участников
             def to_id_list(val):
@@ -187,6 +173,45 @@ class ProjectsService:
             traceback.print_exc()
             return None
 
+    # services/projects_service.py
+
+    def get_project_for_edit(self, project_id: int) -> Optional[ProjectWithMembersDTO]:
+        project = self.project_repo.get_by_id(project_id)
+        if not project:
+            return None
+
+        dto = ProjectWithMembersDTO.model_validate(project)
+        dto.member_ids = [m.employee_id for m in project.members]
+        dto.admin_ids = [m.employee_id for m in project.members if m.is_admin]
+
+        # Загружаем данные колонок по сохраненным ID
+        column_ids = self.project_repo.get_selected_column_ids(project_id)
+        if column_ids:
+            from sqlalchemy import select
+            from models.projects import BoardColumn
+
+            stmt = select(BoardColumn).where(BoardColumn.id.in_(column_ids))
+            columns = self.session.scalars(stmt).all()
+
+            dto.selected_columns_data = []
+            for col in columns:
+                dto.selected_columns_data.append({
+                    'id': col.id,
+                    'name': col.name,
+                    'col_key': col.name.lower().replace(' ', '_'),
+                    'color': col.color,
+                    'position': col.position,
+                    'is_done_column': col.is_done_column
+                })
+
+        print(f"✅ Проект загружен из БД: {dto.name} (ID: {dto.id})")
+        print(f"   Участников: {len(dto.member_ids)}, Админов: {len(dto.admin_ids)}")
+        print(f"   ID шаблонных колонок: {column_ids}")
+
+        return dto
+
+    # services/projects_service.py
+
     def update_project(self, project_id: int, dto: ProjectWithMembersDTO) -> bool:
         try:
             project = self.project_repo.get_by_id(project_id)
@@ -199,12 +224,12 @@ class ProjectsService:
             project.deadline = dto.deadline
             project.updated_at = datetime.now()
 
-            # Сохраняем ID колонок, если они изменились
+            # 👇 СОХРАНЯЕМ ID ВЫБРАННЫХ КОЛОНОК ПРИ ОБНОВЛЕНИИ
             if hasattr(dto, 'selected_columns_data') and dto.selected_columns_data:
-                # Нужно обновить колонки в проекте
-                # Для простоты: удаляем старые и создаем новые
-                # Или можно обновлять существующие
-                pass
+                column_ids = [col.get('id') for col in dto.selected_columns_data if col.get('id')]
+                if column_ids:
+                    self.project_repo.save_selected_column_ids(project_id, column_ids)
+                    print(f"✅ Обновлены ID колонок проекта: {column_ids}")
 
             # Обновление участников...
             current_members = {m.employee_id: bool(m.is_admin) for m in project.members}
@@ -234,41 +259,78 @@ class ProjectsService:
             traceback.print_exc()
             return False
 
-    def get_project_for_edit(self, project_id: int) -> Optional[ProjectWithMembersDTO]:
+    def get_project_board_data(self, project_id: int) -> Optional[ProjectBoardDTO]:
         project = self.project_repo.get_by_id(project_id)
         if not project:
             return None
 
-        dto = ProjectWithMembersDTO.model_validate(project)
-        dto.member_ids = [m.employee_id for m in project.members]
-        dto.admin_ids = [m.employee_id for m in project.members if m.is_admin]
-
-        # Загружаем данные колонок по сохраненным ID
+        # Получаем ID сохраненных шаблонных колонок для проекта
         column_ids = self.project_repo.get_selected_column_ids(project_id)
+
+        # Загружаем шаблонные колонки из БД
+        from sqlalchemy import select
+        from models.projects import BoardColumn
+
         if column_ids:
-            # Получаем полные данные колонок из БД
-            from sqlalchemy import select
-            from models.projects import BoardColumn
+            stmt = select(BoardColumn).where(BoardColumn.id.in_(column_ids)).order_by(BoardColumn.template_order)
+            template_columns = self.session.scalars(stmt).all()
+        else:
+            # Если нет сохраненных, берем все шаблонные колонки
+            stmt = select(BoardColumn).where(BoardColumn.is_template == True).order_by(BoardColumn.template_order)
+            template_columns = self.session.scalars(stmt).all()
 
-            stmt = select(BoardColumn).where(BoardColumn.id.in_(column_ids))
-            columns = self.session.scalars(stmt).all()
+        # Получаем задачи проекта
+        tasks = self.task_repo.get_by_project(project_id)
 
-            dto.selected_columns_data = []
-            for col in columns:
-                dto.selected_columns_data.append({
-                    'id': col.id,
-                    'name': col.name,
-                    'col_key': col.name.lower().replace(' ', '_'),
-                    'color': col.color,
-                    'position': col.position,
-                    'is_done_column': col.is_done_column
-                })
+        # Группируем задачи по шаблонным колонкам
+        tasks_by_column = {}
+        for task in tasks:
+            # Используем имя колонки задачи для группировки
+            column_name = task.column.name if task.column else "К выполнению"
+            if column_name not in tasks_by_column:
+                tasks_by_column[column_name] = []
+            tasks_by_column[column_name].append(task)
 
-        print(f"✅ Проект загружен из БД: {dto.name} (ID: {dto.id})")
-        print(f"   Участников: {len(dto.member_ids)}, Админов: {len(dto.admin_ids)}")
-        print(f"   ID колонок: {column_ids}")
+        # Формируем DTO для каждой шаблонной колонки
+        board_columns_dto = []
+        for template_col in template_columns:
+            column_tasks = tasks_by_column.get(template_col.name, [])
 
-        return dto
+            task_cards = []
+            for t in column_tasks:
+                assigned_name = self.employee_repo.get_full_name(t.assigned_to) if t.assigned_to else "Не назначен"
+                is_overdue = (t.deadline < datetime.now()) if t.deadline else False
+
+                task_cards.append(TaskCardDTO(
+                    id=t.id,
+                    title=t.title,
+                    priority=TaskPriority(t.priority.value if hasattr(t.priority, 'value') else t.priority),
+                    deadline=t.deadline,
+                    assigned_to_name=assigned_name,
+                    is_overdue=is_overdue
+                ))
+
+            col_dto = BoardColumnWithTasksDTO(
+                id=template_col.id,
+                name=template_col.name,
+                color=template_col.color or "#cccccc",
+                position=template_col.template_order or 0,
+                is_done_column=template_col.is_done_column,
+                tasks=task_cards
+            )
+            board_columns_dto.append(col_dto)
+
+        # Загружаем сохраненные колонки в DTO проекта
+        project_dto = ProjectWithMembersDTO.model_validate(project)
+        project_dto.selected_columns_data = [
+            {'id': col.id, 'name': col.name, 'col_key': col.name.lower().replace(' ', '_')}
+            for col in template_columns
+        ]
+
+        return ProjectBoardDTO(
+            project=project_dto,
+            columns=board_columns_dto
+        )
 
     def add_column_to_project(self, project_id: int, template_column_id: int = None, custom_data: Dict = None) -> \
     Optional[Dict[str, Any]]:
@@ -289,74 +351,3 @@ class ProjectsService:
             self.session.rollback()
             print(f"❌ Ошибка при добавлении колонки в проект: {e}")
             return None
-
-    def get_project_board_data(self, project_id: int) -> Optional[ProjectBoardDTO]:
-        project = self.project_repo.get_by_id(project_id)
-        if not project:
-            return None
-
-        # Получаем колонки проекта из БД (те, которые уже созданы)
-        all_project_columns = self.column_service.get_project_columns(project_id)
-
-        # Если есть созданные колонки - используем их
-        if all_project_columns:
-            board_columns_dto = []
-            for col in sorted(all_project_columns, key=lambda x: x['position']):
-                tasks = self.task_repo.get_by_column(col['id'])
-
-                task_cards = []
-                for t in tasks:
-                    assigned_name = self.employee_repo.get_full_name(t.assigned_to) if t.assigned_to else "Не назначен"
-                    is_overdue = (t.deadline < datetime.now()) if t.deadline else False
-
-                    task_cards.append(TaskCardDTO(
-                        id=t.id,
-                        title=t.title,
-                        priority=TaskPriority(t.priority.value if hasattr(t.priority, 'value') else t.priority),
-                        deadline=t.deadline,
-                        assigned_to_name=assigned_name,
-                        is_overdue=is_overdue
-                    ))
-
-                col_dto = BoardColumnWithTasksDTO(
-                    id=col['id'],
-                    name=col['name'],
-                    color=col['color'] or "#cccccc",
-                    position=col['position'],
-                    is_done_column=col['is_done_column'],
-                    tasks=task_cards
-                )
-                board_columns_dto.append(col_dto)
-        else:
-            # Если нет колонок, создаем из сохраненных ID или шаблонов
-            column_ids = self.project_repo.get_selected_column_ids(project_id)
-            if column_ids:
-                from sqlalchemy import select
-                from models.projects import BoardColumn
-
-                stmt = select(BoardColumn).where(BoardColumn.id.in_(column_ids))
-                columns = self.session.scalars(stmt).all()
-
-                board_columns_dto = []
-                for col in columns:
-                    col_dto = BoardColumnWithTasksDTO(
-                        id=col.id,
-                        name=col.name,
-                        color=col.color or "#cccccc",
-                        position=col.position,
-                        is_done_column=col.is_done_column,
-                        tasks=[]
-                    )
-                    board_columns_dto.append(col_dto)
-            else:
-                # Если ничего нет, используем шаблонные колонки
-                board_columns_dto = []
-
-        # Загружаем сохраненные колонки в DTO проекта
-        project_dto = ProjectWithMembersDTO.model_validate(project)
-        project_dto.selected_columns_data = self.project_repo.get_selected_columns(project_id)
-
-        return ProjectBoardDTO(
-            project=project_dto,
-            columns=board_columns_dto
-        )

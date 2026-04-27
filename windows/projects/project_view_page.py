@@ -2,76 +2,231 @@
 
 import os
 from typing import Dict
-
+from PyQt6.QtWidgets import QWidget, QFrame, QHBoxLayout, QLabel, QPushButton, QScrollArea
+from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6 import uic
-from PyQt6.QtWidgets import (QListWidgetItem, QFrame, QVBoxLayout, QHBoxLayout,
-                             QLabel, QPushButton, QListWidget, QProgressBar,
-                             QLineEdit, QWidget, QMessageBox)
-from PyQt6.QtCore import Qt, QDate, pyqtSignal
 
-from windows.other_tasks.others_tasks_page import OthersTasksPage
 from windows.other_tasks.others_task_card import OthersTaskCard
-from windows.other_tasks.task_dialog import TaskDialog
+from windows.shared.kanban_column import KanbanColumn
+from services.tasks_service import TasksService
+from database import get_tasks_session
 
 
-class ProjectViewPage(OthersTasksPage):
+class ProjectViewPage(QWidget):
     """Страница просмотра проекта с задачами и информацией о команде"""
 
-    projectUpdated = pyqtSignal()  # Сигнал при обновлении проекта
+    projectUpdated = pyqtSignal()
+
+    # windows/projects/project_view_page.py - исправленный метод __init__ и load_tasks
 
     def __init__(self, session=None, project_id=None, service=None, parent=None):
-        """
-        Инициализация страницы проекта
+        super().__init__(parent)
 
-        Args:
-            session: сессия БД
-            project_id: ID проекта
-            service: сервис проектов
-            parent: родительский виджет
-        """
         self.project_id = project_id
         self.project_service = service
+        self.columns = {}
+        self.column_widgets = []
+        self.all_tasks = []
 
-        # Получаем данные проекта из сервиса
+        # Загружаем UI
+        ui_path = os.path.join(os.path.dirname(__file__), "..", "..", "ui", "other_tasks")
+        uic.loadUi(os.path.join(ui_path, "others_tasks_page.ui"), self)
+
+        # Скрываем кнопку создания задачи
+        if hasattr(self, 'btnCreateTask'):
+            self.btnCreateTask.hide()
+
+        # Получаем данные проекта
         if service and project_id:
             self.project_data = service.get_project_for_edit(project_id)
             if not self.project_data:
-                self.project_data = self.get_default_project_data()
+                self.project_data = self._get_default_project_data()
         else:
-            self.project_data = self.get_default_project_data()
+            self.project_data = self._get_default_project_data()
 
-        # Создаем временного пользователя для OthersTasksPage
-        temp_user = {"id": 1, "last_name": "", "first_name": ""}
+        # Создаем сервис задач в режиме "all" (показываем все задачи проекта)
+        self.db_session = session or get_tasks_session()
+        temp_user = {"id": 1, "last_name": "Копейкина", "first_name": "Виктория"}
+        self.service = TasksService(
+            db_session=self.db_session,
+            current_user=temp_user,
+            mode="all"
+        )
 
-        # Вызываем родительский конструктор
-        super().__init__(parent=parent, current_user=temp_user, project_id=project_id or 2)
+        # 👇 ПОЛУЧАЕМ КОЛОНКИ ПРОЕКТА ИЗ СОХРАНЕННЫХ ID
+        self.project_columns = []
+        if service and project_id:
+            # Получаем ID сохраненных колонок
+            column_ids = service.project_repo.get_selected_column_ids(project_id)
+            if column_ids:
+                from sqlalchemy import select
+                from models.projects import BoardColumn
 
-        # Перенастраиваем UI для проекта
+                stmt = select(BoardColumn).where(BoardColumn.id.in_(column_ids))
+                columns = self.db_session.scalars(stmt).all()
+
+                for col in columns:
+                    self.project_columns.append({
+                        'id': col.id,
+                        'name': col.name,
+                        'color': col.color,
+                        'position': col.template_order if col.template_order is not None else col.position,
+                        'is_done': col.is_done_column
+                    })
+                print(f"📋 Загружено колонок проекта: {len(self.project_columns)}")
+            else:
+                # Если нет сохраненных, берем все шаблонные
+                from sqlalchemy import select
+                from models.projects import BoardColumn
+
+                stmt = select(BoardColumn).where(BoardColumn.is_template == True)
+                columns = self.db_session.scalars(stmt).all()
+                for col in columns:
+                    self.project_columns.append({
+                        'id': col.id,
+                        'name': col.name,
+                        'color': col.color,
+                        'position': col.template_order if col.template_order is not None else col.position,
+                        'is_done': col.is_done_column
+                    })
+
+        # Настройка UI
+        self.setup_kanban()
+        self.load_tasks()
         self.setup_project_ui()
 
-        # Загружаем задачи проекта
-        self.load_project_tasks()
-
-    def get_default_project_data(self):
+    def _get_default_project_data(self):
         """Возвращает данные проекта по умолчанию"""
         return {
             'id': self.project_id or 1,
             'name': f'Проект #{self.project_id or 1}',
-            'description': 'Описание проекта',
-            'status': 'Активен',
-            'start_date': '01.01.2026',
-            'progress': 0
+            'description': 'Описание проекта'
         }
+
+    def get_column_data(self):
+        """Возвращает колонки текущего проекта"""
+        return self.project_columns
+
+    def load_tasks(self):
+        """Загружает задачи ТОЛЬКО текущего проекта"""
+        if not self.project_service or not self.project_id:
+            return
+
+        # Получаем все задачи проекта через TaskRepo
+        from repositories.task_repo import TaskRepo
+        task_repo = TaskRepo(self.db_session)
+        project_tasks = task_repo.get_by_project(self.project_id, load_column=True)
+
+        print(f"\n📊 Загрузка задач для проекта {self.project_id}: {len(project_tasks)} задач")
+        print(f"Колонки проекта: {[c['name'] for c in self.project_columns]}")
+
+        # Очищаем все колонки
+        self.clear_all_columns()
+
+        # Группируем задачи по именам колонок
+        tasks_by_column = {}
+        for task in project_tasks:
+            column_name = task.column.name if task.column else "К выполнению"
+            if column_name not in tasks_by_column:
+                tasks_by_column[column_name] = []
+            tasks_by_column[column_name].append(task)
+            print(f"  - Задача: {task.title} -> колонка: {column_name}")
+
+        # Добавляем задачи в соответствующие колонки
+        for col_data in self.project_columns:
+            column_name = col_data['name']
+            col_widget = self.columns.get(column_name)
+            if col_widget:
+                tasks = tasks_by_column.get(column_name, [])
+                for task in tasks:
+                    task_dict = self._task_to_dict(task)
+                    task_card = self.create_task_card(task_dict)
+                    self.connect_task_card_signals(task_card)
+                    col_widget.add_task(task_card)
+                print(f"  Колонка '{column_name}': добавлено {len(tasks)} задач")
+
+        self.update_statistics()
+
+    def _task_to_dict(self, task):
+        """Преобразует задачу в словарь для карточки"""
+        from models.schemas.tasks_dto import TaskPriority
+
+        # Получаем имя исполнителя
+        assignee_name = None
+        if task.assigned_to:
+            from repositories.external_employee_repo import ExternalEmployeeRepo
+            emp_repo = ExternalEmployeeRepo(self.db_session)
+            assignee_name = emp_repo.get_full_name(task.assigned_to)
+
+        priority_map = {
+            TaskPriority.low: ("Низкий", "#4CAF50"),
+            TaskPriority.medium: ("Средний", "#FFA726"),
+            TaskPriority.high: ("Высокий", "#D22730"),
+            TaskPriority.critical: ("Критический", "#D22730")
+        }
+
+        priority_text, priority_color = priority_map.get(
+            task.priority,
+            ("Средний", "#FFA726")
+        )
+
+        deadline_text = ""
+        deadline_color = "#666"
+        if task.deadline:
+            deadline_text = task.deadline.strftime("%d.%m.%Y")
+            from datetime import datetime
+            if task.deadline.date() < datetime.now().date():
+                deadline_color = "#D22730"
+
+        return {
+            "id": task.id,
+            "title": task.title,
+            "description": task.description or "",
+            "status": task.column.name if task.column else None,
+            "column_id": task.column_id,
+            "priority": task.priority.value,
+            "priority_text": priority_text,
+            "priority_color": priority_color,
+            "deadline": deadline_text,
+            "deadline_color": deadline_color,
+            "assignee_name": assignee_name or "Не назначен",
+            "created_by": task.created_by,
+            "completed": task.completed if hasattr(task, 'completed') else False,
+            "tags": []
+        }
+
+    def create_task_card(self, task_data: Dict) -> QWidget:
+        """Создает карточку задачи"""
+        # Проверяем, является ли текущий пользователь создателем
+        is_creator = (task_data.get('created_by') == self.current_user.get('id')) if hasattr(self,
+                                                                                             'current_user') else False
+        return OthersTaskCard(task_data, service=self.service, is_creator=is_creator)
+
+    def connect_task_card_signals(self, card):
+        """Подключает сигналы карточки"""
+        # Можно добавить обработчики при необходимости
+        pass
+
+    def clear_all_columns(self):
+        """Очищает все колонки от карточек"""
+        for column in self.column_widgets:
+            column.clear_tasks()
+
+    def update_statistics(self):
+        """Обновляет статистику"""
+        total = 0
+        for column in self.column_widgets:
+            tasks_count = len(column.get_tasks())
+            column.update_count(tasks_count)
+            total += tasks_count
+
+        if hasattr(self, 'totalTasksLabel'):
+            self.totalTasksLabel.setText(f"📊 Всего задач: {total}")
 
     def setup_project_ui(self):
         """Настройка UI для страницы проекта"""
-        # Скрываем стандартные элементы OthersTasksPage
-        if hasattr(self, 'btnCreateTask'):
-            self.btnCreateTask.hide()
-
         # Добавляем информацию о проекте в верхнюю панель
-        if hasattr(self, 'controlPanel'):
-            # Создаем виджет с информацией о проекте
+        if hasattr(self, 'controlPanel') and hasattr(self, 'controlLayout'):
             project_info = QFrame()
             project_info.setStyleSheet("""
                 QFrame {
@@ -86,7 +241,9 @@ class ProjectViewPage(OthersTasksPage):
             layout.setContentsMargins(15, 10, 15, 10)
 
             # Название проекта
-            title_label = QLabel(f"📋 Проект: {self.project_data.name}")
+            title_label = QLabel(
+                f"📋 Проект: {self.project_data.name if hasattr(self.project_data, 'name') else self.project_data.get('name', '')}"
+            )
             title_label.setStyleSheet("font-size: 16px; font-weight: bold; color: #1B232A;")
             layout.addWidget(title_label)
 
@@ -126,66 +283,98 @@ class ProjectViewPage(OthersTasksPage):
 
     def go_back_to_projects(self):
         """Возврат к списку проектов"""
-        # Ищем MainWindow в родителях
         parent = self.parent()
         while parent:
             if hasattr(parent, 'contentStack') and hasattr(parent, 'switch_page'):
-                parent.switch_page(0)  # Переключаемся на главную страницу
+                parent.switch_page(0)
                 break
             parent = parent.parent()
 
-    def load_project_tasks(self):
-        """Загрузка задач проекта"""
-        if self.project_service and self.project_id:
-            # Получаем данные доски проекта
-            board_data = self.project_service.get_project_board_data(self.project_id)
-            if board_data:
-                # Преобразуем задачи в формат для карточек
-                all_tasks = []
-                for column in board_data.columns:
-                    for task in column.tasks:
-                        task_dict = {
-                            'id': task.id,
-                            'title': task.title,
-                            'description': '',
-                            'priority': task.priority.value if hasattr(task.priority, 'value') else task.priority,
-                            'deadline': task.deadline.strftime('%d.%m.%Y') if task.deadline else '',
-                            'status': column.name,
-                            'column_id': column.id,
-                            'assignee_name': task.assigned_to_name,
-                            'completed': task.is_overdue,  # или другой признак
-                        }
-                        all_tasks.append(task_dict)
+    def setup_kanban(self):
+        """Создает колонки канбан-доски"""
+        self.clear_layout(self.kanbanLayout)
 
-                # Очищаем текущие задачи и добавляем новые
-                self.clear_all_columns()
-                for task_dict in all_tasks:
-                    self.add_task_card(task_dict)
+        column_data = self.get_column_data()
+        if not column_data:
+            print(f"⚠️ Нет колонок для проекта {self.project_id}")
+            empty_label = QLabel("Нет настроенных колонок для этого проекта")
+            empty_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            empty_label.setStyleSheet("color: #999; font-size: 14px; padding: 40px;")
+            self.kanbanLayout.addWidget(empty_label)
+            return
 
-                self.update_statistics()
+        # Вертикальный скролл
+        main_scroll = QScrollArea()
+        main_scroll.setWidgetResizable(True)
+        main_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        main_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        main_scroll.setStyleSheet("""
+            QScrollArea {
+                border: none;
+                background-color: transparent;
+            }
+            QScrollBar:vertical {
+                background: #f0f0f0;
+                width: 10px;
+                border-radius: 5px;
+            }
+            QScrollBar::handle:vertical {
+                background: #c0c0c0;
+                border-radius: 5px;
+            }
+        """)
 
-    def create_task_card(self, task_data: Dict) -> QWidget:
-        """Создает карточку задачи (переопределяем для проекта)"""
-        # Определяем, является ли текущий пользователь создателем
-        is_creator = (task_data.get('created_by') == self.current_user.get('id'))
+        # Горизонтальный скролл
+        horizontal_scroll = QScrollArea()
+        horizontal_scroll.setWidgetResizable(True)
+        horizontal_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        horizontal_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        horizontal_scroll.setStyleSheet("""
+            QScrollArea {
+                border: none;
+                background-color: transparent;
+            }
+            QScrollBar:horizontal {
+                background: #f0f0f0;
+                height: 10px;
+                border-radius: 5px;
+            }
+            QScrollBar::handle:horizontal {
+                background: #c0c0c0;
+                border-radius: 5px;
+            }
+        """)
 
-        return OthersTaskCard(
-            task_data,
-            service=self.service,
-            is_creator=is_creator
-        )
+        # Контейнер для колонок
+        columns_container = QWidget()
+        columns_layout = QHBoxLayout(columns_container)
+        columns_layout.setSpacing(16)
+        columns_layout.setContentsMargins(10, 10, 10, 10)
 
-    def update_statistics(self):
-        """Обновление статистики с учетом прогресса проекта"""
-        super().update_statistics()
+        self.columns.clear()
+        self.column_widgets.clear()
 
-        # Обновляем прогресс проекта
-        if hasattr(self, 'project_data') and self.project_data:
-            total = len(self.all_tasks) if hasattr(self, 'all_tasks') else 0
-            completed = len([t for t in self.all_tasks if t.task_data.get('completed')]) if hasattr(self,
-                                                                                                    'all_tasks') else 0
+        for col in sorted(column_data, key=lambda x: x['position']):
+            print(f"📦 Создаем колонку: {col['name']}")
+            column_widget = KanbanColumn(col)
+            self.columns[col['name']] = column_widget
+            self.column_widgets.append(column_widget)
+            columns_layout.addWidget(column_widget)
 
-            if total > 0:
-                progress = int((completed / total) * 100)
-                if hasattr(self, 'project_data'):
-                    self.project_data.progress = progress
+        columns_layout.addStretch()
+        horizontal_scroll.setWidget(columns_container)
+        main_scroll.setWidget(horizontal_scroll)
+        self.kanbanLayout.addWidget(main_scroll)
+
+        print(f"✅ Создано {len(self.column_widgets)} колонок для проекта {self.project_id}")
+
+    def clear_layout(self, layout):
+        """Очищает layout"""
+        if layout:
+            while layout.count():
+                item = layout.takeAt(0)
+                widget = item.widget()
+                if widget:
+                    widget.deleteLater()
+                else:
+                    self.clear_layout(item.layout())

@@ -539,19 +539,21 @@ class MainWindow(QMainWindow):
             'admins': admins_full,
             'participants_ids': project_dto.member_ids,
             'admins_ids': project_dto.admin_ids,
-            'selected_columns_data': project_dto.selected_columns_data  # 👈 ДОБАВИТЬ
+            'selected_columns_data': project_dto.selected_columns_data  # 👈 УЖЕ ЕСТЬ
         }
 
         dialog = ProjectEditDialog(dialog_data, parent=self)
 
         if dialog.exec() == QDialog.DialogCode.Accepted:
             raw_results = dialog.get_project_data()
+            print(
+                f"📊 Результат из диалога: selected_columns_data={len(raw_results.get('selected_columns_data', []))}")  # 👈 ОТЛАДКА
 
             project_dto.name = raw_results['name']
             project_dto.description = raw_results['description']
             project_dto.is_archived = not raw_results.get('is_active', True)
 
-            # 👇 ДОБАВИТЬ ОБНОВЛЕНИЕ КОЛОНОК
+            # 👇 ОБНОВЛЯЕМ КОЛОНКИ
             project_dto.selected_columns_data = raw_results.get('selected_columns_data', [])
 
             def str_to_ids(s):

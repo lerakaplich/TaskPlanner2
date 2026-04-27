@@ -139,8 +139,6 @@ class BaseProjectDialog(QDialog):
 
         return True
 
-    # windows/projects/base_project_dialog.py
-
     def load_project_data(self):
         """Загрузка данных проекта"""
         self.nameInput.setText(self.project_data.get('name', ''))
