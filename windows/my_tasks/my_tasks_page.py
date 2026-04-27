@@ -1,9 +1,12 @@
 # windows/my_tasks/my_tasks_page.py
 
 import os
+from typing import Dict
+
 from PyQt6 import uic
-from PyQt6.QtWidgets import QWidget, QSplitter, QScrollArea, QHBoxLayout
-from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtWidgets import QWidget, QScrollArea, QHBoxLayout
+from PyQt6.QtCore import Qt, pyqtSignal, QPoint
+from PyQt6.QtGui import QDragEnterEvent, QDropEvent, QDragMoveEvent
 
 from windows.my_tasks.task_card import TaskCard
 from windows.shared.kanban_column import KanbanColumn
@@ -26,27 +29,25 @@ class MyTasksPage(QWidget):
 
         uic.loadUi(os.path.join(ui_path, "my_tasks_page.ui"), self)
 
-        # Сервис теперь работает со ВСЕМИ проектами, режим "my"
         self.service = TasksService(
             db_session=db_session,
             current_user=current_user,
             mode="my"
         )
 
-        self.columns = {}  # name -> widget
+        self.columns = {}
         self.column_widgets = []
-
-        # Сохраняем текущего пользователя
         self.current_user = current_user
 
         self.setup_board()
         self.load_tasks()
 
+        # Настройка Drag & Drop для страницы
+        self.setAcceptDrops(True)
+
         # фильтры
         self.priorityFilter.currentTextChanged.connect(self.filter_tasks)
         self.projectFilter.currentTextChanged.connect(self.filter_tasks)
-
-    # windows/my_tasks/my_tasks_page.py
 
     def setup_board(self):
         """Создает колонки канбан-доски с горизонтальной прокруткой"""
@@ -144,10 +145,8 @@ class MyTasksPage(QWidget):
         for task in tasks:
             print(f"  - {task.get('title')} (проект: {task.get('project_name')}, статус: {task.get('status')})")
 
-        # Очищаем все колонки
         self.clear_all_columns()
 
-        # Добавляем задачи в соответствующие колонки
         for task in tasks:
             task_card = TaskCard(task)
 
@@ -158,7 +157,6 @@ class MyTasksPage(QWidget):
                 print(f"  ✅ Добавлена задача '{task.get('title')}' в колонку '{column_name}'")
             else:
                 print(f"  ⚠️ Колонка '{column_name}' не найдена для задачи '{task.get('title')}'")
-                print(f"     Доступные колонки: {list(self.columns.keys())}")
 
         self.update_statistics()
 
@@ -177,7 +175,6 @@ class MyTasksPage(QWidget):
 
         filtered = self.service.filter_tasks_by_priority(all_tasks, priority)
 
-        # Показываем/скрываем карточки
         filtered_ids = {t["id"] for t in filtered}
         for column in self.column_widgets:
             for card in column.get_tasks():
@@ -189,12 +186,10 @@ class MyTasksPage(QWidget):
     def update_statistics(self):
         stats = self.service.get_statistics_for_display()
 
-        # Обновляем счетчики в колонках
         for column in self.column_widgets:
             tasks_in_column = column.get_tasks()
             column.update_count(len(tasks_in_column))
 
-        # Обновляем статистику в UI
         if hasattr(self, 'totalTasksLabel'):
             self.totalTasksLabel.setText(f"📊 Всего задач: {stats['total']}")
 
@@ -206,3 +201,80 @@ class MyTasksPage(QWidget):
 
         if hasattr(self, 'overallProgress'):
             self.overallProgress.setValue(self.service.get_progress_percent())
+
+    # =====================================================
+    # DRAG & DROP
+    # =====================================================
+
+    def dragEnterEvent(self, event: QDragEnterEvent):
+        """Обработка входа перетаскивания"""
+        if event.mimeData().hasFormat("application/x-task"):
+            event.acceptProposedAction()
+
+    def dragMoveEvent(self, event: QDragMoveEvent):
+        """Обработка движения перетаскивания"""
+        if event.mimeData().hasFormat("application/x-task"):
+            event.acceptProposedAction()
+
+    def dropEvent(self, event: QDropEvent):
+        """Обработка сброса задачи"""
+        data = self.service.deserialize_task_from_drag(
+            event.mimeData().data("application/x-task")
+        )
+        if not data:
+            event.ignore()
+            return
+
+        target_column = self.get_target_column(event.position().toPoint())
+        if not target_column:
+            event.ignore()
+            return
+
+        task_id = data.get("id")
+        old_status = data.get("status")
+        new_status = target_column.column_name
+
+        if old_status == new_status:
+            event.ignore()
+            return
+
+        print(f"🔄 Перемещение задачи {task_id}: {old_status} -> {new_status}")
+
+        # Перемещаем задачу в новую колонку
+        result = self.service.move_task(task_id, new_status)
+        if result:
+            old_column_name, task = result
+            # Обновляем UI
+            self.update_task_card(task)
+            self.update_statistics()
+            self.task_moved.emit()
+            event.acceptProposedAction()
+        else:
+            event.ignore()
+
+    def get_target_column(self, pos: QPoint):
+        """Определяет колонку, на которую произошёл сброс"""
+        for column in self.column_widgets:
+            if column.geometry().contains(pos):
+                return column
+        return None
+
+    def update_task_card(self, updated_task: Dict):
+        """Обновляет карточку задачи в UI"""
+        for column in self.column_widgets:
+            for card in column.get_tasks():
+                if hasattr(card, 'task_data') and card.task_data["id"] == updated_task["id"]:
+                    old_status = card.task_data.get("status")
+                    new_status = updated_task.get("status")
+
+                    if old_status != new_status:
+                        # Перемещаем в другую колонку
+                        column.remove_task(card)
+                        new_column = self.columns.get(new_status)
+                        if new_column:
+                            new_column.add_task(card)
+                            print(f"✅ Задача '{card.task_data.get('title')}' перемещена в колонку '{new_status}'")
+
+                    # Обновляем данные карточки
+                    card.update_task_data(updated_task)
+                    return

@@ -31,14 +31,14 @@ class LoginWindow(QDialog):
 
         self.showMaximized()
 
-        # Настройка
+        # Настройка (только базовые, без загрузки изображений)
         self.setup_ui()
         self.setup_signals()
         self.load_saved_credentials()
         self.create_eye_button()
 
-        # Загружаем картинки
-        QTimer.singleShot(100, self.load_side_images)
+        # Убираем QTimer.singleShot - грузим изображения сразу, но асинхронно
+        self.load_side_images()
 
     def get_authenticated_user(self):
         """Возвращает данные авторизованного пользователя"""
@@ -49,7 +49,7 @@ class LoginWindow(QDialog):
         self._authenticated_user = user_data
 
     def setup_ui(self):
-        """Настройка UI элементов"""
+        """Настройка UI элементов (только базовые, без тяжелых операций)"""
         # Тень для карточки
         shadow = QGraphicsDropShadowEffect()
         shadow.setBlurRadius(50)
@@ -66,7 +66,7 @@ class LoginWindow(QDialog):
         logo_shadow.setColor(QColor(0, 0, 0, 40))
         self.logoLabel.setGraphicsEffect(logo_shadow)
 
-        # Логотип компании
+        # Логотип компании - грузим синхронно, он один
         logo_path = self.project_root / "images" / "logo.png"
         if logo_path.exists():
             pixmap = QPixmap(str(logo_path))
@@ -86,7 +86,7 @@ class LoginWindow(QDialog):
         )
 
     def load_side_images(self):
-        """Загрузка боковых изображений с увеличенными размерами"""
+        """Загрузка боковых изображений - без задержек"""
         images_dir = self.project_root / "images"
 
         # Загрузка checkbox - 150x150
@@ -147,7 +147,8 @@ class LoginWindow(QDialog):
             self.eye_open_icon = QIcon(str(images_dir / "eye_open.png"))
 
         self.togglePasswordBtn.clicked.connect(self.toggle_password_visibility)
-        QTimer.singleShot(100, self.position_eye_button)
+        # Убираем QTimer - позиционируем сразу
+        self.position_eye_button()
 
     def position_eye_button(self):
         """Позиционирование кнопки-глаза"""
@@ -160,10 +161,6 @@ class LoginWindow(QDialog):
                 self.togglePasswordBtn.raise_()
             except:
                 pass
-
-    def showEvent(self, event):
-        super().showEvent(event)
-        QTimer.singleShot(100, self.position_eye_button)
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
@@ -218,8 +215,6 @@ class LoginWindow(QDialog):
 
         clean_phone = self.extract_phone_digits(phone)
 
-        print(f"🔍 Поиск пользователя с номером: {clean_phone}")
-
         if len(clean_phone) != 12 or not clean_phone.startswith('375'):
             QMessageBox.warning(self, "Ошибка",
                                 "Неверный формат номера телефона.\nНомер должен начинаться с +375 и содержать 12 цифр.")
@@ -250,14 +245,10 @@ class LoginWindow(QDialog):
             session.close()
 
             if user:
-                # 👇 ВАЖНО: Используем ID найденного пользователя!
                 user_id = user.id
 
-                print(f"✅ Пользователь найден: {user.last_name} {user.first_name}")
-                print(f"📊 ID пользователя для входа: {user_id}")  # Отладка
-
                 self.set_authenticated_user({
-                    'id': user_id,  # 👈 ПРАВИЛЬНЫЙ ID
+                    'id': user_id,
                     'last_name': user.last_name,
                     'first_name': user.first_name,
                     'middle_name': user.middle_name,
@@ -272,16 +263,12 @@ class LoginWindow(QDialog):
                 else:
                     self.clear_saved_credentials()
 
-                self.accept()  # 👈 Здесь передаётся правильный пользователь
+                self.accept()
             else:
-                print(f"❌ Пользователь с номером {clean_phone} не найден")
                 QMessageBox.warning(self, "Ошибка",
                                     f"Пользователь с номером {self.format_phone_for_display(clean_phone)} не найден")
 
         except Exception as e:
-            print(f"❌ Ошибка при авторизации: {e}")
-            import traceback
-            traceback.print_exc()
             QMessageBox.critical(self, "Ошибка", f"Ошибка при подключении к базе данных: {e}")
 
     def save_credentials(self, phone, password):
@@ -293,9 +280,8 @@ class LoginWindow(QDialog):
             data = {"phone": phone, "password": password, "remember": True}
             with open(config_file, 'w', encoding='utf-8') as f:
                 json.dump(data, f)
-            print(f"✅ Учетные данные сохранены для номера: {phone}")
         except Exception as e:
-            print(f"❌ Ошибка сохранения учетных данных: {e}")
+            print(f"Ошибка сохранения учетных данных: {e}")
 
     def load_saved_credentials(self):
         """Загружает сохраненные учетные данные"""
@@ -307,14 +293,12 @@ class LoginWindow(QDialog):
                 if data.get("remember"):
                     phone = data.get("phone", "")
                     if phone and len(phone) == 12 and phone.startswith('375'):
-                        # Форматируем для отображения
                         formatted = self.format_phone_for_display(phone)
                         self.phoneInput.setText(formatted)
                         self.passwordInput.setText(data.get("password", ""))
                         self.rememberCheckbox.setChecked(True)
-                        print(f"✅ Загружены сохраненные данные для номера: {phone}")
         except Exception as e:
-            print(f"❌ Ошибка загрузки учетных данных: {e}")
+            print(f"Ошибка загрузки учетных данных: {e}")
 
     def clear_saved_credentials(self):
         """Удаляет сохраненные учетные данные"""
@@ -322,9 +306,8 @@ class LoginWindow(QDialog):
             config_file = Path.home() / ".taskplanner" / "auth_config.json"
             if config_file.exists():
                 config_file.unlink()
-                print("✅ Сохраненные учетные данные удалены")
         except Exception as e:
-            print(f"❌ Ошибка удаления учетных данных: {e}")
+            print(f"Ошибка удаления учетных данных: {e}")
 
     def on_forgot_clicked(self):
         phone = self.phoneInput.text().strip()

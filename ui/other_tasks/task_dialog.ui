@@ -6,14 +6,14 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>500</width>
-    <height>650</height>
+    <width>550</width>
+    <height>780</height>
    </rect>
   </property>
   <property name="minimumSize">
    <size>
-    <width>500</width>
-    <height>650</height>
+    <width>550</width>
+    <height>750</height>
    </size>
   </property>
   <property name="windowTitle">
@@ -28,19 +28,19 @@
     QLabel {
         color: #2c3e50;
     }
-    QLineEdit, QTextEdit, QComboBox, QDateEdit {
+    QLineEdit, QTextEdit, QComboBox, QDateEdit, QListWidget {
         background-color: white;
         border: 2px solid #e9ecef;
         border-radius: 8px;
-        padding: 10px 12px;
+        padding: 8px 12px;
         font-size: 14px;
         color: #2c3e50;
     }
-    QLineEdit:focus, QTextEdit:focus, QComboBox:focus, QDateEdit:focus {
+    QLineEdit:focus, QTextEdit:focus, QComboBox:focus, QDateEdit:focus, QListWidget:focus {
         border: 2px solid #D22730;
         background-color: #fff5f5;
     }
-    QLineEdit:hover, QTextEdit:hover, QComboBox:hover, QDateEdit:hover {
+    QLineEdit:hover, QTextEdit:hover, QComboBox:hover, QDateEdit:hover, QListWidget:hover {
         border: 2px solid #ccab6e;
         background-color: #fffaf0;
     }
@@ -77,16 +77,42 @@
         width: 0;
         height: 0;
     }
+    QListWidget::item {
+        padding: 5px;
+        border: none;
+    }
+    QListWidget::item:selected {
+        background-color: #D22730;
+        color: white;
+    }
+    QListWidget::item:hover {
+        background-color: #ccab6e;
+        color: white;
+    }
+    QCheckBox {
+        spacing: 8px;
+    }
+    QCheckBox::indicator {
+        width: 18px;
+        height: 18px;
+        border-radius: 4px;
+        border: 2px solid #D9D9D6;
+        background-color: white;
+    }
+    QCheckBox::indicator:checked {
+        background-color: #D22730;
+        border-color: #D22730;
+    }
     /* Стиль для звезд рейтинга */
-    QLabel[objectName^="star"] {
+    QLabel[objectName^=&quot;star&quot;] {
         font-size: 28px;
         font-weight: normal;
         color: #D3D3D3;
     }
-    QLabel[objectName^="star"]:hover {
+    QLabel[objectName^=&quot;star&quot;]:hover {
         color: #FFD700;
     }
-    QLabel[objectName^="star"][active="true"] {
+    QLabel[objectName^=&quot;star&quot;][active=&quot;true&quot;] {
         color: #FFD700;
     }
    </string>
@@ -115,9 +141,6 @@
      <property name="text">
       <string>Создание новой задачи</string>
      </property>
-     <property name="alignment">
-      <set>Qt::AlignmentFlag::AlignCenter</set>
-     </property>
     </widget>
    </item>
    <item>
@@ -132,13 +155,13 @@
      <property name="minimumSize">
       <size>
        <width>0</width>
-       <height>120</height>
+       <height>100</height>
       </size>
      </property>
      <property name="maximumSize">
       <size>
        <width>16777215</width>
-       <height>150</height>
+       <height>120</height>
       </size>
      </property>
      <property name="placeholderText">
@@ -148,21 +171,24 @@
    </item>
    <item>
     <widget class="QComboBox" name="comboBoxProject">
-     <property name="placeholderText">
+     <property name="placeholderText" stdset="0">
       <string>Выберите проект</string>
      </property>
     </widget>
    </item>
    <item>
-    <widget class="QComboBox" name="comboBoxTag">
-     <property name="placeholderText">
-      <string>Выберите теги</string>
+    <widget class="QComboBox" name="comboTags">
+     <property name="editable">
+      <bool>true</bool>
+     </property>
+     <property name="placeholderText" stdset="0">
+      <string>Выберите руководителей</string>
      </property>
     </widget>
    </item>
    <item>
     <widget class="QComboBox" name="comboBoxAssignee">
-     <property name="placeholderText">
+     <property name="placeholderText" stdset="0">
       <string>Выберите исполнителя</string>
      </property>
     </widget>
@@ -184,81 +210,36 @@
      </item>
      <item>
       <widget class="QLabel" name="star1">
-       <property name="styleSheet">
-        <string notr="true">QLabel {
-    font-size: 28px;
-    color: #D3D3D3;
-}</string>
-       </property>
        <property name="text">
         <string>☆</string>
-       </property>
-       <property name="alignment">
-        <set>Qt::AlignmentFlag::AlignCenter</set>
        </property>
       </widget>
      </item>
      <item>
       <widget class="QLabel" name="star2">
-       <property name="styleSheet">
-        <string notr="true">QLabel {
-    font-size: 28px;
-    color: #D3D3D3;
-}</string>
-       </property>
        <property name="text">
         <string>☆</string>
-       </property>
-       <property name="alignment">
-        <set>Qt::AlignmentFlag::AlignCenter</set>
        </property>
       </widget>
      </item>
      <item>
       <widget class="QLabel" name="star3">
-       <property name="styleSheet">
-        <string notr="true">QLabel {
-    font-size: 28px;
-    color: #D3D3D3;
-}</string>
-       </property>
        <property name="text">
         <string>☆</string>
-       </property>
-       <property name="alignment">
-        <set>Qt::AlignmentFlag::AlignCenter</set>
        </property>
       </widget>
      </item>
      <item>
       <widget class="QLabel" name="star4">
-       <property name="styleSheet">
-        <string notr="true">QLabel {
-    font-size: 28px;
-    color: #D3D3D3;
-}</string>
-       </property>
        <property name="text">
         <string>☆</string>
-       </property>
-       <property name="alignment">
-        <set>Qt::AlignmentFlag::AlignCenter</set>
        </property>
       </widget>
      </item>
      <item>
       <widget class="QLabel" name="star5">
-       <property name="styleSheet">
-        <string notr="true">QLabel {
-    font-size: 28px;
-    color: #D3D3D3;
-}</string>
-       </property>
        <property name="text">
         <string>☆</string>
-       </property>
-       <property name="alignment">
-        <set>Qt::AlignmentFlag::AlignCenter</set>
        </property>
       </widget>
      </item>
@@ -274,9 +255,6 @@
      </item>
      <item>
       <spacer name="horizontalSpacerDiff">
-       <property name="orientation">
-        <enum>Qt::Orientation::Horizontal</enum>
-       </property>
        <property name="sizeHint" stdset="0">
         <size>
          <width>40</width>
@@ -415,38 +393,35 @@
      <item>
       <widget class="QLabel" name="createdByLabel">
        <property name="styleSheet">
-        <string notr="true">color: #2c3e50; font-size: 13px; font-style: italic;</string>
+        <string notr="true">color: #2c3e50; font-size: 12px; font-style: italic;</string>
        </property>
        <property name="text">
-        <string>Создатель: Иванов И.И.</string>
+        <string>Создатель:</string>
        </property>
       </widget>
      </item>
      <item>
       <widget class="QLabel" name="createdAtLabel">
        <property name="styleSheet">
-        <string notr="true">color: #2c3e50; font-size: 13px; font-style: italic; </string>
+        <string notr="true">color: #2c3e50; font-size: 12px; font-style: italic;</string>
        </property>
        <property name="text">
-        <string>Создано: 20.01.2026</string>
+        <string>Создано:</string>
        </property>
       </widget>
      </item>
      <item>
       <widget class="QLabel" name="updatedAtLabel">
        <property name="styleSheet">
-        <string notr="true">color: #2c3e50; font-size: 13px; font-style: italic; </string>
+        <string notr="true">color: #2c3e50; font-size: 12px; font-style: italic;</string>
        </property>
        <property name="text">
-        <string>Изменено: 25.01.2026</string>
+        <string>Изменено:</string>
        </property>
       </widget>
      </item>
      <item>
       <spacer name="horizontalSpacer">
-       <property name="orientation">
-        <enum>Qt::Orientation::Horizontal</enum>
-       </property>
        <property name="sizeHint" stdset="0">
         <size>
          <width>40</width>
@@ -471,7 +446,7 @@
            font-weight: bold;
            font-size: 18px;
            border: none;
-           padding: 15px 30px;
+           padding: 12px 30px;
            min-width: 200px;
        }
        QPushButton:hover {

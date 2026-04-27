@@ -162,14 +162,8 @@ class OthersTasksPage(QWidget):
 
         self.update_statistics()
 
-    # windows/other_tasks/others_tasks_page.py - исправленный add_task_card
-
     def add_task_card(self, task_data: Dict):
         """Добавляет карточку задачи в колонку."""
-        # 👇 УБИРАЕМ ЭТУ ПРОВЕРКУ, так как она уже сделана в сервисе
-        # if task_data.get("created_by") == self.current_user.get("id"):
-        #     return
-
         print(f"📋 Добавляем задачу в колонку: {task_data.get('title')} -> {task_data.get('status')}")
 
         card = self.create_task_card(task_data)
@@ -178,16 +172,17 @@ class OthersTasksPage(QWidget):
         column_name = task_data.get("status")
         if column_name in self.columns:
             column = self.columns[column_name]
-            column.add_task(card)
+            # 👇 Добавляем с выравниванием по верху
+            column.add_task(card)  # Уже fixed в kanban_column
             print(f"  ✅ Добавлено в колонку '{column_name}'")
         else:
             print(f"  ❌ Колонка '{column_name}' не найдена!")
-            print(f"  Доступные колонки: {list(self.columns.keys())}")
 
     def create_task_card(self, task_data: Dict) -> QWidget:
         """Создает карточку задачи."""
-        # is_creator = task_data.get("created_by") == self.current_user.get("id")
-        return OthersTaskCard(task_data, service=self.service, is_creator=False)
+        # Определяем, является ли текущий пользователь создателем
+        is_creator = (task_data.get('created_by') == self.current_user.get('id'))
+        return OthersTaskCard(task_data, service=self.service, is_creator=is_creator)
 
     def connect_task_card_signals(self, card):
         """Подключает сигналы карточки."""

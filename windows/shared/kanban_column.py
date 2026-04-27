@@ -1,6 +1,6 @@
 # windows/shared/kanban_column.py
 
-from PyQt6.QtWidgets import QFrame, QVBoxLayout, QHBoxLayout, QLabel, QWidget
+from PyQt6.QtWidgets import QFrame, QVBoxLayout, QHBoxLayout, QLabel, QWidget, QScrollArea, QSizePolicy
 from PyQt6.QtCore import Qt, QSize
 from PyQt6.QtGui import QFont
 
@@ -39,8 +39,9 @@ class KanbanColumn(QFrame):
                 item.widget().deleteLater()
 
     def add_task(self, task_card):
-        """Добавляет карточку задачи в колонку."""
-        self.tasks_layout.addWidget(task_card)
+        """Добавляет карточку задачи в колонку с выравниванием по верху."""
+        # 👇 КЛЮЧЕВОЕ: добавляем с выравниванием по верху
+        self.tasks_layout.addWidget(task_card, 0, Qt.AlignmentFlag.AlignTop)
 
     def remove_task(self, task_card):
         """Удаляет карточку задачи из колонки."""
@@ -53,7 +54,7 @@ class KanbanColumn(QFrame):
             self.count_label.setText(str(count))
 
     def setup_ui(self):
-        """Настройка UI колонки - БЕЗ ВНУТРЕННЕГО СКРОЛЛА"""
+        """Настройка UI колонки"""
         self.setStyleSheet("""
             QFrame {
                 background-color: #f9f9f9;
@@ -62,8 +63,7 @@ class KanbanColumn(QFrame):
             }
         """)
 
-        self.setMinimumWidth(320)
-        self.setMaximumWidth(380)
+        self.setFixedWidth(350)  # Немного шире для комфорта
 
         # Главный layout
         main_layout = QVBoxLayout()
@@ -72,8 +72,9 @@ class KanbanColumn(QFrame):
 
         # ========== ЗАГОЛОВОК ==========
         header_widget = QWidget()
+        header_widget.setFixedHeight(30)
         header_widget.setStyleSheet("background-color: transparent;")
-        header_layout = QHBoxLayout()
+        header_layout = QHBoxLayout(header_widget)
         header_layout.setContentsMargins(0, 0, 0, 0)
 
         self.title_label = QLabel(self.column_name)
@@ -104,22 +105,52 @@ class KanbanColumn(QFrame):
         header_layout.addWidget(self.count_label)
         header_layout.addStretch()
 
-        header_widget.setLayout(header_layout)
         main_layout.addWidget(header_widget)
 
         # Разделитель
         line = QFrame()
+        line.setFixedHeight(2)
         line.setFrameShape(QFrame.Shape.HLine)
         line.setStyleSheet("background-color: #e0e0e0; max-height: 1px;")
         main_layout.addWidget(line)
 
-        # ========== ОБЛАСТЬ ЗАДАЧ - БЕЗ SCROLL ==========
-        self.tasks_layout = QVBoxLayout()
+        # ========== ОБЛАСТЬ ЗАДАЧ С ПРОКРУТКОЙ ==========
+        self.tasks_container = QWidget()
+        self.tasks_container.setStyleSheet("background-color: transparent;")
+
+        self.tasks_layout = QVBoxLayout(self.tasks_container)
         self.tasks_layout.setSpacing(8)
         self.tasks_layout.setContentsMargins(2, 2, 2, 2)
-        self.tasks_layout.addStretch()
+        self.tasks_layout.setAlignment(Qt.AlignmentFlag.AlignTop)  # Прижимаем к верху
+        # 👇 Убираем растяжение у карточек
+        self.tasks_layout.setStretch(0, 0)
 
-        main_layout.addLayout(self.tasks_layout)
+        # Scroll area
+        scroll_area = QScrollArea()
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        scroll_area.setWidget(self.tasks_container)
+        scroll_area.setStyleSheet("""
+            QScrollArea {
+                border: none;
+                background-color: transparent;
+            }
+            QScrollBar:vertical {
+                background: #f0f0f0;
+                width: 6px;
+                border-radius: 3px;
+            }
+            QScrollBar::handle:vertical {
+                background: #c0c0c0;
+                border-radius: 3px;
+            }
+            QScrollBar::handle:vertical:hover {
+                background: #a0a0a0;
+            }
+        """)
+
+        main_layout.addWidget(scroll_area)
 
         self.setLayout(main_layout)
 
@@ -127,8 +158,9 @@ class KanbanColumn(QFrame):
         self.tasksLayout = self.tasks_layout
         self.countLabel = self.count_label
         self.titleLabel = self.title_label
+        self.tasks_container.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
 
         print(f"  ✅ Колонка '{self.column_name}' готова")
 
     def sizeHint(self):
-        return QSize(340, 500)
+        return QSize(350, 500)

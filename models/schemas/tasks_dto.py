@@ -1,10 +1,11 @@
+# models/schemas/tasks_dto.py
+
 from datetime import datetime
 from typing import Optional, List
 from pydantic import BaseModel, ConfigDict, field_validator
 from enum import Enum
 
 
-# Если хочешь не тянуть enum из SQLAlchemy
 class TaskPriority(str, Enum):
     low = "low"
     medium = "medium"
@@ -12,9 +13,6 @@ class TaskPriority(str, Enum):
     critical = "critical"
 
 
-# =========================
-# Базовый DTO задачи
-# =========================
 class TaskDTO(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -30,11 +28,9 @@ class TaskDTO(BaseModel):
     assigned_to: Optional[int] = None
     created_at: datetime
     updated_at: datetime
+    difficulty: float = 0.0  # 👈 добавляем сложность
 
 
-# =========================
-# DTO карточки задачи
-# =========================
 class TaskCardDTO(BaseModel):
     id: int
     title: str
@@ -43,26 +39,20 @@ class TaskCardDTO(BaseModel):
     deadline: Optional[datetime]
     assigned_to_name: Optional[str]
     is_overdue: bool
+    difficulty: float = 0.0  # 👈 добавляем сложность
 
     @field_validator('priority', mode='before')
     @classmethod
     def parse_priority(cls, v):
-        # Если пришел объект SQLAlchemy Enum, берем его значение
         if hasattr(v, 'value'):
             return v.value
         return v
 
 
-# =========================
-# DTO задачи с тегами
-# =========================
 class TaskWithTagsDTO(TaskDTO):
     tags: List[str] = []
 
 
-# =========================
-# DTO для канбан-колонки
-# =========================
 class BoardColumnDTO(BaseModel):
     id: int
     name: str
@@ -70,8 +60,8 @@ class BoardColumnDTO(BaseModel):
     position: int
     is_done_column: bool
 
+
 class TagDTO(BaseModel):
-    """DTO для тега"""
     model_config = ConfigDict(from_attributes=True)
 
     id: int
@@ -79,11 +69,10 @@ class TagDTO(BaseModel):
     name: str
     color: str = "#ccab6e"
     is_archived: bool = False
-    usage_count: int = 0  # Количество использований в задачах
+    usage_count: int = 0
 
 
 class TagCardDTO(BaseModel):
-    """DTO для карточки тега в настройках"""
     id: int
     name: str
     color: str

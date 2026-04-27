@@ -27,10 +27,6 @@ class TasksService:
         self.current_user = current_user
         self.mode = mode
 
-    # =====================================================
-    # РАБОТА С ТЕГАМИ (ГЛОБАЛЬНЫМИ)
-    # =====================================================
-
     def get_all_tags(self, include_archived: bool = False) -> List[Dict]:
         """
         Возвращает список всех глобальных тегов.
@@ -118,10 +114,6 @@ class TasksService:
         self.db_session.commit()
         return result
 
-    # =====================================================
-    # Загрузка задач из всех проектов
-    # =====================================================
-
     def load_tasks(self) -> List[Dict]:
         """Загружает задачи из ВСЕХ проектов с учетом режима."""
         print(f"\n=== ОТЛАДКА: load_tasks (mode={self.mode}) ===")
@@ -160,10 +152,6 @@ class TasksService:
         result = [self._task_to_dict(task) for task in filtered_tasks]
         return result
 
-    # =====================================================
-    # Получение ВСЕХ колонок из всех проектов
-    # =====================================================
-
     def get_all_columns(self) -> List[Dict]:
         """Получает ВСЕ колонки из всех проектов."""
         print(f"\n=== ОТЛАДКА: get_all_columns ===")
@@ -193,10 +181,6 @@ class TasksService:
         """Возвращает данные всех колонок для UI."""
         return self.get_all_columns()
 
-    # =====================================================
-    # Получение задач по колонкам
-    # =====================================================
-
     def get_tasks_by_column(self, column_name: str) -> List[Dict]:
         """Получает все задачи в колонке с указанным именем."""
         all_tasks = self.load_tasks()
@@ -213,10 +197,6 @@ class TasksService:
             result.append({**col, "tasks": tasks})
         return result
 
-    # =====================================================
-    # CRUD операции с задачами
-    # =====================================================
-
     def get_task_by_id(self, task_id: int) -> Optional[Dict]:
         task_orm = self.repo.get_by_id(task_id)
         return self._task_to_dict(task_orm) if task_orm else None
@@ -227,7 +207,6 @@ class TasksService:
         print(f"Входные данные: {data}")
 
         column = self._get_column_by_name(data.get("status"))
-
         if not column:
             column = self._get_first_column(data.get("project_id"))
 
@@ -253,6 +232,7 @@ class TasksService:
             "deadline": self._parse_date(data.get("deadline")),
             "created_by": data.get("created_by"),
             "assigned_to": data.get("assigned_to"),
+            "difficulty": float(data.get("difficulty", 0)),  # 👈 добавляем сложность
             "created_at": datetime.now(),
             "updated_at": datetime.now(),
         }
@@ -265,12 +245,9 @@ class TasksService:
 
         try:
             new_task = self.repo.create(**task_data)
-
-            # Добавляем теги, если они есть
             tags = data.get("tags", [])
             if tags:
                 self.set_task_tags(new_task.id, tags)
-
             self.db_session.commit()
             return self._task_to_dict(new_task)
         except Exception as e:
@@ -299,6 +276,8 @@ class TasksService:
             task.deadline = self._parse_date(updated_data["deadline"])
         if "assigned_to" in updated_data:
             task.assigned_to = updated_data["assigned_to"]
+        if "difficulty" in updated_data:  # 👈 добавляем обновление сложности
+            task.difficulty = float(updated_data["difficulty"])
         if "status" in updated_data:
             new_column = self._get_column_by_name(updated_data["status"])
             if new_column and task.column_id != new_column.id:
@@ -311,51 +290,6 @@ class TasksService:
         self.db_session.commit()
 
         return self._task_to_dict(task)
-
-    def delete_task(self, task_id: int):
-        self.repo.delete(task_id)
-        self.db_session.commit()
-
-    def move_task(self, task_id: int, new_column_name: str) -> Optional[tuple]:
-        task = self.repo.get_by_id(task_id)
-        if not task:
-            return None
-
-        old_column_name = task.column.name if task.column else None
-        new_column = self._get_column_by_name(new_column_name, task.project_id)
-
-        if not new_column or task.column_id == new_column.id:
-            return None
-
-        task.column_id = new_column.id
-        task.updated_at = datetime.now()
-        self.db_session.commit()
-
-        return old_column_name, self._task_to_dict(task)
-
-    # =====================================================
-    # Вспомогательные методы
-    # =====================================================
-
-    def _get_column_by_name(self, column_name: str, project_id: int = None) -> Optional[BoardColumn]:
-        stmt = select(BoardColumn).where(BoardColumn.name == column_name)
-        if project_id:
-            stmt = stmt.where(BoardColumn.project_id == project_id)
-        return self.db_session.scalar(stmt)
-
-    def _get_first_column(self, project_id: int) -> Optional[BoardColumn]:
-        stmt = select(BoardColumn).where(
-            BoardColumn.project_id == project_id
-        ).order_by(BoardColumn.position)
-        return self.db_session.scalar(stmt)
-
-    def _parse_date(self, date_str: Optional[str]) -> Optional[datetime]:
-        if not date_str:
-            return None
-        try:
-            return datetime.strptime(date_str, "%Y-%m-%d")
-        except (ValueError, TypeError):
-            return None
 
     def _task_to_dict(self, task: Task) -> Dict[str, Any]:
         assignee_name = None
@@ -384,6 +318,7 @@ class TasksService:
             ("Средний", "#FFA726")
         )
 
+        # Форматирование дедлайна
         deadline_text = ""
         deadline_color = "#666"
         if task.deadline:
@@ -391,7 +326,24 @@ class TasksService:
             if task.deadline.date() < datetime.now().date():
                 deadline_color = "#D22730"
 
-        # Получаем теги задачи
+        # Форматирование дат для отображения
+        created_display = ""
+        if task.created_at:
+            created_display = task.created_at.strftime("%d.%m.%Y %H:%M")
+
+        updated_display = ""
+        if task.updated_at:
+            updated_display = task.updated_at.strftime("%d.%m.%Y %H:%M")
+
+        # Автор и исполнитель для отображения
+        author_display = ""
+        if creator_name:
+            author_display = creator_name
+
+        executor_display = ""
+        if assignee_name:
+            executor_display = assignee_name
+
         task_tags = self.get_task_tags(task.id)
 
         return {
@@ -404,23 +356,97 @@ class TasksService:
             "priority": task.priority.value,
             "priority_text": priority_text,
             "priority_color": priority_color,
-            "deadline": deadline_text,
+            "difficulty": float(task.difficulty) if task.difficulty else 0,
+            "deadline": task.deadline.strftime("%d.%m.%Y") if task.deadline else "",
+            "deadline_text": deadline_text,
             "deadline_color": deadline_color,
             "created_by": task.created_by,
             "created_by_name": creator_name,
             "assigned_to": task.assigned_to,
             "assignee_name": assignee_name,
-            "created_at": task.created_at.strftime("%d.%m.%Y %H:%M") if task.created_at else "",
-            "updated_at": task.updated_at.strftime("%d.%m.%Y %H:%M") if task.updated_at else "",
+            "created_at": created_display,
+            "updated_at": updated_display,
+            "created_text": created_display,
+            "updated_text": updated_display,
+            "author_text": author_display,
+            "executor_text": executor_display,
             "status": task.column.name if task.column else None,
-            "completed": task.completed if hasattr(task, 'completed') else False,
+            "completed": task.completed,
             "column_id": task.column_id,
-            "tags": [tag["name"] for tag in task_tags],  # Список названий тегов
+            "tags": [tag["name"] for tag in task_tags],
         }
 
-    # =====================================================
-    # Методы для диалога
-    # =====================================================
+    def process_form_data(self, form_data: Dict, current_user: Dict) -> Dict:
+        """Подготавливает данные формы для создания/обновления задачи."""
+        priority_map = self.get_reverse_priority_map()
+        return {
+            "title": form_data["title"],
+            "description": form_data.get("description", ""),
+            "project_id": form_data["project_id"],
+            "assigned_to": form_data.get("assigned_to"),
+            "priority": priority_map.get(form_data.get("priority", "Средний"), "medium"),
+            "status": form_data["status"],
+            "deadline": form_data.get("due_date"),
+            "difficulty": float(form_data.get("difficulty", 0)),  # 👈 добавляем сложность
+            "created_by": current_user.get("id"),
+            "tags": form_data.get("tags", [])
+        }
+
+    def prepare_task_for_display(self, task_data: Dict) -> Dict:
+        """Подготавливает данные задачи для отображения в диалоге."""
+        priority_map = self.get_priority_map()
+        return {
+            "title": task_data.get("title", ""),
+            "description": task_data.get("description", ""),
+            "priority": priority_map.get(task_data.get("priority", "medium"), "Средний"),
+            "status": task_data.get("status", ""),
+            "assigned_to": task_data.get("assigned_to"),
+            "deadline": task_data.get("deadline", ""),
+            "project_id": task_data.get("project_id"),
+            "difficulty": task_data.get("difficulty", 0),  # 👈 добавляем сложность
+            "tags": task_data.get("tags", [])
+        }
+
+    def delete_task(self, task_id: int):
+        self.repo.delete(task_id)
+        self.db_session.commit()
+
+    def move_task(self, task_id: int, new_column_name: str) -> Optional[tuple]:
+        task = self.repo.get_by_id(task_id)
+        if not task:
+            return None
+
+        old_column_name = task.column.name if task.column else None
+        new_column = self._get_column_by_name(new_column_name, task.project_id)
+
+        if not new_column or task.column_id == new_column.id:
+            return None
+
+        task.column_id = new_column.id
+        task.updated_at = datetime.now()
+        self.db_session.commit()
+
+        return old_column_name, self._task_to_dict(task)
+
+    def _get_column_by_name(self, column_name: str, project_id: int = None) -> Optional[BoardColumn]:
+        stmt = select(BoardColumn).where(BoardColumn.name == column_name)
+        if project_id:
+            stmt = stmt.where(BoardColumn.project_id == project_id)
+        return self.db_session.scalar(stmt)
+
+    def _get_first_column(self, project_id: int) -> Optional[BoardColumn]:
+        stmt = select(BoardColumn).where(
+            BoardColumn.project_id == project_id
+        ).order_by(BoardColumn.position)
+        return self.db_session.scalar(stmt)
+
+    def _parse_date(self, date_str: Optional[str]) -> Optional[datetime]:
+        if not date_str:
+            return None
+        try:
+            return datetime.strptime(date_str, "%Y-%m-%d")
+        except (ValueError, TypeError):
+            return None
 
     def get_all_projects(self) -> List[Dict]:
         stmt = select(Project).where(Project.is_archived == False)
@@ -469,20 +495,6 @@ class TasksService:
             return "Выберите статус"
         return None
 
-    def process_form_data(self, form_data: Dict, current_user: Dict) -> Dict:
-        priority_map = self.get_reverse_priority_map()
-        return {
-            "title": form_data["title"],
-            "description": form_data.get("description", ""),
-            "project_id": form_data["project_id"],
-            "assigned_to": form_data.get("assigned_to"),
-            "priority": priority_map.get(form_data.get("priority", "Средний"), "medium"),
-            "status": form_data["status"],
-            "deadline": form_data.get("due_date"),
-            "created_by": current_user.get("id"),
-            "tags": form_data.get("tags", [])
-        }
-
     def prepare_dialog_data(self, mode: str, task_data: Optional[Dict] = None) -> Dict:
         result = {
             "mode": mode,
@@ -504,23 +516,6 @@ class TasksService:
             result["task_data"] = self.prepare_task_for_display(task_data)
 
         return result
-
-    def prepare_task_for_display(self, task_data: Dict) -> Dict:
-        priority_map = self.get_priority_map()
-        return {
-            "title": task_data.get("title", ""),
-            "description": task_data.get("description", ""),
-            "priority": priority_map.get(task_data.get("priority", "medium"), "Средний"),
-            "status": task_data.get("status", ""),
-            "assigned_to": task_data.get("assigned_to"),
-            "deadline": task_data.get("deadline", ""),
-            "project_id": task_data.get("project_id"),
-            "tags": task_data.get("tags", [])  # ← Добавляем теги
-        }
-
-    # =====================================================
-    # Статистика
-    # =====================================================
 
     def get_statistics(self) -> Dict[str, int]:
         tasks = self.load_tasks()
@@ -563,10 +558,6 @@ class TasksService:
         target_priority = priority_map.get(priority, priority.lower())
         return [t for t in tasks if t.get("priority") == target_priority]
 
-    # =====================================================
-    # Drag & Drop
-    # =====================================================
-
     def serialize_task_for_drag(self, task_data: Dict) -> str:
         return json.dumps(task_data, ensure_ascii=False, default=str)
 
@@ -575,10 +566,6 @@ class TasksService:
             return json.loads(raw.decode())
         except (json.JSONDecodeError, UnicodeDecodeError, AttributeError):
             return None
-
-    # =====================================================
-    # Форматирование
-    # =====================================================
 
     def format_assignee_name(self, assignee_id: Optional[int]) -> str:
         if not assignee_id:

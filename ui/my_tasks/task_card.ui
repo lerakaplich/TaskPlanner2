@@ -6,12 +6,12 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>350</width>
-    <height>350</height>
+    <width>330</width>
+    <height>0</height>
    </rect>
   </property>
   <property name="sizePolicy">
-   <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+   <sizepolicy hsizetype="Preferred" vsizetype="Minimum">
     <horstretch>0</horstretch>
     <verstretch>0</verstretch>
    </sizepolicy>
@@ -19,12 +19,12 @@
   <property name="minimumSize">
    <size>
     <width>300</width>
-    <height>350</height>
+    <height>0</height>
    </size>
   </property>
   <property name="maximumSize">
    <size>
-    <width>350</width>
+    <width>330</width>
     <height>16777215</height>
    </size>
   </property>
@@ -62,6 +62,8 @@ QFrame#TaskCard:hover {
    <property name="bottomMargin">
     <number>0</number>
    </property>
+
+   <!-- Заголовок и кнопка меню -->
    <item>
     <layout class="QHBoxLayout" name="titleLayout">
      <item>
@@ -117,6 +119,8 @@ QPushButton:hover {
      </item>
     </layout>
    </item>
+
+   <!-- Подписи Проект и Приоритет -->
    <item>
     <layout class="QHBoxLayout" name="labelsLayout">
      <item>
@@ -154,12 +158,14 @@ QPushButton:hover {
 }</string>
        </property>
        <property name="text">
-        <string>Приоритет задачи</string>
+        <string>Приоритет</string>
        </property>
       </widget>
      </item>
     </layout>
    </item>
+
+   <!-- Проект и Приоритет значения -->
    <item>
     <layout class="QHBoxLayout" name="projectPriorityLayout">
      <property name="spacing">
@@ -213,9 +219,6 @@ QPushButton:hover {
          <height>30</height>
         </size>
        </property>
-       <property name="layoutDirection">
-        <enum>Qt::LayoutDirection::LeftToRight</enum>
-       </property>
        <property name="styleSheet">
         <string notr="true">QLabel {
     background-color: #4CAF50;
@@ -238,6 +241,8 @@ QPushButton:hover {
      </item>
     </layout>
    </item>
+
+   <!-- Описание -->
    <item>
     <widget class="QTextEdit" name="descriptionText">
      <property name="maximumSize">
@@ -269,10 +274,12 @@ hr { height: 1px; border-width: 0; }
 li.unchecked::marker { content: &quot;\2610&quot;; }
 li.checked::marker { content: &quot;\2612&quot;; }
 &lt;/style&gt;&lt;/head&gt;&lt;body style=&quot; font-family:'Segoe UI'; font-size:13px; font-weight:400; font-style:normal;&quot;&gt;
-&lt;p style=&quot; margin-top:0px; margin-bottom:0px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;&quot;&gt;Описание задачи будет здесь. Это может быть длинное описание того, что нужно сделать в рамках данной задачи.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+&lt;p style=&quot; margin-top:0px; margin-bottom:0px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;&quot;&gt;&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
      </property>
     </widget>
    </item>
+
+   <!-- Теги -->
    <item>
     <layout class="QHBoxLayout" name="tagsLayout">
      <property name="spacing">
@@ -280,6 +287,8 @@ li.checked::marker { content: &quot;\2612&quot;; }
      </property>
     </layout>
    </item>
+
+   <!-- Дата создания и Автор -->
    <item>
     <layout class="QHBoxLayout" name="createdLayout">
      <item>
@@ -291,7 +300,7 @@ li.checked::marker { content: &quot;\2612&quot;; }
 }</string>
        </property>
        <property name="text">
-        <string>Создана: 01.01.2024</string>
+        <string>Создана:</string>
        </property>
       </widget>
      </item>
@@ -317,12 +326,14 @@ li.checked::marker { content: &quot;\2612&quot;; }
 }</string>
        </property>
        <property name="text">
-        <string>Автор: Иванов И.И.</string>
+        <string>Автор:</string>
        </property>
       </widget>
      </item>
     </layout>
    </item>
+
+   <!-- Исполнитель -->
    <item>
     <widget class="QLabel" name="executorLabel">
      <property name="styleSheet">
@@ -332,10 +343,12 @@ li.checked::marker { content: &quot;\2612&quot;; }
 }</string>
      </property>
      <property name="text">
-      <string>Исполнитель: Иванов И.И.</string>
+      <string>Исполнитель:</string>
      </property>
     </widget>
    </item>
+
+   <!-- Дедлайн -->
    <item>
     <widget class="QLabel" name="deadlineLabel">
      <property name="styleSheet">
@@ -346,10 +359,64 @@ li.checked::marker { content: &quot;\2612&quot;; }
 }</string>
      </property>
      <property name="text">
-      <string>До: 15.12.2024</string>
+      <string>До:</string>
      </property>
     </widget>
    </item>
+
+   <!-- СЛОЖНОСТЬ - ЦИФРА СО ЗВЕЗДОЙ -->
+   <item>
+    <layout class="QHBoxLayout" name="difficultyLayout">
+     <property name="spacing">
+      <number>5</number>
+     </property>
+     <item>
+      <widget class="QLabel" name="difficultyTitleLabel">
+       <property name="styleSheet">
+        <string notr="true">QLabel {
+    font-size: 11px;
+    color: #666;
+}</string>
+       </property>
+       <property name="text">
+        <string>Сложность:</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QLabel" name="difficultyValueLabel">
+       <property name="text">
+        <string>0⭐</string>
+       </property>
+       <property name="styleSheet">
+        <string notr="true">QLabel {
+    font-size: 12px;
+    font-weight: bold;
+    color: #9E9E9E;
+    background-color: #F5F5F5;
+    border-radius: 10px;
+    padding: 2px 8px;
+}</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <spacer name="difficultySpacer">
+       <property name="orientation">
+        <enum>Qt::Orientation::Horizontal</enum>
+       </property>
+       <property name="sizeHint" stdset="0">
+        <size>
+         <width>40</width>
+         <height>20</height>
+        </size>
+       </property>
+      </spacer>
+     </item>
+    </layout>
+   </item>
+
+   <!-- Дата обновления -->
    <item>
     <widget class="QLabel" name="updatedLabel">
      <property name="styleSheet">
@@ -359,7 +426,7 @@ li.checked::marker { content: &quot;\2612&quot;; }
 }</string>
      </property>
      <property name="text">
-      <string>Обновление: 05.12.2024 14:30</string>
+      <string>Обновление:</string>
      </property>
     </widget>
    </item>

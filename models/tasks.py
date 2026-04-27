@@ -11,6 +11,7 @@ from sqlalchemy import (
     DateTime,
     Enum,
     Boolean,
+    Float,  # ← добавляем Float для сложности
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -33,7 +34,8 @@ class Task(Base):
     title: Mapped[str] = mapped_column(String(500))
     description: Mapped[Optional[str]]
     position: Mapped[int]
-    priority: Mapped[TaskPriorityEnum] = mapped_column(Enum(TaskPriorityEnum, name="task_priority"), default=TaskPriorityEnum.medium)
+    priority: Mapped[TaskPriorityEnum] = mapped_column(Enum(TaskPriorityEnum, name="task_priority"),
+                                                       default=TaskPriorityEnum.medium)
     deadline: Mapped[Optional[datetime]]
     created_by: Mapped[Optional[int]]
     assigned_to: Mapped[Optional[int]]
@@ -41,6 +43,9 @@ class Task(Base):
     updated_at: Mapped[datetime]
     is_archived: Mapped[bool] = mapped_column(Boolean, default=False)
     archived_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+
+    # 👇 НОВОЕ ПОЛЕ: сложность задачи (0-5)
+    difficulty: Mapped[float] = mapped_column(Float, default=0.0)
 
     column: Mapped[Optional["BoardColumn"]] = relationship(back_populates="tasks")
     tags: Mapped[List["TaskTag"]] = relationship(back_populates="task", cascade="all, delete-orphan")
@@ -65,14 +70,13 @@ class Tag(Base):
     __tablename__ = "tags"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    name: Mapped[str] = mapped_column(String(100), unique=True)  # ← уникальное имя
+    name: Mapped[str] = mapped_column(String(100), unique=True)
     color: Mapped[str] = mapped_column(String(7), default="#ccab6e")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now, onupdate=datetime.now)
     is_archived: Mapped[bool] = mapped_column(Boolean, default=False)
     archived_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
 
-    # relationships
     tasks: Mapped[List["TaskTag"]] = relationship(back_populates="tag", cascade="all, delete-orphan")
 
 

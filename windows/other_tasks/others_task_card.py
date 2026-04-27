@@ -41,16 +41,22 @@ class OthersTaskCard(TaskCard):
 
     def _disconnect_parent_signals(self):
         """Отключение сигналов родителя."""
-        for signal in [
-            self.edit_requested,
-            self.delete_requested,
-            self.archive_requested,
-            self.duplicate_requested
-        ]:
-            try:
-                signal.disconnect()
-            except TypeError:
-                pass
+        try:
+            self.edit_requested.disconnect()
+        except TypeError:
+            pass
+        try:
+            self.delete_requested.disconnect()
+        except TypeError:
+            pass
+        try:
+            self.archive_requested.disconnect()
+        except TypeError:
+            pass
+        try:
+            self.duplicate_requested.disconnect()
+        except TypeError:
+            pass
 
     def setup_creator_ui(self):
         """Обновление UI для создателя."""
@@ -68,6 +74,10 @@ class OthersTaskCard(TaskCard):
             self.executorLabel.hide()
 
         self.update_deadline_color()
+
+        # Обновляем сложность
+        difficulty = self.task_data.get("difficulty", 0)
+        self.set_difficulty_display(difficulty)
 
     def update_deadline_color(self):
         """Обновляет цвет дедлайна."""
@@ -163,10 +173,6 @@ class OthersTaskCard(TaskCard):
 
         menu.exec(self.menuButton.mapToGlobal(self.menuButton.rect().bottomLeft()))
 
-    # =====================================================
-    # Действия
-    # =====================================================
-
     def mark_as_done(self):
         """Отмечает задачу как выполненную."""
         self.moveToDoneColumn.emit(self.task_data["id"])
@@ -176,10 +182,6 @@ class OthersTaskCard(TaskCard):
         self.task_data.update(new_data)
         self.fill_ui()
         self.setup_creator_ui()
-
-    # =====================================================
-    # Drag & Drop
-    # =====================================================
 
     def mousePressEvent(self, event):
         """Обработка нажатия мыши."""
