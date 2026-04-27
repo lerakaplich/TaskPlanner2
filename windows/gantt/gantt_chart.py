@@ -14,7 +14,11 @@ from PyQt6.QtCore import Qt, QRectF, QPointF, pyqtSignal, QEvent
 from PyQt6.QtGui import (
     QBrush, QPen, QColor, QFont, QPainter, QLinearGradient, QWheelEvent
 )
-from PyQt6.uic import loadUi
+
+from database import get_tasks_session
+from models.tasks import Task
+from models.projects import Project, EmployeeProject
+from models.employees import ExternalEmployee
 
 # Константы
 PIXELS_PER_DAY = 40
@@ -34,20 +38,26 @@ COLOR_OVERDUE = "#8B0000"
 COLOR_TEXT = "#FFFFFF"
 TODAY_COLOR = "#ccab6e"
 
-TODAY = datetime(2026, 2, 16).date()
+TODAY = datetime.now().date()
+
 
 class GanttTask:
     def __init__(self, task_id: int, title: str, start_date: str, end_date: str,
-                 assignee: str = "", is_critical: bool = False, children=None):
+                 assignee: str = "", is_critical: bool = False, children=None,
+                 project_id: int = None, status: str = "", is_completed: bool = False):
         self.id = task_id
         self.title = title
-        self.start_date = datetime.strptime(start_date, "%Y-%m-%d").date()
-        self.end_date = datetime.strptime(end_date, "%Y-%m-%d").date()
+        self.start_date = datetime.strptime(start_date, "%Y-%m-%d").date() if isinstance(start_date,
+                                                                                         str) else start_date
+        self.end_date = datetime.strptime(end_date, "%Y-%m-%d").date() if isinstance(end_date, str) else end_date
         self.assignee = assignee
         self.is_critical = is_critical
-        self.dependencies = []  # [{'id': int, 'lag': int}]
+        self.dependencies = []
         self.children = children or []
         self.color = COLOR_PRIMARY
+        self.project_id = project_id
+        self.status = status
+        self._is_completed = is_completed or (self.end_date < TODAY)
 
     @property
     def duration_days(self) -> int:
@@ -55,11 +65,12 @@ class GanttTask:
 
     @property
     def is_overdue(self) -> bool:
-        return self.end_date < TODAY and not self.is_completed
+        return self.end_date < TODAY and not self._is_completed
 
     @property
     def is_completed(self) -> bool:
-        return self.end_date < TODAY
+        return self._is_completed or (self.end_date < TODAY)
+
 
 class GanttHeaderItem(QGraphicsRectItem):
     def __init__(self, project_start: datetime.date, project_end: datetime.date, total_days: int):
@@ -84,6 +95,7 @@ class GanttHeaderItem(QGraphicsRectItem):
                 day_text.setPos(x + 2, 25)
                 day_text.setFont(QFont("Segoe UI", 7))
                 day_text.setBrush(QBrush(QColor(COLOR_ACCENT)))
+
 
 class GanttResizeHandle(QGraphicsRectItem):
     def __init__(self, side: str, parent=None):
@@ -138,13 +150,14 @@ class GanttResizeHandle(QGraphicsRectItem):
         if hasattr(parent, 'old_start'):
             parent.scene().task_changed.emit(parent.task.id)
 
+
 class GanttTaskItem(QGraphicsItem):
     def __init__(self, task: GanttTask, project_start: datetime.date, y_position: float):
         super().__init__()
         self.task = task
         self.project_start = project_start
         self.y_position = y_position
-        self._updating_position = False  # ← ДОБАВИТЬ
+        self._updating_position = False
 
         self.rect_item = QGraphicsRectItem(self)
         self.text_item = QGraphicsSimpleTextItem(task.title, self)
@@ -166,7 +179,7 @@ class GanttTaskItem(QGraphicsItem):
         self.text_item.setBrush(QBrush(QColor(COLOR_TEXT)))
 
     def update_position(self):
-        if self._updating_position:  # ← защита от рекурсии
+        if self._updating_position:
             return
         self._updating_position = True
 
@@ -182,7 +195,7 @@ class GanttTaskItem(QGraphicsItem):
 
     def itemChange(self, change, value):
         if change == QGraphicsItem.GraphicsItemChange.ItemPositionChange:
-            if self._updating_position:  # ← пропускаем внутренние изменения
+            if self._updating_position:
                 return value
 
             new_pos = value
@@ -192,13 +205,12 @@ class GanttTaskItem(QGraphicsItem):
             self.task.start_date = new_start
             self.task.end_date = new_start + timedelta(days=self.task.duration_days - 1)
 
-            self.update_position()  # теперь безопасно
-
+            self.update_position()
             new_pos.setX(snapped_x)
             new_pos.setY(self.y_position)
             return new_pos
-
         return super().itemChange(change, value)
+
     def mouseReleaseEvent(self, event):
         super().mouseReleaseEvent(event)
         if hasattr(self, 'old_start'):
@@ -215,7 +227,8 @@ class GanttTaskItem(QGraphicsItem):
     def update_appearance(self):
         pen = QPen(QColor(COLOR_BORDER), 1)
         self.rect_item.setPen(pen)
-        color = QColor(COLOR_COMPLETED) if self.task.is_completed else QColor(COLOR_OVERDUE) if self.task.is_overdue else QColor(self.task.color)
+        color = QColor(COLOR_COMPLETED) if self.task.is_completed else QColor(
+            COLOR_OVERDUE) if self.task.is_overdue else QColor(self.task.color)
         gradient = QLinearGradient(0, 0, 0, TASK_HEIGHT)
         gradient.setColorAt(0, color.lighter(120))
         gradient.setColorAt(1, color)
@@ -262,9 +275,11 @@ class GanttDependencyItem(QGraphicsLineItem):
             reply = QMessageBox.question(None, "Удалить связь", "Удалить эту зависимость?")
             if reply == QMessageBox.StandardButton.Yes:
                 successor = self.to_item.task
-                successor.dependencies = [d for d in successor.dependencies if not (d['id'] == self.from_item.task.id and d.get('lag', 0) == self.lag)]
+                successor.dependencies = [d for d in successor.dependencies if
+                                          not (d['id'] == self.from_item.task.id and d.get('lag', 0) == self.lag)]
                 self.scene().widget.refresh_chart()
         super().mousePressEvent(event)
+
 
 class GanttScene(QGraphicsScene):
     task_changed = pyqtSignal(int)
@@ -284,66 +299,14 @@ class GanttScene(QGraphicsScene):
 
     def collect_tasks(self):
         self.all_tasks_dict = {}
+
         def collect(t):
             self.all_tasks_dict[t.id] = t
             for child in t.children:
                 collect(child)
+
         for root in self.tasks:
             collect(root)
-
-    # ... (остальные методы без изменений, кроме update_scene) ...
-
-    def update_scene(self):
-
-        self.clear()
-        self.task_items.clear()
-        self.dependency_items.clear()
-
-        self.collect_tasks()
-        self.build_successors()
-
-        total_days = (self.project_end - self.project_start).days + 1
-        header = GanttHeaderItem(self.project_start, self.project_end, total_days)
-        self.addItem(header)
-
-        y = HEADER_HEIGHT
-        def add_task(task):
-            nonlocal y
-            item = GanttTaskItem(task, self.project_start, y)
-            self.addItem(item)
-            self.task_items[task.id] = item
-            y += ROW_HEIGHT
-            tree_item = self.tree_items.get(task.id)
-            if tree_item and tree_item.isExpanded():
-                for child in task.children:
-                    add_task(child)
-
-        for root in self.tasks:
-            add_task(root)
-        for task in self.all_tasks_dict.values():
-            for dep in task.dependencies:
-                pred_item = self.task_items.get(dep['id'])
-                succ_item = self.task_items.get(task.id)
-                if pred_item and succ_item:
-                    dep_item = GanttDependencyItem(pred_item, succ_item, dep.get('lag', 0))
-                    self.addItem(dep_item)
-                    self.dependency_items.append(dep_item)
-
-        if self.project_start <= TODAY <= self.project_end:
-            days = (TODAY - self.project_start).days
-            x = days * PIXELS_PER_DAY
-            line = QGraphicsLineItem(x, 0, x, y)
-            line.setPen(QPen(QColor(TODAY_COLOR), 2, Qt.PenStyle.DashLine))
-            line.setZValue(10)
-            self.addItem(line)
-            text = QGraphicsSimpleTextItem("Сегодня")
-            text.setPos(x + 5, 5)
-            text.setBrush(QBrush(QColor(TODAY_COLOR)))
-            text.setFont(QFont("Segoe UI", 10, QFont.Weight.Bold))  # ИСПРАВЛЕНО: было 10433
-            text.setZValue(10)
-            self.addItem(text)
-
-        self.setSceneRect(0, 0, total_days * PIXELS_PER_DAY + 500, y + 100)
 
     def build_successors(self):
         self.successors.clear()
@@ -401,20 +364,73 @@ class GanttScene(QGraphicsScene):
         for dep in self.dependency_items:
             dep.update_position()
 
+    def update_scene(self):
+        self.clear()
+        self.task_items.clear()
+        self.dependency_items.clear()
+
+        self.collect_tasks()
+        self.build_successors()
+
+        total_days = (self.project_end - self.project_start).days + 1
+        header = GanttHeaderItem(self.project_start, self.project_end, total_days)
+        self.addItem(header)
+
+        y = HEADER_HEIGHT
+
+        def add_task(task):
+            nonlocal y
+            item = GanttTaskItem(task, self.project_start, y)
+            self.addItem(item)
+            self.task_items[task.id] = item
+            y += ROW_HEIGHT
+            tree_item = self.tree_items.get(task.id)
+            if tree_item and tree_item.isExpanded():
+                for child in task.children:
+                    add_task(child)
+
+        for root in self.tasks:
+            add_task(root)
+
+        for task in self.all_tasks_dict.values():
+            for dep in task.dependencies:
+                pred_item = self.task_items.get(dep['id'])
+                succ_item = self.task_items.get(task.id)
+                if pred_item and succ_item:
+                    dep_item = GanttDependencyItem(pred_item, succ_item, dep.get('lag', 0))
+                    self.addItem(dep_item)
+                    self.dependency_items.append(dep_item)
+
+        if self.project_start <= TODAY <= self.project_end:
+            days = (TODAY - self.project_start).days
+            x = days * PIXELS_PER_DAY
+            line = QGraphicsLineItem(x, 0, x, y)
+            line.setPen(QPen(QColor(TODAY_COLOR), 2, Qt.PenStyle.DashLine))
+            line.setZValue(10)
+            self.addItem(line)
+            text = QGraphicsSimpleTextItem("Сегодня")
+            text.setPos(x + 5, 5)
+            text.setBrush(QBrush(QColor(TODAY_COLOR)))
+            text.setFont(QFont("Segoe UI", 10, QFont.Weight.Bold))
+            text.setZValue(10)
+            self.addItem(text)
+
+        self.setSceneRect(0, 0, total_days * PIXELS_PER_DAY + 500, y + 100)
+
 
 class GanttChartWidget(QWidget):
-    def __init__(self, service=None, parent=None):  # 👈 ДОБАВЛЯЕМ service
+    def __init__(self, service=None, parent=None):
         super().__init__(parent)
 
         ui_path = os.path.join(
-            os.path.dirname(__file__),  # windows/analytics/employees/
-            "..", "..",  # поднимаемся до корня проекта
-            "ui", "gantt"  # спускаемся в нужную подпапку ui
+            os.path.dirname(__file__),
+            "..", "..",
+            "ui", "gantt"
         )
         uic.loadUi(os.path.join(ui_path, "gantt_chart.ui"), self)
 
-        # Сохраняем сервис, если он нужен для загрузки реальных данных
         self.service = service
+        self.session = get_tasks_session()
 
         self.scene = GanttScene(self)
         self.ganttView.setScene(self.scene)
@@ -425,17 +441,95 @@ class GanttChartWidget(QWidget):
         self.ganttView.viewport().installEventFilter(self)
         self.connect_signals()
 
-        # Если есть сервис - загружаем реальные данные, иначе тестовые
-        if service:
-            self.load_real_data()
-        else:
-            self.load_test_data()
+        # Загружаем реальные данные
+        self.load_real_data()
 
     def load_real_data(self):
-        """Загрузка реальных данных из сервиса"""
-        # Здесь будет код загрузки данных из БД через сервис
-        # Пока оставляем тестовые данные
-        self.load_test_data()
+        """Загрузка реальных данных из БД"""
+        try:
+            # Получаем все проекты
+            projects = self.session.query(Project).filter(Project.is_archived == False).all()
+
+            if not projects:
+                print("⚠️ Нет активных проектов для отображения на диаграмме Ганта")
+                self.load_test_data()
+                return
+
+            # Берем первый проект (или можно сделать выбор проекта)
+            project = projects[0]
+            print(f"📊 Загружаем задачи для проекта: {project.name}")
+
+            # Получаем все задачи проекта
+            tasks = self.session.query(Task).filter(Task.project_id == project.id).all()
+
+            if not tasks:
+                print(f"⚠️ В проекте {project.name} нет задач")
+                self.load_test_data()
+                return
+
+            gantt_tasks = []
+            task_dict = {}
+
+            for task in tasks:
+                # Получаем исполнителя
+                assignee_name = ""
+                if task.assigned_to:
+                    employee = self.session.query(ExternalEmployee).filter(
+                        ExternalEmployee.id == task.assigned_to
+                    ).first()
+                    if employee:
+                        assignee_name = f"{employee.last_name} {employee.first_name[0] if employee.first_name else ''}."
+
+                # Определяем статус выполнения
+                is_completed = False
+                if task.column and task.column.is_done_column:
+                    is_completed = True
+
+                # Определяем даты
+                start_date = task.created_at.date() if task.created_at else TODAY
+                end_date = task.deadline.date() if task.deadline else start_date + timedelta(days=7)
+
+                gantt_task = GanttTask(
+                    task_id=task.id,
+                    title=task.title,
+                    start_date=start_date.strftime("%Y-%m-%d"),
+                    end_date=end_date.strftime("%Y-%m-%d"),
+                    assignee=assignee_name,
+                    is_critical=task.priority in ["high", "critical"],
+                    project_id=task.project_id,
+                    status=task.column.name if task.column else "unknown",
+                    is_completed=is_completed
+                )
+                gantt_tasks.append(gantt_task)
+                task_dict[task.id] = gantt_task
+
+            # Строим иерархию (если нужна)
+            self.scene.tasks = gantt_tasks
+            self.scene.collect_tasks()
+
+            # Рассчитываем границы проекта
+            if gantt_tasks:
+                start = min(t.start_date for t in self.scene.all_tasks_dict.values())
+                end = max(t.end_date for t in self.scene.all_tasks_dict.values())
+                self.scene.project_start = start
+                self.scene.project_end = end
+                self.dateRangeLabel.setText(f"{start.strftime('%d.%m.%Y')} - {end.strftime('%d.%m.%Y')}")
+            else:
+                self.scene.project_start = TODAY
+                self.scene.project_end = TODAY + timedelta(days=30)
+                self.dateRangeLabel.setText(
+                    f"{TODAY.strftime('%d.%m.%Y')} - {(TODAY + timedelta(days=30)).strftime('%d.%m.%Y')}")
+
+            self.update_task_tree()
+            self.scene.update_scene()
+            self.update_statistics()
+            print(f"✅ Загружено {len(gantt_tasks)} задач для диаграммы Ганта")
+
+        except Exception as e:
+            print(f"❌ Ошибка при загрузке данных для Ганта: {e}")
+            import traceback
+            traceback.print_exc()
+            self.load_test_data()
 
     def connect_signals(self):
         self.btnZoomIn.clicked.connect(self.zoom_in)
@@ -484,6 +578,7 @@ class GanttChartWidget(QWidget):
         self.ganttView.centerOn(x, self.ganttView.height() / 2)
 
     def load_test_data(self):
+        """Тестовые данные для демонстрации"""
         task1 = GanttTask(1, "Проектирование архитектуры", "2026-02-01", "2026-02-05", "Иванов И.И.", True)
         task2 = GanttTask(2, "Проектирование UI/UX", "2026-02-01", "2026-02-10", "Петрова А.С.")
         sub1 = GanttTask(31, "Backend API", "2026-02-06", "2026-02-12", "Сидоров П.В.")
@@ -503,17 +598,18 @@ class GanttChartWidget(QWidget):
         self.scene.project_start = start
         self.scene.project_end = end
         self.dateRangeLabel.setText(f"{start.strftime('%d.%m.%Y')} - {end.strftime('%d.%m.%Y')}")
-
         self.scene.update_scene()
         self.update_statistics()
 
     def update_task_tree(self):
-        self.taskList.blockSignals(True)  # ← добавьте
+        self.taskList.blockSignals(True)
         self.taskList.clear()
         self.scene.tree_items.clear()
 
         def add_item(task, parent_item=None):
-            text = f"{task.title} | {task.start_date.strftime('%d.%m')}–{task.end_date.strftime('%d.%m')} | {task.assignee}"
+            status_emoji = "✅" if task.is_completed else "⚠️" if task.is_overdue else "🔄"
+            date_str = f"{task.start_date.strftime('%d.%m')}–{task.end_date.strftime('%d.%m')}"
+            text = f"{status_emoji} {task.title} | {date_str} | {task.assignee}"
             item = QTreeWidgetItem()
             item.setText(0, text)
             item.setData(0, Qt.ItemDataRole.UserRole, task.id)
@@ -522,14 +618,14 @@ class GanttChartWidget(QWidget):
                 self.taskList.addTopLevelItem(item)
             else:
                 parent_item.addChild(item)
-            item.setExpanded(True)  # по умолчанию раскрыто
+            item.setExpanded(True)
             for child in task.children:
                 add_item(child, item)
 
         for task in self.scene.tasks:
             add_item(task)
 
-        self.taskList.blockSignals(False)  # ← добавьте
+        self.taskList.blockSignals(False)
 
     def refresh_chart(self):
         self.scene.update_scene()
@@ -540,7 +636,7 @@ class GanttChartWidget(QWidget):
         total = len(self.scene.all_tasks_dict)
         completed = sum(1 for t in self.scene.all_tasks_dict.values() if t.is_completed)
         overdue = sum(1 for t in self.scene.all_tasks_dict.values() if t.is_overdue)
-        self.statusLabel.setText(f"Завершено: {completed} | Просрочено: {overdue} | Всего: {total}")
+        self.statusLabel.setText(f"✅ Завершено: {completed} | ⚠️ Просрочено: {overdue} | 📊 Всего: {total}")
 
     def zoom_in(self):
         global PIXELS_PER_DAY
@@ -555,7 +651,8 @@ class GanttChartWidget(QWidget):
     def on_scale_changed(self, index):
         global PIXELS_PER_DAY
         text = self.scaleCombo.currentText()
-        PIXELS_PER_DAY = {"Дни": 40, "Недели": 20, "Месяцы": 10}.get(text, 40)
+        scale_map = {"Дни": 40, "Недели": 20, "Месяцы": 10}
+        PIXELS_PER_DAY = scale_map.get(text, 40)
         self.refresh_chart()
 
     def add_task_dialog(self):
@@ -576,13 +673,7 @@ class GanttChartWidget(QWidget):
         else:
             super().wheelEvent(event)
 
-def main():
-    app = QApplication(sys.argv)
-    app.setStyle("Fusion")
-    widget = GanttChartWidget()
-    widget.show()
-    widget.resize(1600, 900)
-    sys.exit(app.exec())
-
-if __name__ == "__main__":
-    main()
+    def closeEvent(self, event):
+        if hasattr(self, 'session'):
+            self.session.close()
+        super().closeEvent(event)

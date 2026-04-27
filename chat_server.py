@@ -3,6 +3,7 @@ from fastapi import FastAPI
 import socketio
 from database import TasksSessionLocal
 from services.chat_service import ChatService
+from telegram_bot import start_telegram_bot
 
 user_sid_map = {}  # {user_id: sid}
 
@@ -259,4 +260,10 @@ async def update_chat_settings(sid, data):
 
 
 if __name__ == "__main__":
+    # Запускаем Telegram бота в отдельном потоке
+    print("🤖 Запуск Telegram бота...")
+    bot_thread = start_telegram_bot()
+    print("✅ Telegram бот запущен!")
+
+    # Запускаем сокет-сервер
     uvicorn.run(socket_app, host="0.0.0.0", port=8081)
