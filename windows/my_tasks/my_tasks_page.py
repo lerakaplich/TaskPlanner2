@@ -2,7 +2,7 @@
 
 import os
 from PyQt6 import uic
-from PyQt6.QtWidgets import QWidget, QSplitter
+from PyQt6.QtWidgets import QWidget, QSplitter, QScrollArea, QHBoxLayout
 from PyQt6.QtCore import Qt, pyqtSignal
 
 from windows.my_tasks.task_card import TaskCard
@@ -46,15 +46,10 @@ class MyTasksPage(QWidget):
         self.priorityFilter.currentTextChanged.connect(self.filter_tasks)
         self.projectFilter.currentTextChanged.connect(self.filter_tasks)
 
-    # =====================================================
-    # BOARD
-    # =====================================================
-
     # windows/my_tasks/my_tasks_page.py
 
     def setup_board(self):
-        """Создает колонки канбан-доски из ВСЕХ проектов"""
-        # Очищаем существующий layout
+        """Создает колонки канбан-доски с горизонтальной прокруткой"""
         self.clear_layout(self.kanbanLayout)
 
         column_data = self.service.get_column_data()
@@ -62,45 +57,71 @@ class MyTasksPage(QWidget):
             print("⚠️ Нет колонок для отображения")
             return
 
-        # Создаем сплиттер
-        splitter = QSplitter(Qt.Orientation.Horizontal)
-        splitter.setHandleWidth(5)
-        splitter.setStyleSheet("""
-            QSplitter::handle {
-                background-color: #E0E0E0;
-                border-radius: 2px;
+        # Горизонтальный скролл
+        scroll_area = QScrollArea()
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        scroll_area.setStyleSheet("""
+            QScrollArea {
+                border: none;
+                background-color: transparent;
             }
-            QSplitter::handle:hover {
-                background-color: #ccab6e;
+            QScrollBar:horizontal {
+                background: #f0f0f0;
+                height: 10px;
+                border-radius: 5px;
+            }
+            QScrollBar::handle:horizontal {
+                background: #c0c0c0;
+                border-radius: 5px;
+            }
+            QScrollBar::handle:horizontal:hover {
+                background: #a0a0a0;
             }
         """)
+
+        columns_container = QWidget()
+        columns_layout = QHBoxLayout(columns_container)
+        columns_layout.setSpacing(16)
+        columns_layout.setContentsMargins(10, 10, 10, 10)
 
         self.columns.clear()
         self.column_widgets.clear()
 
-        # Создаем колонки
         for col in sorted(column_data, key=lambda x: x["position"]):
             print(f"📦 Создаем колонку: {col['name']}")
             column_widget = KanbanColumn(col)
             self.columns[col["name"]] = column_widget
             self.column_widgets.append(column_widget)
-            splitter.addWidget(column_widget)
+            columns_layout.addWidget(column_widget)
 
-        # Устанавливаем начальные размеры
-        sizes = self.service.get_initial_sizes(len(column_data), self.width() - 50)
-        if sizes:
-            splitter.setSizes(sizes)
+        columns_layout.addStretch()
+        scroll_area.setWidget(columns_container)
 
-        # 👇 ВАЖНО: Сначала добавляем splitter в layout, потом показываем
-        self.kanbanLayout.addWidget(splitter)
-        splitter.show()  # Явно показываем splitter
+        # Вертикальный скролл для всего контента
+        vertical_scroll = QScrollArea()
+        vertical_scroll.setWidgetResizable(True)
+        vertical_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        vertical_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        vertical_scroll.setStyleSheet("""
+            QScrollArea {
+                border: none;
+                background-color: transparent;
+            }
+            QScrollBar:vertical {
+                background: #f0f0f0;
+                width: 10px;
+                border-radius: 5px;
+            }
+            QScrollBar::handle:vertical {
+                background: #c0c0c0;
+                border-radius: 5px;
+            }
+        """)
 
-        # 👇 Принудительно показываем все колонки
-        for col in self.column_widgets:
-            col.show()
-            col.setVisible(True)
-            # Проверяем, что родитель установлен
-            print(f"  Колонка '{col.column_name}' родитель: {col.parent()}")
+        vertical_scroll.setWidget(scroll_area)
+        self.kanbanLayout.addWidget(vertical_scroll)
 
         print(f"✅ Создано {len(self.column_widgets)} колонок")
 
@@ -114,10 +135,6 @@ class MyTasksPage(QWidget):
                     widget.deleteLater()
                 else:
                     self.clear_layout(item.layout())
-
-    # =====================================================
-    # TASKS
-    # =====================================================
 
     def load_tasks(self):
         """Загрузка задач (только мои)"""
@@ -150,10 +167,6 @@ class MyTasksPage(QWidget):
         for column in self.column_widgets:
             column.clear_tasks()
 
-    # =====================================================
-    # FILTER
-    # =====================================================
-
     def filter_tasks(self):
         priority = self.priorityFilter.currentText()
 
@@ -172,10 +185,6 @@ class MyTasksPage(QWidget):
                     card.show()
                 else:
                     card.hide()
-
-    # =====================================================
-    # STATISTICS
-    # =====================================================
 
     def update_statistics(self):
         stats = self.service.get_statistics_for_display()

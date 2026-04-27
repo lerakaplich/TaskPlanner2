@@ -14,13 +14,22 @@ class ColumnService:
 
     # ==================== ШАБЛОНЫ КОЛОНОК ====================
 
+        # services/column_service.py
+
     def get_template_columns(self) -> List[Dict[str, Any]]:
         """Получить все шаблонные колонки"""
+        print("🔍 ColumnService.get_template_columns() вызван")
+
         stmt = select(BoardColumn).where(
             BoardColumn.is_template == True
         ).order_by(BoardColumn.template_order, BoardColumn.position)
 
         columns = self.session.scalars(stmt).all()
+        print(f"📊 Найдено шаблонных колонок: {len(columns)}")
+
+        for col in columns:
+            print(f"   - {col.name} (id={col.id}, is_template={col.is_template})")
+
         return [self._column_to_dict(col) for col in columns]
 
     def create_template_column(self, data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
@@ -118,18 +127,17 @@ class ColumnService:
             self.session.rollback()
             print(f"❌ Ошибка при сортировке колонок: {e}")
 
-    # ==================== ПРОЕКТНЫЕ КОЛОНКИ ====================
+    # services/column_service.py
 
     def get_project_columns(self, project_id: int) -> List[Dict[str, Any]]:
         """Получить колонки для конкретного проекта"""
         stmt = select(BoardColumn).where(
-            BoardColumn.project_id == project_id
+            BoardColumn.project_id == project_id,
+            BoardColumn.is_template == False  # Только проектные колонки, не шаблоны
         ).order_by(BoardColumn.position)
 
         columns = self.session.scalars(stmt).all()
         return [self._column_to_dict(col) for col in columns]
-
-    # services/column_service.py
 
     def create_project_column(self, project_id: int, template_column_id: int = None, custom_data: Dict = None) -> \
     Optional[Dict[str, Any]]:
@@ -249,6 +257,60 @@ class ColumnService:
             self.session.rollback()
             print(f"❌ Ошибка при удалении проектной колонки: {e}")
             return False
+
+    def create_project_columns_batch(self, project_id: int, columns_data: List[Dict[str, Any]]) -> List[
+        Dict[str, Any]]:
+        """
+        Создать несколько колонок для проекта за один раз.
+
+        Args:
+            project_id: ID проекта
+            columns_data: Список словарей с данными колонок:
+                [
+                    {'name': 'Название проекта', 'color': '#1B232A', 'position': 0, 'is_done_column': False},
+                    {'name': 'Статус', 'color': '#ccab6e', 'position': 1, 'is_done_column': False},
+                    ...
+                ]
+
+        Returns:
+            Список созданных колонок в виде словарей
+        """
+        from datetime import datetime
+
+        created_columns = []
+
+        try:
+            for col_data in columns_data:
+                new_column = BoardColumn(
+                    project_id=project_id,
+                    name=col_data.get('name'),
+                    color=col_data.get('color', '#ccab6e'),
+                    position=col_data.get('position', len(created_columns)),
+                    is_done_column=col_data.get('is_done_column', False),
+                    is_template=False,
+                    created_at=datetime.now()
+                )
+
+                self.session.add(new_column)
+                self.session.flush()  # получаем ID
+
+                created_columns.append({
+                    'id': new_column.id,
+                    'name': new_column.name,
+                    'color': new_column.color,
+                    'position': new_column.position,
+                    'is_done_column': new_column.is_done_column
+                })
+
+                print(f"  ✅ Создана колонка: {new_column.name} (ID: {new_column.id})")
+
+            self.session.commit()
+            return created_columns
+
+        except Exception as e:
+            self.session.rollback()
+            print(f"❌ Ошибка при массовом создании колонок: {e}")
+            return []
 
     # ==================== ВСПОМОГАТЕЛЬНЫЕ МЕТОДЫ ====================
 

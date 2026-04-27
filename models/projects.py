@@ -32,6 +32,9 @@ class Project(Base):
     deadline: Mapped[Optional[time]]
     owner: Mapped[int]
 
+    # 👇 ДОБАВЛЯЕМ ПОЛЕ ДЛЯ ХРАНЕНИЯ ID КОЛОНОК ЧЕРЕЗ ЗАПЯТУЮ
+    selected_column_ids: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+
     # relationships
     columns: Mapped[List["BoardColumn"]] = relationship(
         back_populates="project",

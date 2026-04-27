@@ -2,24 +2,23 @@
 
 import os
 import sys
+from typing import List, Dict, Any
+
 from PyQt6 import uic
 from PyQt6.QtWidgets import QDialog, QMessageBox
-from PyQt6.QtCore import QDate, pyqtSignal
+from PyQt6.QtCore import QDate, pyqtSignal, Qt
 
-# Добавляем путь к корню проекта
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 
 class BaseProjectDialog(QDialog):
     """Базовый класс для диалогов создания и редактирования проектов"""
 
-    # Сигнал для обновления карточек проектов
     columns_changed = pyqtSignal(dict)
 
     def __init__(self, parent=None, title="Проект", project_data=None):
         super().__init__(parent)
 
-        # Загрузка UI
         ui_path = os.path.join(
             os.path.dirname(__file__),
             "..", "..", "ui", "projects"
@@ -30,148 +29,140 @@ class BaseProjectDialog(QDialog):
         self.participants = []
         self.admins = []
 
-        # Словарь для хранения состояния видимости колонок
-        self.column_visibility = {
-            'name': True,
-            'description': True,
-            'status': True,
-            'created_date': True,
-            'deadline': True,
-            'participants': True,
-            'progress': True
-        }
+        # Хранение выбранных колонок
+        self.selected_columns_data = []
+        self.selected_columns_keys = []
+
+        # Загружаем шаблонные колонки из БД
+        self.template_columns = self._load_template_columns()
 
         # Базовая настройка UI
         self.setup_base_ui()
-        self.setup_columns_ui()
 
         # Подключаем базовые сигналы
         self.participantsBtn.clicked.connect(self.select_participants)
         self.adminsBtn.clicked.connect(self.select_admins)
 
-        # Подключаем сигналы чекбоксов колонок
-        self.connect_column_signals()
+        # Подключаем кнопку колонок из UI
+        if hasattr(self, 'columnBtn'):
+            self.columnBtn.clicked.connect(self.select_columns)
+            self.columnBtn.setCursor(Qt.CursorShape.PointingHandCursor)
+            self.update_columns_button_text()
 
-        # Если есть данные проекта - загружаем их
         if project_data:
             self.load_project_data()
-            # Загружаем сохраненные настройки колонок, если они есть
-            if 'column_visibility' in project_data:
-                self.load_column_visibility(project_data['column_visibility'])
+            if 'selected_columns_data' in project_data:
+                self.selected_columns_data = project_data['selected_columns_data']
+                self.selected_columns_keys = [col.get('col_key', '') for col in self.selected_columns_data]
+                self.update_columns_button_text()
+
+        # Скрываем старый GroupBox с чекбоксами (если есть)
+        if hasattr(self, 'columnsGroupBox'):
+            self.columnsGroupBox.hide()
+
+    def _load_template_columns(self) -> List[Dict]:
+        """Загружает шаблонные колонки из БД"""
+        try:
+            from services.column_service import ColumnService
+            from database import get_tasks_session
+
+            session = get_tasks_session()
+            column_service = ColumnService(session)
+            template_columns = column_service.get_template_columns()
+            session.close()
+
+            print(f"📊 Загружено шаблонных колонок: {len(template_columns)}")
+            return template_columns
+        except Exception as e:
+            print(f"❌ Ошибка при загрузке колонок: {e}")
+            return []
 
     def setup_base_ui(self):
         """Базовая настройка UI"""
         current_date = QDate.currentDate().toString("dd.MM.yyyy")
-        self.dateLabel.setText(f"Дата: {current_date}")
+        self.dateLabel.setText(f"Создан: {current_date}")
+        self.createBtn.setText("Создать проект")
 
-        # По умолчанию кнопка называется "Сохранить"
-        self.createBtn.setText("Сохранить")
-
-    def setup_columns_ui(self):
-        """Настройка UI для колонок"""
-        # Скрываем groupbox с колонками, если он не нужен
-        if hasattr(self, 'columnsGroupBox'):
-            # Можно добавить заголовок
-            self.columnsGroupBox.setTitle("Отображаемые колонки в карточке проекта")
-
-            # Устанавливаем тултипы для чекбоксов
-            if hasattr(self, 'colNameCheckbox'):
-                self.colNameCheckbox.setToolTip("Показывать название проекта в карточке")
-            if hasattr(self, 'colDescriptionCheckbox'):
-                self.colDescriptionCheckbox.setToolTip("Показывать описание проекта в карточке")
-            if hasattr(self, 'colStatusCheckbox'):
-                self.colStatusCheckbox.setToolTip("Показывать статус проекта в карточке")
-            if hasattr(self, 'colCreatedDateCheckbox'):
-                self.colCreatedDateCheckbox.setToolTip("Показывать дату создания в карточке")
-            if hasattr(self, 'colDeadlineCheckbox'):
-                self.colDeadlineCheckbox.setToolTip("Показывать дедлайн в карточке")
-            if hasattr(self, 'colParticipantsCheckbox'):
-                self.colParticipantsCheckbox.setToolTip("Показывать количество участников в карточке")
-            if hasattr(self, 'colProgressCheckbox'):
-                self.colProgressCheckbox.setToolTip("Показывать прогресс выполнения в карточке")
-
-    def connect_column_signals(self):
-        """Подключение сигналов чекбоксов колонок"""
-        if hasattr(self, 'colNameCheckbox'):
-            self.colNameCheckbox.stateChanged.connect(
-                lambda: self.on_column_changed('name', self.colNameCheckbox.isChecked())
-            )
-        if hasattr(self, 'colDescriptionCheckbox'):
-            self.colDescriptionCheckbox.stateChanged.connect(
-                lambda: self.on_column_changed('description', self.colDescriptionCheckbox.isChecked())
-            )
-        if hasattr(self, 'colStatusCheckbox'):
-            self.colStatusCheckbox.stateChanged.connect(
-                lambda: self.on_column_changed('status', self.colStatusCheckbox.isChecked())
-            )
-        if hasattr(self, 'colCreatedDateCheckbox'):
-            self.colCreatedDateCheckbox.stateChanged.connect(
-                lambda: self.on_column_changed('created_date', self.colCreatedDateCheckbox.isChecked())
-            )
-        if hasattr(self, 'colDeadlineCheckbox'):
-            self.colDeadlineCheckbox.stateChanged.connect(
-                lambda: self.on_column_changed('deadline', self.colDeadlineCheckbox.isChecked())
-            )
-        if hasattr(self, 'colParticipantsCheckbox'):
-            self.colParticipantsCheckbox.stateChanged.connect(
-                lambda: self.on_column_changed('participants', self.colParticipantsCheckbox.isChecked())
-            )
-        if hasattr(self, 'colProgressCheckbox'):
-            self.colProgressCheckbox.stateChanged.connect(
-                lambda: self.on_column_changed('progress', self.colProgressCheckbox.isChecked())
-            )
-
-    def on_column_changed(self, column_name, checked):
-        """Обработчик изменения состояния чекбокса колонки"""
-        self.column_visibility[column_name] = checked
-        print(f"📊 Колонка '{column_name}' {'показана' if checked else 'скрыта'}")
-
-    def load_column_visibility(self, visibility_dict):
-        """Загрузка состояния видимости колонок из сохраненных данных"""
-        if not visibility_dict:
+    def update_columns_button_text(self):
+        """Обновляет текст на кнопке выбора колонок"""
+        if not hasattr(self, 'columnBtn'):
             return
 
-        # Обновляем словарь
-        self.column_visibility.update(visibility_dict)
+        count = len(self.selected_columns_data)
+        if count != 0:
+            self.columnBtn.setText(f"Выбрано колонок: {count}")
 
-        # Обновляем чекбоксы
-        if hasattr(self, 'colNameCheckbox'):
-            self.colNameCheckbox.setChecked(self.column_visibility.get('name', True))
-        if hasattr(self, 'colDescriptionCheckbox'):
-            self.colDescriptionCheckbox.setChecked(self.column_visibility.get('description', True))
-        if hasattr(self, 'colStatusCheckbox'):
-            self.colStatusCheckbox.setChecked(self.column_visibility.get('status', True))
-        if hasattr(self, 'colCreatedDateCheckbox'):
-            self.colCreatedDateCheckbox.setChecked(self.column_visibility.get('created_date', True))
-        if hasattr(self, 'colDeadlineCheckbox'):
-            self.colDeadlineCheckbox.setChecked(self.column_visibility.get('deadline', True))
-        if hasattr(self, 'colParticipantsCheckbox'):
-            self.colParticipantsCheckbox.setChecked(self.column_visibility.get('participants', True))
-        if hasattr(self, 'colProgressCheckbox'):
-            self.colProgressCheckbox.setChecked(self.column_visibility.get('progress', True))
+    def select_columns(self):
+        """Открыть диалог выбора колонок"""
+        try:
+            from windows.projects.column_selector import ColumnSelectorDialog
 
-    def get_column_visibility(self):
-        """Получить словарь с настройками видимости колонок"""
-        return self.column_visibility.copy()
+            dialog = ColumnSelectorDialog(
+                self,
+                template_columns=self.template_columns,
+                preselected_keys=self.selected_columns_keys
+            )
+
+            if dialog.exec() == QDialog.DialogCode.Accepted:
+                self.selected_columns_data = dialog.get_selected_columns_data()
+                self.selected_columns_keys = dialog.get_selected_keys()
+                self.update_columns_button_text()
+                print(f"📊 Выбрано колонок: {len(self.selected_columns_data)}")
+
+        except Exception as e:
+            QMessageBox.warning(self, "Ошибка", f"Ошибка при выборе колонок: {e}")
+            import traceback
+            traceback.print_exc()
+
+    def get_project_data(self):
+        """Получить данные нового проекта"""
+        data = self.get_common_data()
+
+        data.update({
+            'id': None,
+            'created_date': QDate.currentDate().toString("dd.MM.yyyy"),
+            'selected_columns': self.selected_columns_keys,
+            'selected_columns_data': self.selected_columns_data,
+            'columns_display_names': {col['col_key']: col['name'] for col in self.selected_columns_data}
+        })
+        return data
+
+    def validate_input(self):
+        """Проверка введенных данных"""
+        if not self.nameInput.text().strip():
+            QMessageBox.warning(self, "Предупреждение", "Введите название проекта")
+            return False
+
+        if not self.selected_columns_data:
+            QMessageBox.warning(self, "Предупреждение", "Выберите хотя бы одну колонку для отображения в проекте!")
+            return False
+
+        return True
+
+    # windows/projects/base_project_dialog.py
 
     def load_project_data(self):
         """Загрузка данных проекта"""
         self.nameInput.setText(self.project_data.get('name', ''))
         self.descInput.setPlainText(self.project_data.get('description', ''))
 
-        # Загружаем статус активности
         is_active = self.project_data.get('is_active', True)
         if isinstance(is_active, str):
             is_active = is_active.lower() == 'true'
         self.activeCheckbox.setChecked(is_active)
 
-        # Загружаем участников и администраторов
+        # Загружаем колонки, если они есть
+        if 'selected_columns_data' in self.project_data and self.project_data['selected_columns_data']:
+            self.selected_columns_data = self.project_data['selected_columns_data']
+            self.selected_columns_keys = [col.get('col_key', '') for col in self.selected_columns_data]
+            self.update_columns_button_text()
+            print(f"📊 Загружено {len(self.selected_columns_data)} колонок")
+
         self.load_participants_and_admins()
 
     def load_participants_and_admins(self):
         """Загрузка участников и администраторов из project_data"""
         if hasattr(self.project_data, 'member_ids'):
-            # Это DTO объект
             member_ids = self.project_data.member_ids
             admin_ids = self.project_data.admin_ids
 
@@ -184,8 +175,6 @@ class BaseProjectDialog(QDialog):
                 from sqlalchemy import select
 
                 session = get_tasks_session()
-
-                # Загружаем участников
                 stmt = select(ExternalEmployee).where(ExternalEmployee.id.in_(member_ids))
                 employees = session.scalars(stmt).all()
 
@@ -204,7 +193,6 @@ class BaseProjectDialog(QDialog):
 
                 session.close()
         else:
-            # Это словарь
             participants_data = self.project_data.get('participants', [])
             self.participants = self._normalize_employee_data(participants_data)
 
@@ -218,11 +206,9 @@ class BaseProjectDialog(QDialog):
         """Приведение данных сотрудников к единому формату"""
         if not data:
             return []
-
         if isinstance(data, str):
             ids = [int(id.strip()) for id in data.split(',') if id.strip()]
             return [self._create_employee_stub(emp_id) for emp_id in ids]
-
         if isinstance(data, list):
             normalized = []
             for item in data:
@@ -236,7 +222,6 @@ class BaseProjectDialog(QDialog):
                 elif isinstance(item, int):
                     normalized.append(self._create_employee_stub(item))
             return normalized
-
         return []
 
     def _create_employee_stub(self, emp_id):
@@ -256,12 +241,7 @@ class BaseProjectDialog(QDialog):
             dialog = EmployeeSelectorDialog(self, mode="participants")
 
             if self.participants:
-                preselected_ids = []
-                for p in self.participants:
-                    if isinstance(p, dict):
-                        preselected_ids.append(p.get('id'))
-                    else:
-                        preselected_ids.append(p)
+                preselected_ids = [p.get('id') if isinstance(p, dict) else p for p in self.participants]
                 dialog.set_preselected(preselected_ids)
 
             if dialog.exec() == QDialog.DialogCode.Accepted:
@@ -278,12 +258,7 @@ class BaseProjectDialog(QDialog):
             dialog = EmployeeSelectorDialog(self, mode="admins")
 
             if self.admins:
-                preselected_ids = []
-                for a in self.admins:
-                    if isinstance(a, dict):
-                        preselected_ids.append(a.get('id'))
-                    else:
-                        preselected_ids.append(a)
+                preselected_ids = [a.get('id') if isinstance(a, dict) else a for a in self.admins]
                 dialog.set_preselected(preselected_ids)
 
             if dialog.exec() == QDialog.DialogCode.Accepted:
@@ -332,39 +307,18 @@ class BaseProjectDialog(QDialog):
         else:
             self.adminsBtn.setText(f"Администраторы ({count} чел.)")
 
-    def validate_input(self):
-        """Проверка введенных данных"""
-        if not self.nameInput.text().strip():
-            QMessageBox.warning(self, "Предупреждение", "Введите название проекта")
-            return False
-        return True
-
     def get_common_data(self):
         """Получить общие данные проекта"""
-        participants_ids = []
-        for p in self.participants:
-            if isinstance(p, dict):
-                participants_ids.append(str(p.get('id', '')))
-            else:
-                participants_ids.append(str(p))
-        participants_str = ','.join(participants_ids) if participants_ids else ''
-
-        admins_ids = []
-        for a in self.admins:
-            if isinstance(a, dict):
-                admins_ids.append(str(a.get('id', '')))
-            else:
-                admins_ids.append(str(a))
-        admins_str = ','.join(admins_ids) if admins_ids else ''
+        participants_ids = [str(p.get('id', '')) if isinstance(p, dict) else str(p) for p in self.participants]
+        admins_ids = [str(a.get('id', '')) if isinstance(a, dict) else str(a) for a in self.admins]
 
         return {
             'name': self.nameInput.text(),
             'description': self.descInput.toPlainText(),
-            'participants_ids': participants_str,
+            'participants_ids': ','.join(participants_ids) if participants_ids else '',
             'participants': self.participants,
-            'admins_ids': admins_str,
+            'admins_ids': ','.join(admins_ids) if admins_ids else '',
             'admins': self.admins,
             'is_active': self.activeCheckbox.isChecked(),
             'updated_date': QDate.currentDate().toString("dd.MM.yyyy"),
-            'column_visibility': self.get_column_visibility()  # 👈 Добавляем настройки колонок
         }

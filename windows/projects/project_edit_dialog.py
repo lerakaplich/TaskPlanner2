@@ -38,12 +38,14 @@ class ProjectEditDialog(BaseProjectDialog):
             self.dateLabel.setText(f"Изменен: {current_date}")
 
     def load_project_data(self):
-        """Переопределяем загрузку данных для редактирования"""
+        """Загрузка данных для редактирования"""
         super().load_project_data()
 
-        # Загружаем настройки колонок из проекта
-        if 'column_visibility' in self.project_data:
-            self.load_column_visibility(self.project_data['column_visibility'])
+        # Загружаем сохраненные колонки
+        if 'selected_columns_data' in self.project_data:
+            self.selected_columns_data = self.project_data['selected_columns_data']
+            self.selected_columns_keys = [col.get('col_key', '') for col in self.selected_columns_data]
+            self.update_columns_button_text()
 
         self._ensure_admins_in_participants()
 

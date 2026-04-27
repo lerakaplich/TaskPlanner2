@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>500</width>
-    <height>593</height>
+    <height>450</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -61,12 +61,6 @@
      <property name="minimumSize">
       <size>
        <width>0</width>
-       <height>45</height>
-      </size>
-     </property>
-     <property name="maximumSize">
-      <size>
-       <width>16777215</width>
        <height>45</height>
       </size>
      </property>
@@ -125,15 +119,9 @@ QTextEdit:focus {
          <height>45</height>
         </size>
        </property>
-       <property name="maximumSize">
-        <size>
-         <width>16777215</width>
-         <height>45</height>
-        </size>
-       </property>
        <property name="font">
         <font>
-         <pointsize>-1</pointsize>
+         <weight>75</weight>
          <bold>true</bold>
         </font>
        </property>
@@ -171,15 +159,9 @@ QPushButton:pressed {
          <height>45</height>
         </size>
        </property>
-       <property name="maximumSize">
-        <size>
-         <width>16777215</width>
-         <height>45</height>
-        </size>
-       </property>
        <property name="font">
         <font>
-         <pointsize>-1</pointsize>
+         <weight>75</weight>
          <bold>true</bold>
         </font>
        </property>
@@ -212,240 +194,48 @@ QPushButton:pressed {
     </layout>
    </item>
    <item>
-    <widget class="QGroupBox" name="columnsGroupBox">
-     <property name="title">
-      <string>Выбор отображаемых колонок</string>
+    <widget class="QPushButton" name="columnBtn">
+     <property name="minimumSize">
+      <size>
+       <width>0</width>
+       <height>45</height>
+      </size>
+     </property>
+     <property name="font">
+      <font>
+       <weight>75</weight>
+       <bold>true</bold>
+      </font>
+     </property>
+     <property name="cursor">
+      <cursorShape>PointingHandCursor</cursorShape>
      </property>
      <property name="styleSheet">
-      <string notr="true">QGroupBox {
+      <string notr="true">QPushButton {
+    background-color: #1B232A;
+    color: white;
+    border: none;
+    border-radius: 10px;
+    padding: 12px;
     font-size: 14px;
     font-weight: bold;
-    border: 2px solid #E0E0E0;
-    border-radius: 8px;
-    margin-top: 10px;
-    padding-top: 10px;
-    background-color: white;
 }
-QGroupBox::title {
-    subcontrol-origin: margin;
-    left: 10px;
-    padding: 0 5px 0 5px;
+QPushButton:hover {
+    background-color: #D9D9D6;
+    color: black;
+}
+QPushButton:pressed {
+    background-color: #B8B8B5;
 }</string>
      </property>
-     <layout class="QVBoxLayout" name="columnsLayout">
-      <property name="spacing">
-       <number>8</number>
-      </property>
-      <property name="leftMargin">
-       <number>15</number>
-      </property>
-      <property name="topMargin">
-       <number>15</number>
-      </property>
-      <property name="rightMargin">
-       <number>15</number>
-      </property>
-      <property name="bottomMargin">
-       <number>15</number>
-      </property>
-      <item>
-       <widget class="QCheckBox" name="colNameCheckbox">
-        <property name="styleSheet">
-         <string notr="true">QCheckBox {
-    font-size: 13px;
-    color: #1B232A;
-    padding: 5px;
-}
-QCheckBox::indicator {
-    width: 18px;
-    height: 18px;
-    border: 2px solid #1B232A;
-    border-radius: 4px;
-}
-QCheckBox::indicator:checked {
-    background-color: #D22730;
-    border: 2px solid #D22730;
-}</string>
-        </property>
-        <property name="text">
-         <string>Название проекта</string>
-        </property>
-        <property name="checked">
-         <bool>true</bool>
-        </property>
-       </widget>
-      </item>
-      <item>
-       <widget class="QCheckBox" name="colDescriptionCheckbox">
-        <property name="styleSheet">
-         <string notr="true">QCheckBox {
-    font-size: 13px;
-    color: #1B232A;
-    padding: 5px;
-}
-QCheckBox::indicator {
-    width: 18px;
-    height: 18px;
-    border: 2px solid #1B232A;
-    border-radius: 4px;
-}
-QCheckBox::indicator:checked {
-    background-color: #D22730;
-    border: 2px solid #D22730;
-}</string>
-        </property>
-        <property name="text">
-         <string>Описание проекта</string>
-        </property>
-        <property name="checked">
-         <bool>true</bool>
-        </property>
-       </widget>
-      </item>
-      <item>
-       <widget class="QCheckBox" name="colStatusCheckbox">
-        <property name="styleSheet">
-         <string notr="true">QCheckBox {
-    font-size: 13px;
-    color: #1B232A;
-    padding: 5px;
-}
-QCheckBox::indicator {
-    width: 18px;
-    height: 18px;
-    border: 2px solid #1B232A;
-    border-radius: 4px;
-}
-QCheckBox::indicator:checked {
-    background-color: #D22730;
-    border: 2px solid #D22730;
-}</string>
-        </property>
-        <property name="text">
-         <string>Статус проекта</string>
-        </property>
-        <property name="checked">
-         <bool>true</bool>
-        </property>
-       </widget>
-      </item>
-      <item>
-       <widget class="QCheckBox" name="colCreatedDateCheckbox">
-        <property name="styleSheet">
-         <string notr="true">QCheckBox {
-    font-size: 13px;
-    color: #1B232A;
-    padding: 5px;
-}
-QCheckBox::indicator {
-    width: 18px;
-    height: 18px;
-    border: 2px solid #1B232A;
-    border-radius: 4px;
-}
-QCheckBox::indicator:checked {
-    background-color: #D22730;
-    border: 2px solid #D22730;
-}</string>
-        </property>
-        <property name="text">
-         <string>Дата создания</string>
-        </property>
-        <property name="checked">
-         <bool>true</bool>
-        </property>
-       </widget>
-      </item>
-      <item>
-       <widget class="QCheckBox" name="colDeadlineCheckbox">
-        <property name="styleSheet">
-         <string notr="true">QCheckBox {
-    font-size: 13px;
-    color: #1B232A;
-    padding: 5px;
-}
-QCheckBox::indicator {
-    width: 18px;
-    height: 18px;
-    border: 2px solid #1B232A;
-    border-radius: 4px;
-}
-QCheckBox::indicator:checked {
-    background-color: #D22730;
-    border: 2px solid #D22730;
-}</string>
-        </property>
-        <property name="text">
-         <string>Дедлайн</string>
-        </property>
-        <property name="checked">
-         <bool>true</bool>
-        </property>
-       </widget>
-      </item>
-      <item>
-       <widget class="QCheckBox" name="colParticipantsCheckbox">
-        <property name="styleSheet">
-         <string notr="true">QCheckBox {
-    font-size: 13px;
-    color: #1B232A;
-    padding: 5px;
-}
-QCheckBox::indicator {
-    width: 18px;
-    height: 18px;
-    border: 2px solid #1B232A;
-    border-radius: 4px;
-}
-QCheckBox::indicator:checked {
-    background-color: #D22730;
-    border: 2px solid #D22730;
-}</string>
-        </property>
-        <property name="text">
-         <string>Количество участников</string>
-        </property>
-        <property name="checked">
-         <bool>true</bool>
-        </property>
-       </widget>
-      </item>
-      <item>
-       <widget class="QCheckBox" name="colProgressCheckbox">
-        <property name="styleSheet">
-         <string notr="true">QCheckBox {
-    font-size: 13px;
-    color: #1B232A;
-    padding: 5px;
-}
-QCheckBox::indicator {
-    width: 18px;
-    height: 18px;
-    border: 2px solid #1B232A;
-    border-radius: 4px;
-}
-QCheckBox::indicator:checked {
-    background-color: #D22730;
-    border: 2px solid #D22730;
-}</string>
-        </property>
-        <property name="text">
-         <string>Прогресс выполнения</string>
-        </property>
-        <property name="checked">
-         <bool>true</bool>
-        </property>
-       </widget>
-      </item>
-     </layout>
+     <property name="text">
+      <string>Колонки проекта</string>
+     </property>
     </widget>
    </item>
    <item>
     <layout class="QHBoxLayout" name="bottomLayout">
-     <property name="topMargin">
-      <number>10</number>
-     </property>
-     <property name="bottomMargin">
+     <property name="spacing">
       <number>10</number>
      </property>
      <item>
@@ -511,15 +301,9 @@ QCheckBox::indicator:checked {
        <height>50</height>
       </size>
      </property>
-     <property name="maximumSize">
-      <size>
-       <width>16777215</width>
-       <height>50</height>
-      </size>
-     </property>
      <property name="font">
       <font>
-       <pointsize>-1</pointsize>
+       <weight>75</weight>
        <bold>true</bold>
       </font>
      </property>
@@ -547,19 +331,6 @@ QPushButton:pressed {
       <string>Создать проект</string>
      </property>
     </widget>
-   </item>
-   <item>
-    <spacer name="verticalSpacer">
-     <property name="orientation">
-      <enum>Qt::Orientation::Vertical</enum>
-     </property>
-     <property name="sizeHint" stdset="0">
-      <size>
-       <width>20</width>
-       <height>40</height>
-      </size>
-     </property>
-    </spacer>
    </item>
   </layout>
  </widget>

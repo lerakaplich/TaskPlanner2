@@ -1,0 +1,176 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>ColumnSelectorDialog</class>
+ <widget class="QDialog" name="ColumnSelectorDialog">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>500</width>
+    <height>550</height>
+   </rect>
+  </property>
+  <property name="windowTitle">
+   <string>Выбор колонок для проекта</string>
+  </property>
+  <property name="styleSheet">
+   <string notr="true">
+    QDialog {
+        background-color: white;
+    }
+    QLabel {
+        font-size: 14px;
+        color: #1B232A;
+    }
+    QLineEdit {
+        border: 1px solid #D9D9D6;
+        border-radius: 8px;
+        padding: 8px 12px;
+        font-size: 13px;
+        background-color: white;
+    }
+    QLineEdit:focus {
+        border: 2px solid #D22730;
+    }
+    QScrollArea {
+        border: 1px solid #D9D9D6;
+        border-radius: 8px;
+        background-color: white;
+    }
+    QScrollBar:vertical {
+        border: none;
+        background-color: #f0f0f0;
+        width: 10px;
+        border-radius: 5px;
+        margin: 0px;
+    }
+    QScrollBar::handle:vertical {
+        background-color: #B8B8B5;
+        border-radius: 5px;
+        min-height: 20px;
+    }
+    QScrollBar::handle:vertical:hover {
+        background-color: #998664;
+    }
+    QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+        height: 0px;
+    }
+   </string>
+  </property>
+  <layout class="QVBoxLayout" name="verticalLayout">
+   <property name="spacing">
+    <number>15</number>
+   </property>
+   <property name="leftMargin">
+    <number>20</number>
+   </property>
+   <property name="topMargin">
+    <number>20</number>
+   </property>
+   <property name="rightMargin">
+    <number>20</number>
+   </property>
+   <property name="bottomMargin">
+    <number>20</number>
+   </property>
+   <item>
+    <widget class="QLabel" name="titleLabel">
+     <property name="styleSheet">
+      <string notr="true">font-size: 18px; font-weight: bold;</string>
+     </property>
+     <property name="text">
+      <string>Выберите колонки для отображения</string>
+     </property>
+     <property name="alignment">
+      <set>Qt::AlignmentFlag::AlignCenter</set>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <widget class="QLineEdit" name="searchInput">
+     <property name="placeholderText">
+      <string>🔍 Поиск колонки...</string>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <widget class="QCheckBox" name="selectAllCheckBox">
+     <property name="text">
+      <string>Выбрать все колонки</string>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <widget class="QScrollArea" name="scrollArea">
+     <property name="widgetResizable">
+      <bool>true</bool>
+     </property>
+     <widget class="QWidget" name="scrollAreaWidgetContents">
+      <property name="geometry">
+       <rect>
+        <x>0</x>
+        <y>0</y>
+        <width>458</width>
+        <height>350</height>
+       </rect>
+      </property>
+      <layout class="QVBoxLayout" name="verticalLayout_2">
+       <property name="spacing">
+        <number>5</number>
+       </property>
+       <property name="leftMargin">
+        <number>10</number>
+       </property>
+       <property name="topMargin">
+        <number>10</number>
+       </property>
+       <property name="rightMargin">
+        <number>10</number>
+       </property>
+       <property name="bottomMargin">
+        <number>10</number>
+       </property>
+      </layout>
+     </widget>
+    </widget>
+   </item>
+   <item>
+    <widget class="QLabel" name="selectedCountLabel">
+     <property name="styleSheet">
+      <string notr="true">color: #1B232A; font-size: 12px; font-weight: bold;</string>
+     </property>
+     <property name="text">
+      <string>Выбрано: 0</string>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <layout class="QHBoxLayout" name="buttonLayout">
+     <item>
+      <widget class="QPushButton" name="selectBtn">
+       <property name="styleSheet">
+        <string notr="true">QPushButton {
+            background-color: #D22730;
+            color: white;
+            border-radius: 10px;
+            font-weight: bold;
+            font-size: 16px;
+            border: none;
+            padding: 10px 30px;
+        }
+        QPushButton:hover {
+            background-color: #862633;
+        }</string>
+       </property>
+       <property name="text">
+        <string>Применить</string>
+       </property>
+      </widget>
+     </item>
+    </layout>
+   </item>
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>

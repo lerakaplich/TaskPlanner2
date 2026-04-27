@@ -77,6 +77,18 @@
         width: 0;
         height: 0;
     }
+    /* Стиль для звезд рейтинга */
+    QLabel[objectName^="star"] {
+        font-size: 28px;
+        font-weight: normal;
+        color: #D3D3D3;
+    }
+    QLabel[objectName^="star"]:hover {
+        color: #FFD700;
+    }
+    QLabel[objectName^="star"][active="true"] {
+        color: #FFD700;
+    }
    </string>
   </property>
   <layout class="QVBoxLayout" name="verticalLayout">
@@ -154,6 +166,126 @@
       <string>Выберите исполнителя</string>
      </property>
     </widget>
+   </item>
+   <item>
+    <layout class="QHBoxLayout" name="difficultyLayout">
+     <property name="spacing">
+      <number>10</number>
+     </property>
+     <item>
+      <widget class="QLabel" name="labelDifficulty">
+       <property name="styleSheet">
+        <string notr="true">font-weight: bold; font-size: 14px; color: #D22730; margin-right: 10px;</string>
+       </property>
+       <property name="text">
+        <string>Сложность:</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QLabel" name="star1">
+       <property name="styleSheet">
+        <string notr="true">QLabel {
+    font-size: 28px;
+    color: #D3D3D3;
+}</string>
+       </property>
+       <property name="text">
+        <string>☆</string>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignmentFlag::AlignCenter</set>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QLabel" name="star2">
+       <property name="styleSheet">
+        <string notr="true">QLabel {
+    font-size: 28px;
+    color: #D3D3D3;
+}</string>
+       </property>
+       <property name="text">
+        <string>☆</string>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignmentFlag::AlignCenter</set>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QLabel" name="star3">
+       <property name="styleSheet">
+        <string notr="true">QLabel {
+    font-size: 28px;
+    color: #D3D3D3;
+}</string>
+       </property>
+       <property name="text">
+        <string>☆</string>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignmentFlag::AlignCenter</set>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QLabel" name="star4">
+       <property name="styleSheet">
+        <string notr="true">QLabel {
+    font-size: 28px;
+    color: #D3D3D3;
+}</string>
+       </property>
+       <property name="text">
+        <string>☆</string>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignmentFlag::AlignCenter</set>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QLabel" name="star5">
+       <property name="styleSheet">
+        <string notr="true">QLabel {
+    font-size: 28px;
+    color: #D3D3D3;
+}</string>
+       </property>
+       <property name="text">
+        <string>☆</string>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignmentFlag::AlignCenter</set>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QLabel" name="labelDifficultyValue">
+       <property name="styleSheet">
+        <string notr="true">color: #2c3e50; font-size: 14px; font-weight: bold; margin-left: 10px;</string>
+       </property>
+       <property name="text">
+        <string>Не выбрана</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <spacer name="horizontalSpacerDiff">
+       <property name="orientation">
+        <enum>Qt::Orientation::Horizontal</enum>
+       </property>
+       <property name="sizeHint" stdset="0">
+        <size>
+         <width>40</width>
+         <height>20</height>
+        </size>
+       </property>
+      </spacer>
+     </item>
+    </layout>
    </item>
    <item>
     <layout class="QHBoxLayout" name="optionsLayout">

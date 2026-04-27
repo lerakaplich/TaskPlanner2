@@ -1,172 +1,529 @@
-from typing import List, Dict, Optional
+# services/analytics_service.py
 
-from database import get_tasks_session
+from typing import List, Dict, Optional, Any
+from datetime import datetime
+from sqlalchemy.orm import Session
+from sqlalchemy import select, func, and_, or_
+
+from models.tasks import Task, TaskTag, Tag
+from models.projects import Project, EmployeeProject, BoardColumn
+from models.employees import ExternalEmployee, DepartmentFDW, DivisionFDW
+from repositories.tag_repo import TagRepo
 
 
 class AnalyticsService:
-    """
-    Сервис архива.
-    Хранит бизнес-логику и управление состоянием.
-    UI ничего не знает о структуре данных.
-    """
+    """Сервис для аналитики по сотрудникам, темам и проектам"""
 
-    def __init__(self, session=None):
-        self.session = session or get_tasks_session()
-        self.current_user_id = None
+    def __init__(self, session: Session):
+        self.session = session
+        self.tag_repo = TagRepo(session)
+        self.current_user_id = None  # ← ДОБАВИТЬ
 
-    def set_current_user_id(self, user_id):
+    def set_current_user_id(self, user_id: int):
+        """Устанавливает ID текущего пользователя"""
         self.current_user_id = user_id
+        print(f"📊 AnalyticsService: current_user_id = {user_id}")
 
     # ======================================================
-    # Загрузка данных
+    # Аналитика по сотрудникам
     # ======================================================
 
-    def load_test_data(self):
-        self._archived_projects = [
-            {
-                "id": 1,
-                "name": "Разработка новой CRM (завершен)",
-                "description": "Проект по разработке CRM системы",
-                "archived_at": "2025-12-15",
-                "created_at": "2025-01-10"
-            },
-            {
-                "id": 2,
-                "name": "Модернизация конвейера",
-                "description": "Устаревшая версия проекта",
-                "archived_at": "2025-10-20",
-                "created_at": "2025-03-15"
-            }
-        ]
+    def get_all_employees_with_stats(self) -> List[Dict[str, Any]]:
+        """
+        Получить всех сотрудников со статистикой:
+        - активные проекты (где сотрудник участник)
+        - выполненные задачи
+        - активные задачи
+        - просроченные задачи
+        - аналитика по тегам
+        """
+        # Получаем всех сотрудников из внешней БД
+        stmt = select(ExternalEmployee).order_by(ExternalEmployee.last_name)
+        employees = list(self.session.scalars(stmt))
 
-        self._archived_tasks = [
-            {
-                "id": 101,
-                "title": "Написание документации",
-                "description": "Старая версия",
-                "project_id": 1,
-                "priority": "medium"
-            },
-            {
-                "id": 102,
-                "title": "Интеграция API",
-                "description": "Больше не используется",
-                "project_id": 1,
-                "priority": "high"
-            }
-        ]
+        result = []
+        for emp in employees:
+            stats = self._get_employee_stats(emp.id)
+            result.append({
+                "id": emp.id,
+                "name": self._format_employee_name(emp),
+                "last_name": emp.last_name,
+                "first_name": emp.first_name,
+                "middle_name": emp.middle_name or "",
+                "position": emp.position or "—",
+                "department_id": emp.department_id,
+                "division_id": emp.division_id,
+                "department": self._get_department_name(emp.department_id),
+                "subdivision": self._get_division_name(emp.division_id),
+                "active_projects": stats["active_projects"],
+                "completed_projects": stats["completed_projects"],
+                "active_tasks": stats["active_tasks"],
+                "completed_tasks": stats["completed_tasks"],
+                "overdue_tasks": stats["overdue_tasks"],
+                "total_tasks": stats["total_tasks"],
+                "tag_analytics": stats["tag_analytics"]
+            })
 
-    # ======================================================
-    # Получение данных
-    # ======================================================
+        return result
 
-    def get_archived_projects(self) -> List[Dict]:
-        return [
-            {
-                **project,
-                "archived_tasks_count": self._count_tasks(project["id"])
-            }
-            for project in self._archived_projects
-        ]
+    def _get_employee_stats(self, employee_id: int) -> Dict[str, Any]:
+        """Получить статистику сотрудника"""
+        from datetime import datetime
 
-    def get_project_tasks(self, project_id: int) -> List[Dict]:
-        return [
-            task for task in self._archived_tasks
-            if task["project_id"] == project_id
-        ]
+        # 1. Проекты сотрудника
+        projects_stmt = select(Project).join(
+            EmployeeProject, Project.id == EmployeeProject.project_id
+        ).where(EmployeeProject.employee_id == employee_id)
 
-    def get_project_by_id(self, project_id: int) -> Optional[Dict]:
-        return next(
-            (p for p in self._archived_projects if p["id"] == project_id),
-            None
-        )
+        all_projects = list(self.session.scalars(projects_stmt))
 
-    def get_task_by_id(self, task_id: int) -> Optional[Dict]:
-        return next(
-            (t for t in self._archived_tasks if t["id"] == task_id),
-            None
-        )
+        # Активные проекты (не архивные) и выполненные проекты (архивные)
+        active_projects = []
+        completed_projects = []
 
-    def _count_tasks(self, project_id: int) -> int:
-        return len([
-            t for t in self._archived_tasks
-            if t["project_id"] == project_id
-        ])
+        for p in all_projects:
+            # Получаем полные данные проекта с задачами
+            proj_dict = self._project_to_dict(p)
+            if p.is_archived:
+                completed_projects.append(proj_dict)
+            else:
+                active_projects.append(proj_dict)
 
-    # ======================================================
-    # Поиск
-    # ======================================================
-
-    def search_projects(self, text: str) -> List[Dict]:
-        text = text.lower()
-
-        return [
-            {
-                **project,
-                "archived_tasks_count": self._count_tasks(project["id"])
-            }
-            for project in self._archived_projects
-            if text in project["name"].lower()
-            or text in project.get("description", "").lower()
-        ]
-
-    def search_tasks(self, project_id: int, text: str) -> List[Dict]:
-        text = text.lower()
-
-        return [
-            task for task in self._archived_tasks
-            if task["project_id"] == project_id
-            and (
-                text in task["title"].lower()
-                or text in task.get("description", "").lower()
+        # 2. Задачи сотрудника (как исполнитель или создатель)
+        tasks_stmt = select(Task).where(
+            or_(
+                Task.assigned_to == employee_id,
+                Task.created_by == employee_id
             )
-        ]
+        )
+        all_tasks = list(self.session.scalars(tasks_stmt))
+
+        # Подсчет статистики по задачам
+        active_tasks = 0
+        completed_tasks = 0
+        overdue_tasks = 0
+
+        for task in all_tasks:
+            is_completed = False
+            if task.column:
+                is_completed = task.column.is_done_column
+
+            if is_completed or task.is_archived:
+                completed_tasks += 1
+            else:
+                active_tasks += 1
+
+            # Проверка на просрочку
+            if task.deadline and not is_completed and not task.is_archived:
+                if task.deadline.date() < datetime.now().date():
+                    overdue_tasks += 1
+
+        # 3. Аналитика по тегам (темам)
+        tag_analytics = self._get_employee_tag_analytics(employee_id, all_tasks)
+
+        return {
+            "active_projects": active_projects,
+            "completed_projects": completed_projects,
+            "active_tasks": active_tasks,
+            "completed_tasks": completed_tasks,
+            "overdue_tasks": overdue_tasks,
+            "total_tasks": len(all_tasks),
+            "tag_analytics": tag_analytics
+        }
+
+    def _get_employee_tag_analytics(self, employee_id: int, tasks: List[Task]) -> List[Dict]:
+        """Получить аналитику по тегам для сотрудника"""
+        tag_stats = {}
+
+        for task in tasks:
+            # Получаем теги задачи
+            task_tags = self.tag_repo.get_task_tags(task.id)
+
+            for tag in task_tags:
+                tag_name = tag.name
+                if tag_name not in tag_stats:
+                    tag_stats[tag_name] = {
+                        "tag": tag_name,
+                        "count": 0,
+                        "completed": 0,
+                        "kpd": 0.0
+                    }
+
+                tag_stats[tag_name]["count"] += 1
+
+                # Проверяем, выполнена ли задача
+                is_completed = False
+                if task.column:
+                    is_completed = task.column.is_done_column
+                if is_completed or task.is_archived:
+                    tag_stats[tag_name]["completed"] += 1
+
+        # Рассчитываем КПД для каждого тега
+        for tag_name, stats in tag_stats.items():
+            if stats["count"] > 0:
+                stats["kpd"] = round(stats["completed"] / stats["count"], 2)
+            else:
+                stats["kpd"] = 0.0
+
+        # Сортируем по количеству задач
+        return sorted(tag_stats.values(), key=lambda x: x["count"], reverse=True)
 
     # ======================================================
-    # Восстановление
+    # Аналитика по темам (тегам)
     # ======================================================
 
-    def restore_project(self, project_id: int) -> bool:
-        if not self.get_project_by_id(project_id):
-            return False
+    def get_themes_stats(self) -> List[Dict[str, Any]]:
+        """Получить статистику по всем темам (тегам)"""
+        all_tags = self.tag_repo.get_all(include_archived=False)
+        result = []
 
-        self._archived_projects = [
-            p for p in self._archived_projects
-            if p["id"] != project_id
-        ]
+        for tag in all_tags:
+            # Получаем все задачи с этим тегом
+            task_ids = self.tag_repo.get_tasks_by_tag(tag.id)
+            tasks = []
+            for task_id in task_ids:
+                task = self.session.get(Task, task_id)
+                if task and not task.is_archived:
+                    tasks.append(task)
 
-        self._archived_tasks = [
-            t for t in self._archived_tasks
-            if t["project_id"] != project_id
-        ]
+            # Статистика по проектам
+            project_stats = {}
+            # Статистика по сотрудникам
+            employee_stats = {}
 
-        return True
+            for task in tasks:
+                # Проект
+                project = self.session.get(Project, task.project_id)
+                if project:
+                    project_name = project.name
+                    if project_name not in project_stats:
+                        project_stats[project_name] = {
+                            "project_name": project_name,
+                            "task_count": 0,
+                            "completed_count": 0
+                        }
+                    project_stats[project_name]["task_count"] += 1
 
-    def restore_task(self, task_id: int) -> bool:
-        if not self.get_task_by_id(task_id):
-            return False
+                    # Проверка на выполнение
+                    is_completed = False
+                    if task.column:
+                        is_completed = task.column.is_done_column
+                    if is_completed:
+                        project_stats[project_name]["completed_count"] += 1
 
-        self._archived_tasks = [
-            t for t in self._archived_tasks
-            if t["id"] != task_id
-        ]
+                # Сотрудник (исполнитель)
+                if task.assigned_to:
+                    emp = self.session.get(ExternalEmployee, task.assigned_to)
+                    if emp:
+                        emp_name = self._format_employee_name(emp)
+                        if emp_name not in employee_stats:
+                            employee_stats[emp_name] = {
+                                "employee_id": task.assigned_to,
+                                "employee_name": emp_name,
+                                "task_count": 0,
+                                "completed_count": 0,
+                                "avg_kpi": 0,
+                                "low": 0,
+                                "medium": 0,
+                                "high": 0,
+                                "critical": 0
+                            }
+                        employee_stats[emp_name]["task_count"] += 1
 
-        return True
+                        # Считаем приоритеты
+                        priority = task.priority.value if hasattr(task.priority, 'value') else str(task.priority)
+                        if priority in employee_stats[emp_name]:
+                            employee_stats[emp_name][priority] += 1
+                        elif priority == "low":
+                            employee_stats[emp_name]["low"] += 1
+                        elif priority == "medium":
+                            employee_stats[emp_name]["medium"] += 1
+                        elif priority == "high":
+                            employee_stats[emp_name]["high"] += 1
+                        elif priority == "critical":
+                            employee_stats[emp_name]["critical"] += 1
+
+                        is_completed = False
+                        if task.column:
+                            is_completed = task.column.is_done_column
+                        if is_completed:
+                            employee_stats[emp_name]["completed_count"] += 1
+
+            # Рассчитываем средний КПД для сотрудников
+            for emp_name, stats in employee_stats.items():
+                if stats["task_count"] > 0:
+                    stats["avg_kpi"] = round(stats["completed_count"] / stats["task_count"], 2)
+                else:
+                    stats["avg_kpi"] = 0
+
+            # КПД для тега
+            total_tasks = len(tasks)
+            completed_tasks = sum(1 for t in tasks if t.column and t.column.is_done_column)
+            kpd = round(completed_tasks / total_tasks, 2) if total_tasks > 0 else 0
+
+            result.append({
+                "theme_name": tag.name,
+                "tag_id": tag.id,
+                "color": tag.color,
+                "task_count": total_tasks,
+                "completed_count": completed_tasks,
+                "kpd": kpd,
+                "project_stats": list(project_stats.values()),
+                "employee_stats": list(employee_stats.values())
+            })
+
+        # Сортируем по количеству задач
+        return sorted(result, key=lambda x: x["task_count"], reverse=True)
+
+    # services/analytics_service.py - метод get_projects_stats
+
+    def get_projects_stats(self) -> List[Dict[str, Any]]:
+        """Получить статистику по всем проектам"""
+        stmt = select(Project).order_by(Project.name)
+        projects = list(self.session.scalars(stmt))
+
+        result = []
+        for project in projects:
+            # Задачи проекта
+            tasks = self.session.scalars(
+                select(Task).where(Task.project_id == project.id)
+            ).all()
+
+            # Группируем задачи по статусам для ProjectCard
+            grouped_tasks = {
+                "to_do": [],
+                "in_progress": [],
+                "review": [],
+                "completed": []
+            }
+
+            active_tasks = 0
+            completed_tasks = 0
+            overdue_tasks = 0
+            high_priority_tasks = 0
+
+            for task in tasks:
+                # Определяем статус
+                status = "to_do"
+                is_completed = False
+
+                if task.column:
+                    column_name = task.column.name.lower()
+                    if task.column.is_done_column:
+                        status = "completed"
+                        is_completed = True
+                    elif "проверк" in column_name:
+                        status = "review"
+                    elif "работ" in column_name:
+                        status = "in_progress"
+                    else:
+                        status = "to_do"
+
+                # Формируем DTO задачи для карточки
+                task_dto = self._task_to_analytics_dto(task, status, is_completed)
+
+                # 🔧 ВАЖНО: Добавляем задачу в grouped_tasks
+                if status in grouped_tasks:
+                    grouped_tasks[status].append(task_dto)
+                else:
+                    grouped_tasks["to_do"].append(task_dto)
+
+                if is_completed or task.is_archived:
+                    completed_tasks += 1
+                else:
+                    active_tasks += 1
+
+                if task.deadline and not is_completed and not task.is_archived:
+                    if task.deadline.date() < datetime.now().date():
+                        overdue_tasks += 1
+
+                if task.priority.value in ["high", "critical"]:
+                    high_priority_tasks += 1
+
+            # Участники проекта
+            members_stmt = select(EmployeeProject).where(
+                EmployeeProject.project_id == project.id
+            )
+            members = list(self.session.scalars(members_stmt))
+
+            employees = []
+            for member in members:
+                emp = self.session.get(ExternalEmployee, member.employee_id)
+                if emp:
+                    # Считаем статистику сотрудника в этом проекте
+                    emp_tasks = [t for t in tasks if t.assigned_to == emp.id]
+                    active = sum(
+                        1 for t in emp_tasks if not (t.column and t.column.is_done_column) and not t.is_archived)
+                    completed = sum(1 for t in emp_tasks if (t.column and t.column.is_done_column) or t.is_archived)
+
+                    employees.append({
+                        "id": emp.id,
+                        "name": self._format_employee_name(emp),
+                        "is_admin": member.is_admin or False,
+                        "active_tasks": active,
+                        "completed_tasks": completed,
+                        "active": active,  # 🔧 Добавляем для совместимости с EmployeeProjectCard
+                        "completed": completed  # 🔧 Добавляем для совместимости с EmployeeProjectCard
+                    })
+
+            # 🔧 ДОБАВЛЯЕМ ОТЛАДКУ
+            print(f"📊 Проект: {project.name}")
+            print(f"   Всего задач: {len(tasks)}")
+            print(
+                f"   grouped_tasks: to_do={len(grouped_tasks['to_do'])}, in_progress={len(grouped_tasks['in_progress'])}, review={len(grouped_tasks['review'])}, completed={len(grouped_tasks['completed'])}")
+            print(f"   Сотрудников: {len(employees)}")
+
+            result.append({
+                "id": project.id,
+                "name": project.name,
+                "description": project.description or "",
+                "is_archived": project.is_archived,
+                "created_at": project.created_at.strftime("%d.%m.%Y") if project.created_at else "",
+                "created_at_str": project.created_at.strftime("%d.%m.%Y") if project.created_at else "",
+                "total_tasks": len(tasks),
+                "active_tasks": active_tasks,
+                "completed_tasks": completed_tasks,
+                "overdue_tasks": overdue_tasks,
+                "high_priority_tasks": high_priority_tasks,
+                "members": employees,
+                "employees": employees,  # 🔧 Дублируем для совместимости
+                "member_count": len(employees),
+                "emp_count": len(employees),  # 🔧 Для совместимости
+                "grouped_tasks": grouped_tasks,  # 🔧 Это ключевое поле!
+                "status_display": "Активный" if not project.is_archived else "Архивный"
+            })
+
+        return result
+
+    def _task_to_analytics_dto(self, task: Task, status: str, is_completed: bool) -> Dict:
+        """Преобразует задачу в DTO для аналитики"""
+        # Получаем теги
+        task_tags = self.tag_repo.get_task_tags(task.id)
+        tags_list = [tag.name for tag in task_tags]
+
+        # Получаем создателя
+        creator_name = "Неизвестен"
+        if task.created_by:
+            creator = self.session.get(ExternalEmployee, task.created_by)
+            if creator:
+                creator_name = self._format_employee_name(creator)
+
+        return {
+            "id": task.id,
+            "title": task.title,
+            "description": task.description or "",
+            "priority": task.priority.value if hasattr(task.priority, 'value') else str(task.priority),
+            "status": status,
+            "is_overdue": task.deadline and task.deadline.date() < datetime.now().date() and not is_completed,
+            "is_completed": is_completed,
+            "created_at_str": task.created_at.strftime("%d.%m.%Y") if task.created_at else "",
+            "due_date_str": task.deadline.strftime("%d.%m.%Y") if task.deadline else "",
+            "completed_at_str": task.archived_at.strftime("%d.%m.%Y") if task.archived_at else "",
+            "creator_name": creator_name,
+            "tags_list": tags_list,
+            "project_name": self.session.get(Project, task.project_id).name if task.project_id else ""
+        }
 
     # ======================================================
-    # Полное удаление
+    # Вспомогательные методы
     # ======================================================
 
-    def delete_project_permanently(self, project_id: int) -> bool:
-        return self.restore_project(project_id)
+    def _format_employee_name(self, emp: ExternalEmployee) -> str:
+        """Форматирует ФИО сотрудника"""
+        parts = [emp.last_name, emp.first_name]
+        if emp.middle_name:
+            parts.append(emp.middle_name)
+        return " ".join(parts)
 
-    def delete_task_permanently(self, task_id: int) -> bool:
-        return self.restore_task(task_id)
+    def _get_department_name(self, department_id: Optional[int]) -> str:
+        """Получить название отдела по ID"""
+        if not department_id:
+            return "—"
+        dept = self.session.get(DepartmentFDW, department_id)
+        return dept.name if dept else "—"
 
-    def get_project_display_name(self, project_id: int) -> str:
-        project = self.get_project_by_id(project_id)
-        return project["name"] if project else ""
+    def _get_division_name(self, division_id: Optional[int]) -> str:
+        """Получить название подразделения по ID"""
+        if not division_id:
+            return "—"
+        div = self.session.get(DivisionFDW, division_id)
+        return div.name if div else "—"
 
-    def get_task_display_name(self, task_id: int) -> str:
-        task = self.get_task_by_id(task_id)
-        return task["title"] if task else ""
+    # services/analytics_service.py
+
+    def _project_to_dict(self, project: Project) -> Dict:
+        """Преобразует проект в словарь для карточки сотрудника"""
+        from datetime import datetime
+
+        # Считаем задачи проекта
+        tasks = self.session.scalars(
+            select(Task).where(Task.project_id == project.id)
+        ).all()
+
+        # Группируем задачи по статусам
+        grouped_tasks = {
+            "to_do": [],
+            "in_progress": [],
+            "review": [],
+            "completed": [],
+            "archived": []
+        }
+
+        for task in tasks:
+            status = "to_do"
+            is_completed = False
+
+            if task.column:
+                column_name = task.column.name.lower()
+                if task.column.is_done_column:
+                    status = "completed"
+                    is_completed = True
+                elif "проверк" in column_name:
+                    status = "review"
+                elif "работ" in column_name:
+                    status = "in_progress"
+                else:
+                    status = "to_do"
+
+            # Преобразуем задачу в словарь для UI
+            task_dict = {
+                "id": task.id,
+                "title": task.title,
+                "description": task.description or "",
+                "priority": task.priority.value if hasattr(task.priority, 'value') else str(task.priority),
+                "status": status,
+                "is_overdue": task.deadline and task.deadline.date() < datetime.now().date() and not is_completed,
+                "is_completed": is_completed,
+                "created_at_str": task.created_at.strftime("%d.%m.%Y") if task.created_at else "",
+                "due_date_str": task.deadline.strftime("%d.%m.%Y") if task.deadline else "",
+                "completed_at_str": task.archived_at.strftime("%d.%m.%Y") if task.archived_at else "",
+                "creator_name": "Неизвестен",
+                "tags_list": [],
+                "project_name": project.name
+            }
+
+            # Получаем создателя
+            if task.created_by:
+                creator = self.session.get(ExternalEmployee, task.created_by)
+                if creator:
+                    task_dict["creator_name"] = self._format_employee_name(creator)
+
+            # Получаем теги задачи
+            task_tags = self.tag_repo.get_task_tags(task.id)
+            task_dict["tags_list"] = [tag.name for tag in task_tags]
+
+            grouped_tasks[status].append(task_dict)
+
+        # Подсчет выполненных задач
+        completed_tasks = len(grouped_tasks["completed"]) + len(grouped_tasks["archived"])
+
+        return {
+            "id": project.id,
+            "name": project.name,
+            "created_at": project.created_at.strftime("%d.%m.%Y") if project.created_at else "",
+            "tasks_total": len(tasks),  # ✅ это есть
+            "tasks_done": completed_tasks,  # ✅ это есть
+            "tasks": tasks,
+            "grouped_tasks": grouped_tasks,
+            "is_archived": project.is_archived  # ✅ добавьте это поле
+        }

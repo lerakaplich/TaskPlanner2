@@ -1,6 +1,8 @@
 # windows/profile/projects_page.py
 
 import os
+from datetime import datetime
+from typing import List, Dict, Any, Union
 
 from PyQt6 import uic
 from PyQt6.QtWidgets import (
@@ -9,6 +11,7 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt, pyqtSignal
 
 from services.profile_service import ProfileService
+from models.tasks import Task
 
 
 class ProjectsPage(QWidget):
@@ -24,21 +27,23 @@ class ProjectsPage(QWidget):
 
         self.profile_service = ProfileService()
 
-        # Настройки окна
-        self.setWindowTitle("Проекты сотрудника")
-        self.setMinimumSize(800, 600)
-        self.resize(900, 700)
+        if not self.compact:
+            self.setMinimumSize(800, 600)
+            self.resize(900, 700)
 
         if not self.compact:
             ui_path = os.path.join(
                 os.path.dirname(__file__), "..", "..", "ui", "profile"
             )
-            uic.loadUi(os.path.join(ui_path, "projects_page.ui"), self)
-            self.projects_layout = self.findChild(QVBoxLayout, "projectsLayout")
-
-            # Добавляем кнопку закрытия, если её нет в UI
-            if hasattr(self, 'btnClose'):
-                self.btnClose.clicked.connect(self.close)
+            ui_file = os.path.join(ui_path, "projects_page.ui")
+            if os.path.exists(ui_file):
+                uic.loadUi(ui_file, self)
+                self.projects_layout = self.findChild(QVBoxLayout, "projectsLayout")
+                if hasattr(self, 'btnClose'):
+                    self.btnClose.clicked.connect(self.close)
+            else:
+                self.setLayout(QVBoxLayout())
+                self.projects_layout = self.layout()
         else:
             self.setLayout(QVBoxLayout())
             self.projects_layout = self.layout()
@@ -47,7 +52,42 @@ class ProjectsPage(QWidget):
 
         self.refresh_data()
 
-    # ---------- DATA ----------
+    def _get_tasks_from_project(self, project):
+        """Извлекает задачи из проекта в зависимости от режима"""
+        tasks = []
+
+        # Если есть grouped_tasks
+        if "grouped_tasks" in project:
+            grouped = project["grouped_tasks"]
+            if self.mode == "active":
+                # Активные задачи: to_do, in_progress, review
+                tasks = grouped.get("to_do", []) + grouped.get("in_progress", []) + grouped.get("review", [])
+            elif self.mode == "completed":
+                # Выполненные задачи: completed, archived
+                tasks = grouped.get("completed", []) + grouped.get("archived", [])
+            else:
+                tasks = grouped.get("to_do", []) + grouped.get("in_progress", []) + \
+                        grouped.get("review", []) + grouped.get("completed", []) + \
+                        grouped.get("archived", [])
+        # Если есть обычные задачи
+        elif "tasks" in project:
+            raw_tasks = project["tasks"]
+            for task in raw_tasks:
+                is_completed = False
+                if isinstance(task, Task):
+                    is_completed = task.completed or task.is_archived
+                elif isinstance(task, dict):
+                    is_completed = task.get("is_completed", False) or task.get("status", "").lower() in ("completed",
+                                                                                                         "archived")
+
+                if self.mode == "active" and not is_completed:
+                    tasks.append(task)
+                elif self.mode == "completed" and is_completed:
+                    tasks.append(task)
+                elif self.mode == "all":
+                    tasks.append(task)
+
+        return tasks
 
     def load_projects(self):
         """Загружает проекты в зависимости от режима"""
@@ -58,50 +98,60 @@ class ProjectsPage(QWidget):
                 self.employee_id
             )
 
-        # Фильтруем по режиму
-        if self.mode == "completed":
-            filtered_projects = []
-            for project in projects:
-                completed_tasks = [
-                    t for t in project["tasks"]
-                    if t.get("status", "").lower() in ("completed", "archived")
-                ]
-                if completed_tasks:
-                    filtered_projects.append({
-                        "name": project["name"],
-                        "tasks": completed_tasks,
-                        "id": project.get("id")
-                    })
-            return filtered_projects, "Нет выполненных проектов"
+        filtered_projects = []
+        for project in projects:
+            # Получаем имя проекта
+            project_name = project.get("name", "Без названия")
+            project_id = project.get("id")
 
-        elif self.mode == "active":
-            filtered_projects = []
-            for project in projects:
-                active_tasks = [
-                    t for t in project["tasks"]
-                    if t.get("status", "").lower() not in ("completed", "archived")
-                ]
-                if active_tasks:
-                    filtered_projects.append({
-                        "name": project["name"],
-                        "tasks": active_tasks,
-                        "id": project.get("id")
-                    })
-            return filtered_projects, "Нет активных проектов"
+            # Получаем задачи для текущего режима
+            tasks = self._get_tasks_from_project(project)
 
-        else:  # mode == "all"
-            # Показываем все проекты со всеми задачами
-            all_projects = []
-            for project in projects:
-                if project["tasks"]:  # Только проекты с задачами
-                    all_projects.append({
-                        "name": project["name"],
-                        "tasks": project["tasks"],
-                        "id": project.get("id")
-                    })
-            return all_projects, "Нет проектов"
+            # 🔧 ИСПРАВЛЕНИЕ: Показываем проект, даже если задач 0
+            # Определяем, должен ли проект отображаться в текущем режиме
+            is_archived = project.get("is_archived", False)
 
-    # ---------- UI ----------
+            if self.mode == "active":
+                should_show = not is_archived  # Показываем все неархивные проекты
+            elif self.mode == "completed":
+                should_show = is_archived  # Показываем все архивные проекты
+            else:  # all
+                should_show = True
+
+            # Показываем проект, если он подходит по режиму ИЛИ в нем есть задачи
+            if should_show or tasks:
+                filtered_projects.append({
+                    "name": project_name,
+                    "tasks": tasks,
+                    "id": project_id,
+                    "grouped_tasks": project.get("grouped_tasks"),
+                    "tasks_total": project.get("tasks_total", 0),
+                    "tasks_done": project.get("tasks_done", 0),
+                    "is_archived": is_archived
+                })
+
+        # Текст для пустого состояния
+        texts = {
+            "active": "Нет активных проектов",
+            "completed": "Нет выполненных проектов",
+            "all": "Нет проектов"
+        }
+
+        print(f"   ProjectsPage ({self.mode}): загружено {len(filtered_projects)} проектов")
+        for p in filtered_projects:
+            print(f"      - {p['name']} (задач: {len(p['tasks'])}, всего: {p.get('tasks_total', 0)})")
+
+        return filtered_projects, texts.get(self.mode, "Нет проектов")
+
+    # windows/profile/projects_page.py
+
+    def update_data(self, projects_data=None, employee_id=None):
+        """Обновляет данные и перерисовывает UI"""
+        if projects_data is not None:
+            self.projects_data = projects_data
+        if employee_id is not None:
+            self.employee_id = employee_id
+        self.refresh_data()
 
     def refresh_data(self):
         """Обновляет отображение проектов"""
@@ -123,18 +173,59 @@ class ProjectsPage(QWidget):
             for project in projects:
                 self.add_project_section(
                     project["name"],
-                    project["tasks"]
+                    project["tasks"],
+                    project.get("grouped_tasks")
                 )
 
         self.projects_layout.addStretch()
 
-    # ---------- PROJECT ----------
+    def _task_to_dict(self, task) -> Dict:
+        """Преобразует задачу в словарь для UI"""
+        if isinstance(task, dict):
+            return task
+        elif isinstance(task, Task):
+            status = "to_do"
+            is_completed = False
+            if task.column:
+                column_name = task.column.name.lower()
+                if task.column.is_done_column:
+                    status = "completed"
+                    is_completed = True
+                elif "проверк" in column_name:
+                    status = "review"
+                elif "работ" in column_name:
+                    status = "in_progress"
+                else:
+                    status = "to_do"
 
-    def add_project_section(self, project_name, tasks):
+            return {
+                "id": task.id,
+                "title": task.title,
+                "description": task.description or "",
+                "priority": task.priority.value if hasattr(task.priority, 'value') else str(task.priority),
+                "status": status,
+                "is_overdue": task.deadline and task.deadline.date() < datetime.now().date() and not is_completed,
+                "is_completed": is_completed,
+                "created_at_str": task.created_at.strftime("%d.%m.%Y") if task.created_at else "",
+                "due_date_str": task.deadline.strftime("%d.%m.%Y") if task.deadline else "",
+                "completed_at_str": task.archived_at.strftime("%d.%m.%Y") if task.archived_at else "",
+                "creator_name": "Неизвестен",
+                "tags_list": [],
+                "project_name": ""
+            }
+        return {}
+
+    # windows/profile/projects_page.py
+
+    def add_project_section(self, project_name, tasks, grouped_tasks=None):
         """Добавляет секцию проекта с задачами"""
         from windows.analytics.task_card_analytics import TaskCard
 
-        # Стиль заголовка проекта
+        # 🔧 Убираем ранний return, даже если задач нет
+        # if not tasks:  # <-- УДАЛИТЬ ЭТУ СТРОКУ
+        #     return     # <-- УДАЛИТЬ ЭТУ СТРОКУ
+
+        # Стиль заголовка проекта (без изменений)
         if self.compact:
             header_style = """
                 QPushButton { background-color: #D22730; color: white; border-radius: 6px;
@@ -165,103 +256,100 @@ class ProjectsPage(QWidget):
         panel_layout.setContentsMargins(10 if self.compact else 20, 10, 10, 10)
         panel_layout.setSpacing(8)
 
-        # Статусы для группировки
-        status_order = ["to_do", "in_progress", "review", "completed", "archived"]
-        status_groups = {s: [] for s in status_order}
-
-        for task in tasks:
-            status = task.get("status", "").lower()
-            if status in status_groups:
-                status_groups[status].append(task)
-            else:
-                status_groups["to_do"].append(task)
-
-        # Параметры для карточек
-        check_overdue = (self.mode == "active")
-        show_theme = (self.mode == "active")
-        creator_names = TaskCard.DEFAULT_CREATOR_NAMES
-
-        # Создаём блоки для каждого статуса
-        for status_key in status_order:
-            status_tasks = status_groups.get(status_key, [])
-            if not status_tasks:
-                continue
-
-            status_display = TaskCard.STATUS_MAP.get(status_key, status_key.capitalize())
-
-            # Кнопка статуса
-            status_btn = QPushButton(f"▶ {status_display} ({len(status_tasks)})")
-            status_btn.setCheckable(True)
-
-            if self.compact:
-                font_size = "14px"
-                padding = "8px 12px"
-            else:
-                font_size = "15px"
-                padding = "10px 15px"
-
-            status_btn.setStyleSheet(f"""
-                QPushButton {{
-                    background-color: #1B232A;
-                    color: white;
-                    border: none;
-                    border-radius: 6px;
-                    padding: {padding};
-                    font-size: {font_size};
-                    font-weight: bold;
-                    text-align: left;
-                    margin-left: 5px;
-                }}
-                QPushButton:hover {{
-                    background-color: #D9D9D6;
-                    color: black;
-                }}
-                QPushButton:pressed {{
-                    background-color: #B8B8B5;
-                }}
-            """)
-            panel_layout.addWidget(status_btn)
-
-            # Панель задач статуса
-            tasks_panel = QFrame()
-            tasks_panel.setVisible(False)
-            tasks_panel.setStyleSheet("background-color: white; border-radius: 4px;")
-            tasks_layout = QVBoxLayout(tasks_panel)
-            tasks_layout.setContentsMargins(8, 8, 8, 8)
-            tasks_layout.setSpacing(6)
-
-            for task in status_tasks:
-                card = TaskCard(
-                    task_data=task,
-                    compact=self.compact,
-                    show_theme=show_theme,
-                    show_project=False,
-                    check_overdue=check_overdue,
-                    creator_names=creator_names
-                )
-                tasks_layout.addWidget(card)
-
-            panel_layout.addWidget(tasks_panel)
-
-            # Связываем кнопку статуса с панелью
-            def make_toggle(panel):
-                return lambda checked: panel.setVisible(checked)
-
-            status_btn.toggled.connect(make_toggle(tasks_panel))
-            status_btn.toggled.connect(lambda checked, btn=status_btn:
-                                       btn.setText(("▼" if checked else "▶") + btn.text()[1:]))
-
-        # Если задач в проекте нет
+        # 🔧 Добавляем обработку для пустых проектов
         if not tasks:
-            no_tasks = QLabel("Нет задач в этом проекте")
-            no_tasks.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            # Показываем сообщение "Нет задач"
+            empty_label = QLabel("📭 Нет задач в этом проекте")
+            empty_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            empty_label.setStyleSheet("color: #999; padding: 20px; font-style: italic; font-size: 13px;")
+            panel_layout.addWidget(empty_label)
+        else:
+            # Группируем задачи по статусам (код без изменений)
+            status_groups = {
+                "to_do": [],
+                "in_progress": [],
+                "review": [],
+                "completed": [],
+                "archived": []
+            }
 
-            if self.compact:
-                no_tasks.setStyleSheet("color: #888888; padding: 30px; font-size: 15px;")
-            else:
-                no_tasks.setStyleSheet("color: #888888; padding: 30px; font-size: 18px;")
+            for task in tasks:
+                if isinstance(task, dict):
+                    status = task.get("status", "to_do").lower()
+                else:
+                    status = "to_do"
+                if status in status_groups:
+                    status_groups[status].append(task)
+                else:
+                    status_groups["to_do"].append(task)
 
-            panel_layout.addWidget(no_tasks)
+            # Создаём блоки для каждого статуса с задачами
+            status_order = ["to_do", "in_progress", "review", "completed", "archived"]
+            for status_key in status_order:
+                status_tasks = status_groups.get(status_key, [])
+                if not status_tasks:
+                    continue
+
+                status_display = TaskCard.STATUS_MAP.get(status_key, status_key.capitalize())
+
+                # Кнопка статуса
+                status_btn = QPushButton(f"▶ {status_display} ({len(status_tasks)})")
+                status_btn.setCheckable(True)
+
+                if self.compact:
+                    font_size = "14px"
+                    padding = "8px 12px"
+                else:
+                    font_size = "15px"
+                    padding = "10px 15px"
+
+                status_btn.setStyleSheet(f"""
+                    QPushButton {{
+                        background-color: #1B232A;
+                        color: white;
+                        border: none;
+                        border-radius: 6px;
+                        padding: {padding};
+                        font-size: {font_size};
+                        font-weight: bold;
+                        text-align: left;
+                        margin-left: 5px;
+                    }}
+                    QPushButton:hover {{
+                        background-color: #D9D9D6;
+                        color: black;
+                    }}
+                    QPushButton:pressed {{
+                        background-color: #B8B8B5;
+                    }}
+                """)
+                panel_layout.addWidget(status_btn)
+
+                # Панель задач статуса
+                tasks_panel = QFrame()
+                tasks_panel.setVisible(False)
+                tasks_panel.setStyleSheet("background-color: white; border-radius: 4px;")
+                tasks_layout = QVBoxLayout(tasks_panel)
+                tasks_layout.setContentsMargins(8, 8, 8, 8)
+                tasks_layout.setSpacing(6)
+
+                for task in status_tasks:
+                    task_dict = self._task_to_dict(task)
+                    card = TaskCard(
+                        task_data=task_dict,
+                        compact=self.compact,
+                        show_theme=False,
+                        show_project=False
+                    )
+                    tasks_layout.addWidget(card)
+
+                panel_layout.addWidget(tasks_panel)
+
+                # Связываем кнопку статуса с панелью
+                def make_toggle(panel, btn):
+                    return lambda checked: self._toggle_status_panel(checked, panel, btn)
+
+                status_btn.toggled.connect(make_toggle(tasks_panel, status_btn))
 
         self.projects_layout.addWidget(header_btn)
         self.projects_layout.addWidget(project_panel)
@@ -274,7 +362,11 @@ class ProjectsPage(QWidget):
 
         header_btn.toggled.connect(toggle_project_panel)
 
-    # ---------- API ----------
+    def _toggle_status_panel(self, checked, panel, button):
+        """Переключает видимость панели статуса"""
+        panel.setVisible(checked)
+        arrow = "▼" if checked else "▶"
+        button.setText(arrow + button.text()[1:])
 
     def set_employee_id(self, employee_id):
         """Устанавливает ID сотрудника и обновляет данные"""

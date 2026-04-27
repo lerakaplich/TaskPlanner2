@@ -1,5 +1,6 @@
 # services/projects_service.py
 
+import json  # 👈 ДОБАВИТЬ
 from datetime import datetime
 from typing import List, Optional, Dict, Any
 from sqlalchemy.orm import Session
@@ -11,7 +12,7 @@ from models.schemas.tasks_dto import TaskCardDTO, TaskPriority
 from repositories.project_repo import ProjectRepo
 from repositories.task_repo import TaskRepo
 from repositories.external_employee_repo import ExternalEmployeeRepo
-from services.column_service import ColumnService  # ← ДОБАВИТЬ
+from services.column_service import ColumnService
 
 
 class ProjectsService:
@@ -21,10 +22,9 @@ class ProjectsService:
         self.project_repo = ProjectRepo(session)
         self.task_repo = TaskRepo(session)
         self.employee_repo = ExternalEmployeeRepo(session)
-        self.column_service = ColumnService(session)  # ← ДОБАВИТЬ
+        self.column_service = ColumnService(session)
 
     def set_current_user_id(self, user_id):
-        """Устанавливает ID текущего пользователя"""
         self.current_user_id = user_id
 
     def set_current_user(self, user):
@@ -32,94 +32,90 @@ class ProjectsService:
 
     def get_projects_for_cards(self, search_query: str = "", status_filter: str = "Все", owner_filter: bool = False) -> \
     List[ProjectCardDTO]:
-        """
-        Получает список проектов, фильтрует их и возвращает в виде списка DTO для карточек.
+        try:
+            all_projects = self.project_repo.get_all(exclude_archived=True)
+            result = []
 
-        ВАЖНО: Архивные проекты НИКОГДА не возвращаются в этой вкладке!
-        """
-        all_projects = self.project_repo.get_all(exclude_archived=True)
-        print(f"📊 Запрошены ТОЛЬКО АКТИВНЫЕ проекты из БД (архивные исключены принудительно)")
+            for proj in all_projects:
+                try:
+                    if owner_filter and proj.owner != self.current_user_id:
+                        continue
 
-        result = []
+                    if search_query and search_query.lower() not in proj.name.lower():
+                        continue
 
-        for proj in all_projects:
-            if owner_filter and proj.owner != self.current_user_id:
-                continue
+                    tasks = self.task_repo.get_by_project(proj.id)
+                    total_tasks = len(tasks)
+                    done_tasks = len([t for t in tasks if t.column and t.column.is_done_column])
 
-            if search_query and search_query.lower() not in proj.name.lower():
-                continue
+                    member_count = len(proj.members) if hasattr(proj, 'members') else 0
+                    admin_count = len([m for m in proj.members if m.is_admin]) if hasattr(proj, 'members') else 0
 
-            tasks = self.task_repo.get_by_project(proj.id)
-            total_tasks = len(tasks)
-            done_tasks = len([t for t in tasks if t.column and t.column.is_done_column])
+                    # Исправленный вызов - с try/except
+                    try:
+                        columns_count = self.project_repo.get_project_columns_count(proj.id)
+                    except Exception as e:
+                        print(f"⚠️ Ошибка подсчета колонок для проекта {proj.id}: {e}")
+                        columns_count = 0
 
-            member_count = len(proj.members) if hasattr(proj, 'members') else 0
-            admin_count = len([m for m in proj.members if m.is_admin]) if hasattr(proj, 'members') else 0
+                    owner_name = "Не назначен"
+                    if proj.owner:
+                        owner = self.employee_repo.get_by_id(proj.owner)
+                        if owner:
+                            owner_name = f"{owner.last_name} {owner.first_name[0]}."
+                            if owner.middle_name:
+                                owner_name += f"{owner.middle_name[0]}."
 
-            owner_name = "Не назначен"
-            if proj.owner:
-                owner = self.employee_repo.get_by_id(proj.owner)
-                if owner:
-                    owner_name = f"{owner.last_name} {owner.first_name[0]}."
-                    if owner.middle_name:
-                        owner_name += f"{owner.middle_name[0]}."
+                    created_at_str = None
+                    if proj.created_at:
+                        created_at_str = proj.created_at.strftime("%d.%m.%Y")
 
-            created_at_str = None
-            if proj.created_at:
-                created_at_str = proj.created_at.strftime("%d.%m.%Y")
+                    card_dto = ProjectCardDTO(
+                        id=proj.id,
+                        name=proj.name,
+                        description=proj.description or "",
+                        tasks_total=total_tasks,
+                        tasks_done=done_tasks,
+                        deadline=proj.deadline,
+                        is_archived=proj.is_archived,
+                        member_count=member_count,
+                        admin_count=admin_count,
+                        owner_name=owner_name,
+                        owner_id=proj.owner,
+                        created_at=created_at_str,
+                        columns_count=columns_count
+                    )
 
-            card_dto = ProjectCardDTO(
-                id=proj.id,
-                name=proj.name,
-                description=proj.description or "",
-                tasks_total=total_tasks,
-                tasks_done=done_tasks,
-                deadline=proj.deadline,
-                is_archived=proj.is_archived,
-                member_count=member_count,
-                admin_count=admin_count,
-                owner_name=owner_name,
-                owner_id=proj.owner,
-                created_at=created_at_str
-            )
+                    result.append(card_dto)
+                except Exception as e:
+                    print(f"⚠️ Ошибка при обработке проекта {proj.id if hasattr(proj, 'id') else 'unknown'}: {e}")
+                    continue
 
-            result.append(card_dto)
-
-        return result
+            return result
+        except Exception as e:
+            print(f"❌ Критическая ошибка в get_projects_for_cards: {e}")
+            import traceback
+            traceback.print_exc()
+            return []
 
     def archive_project(self, project_id: int) -> bool:
-        """
-        Архивирует проект (устанавливает is_archived = True)
-        """
         try:
             project = self.project_repo.get_by_id(project_id)
-
             if not project:
-                print(f"❌ Проект {project_id} не найден")
                 return False
 
             project.is_archived = True
             project.updated_at = datetime.now()
-
             self.session.commit()
-            print(f"✅ Проект {project_id} успешно архивирован")
             return True
-
         except Exception as e:
             self.session.rollback()
             print(f"❌ Ошибка при архивации проекта: {e}")
             return False
 
-    # ==================== ИЗМЕНЕННЫЙ МЕТОД СОЗДАНИЯ ПРОЕКТА ====================
-
-    # services/projects_service.py
-
     def create_new_project(self, raw_data: dict, creator_id: int) -> Optional[ProjectWithMembersDTO]:
-        """
-        Создает проект 'под ключ': запись в БД, участников и колонки из шаблонов.
-        """
         try:
-            # 1. Создаем сам проект
+            # 1. Создаем проект
             project = self.project_repo.create(
                 name=raw_data['name'],
                 description=raw_data.get('description', ''),
@@ -133,7 +129,35 @@ class ProjectsService:
             self.session.flush()
             print(f"✅ Проект создан в БД, ID: {project.id}")
 
-            # 2. Обработка участников (как было)
+            # 2. Создаем колонки для канбан-доски и сохраняем их ID
+            selected_columns_data = raw_data.get('selected_columns_data', [])
+            created_columns = []
+            column_ids = []
+
+            if selected_columns_data:
+                created_columns = self.column_service.create_project_columns_batch(
+                    project_id=project.id,
+                    columns_data=selected_columns_data
+                )
+                # Сохраняем ID созданных колонок
+                column_ids = [col['id'] for col in created_columns]
+                self.project_repo.save_selected_column_ids(project.id, column_ids)
+                print(f"✅ Создано {len(created_columns)} колонок, ID: {column_ids}")
+            else:
+                default_columns = [
+                    {'name': 'Название проекта', 'color': '#1B232A', 'position': 0, 'is_done_column': False},
+                    {'name': 'Статус', 'color': '#ccab6e', 'position': 1, 'is_done_column': False},
+                    {'name': 'Прогресс', 'color': '#9b59b6', 'position': 2, 'is_done_column': False}
+                ]
+                created_columns = self.column_service.create_project_columns_batch(
+                    project_id=project.id,
+                    columns_data=default_columns
+                )
+                column_ids = [col['id'] for col in created_columns]
+                self.project_repo.save_selected_column_ids(project.id, column_ids)
+                print(f"✅ Создано {len(created_columns)} стандартных колонок, ID: {column_ids}")
+
+            # 3. Обработка участников
             def to_id_list(val):
                 if isinstance(val, str):
                     return [int(i.strip()) for i in val.split(',') if i.strip().isdigit()]
@@ -153,52 +177,7 @@ class ProjectsService:
                 )
                 print(f"✅ Добавлен участник ID: {emp_id}")
 
-            # 3. Создание колонок через column_service
-            print("📋 Создаем колонки из шаблонов...")
-
-            # Получаем шаблонные колонки
-            template_columns = self.column_service.get_template_columns()
-
-            if template_columns:
-                # Копируем шаблоны в проект
-                for template in template_columns:
-                    column = self.column_service.create_project_column(
-                        project_id=project.id,
-                        template_column_id=template['id']
-                    )
-                    if column:
-                        print(f"  ✅ Создана колонка: {column['name']} (ID: {column['id']})")
-                    else:
-                        print(f"  ❌ Ошибка при создании колонки из шаблона {template['name']}")
-            else:
-                # Fallback: создаем стандартные колонки
-                print("⚠️ Шаблонные колонки не найдены, создаем стандартные")
-                default_columns = [
-                    ("К выполнению", 0, False, "#ccab6e"),
-                    ("В работе", 1, False, "#3498db"),
-                    ("Проверка", 2, False, "#e67e22"),
-                    ("Готово", 3, True, "#2ecc71")
-                ]
-
-                for name, pos, is_done, color in default_columns:
-                    column = self.column_service.create_project_column(
-                        project_id=project.id,
-                        custom_data={
-                            'name': name,
-                            'color': color,
-                            'position': pos,
-                            'is_done_column': is_done
-                        }
-                    )
-                    if column:
-                        print(f"  ✅ Создана стандартная колонка: {name} (ID: {column['id']})")
-                    else:
-                        print(f"  ❌ Ошибка при создании колонки {name}")
-
-            # Фиксируем все изменения
             self.session.commit()
-            print(f"✅ Проект успешно сохранен в БД")
-
             return self.get_project_for_edit(project.id)
 
         except Exception as e:
@@ -220,31 +199,32 @@ class ProjectsService:
             project.deadline = dto.deadline
             project.updated_at = datetime.now()
 
+            # Сохраняем ID колонок, если они изменились
+            if hasattr(dto, 'selected_columns_data') and dto.selected_columns_data:
+                # Нужно обновить колонки в проекте
+                # Для простоты: удаляем старые и создаем новые
+                # Или можно обновлять существующие
+                pass
+
+            # Обновление участников...
             current_members = {m.employee_id: bool(m.is_admin) for m in project.members}
             target_members = {emp_id: (emp_id in dto.admin_ids) for emp_id in dto.member_ids}
 
             current_ids = set(current_members.keys())
             target_ids = set(target_members.keys())
 
-            print(f"📊 Текущие участники: {current_ids}")
-            print(f"📊 Новые участники: {target_ids}")
-
             for emp_id in (current_ids - target_ids):
-                print(f"🗑️ Удаляем участника {emp_id}")
                 self.project_repo.remove_member(project_id, emp_id)
 
             for emp_id in (target_ids - current_ids):
                 is_admin = target_members[emp_id]
-                print(f"➕ Добавляем участника {emp_id}, админ: {is_admin}")
                 self.project_repo.add_member(project_id, emp_id, is_admin=is_admin)
 
             for emp_id in (current_ids & target_ids):
                 if current_members[emp_id] != target_members[emp_id]:
-                    print(f"🔄 Обновляем роль участника {emp_id}, админ: {target_members[emp_id]}")
                     self.project_repo.update_member_role(project_id, emp_id, is_admin=target_members[emp_id])
 
             self.session.commit()
-            print(f"✅ Проект {project_id} успешно обновлен")
             return True
 
         except Exception as e:
@@ -255,7 +235,6 @@ class ProjectsService:
             return False
 
     def get_project_for_edit(self, project_id: int) -> Optional[ProjectWithMembersDTO]:
-        """Получает проект для редактирования"""
         project = self.project_repo.get_by_id(project_id)
         if not project:
             return None
@@ -264,16 +243,35 @@ class ProjectsService:
         dto.member_ids = [m.employee_id for m in project.members]
         dto.admin_ids = [m.employee_id for m in project.members if m.is_admin]
 
+        # Загружаем данные колонок по сохраненным ID
+        column_ids = self.project_repo.get_selected_column_ids(project_id)
+        if column_ids:
+            # Получаем полные данные колонок из БД
+            from sqlalchemy import select
+            from models.projects import BoardColumn
+
+            stmt = select(BoardColumn).where(BoardColumn.id.in_(column_ids))
+            columns = self.session.scalars(stmt).all()
+
+            dto.selected_columns_data = []
+            for col in columns:
+                dto.selected_columns_data.append({
+                    'id': col.id,
+                    'name': col.name,
+                    'col_key': col.name.lower().replace(' ', '_'),
+                    'color': col.color,
+                    'position': col.position,
+                    'is_done_column': col.is_done_column
+                })
+
         print(f"✅ Проект загружен из БД: {dto.name} (ID: {dto.id})")
         print(f"   Участников: {len(dto.member_ids)}, Админов: {len(dto.admin_ids)}")
+        print(f"   ID колонок: {column_ids}")
 
         return dto
 
     def add_column_to_project(self, project_id: int, template_column_id: int = None, custom_data: Dict = None) -> \
     Optional[Dict[str, Any]]:
-        """
-        Добавить новую колонку в существующий проект
-        """
         try:
             column = self.column_service.create_project_column(
                 project_id=project_id,
@@ -293,42 +291,72 @@ class ProjectsService:
             return None
 
     def get_project_board_data(self, project_id: int) -> Optional[ProjectBoardDTO]:
-        """Собирает полное DTO доски для UI"""
         project = self.project_repo.get_by_id(project_id)
         if not project:
             return None
 
-        board_columns_dto = []
-        sorted_columns = sorted(project.columns, key=lambda x: x.position)
+        # Получаем колонки проекта из БД (те, которые уже созданы)
+        all_project_columns = self.column_service.get_project_columns(project_id)
 
-        for col in sorted_columns:
-            tasks = self.task_repo.get_by_column(col.id)
+        # Если есть созданные колонки - используем их
+        if all_project_columns:
+            board_columns_dto = []
+            for col in sorted(all_project_columns, key=lambda x: x['position']):
+                tasks = self.task_repo.get_by_column(col['id'])
 
-            task_cards = []
-            for t in tasks:
-                assigned_name = self.employee_repo.get_full_name(t.assigned_to) if t.assigned_to else "Не назначен"
-                is_overdue = (t.deadline < datetime.now()) if t.deadline else False
+                task_cards = []
+                for t in tasks:
+                    assigned_name = self.employee_repo.get_full_name(t.assigned_to) if t.assigned_to else "Не назначен"
+                    is_overdue = (t.deadline < datetime.now()) if t.deadline else False
 
-                task_cards.append(TaskCardDTO(
-                    id=t.id,
-                    title=t.title,
-                    priority=TaskPriority(t.priority.value if hasattr(t.priority, 'value') else t.priority),
-                    deadline=t.deadline,
-                    assigned_to_name=assigned_name,
-                    is_overdue=is_overdue
-                ))
+                    task_cards.append(TaskCardDTO(
+                        id=t.id,
+                        title=t.title,
+                        priority=TaskPriority(t.priority.value if hasattr(t.priority, 'value') else t.priority),
+                        deadline=t.deadline,
+                        assigned_to_name=assigned_name,
+                        is_overdue=is_overdue
+                    ))
 
-            col_dto = BoardColumnWithTasksDTO(
-                id=col.id,
-                name=col.name,
-                color=col.color or "#cccccc",
-                position=col.position,
-                is_done_column=col.is_done_column,
-                tasks=task_cards
-            )
-            board_columns_dto.append(col_dto)
+                col_dto = BoardColumnWithTasksDTO(
+                    id=col['id'],
+                    name=col['name'],
+                    color=col['color'] or "#cccccc",
+                    position=col['position'],
+                    is_done_column=col['is_done_column'],
+                    tasks=task_cards
+                )
+                board_columns_dto.append(col_dto)
+        else:
+            # Если нет колонок, создаем из сохраненных ID или шаблонов
+            column_ids = self.project_repo.get_selected_column_ids(project_id)
+            if column_ids:
+                from sqlalchemy import select
+                from models.projects import BoardColumn
+
+                stmt = select(BoardColumn).where(BoardColumn.id.in_(column_ids))
+                columns = self.session.scalars(stmt).all()
+
+                board_columns_dto = []
+                for col in columns:
+                    col_dto = BoardColumnWithTasksDTO(
+                        id=col.id,
+                        name=col.name,
+                        color=col.color or "#cccccc",
+                        position=col.position,
+                        is_done_column=col.is_done_column,
+                        tasks=[]
+                    )
+                    board_columns_dto.append(col_dto)
+            else:
+                # Если ничего нет, используем шаблонные колонки
+                board_columns_dto = []
+
+        # Загружаем сохраненные колонки в DTO проекта
+        project_dto = ProjectWithMembersDTO.model_validate(project)
+        project_dto.selected_columns_data = self.project_repo.get_selected_columns(project_id)
 
         return ProjectBoardDTO(
-            project=ProjectWithMembersDTO.model_validate(project),
+            project=project_dto,
             columns=board_columns_dto
         )

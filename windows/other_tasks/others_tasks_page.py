@@ -55,12 +55,8 @@ class OthersTasksPage(QWidget):
         self.projectFilter.currentTextChanged.connect(self.filter_tasks)
         self.btnCreateTask.clicked.connect(self.create_new_task)
 
-    # =====================================================
-    # Настройка UI
-    # =====================================================
-
     def setup_kanban(self):
-        """Создает колонки канбан-доски из ВСЕХ проектов"""
+        """Создает колонки канбан-доски с горизонтальной и вертикальной прокруткой"""
         self.clear_layout(self.kanbanLayout)
 
         column_data = self.service.get_column_data()
@@ -68,32 +64,76 @@ class OthersTasksPage(QWidget):
             print("⚠️ Нет колонок для отображения")
             return
 
-        splitter = QSplitter(Qt.Orientation.Horizontal)
-        splitter.setHandleWidth(5)
-        splitter.setStyleSheet("""
-            QSplitter::handle {
-                background-color: #E0E0E0;
-                border-radius: 2px;
+        # 👇 ВЕРТИКАЛЬНЫЙ СКРОЛЛ ДЛЯ ВСЕГО КОНТЕНТА
+        main_scroll = QScrollArea()
+        main_scroll.setWidgetResizable(True)
+        main_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        main_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        main_scroll.setStyleSheet("""
+            QScrollArea {
+                border: none;
+                background-color: transparent;
             }
-            QSplitter::handle:hover {
-                background-color: #ccab6e;
+            QScrollBar:vertical {
+                background: #f0f0f0;
+                width: 10px;
+                border-radius: 5px;
+            }
+            QScrollBar::handle:vertical {
+                background: #c0c0c0;
+                border-radius: 5px;
+            }
+            QScrollBar::handle:vertical:hover {
+                background: #a0a0a0;
             }
         """)
+
+        # 👇 ГОРИЗОНТАЛЬНЫЙ СКРОЛЛ ДЛЯ КОЛОНОК
+        horizontal_scroll = QScrollArea()
+        horizontal_scroll.setWidgetResizable(True)
+        horizontal_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        horizontal_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        horizontal_scroll.setStyleSheet("""
+            QScrollArea {
+                border: none;
+                background-color: transparent;
+            }
+            QScrollBar:horizontal {
+                background: #f0f0f0;
+                height: 10px;
+                border-radius: 5px;
+            }
+            QScrollBar::handle:horizontal {
+                background: #c0c0c0;
+                border-radius: 5px;
+            }
+            QScrollBar::handle:horizontal:hover {
+                background: #a0a0a0;
+            }
+        """)
+
+        # Контейнер для колонок
+        columns_container = QWidget()
+        columns_layout = QHBoxLayout(columns_container)
+        columns_layout.setSpacing(16)
+        columns_layout.setContentsMargins(10, 10, 10, 10)
 
         self.columns.clear()
         self.column_widgets.clear()
 
         for col in sorted(column_data, key=lambda x: x["position"]):
+            print(f"📦 Создаем колонку: {col['name']}")
             column_widget = KanbanColumn(col)
             self.columns[col["name"]] = column_widget
             self.column_widgets.append(column_widget)
-            splitter.addWidget(column_widget)
+            columns_layout.addWidget(column_widget)
 
-        sizes = self.service.get_initial_sizes(len(column_data), self.width() - 50)
-        if sizes:
-            splitter.setSizes(sizes)
+        columns_layout.addStretch()
+        horizontal_scroll.setWidget(columns_container)
+        main_scroll.setWidget(horizontal_scroll)
+        self.kanbanLayout.addWidget(main_scroll)
 
-        self.kanbanLayout.addWidget(splitter)
+        print(f"✅ Создано {len(self.column_widgets)} колонок")
 
     def clear_layout(self, layout):
         """Очищает layout."""
@@ -105,10 +145,6 @@ class OthersTasksPage(QWidget):
                     widget.deleteLater()
                 else:
                     self.clear_layout(item.layout())
-
-    # =====================================================
-    # Работа с задачами
-    # =====================================================
 
     def load_tasks(self):
         """Загружает задачи (только чужие)"""

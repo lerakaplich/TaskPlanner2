@@ -1,6 +1,6 @@
 # windows/shared/kanban_column.py
 
-from PyQt6.QtWidgets import QFrame, QVBoxLayout, QHBoxLayout, QLabel, QScrollArea, QWidget
+from PyQt6.QtWidgets import QFrame, QVBoxLayout, QHBoxLayout, QLabel, QWidget
 from PyQt6.QtCore import Qt, QSize
 from PyQt6.QtGui import QFont
 
@@ -20,8 +20,6 @@ class KanbanColumn(QFrame):
 
         self.setup_ui()
         self.setAcceptDrops(True)
-
-        # Принудительно показываем
         self.show()
 
     def get_tasks(self):
@@ -35,17 +33,14 @@ class KanbanColumn(QFrame):
 
     def clear_tasks(self):
         """Очищает все карточки из колонки."""
-        while self.tasks_layout.count() > 1:
+        while self.tasks_layout.count() > 0:
             item = self.tasks_layout.takeAt(0)
             if item and item.widget():
                 item.widget().deleteLater()
 
     def add_task(self, task_card):
         """Добавляет карточку задачи в колонку."""
-        self.tasks_layout.insertWidget(
-            self.tasks_layout.count() - 1,
-            task_card
-        )
+        self.tasks_layout.addWidget(task_card)
 
     def remove_task(self, task_card):
         """Удаляет карточку задачи из колонки."""
@@ -58,9 +53,7 @@ class KanbanColumn(QFrame):
             self.count_label.setText(str(count))
 
     def setup_ui(self):
-        """Настройка UI колонки - максимально простая версия"""
-
-        # Стиль колонки
+        """Настройка UI колонки - БЕЗ ВНУТРЕННЕГО СКРОЛЛА"""
         self.setStyleSheet("""
             QFrame {
                 background-color: #f9f9f9;
@@ -69,8 +62,8 @@ class KanbanColumn(QFrame):
             }
         """)
 
-        self.setMinimumWidth(280)
-        self.setMinimumHeight(400)
+        self.setMinimumWidth(320)
+        self.setMaximumWidth(380)
 
         # Главный layout
         main_layout = QVBoxLayout()
@@ -83,21 +76,18 @@ class KanbanColumn(QFrame):
         header_layout = QHBoxLayout()
         header_layout.setContentsMargins(0, 0, 0, 0)
 
-        # Название колонки - ПРОСТОЙ QLabel
         self.title_label = QLabel(self.column_name)
-        # Устанавливаем шрифт через setStyleSheet
-        self.title_label.setStyleSheet(f"""
-            QLabel {{
+        self.title_label.setStyleSheet("""
+            QLabel {
                 color: black;
                 font-size: 16px;
                 font-weight: bold;
                 font-family: 'Segoe UI', Arial;
                 padding: 5px;
-            }}
+            }
         """)
         header_layout.addWidget(self.title_label)
 
-        # Счетчик
         self.count_label = QLabel("0")
         self.count_label.setStyleSheet("""
             QLabel {
@@ -123,38 +113,13 @@ class KanbanColumn(QFrame):
         line.setStyleSheet("background-color: #e0e0e0; max-height: 1px;")
         main_layout.addWidget(line)
 
-        # ========== ОБЛАСТЬ ЗАДАЧ ==========
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        scroll.setStyleSheet("""
-            QScrollArea {
-                border: none;
-                background-color: transparent;
-            }
-            QScrollBar:vertical {
-                background: #f0f0f0;
-                width: 6px;
-                border-radius: 3px;
-            }
-            QScrollBar::handle:vertical {
-                background: #c0c0c0;
-                border-radius: 3px;
-            }
-        """)
-
-        # Контейнер для задач
-        self.tasks_container = QWidget()
-        self.tasks_container.setStyleSheet("background-color: transparent;")
-
+        # ========== ОБЛАСТЬ ЗАДАЧ - БЕЗ SCROLL ==========
         self.tasks_layout = QVBoxLayout()
         self.tasks_layout.setSpacing(8)
         self.tasks_layout.setContentsMargins(2, 2, 2, 2)
         self.tasks_layout.addStretch()
-        self.tasks_container.setLayout(self.tasks_layout)
 
-        scroll.setWidget(self.tasks_container)
-        main_layout.addWidget(scroll)
+        main_layout.addLayout(self.tasks_layout)
 
         self.setLayout(main_layout)
 
@@ -164,9 +129,6 @@ class KanbanColumn(QFrame):
         self.titleLabel = self.title_label
 
         print(f"  ✅ Колонка '{self.column_name}' готова")
-        print(f"     Заголовок: '{self.title_label.text()}'")
-        print(f"     Заголовок видим: {self.title_label.isVisible()}")
-        print(f"     Шрифт установлен через stylesheet")
 
     def sizeHint(self):
-        return QSize(300, 500)
+        return QSize(340, 500)

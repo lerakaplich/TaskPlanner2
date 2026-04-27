@@ -7,19 +7,19 @@
     <x>0</x>
     <y>0</y>
     <width>443</width>
-    <height>250</height>
+    <height>280</height>
    </rect>
   </property>
   <property name="minimumSize">
    <size>
     <width>200</width>
-    <height>250</height>
+    <height>280</height>
    </size>
   </property>
   <property name="maximumSize">
    <size>
     <width>450</width>
-    <height>250</height>
+    <height>280</height>
    </size>
   </property>
   <property name="styleSheet">
@@ -57,7 +57,7 @@ QFrame#projectCard:hover {
      <item>
       <spacer name="horizontalSpacer">
        <property name="orientation">
-        <enum>Qt::Vertical</enum>
+        <enum>Qt::Horizontal</enum>
        </property>
        <property name="sizeHint" stdset="0">
         <size>
@@ -109,7 +109,7 @@ QPushButton:hover {
     text-align: center;
     background-color: white;
     font-size: 14px;
-	color: black;
+    color: black;
 }
 QProgressBar:hover {
     border: 2px solid #ccab6e;

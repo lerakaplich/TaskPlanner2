@@ -1,7 +1,7 @@
 # models/schemas/projects_dto.py
 
 from datetime import datetime, time
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
 from pydantic import BaseModel, ConfigDict
 
 from models.schemas.tasks_dto import BoardColumnDTO, TaskCardDTO
@@ -10,6 +10,8 @@ from models.schemas.tasks_dto import BoardColumnDTO, TaskCardDTO
 # =========================
 # Базовый DTO проекта
 # =========================
+# models/schemas/projects_dto.py
+
 class ProjectDTO(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -21,16 +23,14 @@ class ProjectDTO(BaseModel):
     updated_at: datetime
     deadline: Optional[time] = None
     owner: int
+    selected_column_ids: Optional[str] = None  # 👈 Строка с ID через запятую
 
 
-# =========================
-# DTO проекта с участниками
-# =========================
 class ProjectWithMembersDTO(ProjectDTO):
-    member_ids: List[int] = []  # Все участники (включая админов)
-    admin_ids: List[int] = []  # Только те, у кого есть флаг is_admin
+    member_ids: List[int] = []
+    admin_ids: List[int] = []
     is_admin: Optional[bool] = None
-
+    selected_columns_data: List[Dict[str, Any]] = []  # Для UI
 
 # =========================
 # DTO карточки проекта
@@ -42,15 +42,14 @@ class ProjectCardDTO(BaseModel):
     tasks_total: int
     tasks_done: int
     is_archived: bool = False
-    member_count: int = 0  # Количество участников
-    admin_count: int = 0   # Количество администраторов
+    member_count: int = 0
+    admin_count: int = 0
     owner_name: str = "Не назначен"
     owner_id: Optional[int] = None
     created_at: Optional[str] = None
+    columns_count: int = 0  # 👈 ДОБАВИТЬ: количество колонок
 
-# =========================
-# DTO для аналитики
-# =========================
+
 class ProjectAnalyticsDTO(BaseModel):
     id: int
     name: str
@@ -59,9 +58,10 @@ class ProjectAnalyticsDTO(BaseModel):
     overdue_tasks: int
     high_priority_tasks: int
 
-# В файле схем проектов/задач
+
 class BoardColumnWithTasksDTO(BoardColumnDTO):
     tasks: List[TaskCardDTO] = []
+
 
 class ProjectBoardDTO(BaseModel):
     project: ProjectWithMembersDTO
