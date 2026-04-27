@@ -4,7 +4,8 @@ import os
 from datetime import datetime
 
 from PyQt6 import uic
-from PyQt6.QtWidgets import QFrame, QSizePolicy, QPushButton, QVBoxLayout, QLabel
+from PyQt6.QtWidgets import QFrame, QSizePolicy, QPushButton, QVBoxLayout, QLabel, QTableWidget, QTableWidgetItem, \
+    QHeaderView
 from PyQt6.QtCore import Qt
 
 from windows.analytics.projects.employee_project_card import EmployeeProjectCard
@@ -25,16 +26,16 @@ class ProjectCard(QFrame):
         # Проверяем существование UI файла
         if os.path.exists(ui_path):
             uic.loadUi(ui_path, self)
+            # Удаляем старые панели из UI, если они есть
+            self._remove_old_ui_panels()
         else:
-            # Создаем UI программно, если файл не найден
+            # Создаем UI программно
             self._create_ui_programmatically()
 
         self.data = project_data
-        self.is_tasks_visible = True  # По умолчанию задачи показаны
-        self.is_employees_visible = False  # По умолчанию сотрудники скрыты
 
         self.setMinimumHeight(200)
-        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
+        self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
 
         # Основная информация
         if hasattr(self, 'name_btn'):
@@ -52,38 +53,212 @@ class ProjectCard(QFrame):
                 f"Сотрудников: {emp_count}"
             )
 
-        # 🔧 СНАЧАЛА ЗАПОЛНЯЕМ ЗАДАЧИ И СОТРУДНИКОВ
-        if hasattr(self, 'tasks_panel'):
-            self._populate_tasks()
+        # Создаем новые секции (все скрыты по умолчанию)
+        self._setup_tasks_section()
+        self._setup_employees_section()
 
-        if hasattr(self, 'employees_panel'):
-            self._populate_employees()
+    def _remove_old_ui_panels(self):
+        """Удаляет старые панели из UI файла, чтобы не дублировались"""
+        old_widgets = ['tasks_btn', 'employees_btn', 'tasks_panel', 'employees_panel']
+        for widget_name in old_widgets:
+            if hasattr(self, widget_name):
+                widget = getattr(self, widget_name)
+                if widget:
+                    widget.deleteLater()
+                    delattr(self, widget_name)
 
-        # 🔧 ПОТОМ ПОДКЛЮЧАЕМ СИГНАЛЫ
-        if hasattr(self, 'tasks_btn'):
-            self.tasks_btn.toggled.connect(self._toggle_tasks_panel)
+    def _setup_tasks_section(self):
+        """Создает секцию с задачами - по умолчанию скрыта"""
+        grouped_tasks = self.data.get("grouped_tasks", {})
+        has_tasks = any(tasks for tasks in grouped_tasks.values())
 
-        if hasattr(self, 'employees_btn'):
-            self.employees_btn.toggled.connect(self._toggle_employees_panel)
+        # Кнопка-заголовок
+        btn = QPushButton(f"▶ Задачи", self)
+        btn.setCheckable(True)
+        btn.setChecked(False)  # Скрыто по умолчанию
+        btn.setStyleSheet("""
+            QPushButton {
+                background-color: #F0F0F0;
+                border-radius: 6px;
+                padding: 8px;
+                text-align: left;
+                font-weight: bold;
+                margin-top: 5px;
+            }
+            QPushButton:checked {
+                background-color: #E0E0E0;
+            }
+        """)
 
-        # 🔧 ПРИНУДИТЕЛЬНО УСТАНАВЛИВАЕМ ВИДИМОСТЬ
-        # Задачи показываем, сотрудников скрываем
-        if hasattr(self, 'tasks_btn') and hasattr(self, 'tasks_panel'):
-            self.tasks_btn.blockSignals(True)
-            self.tasks_btn.setChecked(True)
-            self.tasks_btn.setText("▼ Задачи")
-            self.tasks_panel.setVisible(True)
-            self.tasks_btn.blockSignals(False)
+        # Панель задач
+        panel = QFrame(self)
+        panel.setVisible(False)  # Скрыта по умолчанию
+        panel.setStyleSheet("background-color: #FAFAFA; border-radius: 6px;")
+        panel.setMinimumHeight(100)
 
-        if hasattr(self, 'employees_btn') and hasattr(self, 'employees_panel'):
-            self.employees_btn.blockSignals(True)
-            self.employees_btn.setChecked(False)
-            self.employees_btn.setText("▶ Сотрудники")
-            self.employees_panel.setVisible(False)
-            self.employees_btn.blockSignals(False)
+        panel_layout = QVBoxLayout(panel)
 
-        # Принудительно обновляем геометрию
-        self.updateGeometry()
+        if not has_tasks:
+            label = QLabel("📭 Нет задач в этом проекте")
+            label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            label.setStyleSheet("color: #999; padding: 20px;")
+            panel_layout.addWidget(label)
+        else:
+            # Создаем группы задач по статусам
+            for status_key, tasks in grouped_tasks.items():
+                if not tasks:
+                    continue
+
+                status_btn = QPushButton(f"▶ {self._get_status_name(status_key)} ({len(tasks)})")
+                status_btn.setCheckable(True)
+                status_btn.setChecked(False)  # Скрыто по умолчанию
+                status_btn.setStyleSheet("""
+                    QPushButton {
+                        background-color: #1B232A;
+                        color: white;
+                        border: none;
+                        border-radius: 6px;
+                        padding: 6px 10px;
+                        font-size: 12px;
+                        font-weight: bold;
+                        text-align: left;
+                        margin: 2px;
+                    }
+                    QPushButton:hover {
+                        background-color: #D9D9D6;
+                        color: black;
+                    }
+                """)
+                panel_layout.addWidget(status_btn)
+
+                tasks_panel = QFrame()
+                tasks_panel.setVisible(False)
+                tasks_panel.setStyleSheet("background-color: white; border-radius: 4px;")
+                tasks_layout = QVBoxLayout(tasks_panel)
+                tasks_layout.setContentsMargins(8, 8, 8, 8)
+                tasks_layout.setSpacing(4)
+
+                for task_dto in tasks:
+                    try:
+                        card = TaskCard(task_data=task_dto, compact=True, show_project=False)
+                        tasks_layout.addWidget(card)
+                    except Exception as e:
+                        print(f"❌ Ошибка создания карточки задачи: {e}")
+
+                panel_layout.addWidget(tasks_panel)
+
+                # Подключаем сигнал для статусной кнопки
+                status_btn.toggled.connect(
+                    lambda checked, p=tasks_panel, b=status_btn: self._toggle_subpanel(checked, p, b)
+                )
+
+        # Добавляем в основной layout
+        layout = self.layout()
+        if layout:
+            layout.addWidget(btn)
+            layout.addWidget(panel)
+
+        self.tasks_btn = btn
+        self.tasks_panel = panel
+
+        # Подключаем сигнал для основной кнопки
+        btn.toggled.connect(lambda checked, p=panel, b=btn: self._toggle_panel(checked, p, b))
+
+    def _setup_employees_section(self):
+        """Создает секцию с сотрудниками - по умолчанию скрыта"""
+        employees = self.data.get("employees", [])
+
+        # Кнопка-заголовок
+        btn = QPushButton(f"▶ Сотрудники ({len(employees)})", self)
+        btn.setCheckable(True)
+        btn.setChecked(False)  # Скрыто по умолчанию
+        btn.setStyleSheet("""
+            QPushButton {
+                background-color: #F0F0F0;
+                border-radius: 6px;
+                padding: 8px;
+                text-align: left;
+                font-weight: bold;
+                margin-top: 5px;
+            }
+            QPushButton:checked {
+                background-color: #E0E0E0;
+            }
+        """)
+
+        # Панель сотрудников
+        panel = QFrame(self)
+        panel.setVisible(False)  # Скрыта по умолчанию
+        panel.setStyleSheet("background-color: #FAFAFA; border-radius: 6px;")
+        panel.setMinimumHeight(100)
+
+        panel_layout = QVBoxLayout(panel)
+
+        if not employees:
+            label = QLabel("👥 Нет сотрудников в этом проекте")
+            label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            label.setStyleSheet("color: #999; padding: 20px;")
+            panel_layout.addWidget(label)
+        else:
+            # Создаем таблицу сотрудников
+            table = QTableWidget()
+            table.setColumnCount(3)
+            table.setHorizontalHeaderLabels(["Сотрудник", "Активных задач", "Выполнено"])
+            table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+            table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+            table.setRowCount(len(employees))
+            table.setFixedHeight(min(len(employees) * 35 + 30, 200))
+
+            for i, emp in enumerate(employees):
+                name = emp.get("name", emp.get("employee_name", "Неизвестен"))
+                active = emp.get("active_tasks", emp.get("active", 0))
+                completed = emp.get("completed_tasks", emp.get("completed", 0))
+
+                table.setItem(i, 0, QTableWidgetItem(name))
+                table.setItem(i, 1, QTableWidgetItem(str(active)))
+                table.setItem(i, 2, QTableWidgetItem(str(completed)))
+
+            panel_layout.addWidget(table)
+
+        # Добавляем в основной layout
+        layout = self.layout()
+        if layout:
+            layout.addWidget(btn)
+            layout.addWidget(panel)
+
+        self.employees_btn = btn
+        self.employees_panel = panel
+
+        # Подключаем сигнал
+        btn.toggled.connect(lambda checked, p=panel, b=btn: self._toggle_panel(checked, p, b))
+
+    def _get_status_name(self, status_key):
+        """Возвращает русское название статуса"""
+        status_names = {
+            'to_do': 'К выполнению',
+            'in_progress': 'В работе',
+            'review': 'На проверке',
+            'completed': 'Выполнено'
+        }
+        return status_names.get(status_key, status_key)
+
+    def _toggle_panel(self, checked, panel, button):
+        """Переключает видимость панели и текст кнопки"""
+        panel.setVisible(checked)
+        current_text = button.text()
+        if current_text.startswith("▼"):
+            button.setText("▶" + current_text[1:])
+        else:
+            button.setText("▼" + current_text[1:])
+
+    def _toggle_subpanel(self, checked, panel, button):
+        """Переключает видимость подпанели (для статусов задач)"""
+        panel.setVisible(checked)
+        current_text = button.text()
+        if current_text.startswith("▼"):
+            button.setText("▶" + current_text[1:])
+        else:
+            button.setText("▼" + current_text[1:])
 
     def _create_ui_programmatically(self):
         """Создает UI программно, если файл не найден"""
@@ -93,11 +268,9 @@ class ProjectCard(QFrame):
                 background-color: white;
                 border-radius: 10px;
                 border: 1px solid #E0E0E0;
-                margin: 2px;
+                margin: 4px;
             }
         """)
-
-        from PyQt6.QtWidgets import QVBoxLayout, QPushButton, QLabel, QFrame
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(15, 15, 15, 15)
@@ -125,237 +298,3 @@ class ProjectCard(QFrame):
         self.info_label.setStyleSheet("color: #666; font-size: 12px;")
         self.info_label.setWordWrap(True)
         layout.addWidget(self.info_label)
-
-        # Кнопка задач
-        self.tasks_btn = QPushButton("▼ Задачи")
-        self.tasks_btn.setCheckable(True)
-        self.tasks_btn.setChecked(True)
-        self.tasks_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #F0F0F0;
-                border-radius: 6px;
-                padding: 8px 12px;
-                text-align: left;
-                font-weight: bold;
-                font-size: 13px;
-            }
-            QPushButton:hover {
-                background-color: #E0E0E0;
-            }
-        """)
-        layout.addWidget(self.tasks_btn)
-
-        # Панель задач
-        self.tasks_panel = QFrame()
-        self.tasks_panel.setVisible(True)
-        self.tasks_panel.setStyleSheet("background-color: #FAFAFA; border-radius: 6px;")
-        tasks_layout = QVBoxLayout(self.tasks_panel)
-        tasks_layout.setContentsMargins(5, 5, 5, 5)
-        layout.addWidget(self.tasks_panel)
-
-        # Кнопка сотрудников
-        self.employees_btn = QPushButton("▶ Сотрудники")
-        self.employees_btn.setCheckable(True)
-        self.employees_btn.setChecked(False)
-        self.employees_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #F0F0F0;
-                border-radius: 6px;
-                padding: 8px 12px;
-                text-align: left;
-                font-weight: bold;
-                font-size: 13px;
-            }
-            QPushButton:hover {
-                background-color: #E0E0E0;
-            }
-        """)
-        layout.addWidget(self.employees_btn)
-
-        # Панель сотрудников
-        self.employees_panel = QFrame()
-        self.employees_panel.setVisible(False)
-        self.employees_panel.setStyleSheet("background-color: #FAFAFA; border-radius: 6px;")
-        employees_layout = QVBoxLayout(self.employees_panel)
-        employees_layout.setContentsMargins(5, 5, 5, 5)
-        layout.addWidget(self.employees_panel)
-
-    def _toggle_tasks_panel(self, checked):
-        """Переключение видимости панели задач"""
-        if hasattr(self, 'tasks_panel'):
-            self.tasks_panel.setVisible(checked)
-            self.tasks_panel.updateGeometry()
-
-        if hasattr(self, 'tasks_btn'):
-            self.tasks_btn.setText(f"{'▼' if checked else '▶'} Задачи")
-
-        # Принудительно обновляем геометрию всей карточки
-        self.updateGeometry()
-
-        # Обновляем родительские виджеты
-        if self.parent():
-            self.parent().updateGeometry()
-
-    def _toggle_employees_panel(self, checked):
-        """Переключение видимости панели сотрудников"""
-        if hasattr(self, 'employees_panel'):
-            self.employees_panel.setVisible(checked)
-            self.employees_panel.updateGeometry()
-
-        if hasattr(self, 'employees_btn'):
-            self.employees_btn.setText(f"{'▼' if checked else '▶'} Сотрудники")
-
-        # Принудительно обновляем геометрию всей карточки
-        self.updateGeometry()
-
-        # Обновляем родительские виджеты
-        if self.parent():
-            self.parent().updateGeometry()
-
-    def _populate_tasks(self):
-        """Заполняет панель задач с группировкой по статусам."""
-        if not hasattr(self, 'tasks_panel'):
-            return
-
-        layout = self.tasks_panel.layout()
-        if not layout:
-            layout = QVBoxLayout(self.tasks_panel)
-            self.tasks_panel.setLayout(layout)
-
-        self._clear_layout(layout)
-        layout.setSpacing(8)
-        layout.setContentsMargins(5, 5, 5, 5)
-
-        grouped_tasks = self.data.get("grouped_tasks", {})
-        display_names = TaskCard.STATUS_MAP
-
-        has_tasks = False
-        for status_key, tasks in grouped_tasks.items():
-            if not tasks:
-                continue
-
-            has_tasks = True
-
-            status_container = QFrame()
-            container_layout = QVBoxLayout(status_container)
-            container_layout.setSpacing(4)
-            container_layout.setContentsMargins(0, 0, 0, 0)
-
-            status_btn = QPushButton(f"▶ {display_names.get(status_key, status_key)} ({len(tasks)})")
-            status_btn.setCheckable(True)
-            status_btn.setStyleSheet("""
-                QPushButton {
-                    background-color: #1B232A;
-                    color: white;
-                    border: none;
-                    border-radius: 6px;
-                    padding: 8px 12px;
-                    font-size: 13px;
-                    font-weight: bold;
-                    text-align: left;
-                }
-                QPushButton:hover {
-                    background-color: #D9D9D6;
-                    color: black;
-                }
-            """)
-            container_layout.addWidget(status_btn)
-
-            tasks_panel = QFrame()
-            tasks_panel.setVisible(False)
-            tasks_panel.setStyleSheet("""
-                QFrame {
-                    background-color: white;
-                    border-radius: 4px;
-                    margin-top: 2px;
-                }
-            """)
-            tasks_layout = QVBoxLayout(tasks_panel)
-            tasks_layout.setContentsMargins(8, 8, 8, 8)
-            tasks_layout.setSpacing(6)
-
-            for task_dto in tasks:
-                try:
-                    card = TaskCard(task_data=task_dto, compact=True, show_project=False)
-                    tasks_layout.addWidget(card)
-                except Exception as e:
-                    print(f"❌ Ошибка создания карточки задачи: {e}")
-
-            container_layout.addWidget(tasks_panel)
-            layout.addWidget(status_container)
-
-            # Связываем кнопку с панелью
-            status_btn.toggled.connect(
-                lambda checked, p=tasks_panel, b=status_btn: self._update_status_btn(checked, p, b)
-            )
-
-            # 🔧 РАСКРЫВАЕМ ПАНЕЛЬ ДЛЯ ПЕРВОГО СТАТУСА (to_do)
-            if status_key == "to_do":
-                status_btn.setChecked(True)
-                tasks_panel.setVisible(True)
-                # Обновляем текст кнопки
-                status_btn.setText(f"▼ {display_names.get(status_key, status_key)} ({len(tasks)})")
-
-        if not has_tasks:
-            no_tasks_label = QLabel("📭 Нет задач в этом проекте")
-            no_tasks_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            no_tasks_label.setStyleSheet("color: #999; padding: 20px;")
-            layout.addWidget(no_tasks_label)
-
-        layout.addStretch()
-        self.tasks_panel.updateGeometry()
-
-    def _update_status_btn(self, checked, panel, button):
-        """Обновление состояния кнопки статуса"""
-        panel.setVisible(checked)
-        current_text = button.text()
-        # Извлекаем текст после стрелки
-        if len(current_text) > 1:
-            content = current_text[1:]
-        else:
-            content = ""
-        arrow = "▼" if checked else "▶"
-        button.setText(arrow + content)
-        panel.updateGeometry()
-        # Обновляем родительскую карточку
-        self.updateGeometry()
-
-    def _populate_employees(self):
-        """Заполняет панель сотрудников."""
-        if not hasattr(self, 'employees_panel'):
-            return
-
-        layout = self.employees_panel.layout()
-        if not layout:
-            layout = QVBoxLayout(self.employees_panel)
-            self.employees_panel.setLayout(layout)
-
-        self._clear_layout(layout)
-
-        employees = self.data.get("employees", [])
-
-        if not employees:
-            no_emp_label = QLabel("👥 Нет сотрудников в этом проекте")
-            no_emp_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            no_emp_label.setStyleSheet("color: #999; padding: 20px;")
-            layout.addWidget(no_emp_label)
-        else:
-            for emp in employees:
-                try:
-                    card = EmployeeProjectCard(emp, self.data.get("id", ""))
-                    layout.addWidget(card)
-                except Exception as e:
-                    print(f"❌ Ошибка создания карточки сотрудника: {e}")
-
-        layout.addStretch()
-        self.employees_panel.updateGeometry()
-
-    def _clear_layout(self, layout):
-        """Очищает layout рекурсивно"""
-        if layout:
-            while layout.count():
-                item = layout.takeAt(0)
-                if item.widget():
-                    item.widget().deleteLater()
-                elif item.layout():
-                    self._clear_layout(item.layout())

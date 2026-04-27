@@ -38,6 +38,12 @@ class EmployeesStatsView(QWidget):
         self.table.setRowCount(0)
 
         if not self.all_stats:
+            # Показываем сообщение об отсутствии данных
+            self.table.setRowCount(1)
+            self.table.setSpan(0, 0, 1, 7)
+            no_data_item = QTableWidgetItem("Нет данных по сотрудникам")
+            no_data_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+            self.table.setItem(0, 0, no_data_item)
             self.table.setSortingEnabled(True)
             return
 
@@ -53,8 +59,17 @@ class EmployeesStatsView(QWidget):
 
             self.table.insertRow(row)
             self.table.setItem(row, 0, QTableWidgetItem(employee_name))
-            self.table.setItem(row, 1, QTableWidgetItem(str(stat.get('avg_kpi', 0))))
-            self.table.setItem(row, 2, QTableWidgetItem(str(stat.get("completed_count", 0))))
+
+            # КПД
+            kpi_value = stat.get('avg_kpi', 0)
+            kpi_item = QTableWidgetItem(f"{kpi_value:.1f}%" if isinstance(kpi_value, (int, float)) else str(kpi_value))
+            self.table.setItem(row, 1, kpi_item)
+
+            # Выполнено
+            completed_count = stat.get("completed_count", 0)
+            self.table.setItem(row, 2, QTableWidgetItem(str(completed_count)))
+
+            # Приоритеты
             self.table.setItem(row, 3, QTableWidgetItem(str(stat.get("low", 0))))
             self.table.setItem(row, 4, QTableWidgetItem(str(stat.get("medium", 0))))
             self.table.setItem(row, 5, QTableWidgetItem(str(stat.get("high", 0))))

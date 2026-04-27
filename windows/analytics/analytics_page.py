@@ -52,11 +52,10 @@ class AnalyticsPage(QWidget):
             print("⚠️ Сервис аналитики не инициализирован (нет сессии)")
             self._show_placeholder()
 
-    # windows/analytics/analytics_page.py
-
     def _setup_ui_from_file(self):
         """Настраивает UI из загруженного файла"""
-        # Для вкладки Сотрудники
+
+        # ========== Вкладка Сотрудники ==========
         if hasattr(self, 'employeesContainer'):
             if self.employeesContainer.layout():
                 self.employees_grid = self.employeesContainer.layout()
@@ -72,67 +71,20 @@ class AnalyticsPage(QWidget):
             if hasattr(self, 'employeesScroll'):
                 self.employeesScroll.setWidget(self.employeesContainer)
 
-        # 🔧 ИСПРАВЛЕНИЕ: Для вкладки Темы - удаляем placeholder и создаем контейнер
-        self._setup_tab_from_placeholder('themesTab', 'themesPlaceholder', 'themesContainer', 'themesGrid')
+        # ========== Вкладка Темы - УДАЛЯЕМ placeholder и СОЗДАЕМ КОНТЕЙНЕР ==========
+        self._setup_tab_container('themesTab', 'themesContainer', 'themesGrid')
 
-        # 🔧 ИСПРАВЛЕНИЕ: Для вкладки Проекты - удаляем placeholder и создаем контейнер
-        self._setup_tab_from_placeholder('projectsTab', 'projectsPlaceholder', 'projectsContainer', 'projectsGrid')
-
-    def _setup_tab_from_placeholder(self, tab_name, placeholder_name, container_name, grid_name):
-        """Настраивает вкладку, заменяя placeholder на контейнер с grid"""
-        tab = getattr(self, tab_name, None)
-        if not tab:
-            print(f"⚠️ Вкладка {tab_name} не найдена")
-            return
-
-        # Удаляем placeholder, если он есть
-        placeholder = getattr(self, placeholder_name, None)
-        if placeholder:
-            placeholder.deleteLater()
-            # Удаляем атрибут, чтобы не было конфликтов
-            delattr(self, placeholder_name)
-
-        # Очищаем вкладку
-        old_layout = tab.layout()
-        if old_layout:
-            while old_layout.count():
-                item = old_layout.takeAt(0)
-                if item.widget():
-                    item.widget().deleteLater()
-        else:
-            layout = QVBoxLayout(tab)
-            layout.setContentsMargins(15, 15, 15, 15)
-            tab.setLayout(layout)
-
-        # Создаем ScrollArea
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        scroll.setStyleSheet("border: none; background-color: transparent;")
-
-        # Создаем контейнер
-        container = QWidget()
-        container.setStyleSheet("background-color: transparent;")
-        grid = QGridLayout(container)
-        grid.setHorizontalSpacing(15)
-        grid.setVerticalSpacing(15)
-
-        scroll.setWidget(container)
-        tab.layout().addWidget(scroll)
-
-        # Сохраняем ссылки
-        setattr(self, container_name, container)
-        setattr(self, grid_name, grid)
-
-        print(f"✅ Создан контейнер для вкладки {tab_name}: {grid_name}")
+        # ========== Вкладка Проекты - УДАЛЯЕМ placeholder и СОЗДАЕМ КОНТЕЙНЕР ==========
+        self._setup_tab_container('projectsTab', 'projectsContainer', 'projectsGrid')
 
     def _setup_tab_container(self, tab_name, container_name, grid_name):
-        """Настраивает контейнер для вкладки"""
+        """Настраивает контейнер для вкладки (удаляет placeholder, создает scroll и grid)"""
         tab = getattr(self, tab_name, None)
         if not tab:
             print(f"⚠️ Вкладка {tab_name} не найдена")
             return
 
-        # Очищаем вкладку
+        # Очищаем вкладку - удаляем все старые виджеты
         old_layout = tab.layout()
         if old_layout:
             # Удаляем все виджеты из старого layout
@@ -150,13 +102,18 @@ class AnalyticsPage(QWidget):
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setStyleSheet("border: none; background-color: transparent;")
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
 
         # Создаем контейнер
         container = QWidget()
         container.setStyleSheet("background-color: transparent;")
+
+        # Создаем GridLayout
         grid = QGridLayout(container)
         grid.setHorizontalSpacing(15)
         grid.setVerticalSpacing(15)
+        grid.setAlignment(Qt.AlignmentFlag.AlignTop)
 
         scroll.setWidget(container)
         tab.layout().addWidget(scroll)
@@ -241,12 +198,14 @@ class AnalyticsPage(QWidget):
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setStyleSheet("border: none; background-color: transparent;")
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
 
         container = QWidget()
         container.setStyleSheet("background-color: transparent;")
         grid = QGridLayout(container)
         grid.setHorizontalSpacing(15)
         grid.setVerticalSpacing(15)
+        grid.setAlignment(Qt.AlignmentFlag.AlignTop)
 
         scroll.setWidget(container)
         tab_layout.addWidget(scroll)
@@ -263,9 +222,7 @@ class AnalyticsPage(QWidget):
         for grid_attr in ['employeesGrid', 'themesGrid', 'projectsGrid']:
             grid = getattr(self, grid_attr, None)
             if grid:
-                # Очищаем grid
                 self._clear_grid(grid)
-
                 label = QLabel("Нет данных для отображения")
                 label.setAlignment(Qt.AlignmentFlag.AlignCenter)
                 label.setStyleSheet("font-size: 18px; color: #666; padding: 50px;")
@@ -312,11 +269,6 @@ class AnalyticsPage(QWidget):
             # Отображаем данные
             self.populate_employees_tab()
             self.populate_themes_tab()
-
-            # 🔧 ПРОВЕРЯЕМ СУЩЕСТВОВАНИЕ projectsGrid
-            print(
-                f"🔍 Проверка projectsGrid: hasattr={hasattr(self, 'projectsGrid')}, value={getattr(self, 'projectsGrid', None)}")
-
             self.populate_projects_tab()
 
         except Exception as e:
@@ -325,24 +277,12 @@ class AnalyticsPage(QWidget):
             traceback.print_exc()
             QMessageBox.warning(self, "Ошибка", f"Не удалось загрузить данные: {str(e)}")
 
-    def  populate_employees_tab(self):
+    def populate_employees_tab(self):
         """Заполняет вкладку сотрудников"""
-        # Проверяем наличие employeesGrid
         if not hasattr(self, 'employeesGrid') or self.employeesGrid is None:
-            print("❌ employeesGrid не найден, создаем...")
-            # Пытаемся найти или создать employeesContainer
-            if hasattr(self, 'employeesContainer'):
-                if self.employeesContainer.layout():
-                    self.employeesGrid = self.employeesContainer.layout()
-                else:
-                    self.employeesGrid = QGridLayout(self.employeesContainer)
-                    self.employeesGrid.setHorizontalSpacing(15)
-                    self.employeesGrid.setVerticalSpacing(15)
-            else:
-                print("❌ Не удалось создать employeesGrid")
-                return
+            print("❌ employeesGrid не найден")
+            return
 
-        # Очищаем контейнер
         self._clear_grid(self.employeesGrid)
 
         if not self.employees_data:
@@ -352,7 +292,8 @@ class AnalyticsPage(QWidget):
             self.employeesGrid.addWidget(label, 0, 0)
             return
 
-        row = col = 0
+        row = 0
+        col = 0
         max_cols = 3
 
         for emp_data in self.employees_data:
@@ -365,7 +306,6 @@ class AnalyticsPage(QWidget):
                 col = 0
                 row += 1
 
-        self.employeesGrid.setRowStretch(row + 1, 1)
         print(f"✅ Отображено {len(self.employees_data)} сотрудников")
 
     def populate_themes_tab(self):
@@ -383,7 +323,8 @@ class AnalyticsPage(QWidget):
             self.themesGrid.addWidget(label, 0, 0)
             return
 
-        row = col = 0
+        row = 0
+        col = 0
         max_cols = 3
 
         for theme_data in self.themes_data:
@@ -396,7 +337,6 @@ class AnalyticsPage(QWidget):
                 col = 0
                 row += 1
 
-        self.themesGrid.setRowStretch(row + 1, 1)
         print(f"✅ Отображено {len(self.themes_data)} тем")
 
     def populate_projects_tab(self):
@@ -414,7 +354,8 @@ class AnalyticsPage(QWidget):
             self.projectsGrid.addWidget(label, 0, 0)
             return
 
-        row = col = 0
+        row = 0
+        col = 0
         max_cols = 3
 
         for proj_data in self.projects_data:
@@ -429,8 +370,7 @@ class AnalyticsPage(QWidget):
                     col = 0
                     row += 1
 
-        self.projectsGrid.setRowStretch(row + 1, 1)
-        print(f"✅ Отображено проектов")
+        print(f"✅ Отображено проектов: {row * max_cols + col}")
 
     def refresh(self):
         """Обновляет все данные"""

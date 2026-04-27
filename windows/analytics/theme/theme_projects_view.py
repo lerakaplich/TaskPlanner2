@@ -3,8 +3,8 @@
 from datetime import datetime
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QPushButton, QFrame,
                              QLabel, QSizePolicy)
+from PyQt6.QtCore import Qt
 
-# Исправлен импорт
 from windows.analytics.task_card_analytics import TaskCard
 
 
@@ -21,7 +21,7 @@ class ThemeProjectsView(QWidget):
         self.build_ui()
 
     def build_ui(self):
-        """Построение интерфейса"""
+        """Построение интерфейса - все проекты скрыты по умолчанию"""
         # Очищаем layout
         while self.layout().count():
             item = self.layout().takeAt(0)
@@ -39,20 +39,23 @@ class ThemeProjectsView(QWidget):
                 project_name = project_item.get("project_name", "Без названия")
                 task_count = project_item.get("task_count", 0)
                 completed_count = project_item.get("completed_count", 0)
+                # tasks = project_item.get("tasks", [])  # Если нужны задачи, раскомментировать
 
                 # Заголовок проекта
-                project_btn = QPushButton(f"▶ {project_name} ({task_count} задач)")
+                project_btn = QPushButton(f"▶ {project_name} ({task_count} задач)", self)
                 project_btn.setCheckable(True)
+                project_btn.setChecked(False)  # 👈 СКРЫТО ПО УМОЛЧАНИЮ
                 project_btn.setStyleSheet("""
                     QPushButton {
                         background-color: #D22730;
                         color: white;
                         border-radius: 6px;
                         font-weight: bold;
-                        font-size: 14px;
+                        font-size: 13px;
                         border: none;
                         text-align: left;
-                        padding: 8px 12px;
+                        padding: 6px 10px;
+                        margin: 2px;
                     }
                     QPushButton:hover {
                         background-color: #862633;
@@ -62,7 +65,7 @@ class ThemeProjectsView(QWidget):
 
                 # Панель проекта
                 project_panel = QFrame()
-                project_panel.setVisible(False)
+                project_panel.setVisible(False)  # 👈 СКРЫТО ПО УМОЛЧАНИЮ
                 project_panel.setStyleSheet("background-color: #f5f5f5; border-radius: 4px;")
                 panel_layout = QVBoxLayout(project_panel)
                 panel_layout.setContentsMargins(10, 10, 10, 10)
@@ -70,7 +73,7 @@ class ThemeProjectsView(QWidget):
 
                 # Информация о проекте
                 info_label = QLabel(f"📊 Задач: {task_count} | ✅ Выполнено: {completed_count}")
-                info_label.setStyleSheet("color: #555; font-size: 12px;")
+                info_label.setStyleSheet("color: #555; font-size: 11px;")
                 panel_layout.addWidget(info_label)
 
                 self.layout().addWidget(project_panel)
@@ -81,6 +84,7 @@ class ThemeProjectsView(QWidget):
                 )
 
     def _update_toggle_state(self, checked, panel, button):
+        """Переключает видимость панели и текст кнопки"""
         panel.setVisible(checked)
         current_text = button.text()
         arrow = "▼" if checked else "▶"

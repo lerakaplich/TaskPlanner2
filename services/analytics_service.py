@@ -81,9 +81,12 @@ class AnalyticsService:
         active_projects = []
         completed_projects = []
 
+        print(f"📊 Сотрудник {employee_id}: найдено проектов: {len(all_projects)}")
+
         for p in all_projects:
             # Получаем полные данные проекта с задачами
             proj_dict = self._project_to_dict(p)
+            print(f"   Проект: {p.name}, is_archived={p.is_archived}")
             if p.is_archived:
                 completed_projects.append(proj_dict)
             else:
@@ -97,6 +100,8 @@ class AnalyticsService:
             )
         )
         all_tasks = list(self.session.scalars(tasks_stmt))
+
+        print(f"   Найдено задач: {len(all_tasks)}")
 
         # Подсчет статистики по задачам
         active_tasks = 0
@@ -120,6 +125,7 @@ class AnalyticsService:
 
         # 3. Аналитика по тегам (темам)
         tag_analytics = self._get_employee_tag_analytics(employee_id, all_tasks)
+        print(f"   Аналитика по темам: {len(tag_analytics)}")
 
         return {
             "active_projects": active_projects,
@@ -167,10 +173,6 @@ class AnalyticsService:
 
         # Сортируем по количеству задач
         return sorted(tag_stats.values(), key=lambda x: x["count"], reverse=True)
-
-    # ======================================================
-    # Аналитика по темам (тегам)
-    # ======================================================
 
     def get_themes_stats(self) -> List[Dict[str, Any]]:
         """Получить статистику по всем темам (тегам)"""
@@ -274,8 +276,6 @@ class AnalyticsService:
 
         # Сортируем по количеству задач
         return sorted(result, key=lambda x: x["task_count"], reverse=True)
-
-    # services/analytics_service.py - метод get_projects_stats
 
     def get_projects_stats(self) -> List[Dict[str, Any]]:
         """Получить статистику по всем проектам"""
@@ -424,10 +424,6 @@ class AnalyticsService:
             "project_name": self.session.get(Project, task.project_id).name if task.project_id else ""
         }
 
-    # ======================================================
-    # Вспомогательные методы
-    # ======================================================
-
     def _format_employee_name(self, emp: ExternalEmployee) -> str:
         """Форматирует ФИО сотрудника"""
         parts = [emp.last_name, emp.first_name]
@@ -449,8 +445,6 @@ class AnalyticsService:
         div = self.session.get(DivisionFDW, division_id)
         return div.name if div else "—"
 
-    # services/analytics_service.py
-
     def _project_to_dict(self, project: Project) -> Dict:
         """Преобразует проект в словарь для карточки сотрудника"""
         from datetime import datetime
@@ -460,70 +454,20 @@ class AnalyticsService:
             select(Task).where(Task.project_id == project.id)
         ).all()
 
-        # Группируем задачи по статусам
-        grouped_tasks = {
-            "to_do": [],
-            "in_progress": [],
-            "review": [],
-            "completed": [],
-            "archived": []
-        }
-
-        for task in tasks:
-            status = "to_do"
-            is_completed = False
-
-            if task.column:
-                column_name = task.column.name.lower()
-                if task.column.is_done_column:
-                    status = "completed"
-                    is_completed = True
-                elif "проверк" in column_name:
-                    status = "review"
-                elif "работ" in column_name:
-                    status = "in_progress"
-                else:
-                    status = "to_do"
-
-            # Преобразуем задачу в словарь для UI
-            task_dict = {
-                "id": task.id,
-                "title": task.title,
-                "description": task.description or "",
-                "priority": task.priority.value if hasattr(task.priority, 'value') else str(task.priority),
-                "status": status,
-                "is_overdue": task.deadline and task.deadline.date() < datetime.now().date() and not is_completed,
-                "is_completed": is_completed,
-                "created_at_str": task.created_at.strftime("%d.%m.%Y") if task.created_at else "",
-                "due_date_str": task.deadline.strftime("%d.%m.%Y") if task.deadline else "",
-                "completed_at_str": task.archived_at.strftime("%d.%m.%Y") if task.archived_at else "",
-                "creator_name": "Неизвестен",
-                "tags_list": [],
-                "project_name": project.name
-            }
-
-            # Получаем создателя
-            if task.created_by:
-                creator = self.session.get(ExternalEmployee, task.created_by)
-                if creator:
-                    task_dict["creator_name"] = self._format_employee_name(creator)
-
-            # Получаем теги задачи
-            task_tags = self.tag_repo.get_task_tags(task.id)
-            task_dict["tags_list"] = [tag.name for tag in task_tags]
-
-            grouped_tasks[status].append(task_dict)
-
         # Подсчет выполненных задач
-        completed_tasks = len(grouped_tasks["completed"]) + len(grouped_tasks["archived"])
+        completed_tasks = 0
+        for task in tasks:
+            if task.column and task.column.is_done_column:
+                completed_tasks += 1
+
+        print(f"      Проект {project.name}: задач={len(tasks)}, выполнено={completed_tasks}")
 
         return {
             "id": project.id,
             "name": project.name,
             "created_at": project.created_at.strftime("%d.%m.%Y") if project.created_at else "",
-            "tasks_total": len(tasks),  # ✅ это есть
-            "tasks_done": completed_tasks,  # ✅ это есть
+            "tasks_total": len(tasks),
+            "tasks_done": completed_tasks,
             "tasks": tasks,
-            "grouped_tasks": grouped_tasks,
-            "is_archived": project.is_archived  # ✅ добавьте это поле
+            "is_archived": project.is_archived
         }
