@@ -61,6 +61,7 @@ class ExternalEmployee(Base):
     organization_id: Mapped[Optional[int]]
     session_token: Mapped[Optional[str]]
     settings: Mapped[Optional[dict]] = mapped_column(JSONB)
+    password_hash: Mapped[Optional[str]] = mapped_column(String(255))
 
 
 # =========================

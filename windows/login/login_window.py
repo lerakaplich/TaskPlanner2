@@ -14,6 +14,18 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt, QSize, QTimer
 from PyQt6.QtGui import QPixmap, QIcon, QColor
 
+# Импортируем для проверки пароля
+try:
+    from passlib.context import CryptContext
+
+    pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+    HAS_PASSLIB = True
+except ImportError:
+    HAS_PASSLIB = False
+    import hashlib
+
+    print("⚠️ passlib не установлен, используется простой хеш")
+
 
 class LoginWindow(QDialog):
     def __init__(self, parent=None, auth_service=None):
@@ -31,13 +43,11 @@ class LoginWindow(QDialog):
 
         self.showMaximized()
 
-        # Настройка (только базовые, без загрузки изображений)
+        # Настройка
         self.setup_ui()
         self.setup_signals()
         self.load_saved_credentials()
         self.create_eye_button()
-
-        # Убираем QTimer.singleShot - грузим изображения сразу, но асинхронно
         self.load_side_images()
 
     def get_authenticated_user(self):
@@ -49,7 +59,7 @@ class LoginWindow(QDialog):
         self._authenticated_user = user_data
 
     def setup_ui(self):
-        """Настройка UI элементов (только базовые, без тяжелых операций)"""
+        """Настройка UI элементов"""
         # Тень для карточки
         shadow = QGraphicsDropShadowEffect()
         shadow.setBlurRadius(50)
@@ -66,7 +76,7 @@ class LoginWindow(QDialog):
         logo_shadow.setColor(QColor(0, 0, 0, 40))
         self.logoLabel.setGraphicsEffect(logo_shadow)
 
-        # Логотип компании - грузим синхронно, он один
+        # Логотип компании
         logo_path = self.project_root / "images" / "logo.png"
         if logo_path.exists():
             pixmap = QPixmap(str(logo_path))
@@ -86,7 +96,7 @@ class LoginWindow(QDialog):
         )
 
     def load_side_images(self):
-        """Загрузка боковых изображений - без задержек"""
+        """Загрузка боковых изображений"""
         images_dir = self.project_root / "images"
 
         # Загрузка checkbox - 150x150
@@ -147,7 +157,6 @@ class LoginWindow(QDialog):
             self.eye_open_icon = QIcon(str(images_dir / "eye_open.png"))
 
         self.togglePasswordBtn.clicked.connect(self.toggle_password_visibility)
-        # Убираем QTimer - позиционируем сразу
         self.position_eye_button()
 
     def position_eye_button(self):
@@ -247,6 +256,29 @@ class LoginWindow(QDialog):
             if user:
                 user_id = user.id
 
+                # Проверяем пароль
+                if user.password_hash:
+                    if HAS_PASSLIB:
+                        if not pwd_context.verify(password, user.password_hash):
+                            QMessageBox.warning(self, "Ошибка", "Неверный пароль")
+                            return
+                    else:
+                        # Простая проверка для теста
+                        if hashlib.sha256(password.encode()).hexdigest() != user.password_hash:
+                            QMessageBox.warning(self, "Ошибка", "Неверный пароль")
+                            return
+                else:
+                    # Для старых аккаунтов без пароля - предупреждение
+                    reply = QMessageBox.question(
+                        self,
+                        "Внимание",
+                        "У вашей учетной записи нет пароля. Рекомендуем установить пароль в настройках профиля.\n\n"
+                        "Продолжить вход без пароля?",
+                        QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+                    )
+                    if reply != QMessageBox.StandardButton.Yes:
+                        return
+
                 self.set_authenticated_user({
                     'id': user_id,
                     'last_name': user.last_name,
@@ -272,7 +304,7 @@ class LoginWindow(QDialog):
             QMessageBox.critical(self, "Ошибка", f"Ошибка при подключении к базе данных: {e}")
 
     def save_credentials(self, phone, password):
-        """Сохраняет учетные данные (номер в формате 375xxxxxxxxx)"""
+        """Сохраняет учетные данные"""
         try:
             config_dir = Path.home() / ".taskplanner"
             config_dir.mkdir(exist_ok=True)
@@ -320,20 +352,43 @@ class LoginWindow(QDialog):
             QMessageBox.warning(self, "Ошибка", "Введите номер телефона")
 
     def on_request_clicked(self):
-        phone = self.phoneInput.text().strip()
-        password = self.passwordInput.text().strip()
-        empty_mask = "+375 (  )   -  -"
+        """Открытие формы регистрации нового сотрудника"""
+        try:
+            from database import get_tasks_session
+            from windows.settings.employees.employee_dialog import EmployeeDialog
+            from services.employee_service import EmployeeService
 
-        if not phone or phone == empty_mask:
-            QMessageBox.warning(self, "Ошибка", "Введите номер телефона")
-            return
-        if not password:
-            QMessageBox.warning(self, "Ошибка", "Введите пароль")
-            return
+            # Получаем сессию
+            session = get_tasks_session()
 
-        clean_phone = self.extract_phone_digits(phone)
-        QMessageBox.information(self, "Заявка отправлена",
-                                f"Заявка на регистрацию отправлена администратору\nТелефон: {self.format_phone_for_display(clean_phone)}")
+            # Создаем EmployeeService
+            employee_service = EmployeeService(session)
+
+            # Открываем диалог добавления сотрудника (без данных - режим создания)
+            dialog = EmployeeDialog(parent=self, employee_data=None, session=session)
+
+            # Обработчик сохранения
+            def on_employee_saved(employee_data):
+                try:
+                    # Сохраняем в БД
+                    new_employee = employee_service.create_employee_in_db(employee_data)
+                    if new_employee:
+                        QMessageBox.information(
+                            self,
+                            "Заявка отправлена",
+                            f"Ваша заявка на регистрацию отправлена администратору.\n"
+                            f"После одобрения вы получите пароль для входа."
+                        )
+                    else:
+                        QMessageBox.warning(self, "Ошибка", "Не удалось сохранить данные")
+                except Exception as e:
+                    QMessageBox.critical(self, "Ошибка", f"Ошибка при сохранении: {e}")
+
+            dialog.employee_saved.connect(on_employee_saved)
+            dialog.exec()
+
+        except Exception as e:
+            QMessageBox.critical(self, "Ошибка", f"Не удалось открыть форму регистрации: {e}")
 
     def keyPressEvent(self, event):
         if event.key() == Qt.Key.Key_Escape:
