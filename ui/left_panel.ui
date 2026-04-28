@@ -201,7 +201,10 @@ QPushButton:checked {
 }</string>
      </property>
      <property name="text">
-      <string>🗂 Архив</string>
+      <string>🗂  Архив</string>
+     </property>
+     <property name="checkable">
+      <bool>true</bool>
      </property>
     </widget>
    </item>
@@ -304,6 +307,29 @@ QPushButton:checked {
       </size>
      </property>
     </spacer>
+   </item>
+   <item>
+    <!-- НОВАЯ КНОПКА ВЫХОДА -->
+    <widget class="QPushButton" name="btnLogout">
+     <property name="styleSheet">
+      <string notr="true">QPushButton {
+    background-color: transparent;
+    color: #D22730;
+    font-size: 14px;
+    border: 1px solid #D22730;
+    border-radius: 6px;
+    padding: 8px;
+    margin-bottom: 5px;
+}
+QPushButton:hover {
+    background-color: #D22730;
+    color: white;
+}</string>
+     </property>
+     <property name="text">
+      <string>Выйти</string>
+     </property>
+    </widget>
    </item>
    <item>
     <widget class="QPushButton" name="btnCollapse">

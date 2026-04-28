@@ -380,6 +380,29 @@ class LoginWindow(QDialog):
         except Exception as e:
             print(f"❌ Ошибка сохранения учетных данных: {e}")
 
+    def logout(self):
+        """Выход из системы - очищает сессию и показывает окно входа"""
+        try:
+            # Очищаем сессию (локально и в БД)
+            self.clear_session()
+
+            # Очищаем данные аутентифицированного пользователя
+            self._authenticated_user = None
+
+            # Очищаем поля ввода
+            self.phoneInput.clear()
+            self.passwordInput.clear()
+            self.rememberCheckbox.setChecked(False)
+
+            # Показываем уведомление
+            QMessageBox.information(self, "Выход", "Вы успешно вышли из системы")
+
+            # Показываем окно входа
+            self.show()
+
+        except Exception as e:
+            print(f"❌ Ошибка при выходе: {e}")
+
     def clear_saved_credentials(self):
         """Удаляет сохраненные учетные данные"""
         try:

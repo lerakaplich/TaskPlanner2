@@ -358,6 +358,29 @@ class MainWindow(QMainWindow):
         self.adjust_card_columns()
         print(f"UI обновлен: отображено {len(self.project_cards)} проектов.")
 
+    def logout(self):
+        """Выход из системы"""
+        reply = QMessageBox.question(
+            self,
+            "Выход",
+            "Вы уверены, что хотите выйти из системы?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No
+        )
+
+        if reply == QMessageBox.StandardButton.Yes:
+            # Очищаем сессию (локально и в БД)
+            from windows.login.login_window import LoginWindow
+            login_window = LoginWindow()
+            login_window.clear_session()
+
+            # Закрываем главное окно
+            self.close()
+
+            # Создаем и показываем новое окно входа
+            self.login_window = LoginWindow()
+            self.login_window.show()
+
     def connect_signals(self):
         self.nav_map = {
             self.leftPanel.btnMain: self.PAGE_PROJECTS,
@@ -385,6 +408,8 @@ class MainWindow(QMainWindow):
             self.btnNotifications.clicked.connect(self.show_notifications)
         if hasattr(self, 'btnProfile'):
             self.btnProfile.clicked.connect(self.show_profile)
+        if hasattr(self.leftPanel, 'btnLogout'):
+            self.leftPanel.btnLogout.clicked.connect(self.logout)
         self.contentStack.currentChanged.connect(self.on_stack_page_changed)
 
     def on_stack_page_changed(self, index):
