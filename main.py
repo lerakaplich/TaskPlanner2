@@ -25,15 +25,32 @@ def main():
     # Показываем окно авторизации
     login_window = LoginWindow()
 
-    if login_window.exec() == LoginWindow.DialogCode.Accepted:
-        # 👇 ПОЛУЧАЕМ РЕАЛЬНОГО ПОЛЬЗОВАТЕЛЯ ИЗ ОКНА ВХОДА
-        authenticated_user = login_window.get_authenticated_user()
+    # Переменная для хранения пользователя
+    authenticated_user = None
+
+    # Функция для обработки успешного входа через сигнал
+    def on_login_success(user_data):
+        nonlocal authenticated_user
+        authenticated_user = user_data
+        print(f"✅ Сигнал login_success получен для {user_data.get('phone_number')}")
+
+    # Подключаем сигнал ПРАВИЛЬНО
+    login_window.login_success.connect(on_login_success)
+
+    # Запускаем диалог
+    result = login_window.exec()
+
+    # Если есть аутентифицированный пользователь ИЛИ диалог завершился успешно
+    if authenticated_user or result == LoginWindow.DialogCode.Accepted:
+        # Если пользователь был аутентифицирован через сигнал
+        if authenticated_user is None:
+            authenticated_user = login_window.get_authenticated_user()
 
         if not authenticated_user:
             QMessageBox.critical(None, "Ошибка", "Не удалось получить данные пользователя")
             sys.exit(1)
 
-        user_id = authenticated_user.get('id')  # 👈 Берем ID из результата входа
+        user_id = authenticated_user.get('id')
         user_name = f"{authenticated_user.get('last_name', '')} {authenticated_user.get('first_name', '')}"
 
         print(f"\n✅ Вход выполнен: {user_name}")
@@ -51,7 +68,7 @@ def main():
         # Создаем главное окно с правильным user_id
         window = MainWindow(
             session=session,
-            user_id=user_id,  # 👈 Передаем правильный ID
+            user_id=user_id,
             socket_client=socket_client
         )
         window.show()
@@ -60,6 +77,7 @@ def main():
     else:
         print("❌ Вход отменен")
         sys.exit(0)
+
 
 if __name__ == "__main__":
     main()

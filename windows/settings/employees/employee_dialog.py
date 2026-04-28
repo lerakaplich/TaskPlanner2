@@ -11,9 +11,27 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6 import uic, QtCore
 from PyQt6.QtCore import QDate, pyqtSignal
+from PyQt6.QtGui import QValidator
 
 from windows.settings.departments.department_dialog import DepartmentDialog
 from windows.settings.divisions.division_dialog import DivisionDialog
+
+
+class PhoneValidator(QValidator):
+    """Валидатор для номера телефона (только цифры, максимум 9)"""
+    def validate(self, input_str, pos):
+        # Разрешаем только цифры
+        filtered = ''.join([c for c in input_str if c.isdigit()])
+        if len(filtered) > 9:
+            filtered = filtered[:9]
+
+        if input_str != filtered:
+            return QValidator.State.Invalid, filtered, len(filtered)
+
+        if len(filtered) <= 9:
+            return QValidator.State.Acceptable, filtered, pos
+
+        return QValidator.State.Invalid, filtered[:9], 9
 
 
 class EmployeeDialog(QDialog):
@@ -47,11 +65,13 @@ class EmployeeDialog(QDialog):
         # === ОПРЕДЕЛЯЕМ РЕЖИМ ===
         self.is_edit_mode = employee_data is not None and employee_data.get('id') is not None
 
+        # Настраиваем поле телефона с префиксом +375
+        self.setup_phone_field()
+
         # Загружаем данные в комбобоксы
         self.load_divisions_combo()
 
-        # Настраиваем валидацию и клавиатуру
-        self.setup_phone_validators()
+        # Настраиваем клавиатуру
         self.setup_keyboard_navigation()
 
         # Подключаем сигналы
@@ -68,16 +88,13 @@ class EmployeeDialog(QDialog):
             self.load_employee_data(employee_data)
             if hasattr(self, 'comboBoxRole'):
                 self.comboBoxRole.setEnabled(True)
-            # Показываем кнопки добавления
             self.btnAddDivision.setVisible(True)
             self.btnAddDepartment.setVisible(True)
-
 
         elif self.is_registration_mode:
             self.setWindowTitle("Регистрация нового сотрудника")
             if hasattr(self, 'titleLabel'):
                 self.titleLabel.setText("Регистрация нового сотрудника")
-            # Блокируем выбор роли и устанавливаем "Пользователь"
             if hasattr(self, 'comboBoxRole'):
                 user_index = self.comboBoxRole.findText("Пользователь")
                 if user_index >= 0:
@@ -93,12 +110,47 @@ class EmployeeDialog(QDialog):
                 self.titleLabel.setText("Добавление нового сотрудника")
             if hasattr(self, 'comboBoxRole'):
                 self.comboBoxRole.setEnabled(True)
-            # Показываем кнопки добавления
             self.btnAddDivision.setVisible(True)
             self.btnAddDepartment.setVisible(True)
 
-        # Устанавливаем максимальную дату рождения
         self.dateEditBirthDate.setMaximumDate(QDate.currentDate())
+
+    def setup_phone_field(self):
+        """Настройка поля телефона с префиксом +375"""
+        # Устанавливаем валидатор
+        validator = PhoneValidator()
+        self.lineEditMobilePhone.setValidator(validator)
+
+        # Устанавливаем префикс
+        self.lineEditMobilePhone.setText("")
+
+        # Обработчик ввода для автоматического добавления префикса
+        def on_phone_edit(text):
+            # Убираем все нецифровые символы
+            digits = ''.join([c for c in text if c.isdigit()])
+            # Ограничиваем 9 цифрами
+            if len(digits) > 9:
+                digits = digits[:9]
+
+            # Если есть цифры, показываем +375 + цифры
+            if digits:
+                self.lineEditMobilePhone.blockSignals(True)
+                self.lineEditMobilePhone.setText(digits)
+                self.lineEditMobilePhone.blockSignals(False)
+
+        self.lineEditMobilePhone.textChanged.connect(on_phone_edit)
+
+        # Устанавливаем placeholder
+        self.lineEditMobilePhone.setPlaceholderText("Введите 9 цифр (29XXXXXXX)")
+
+    def get_full_phone_number(self):
+        """Получает полный номер телефона в формате 375XXXXXXXXX"""
+        digits = self.lineEditMobilePhone.text().strip()
+        # Убираем все нецифровые символы
+        digits = ''.join([c for c in digits if c.isdigit()])
+        if digits:
+            return f"375{digits}"
+        return ""
 
     def load_divisions_from_db(self):
         """Загрузка подразделений из БД"""
@@ -205,10 +257,6 @@ class EmployeeDialog(QDialog):
 
         QMessageBox.information(self, "Успешно", f"Отдел «{department_data.get('name')}» добавлен")
 
-    def setup_phone_validators(self):
-        """Настройка валидаторов для телефонных номеров"""
-        pass
-
     def validate_data(self):
         """Проверка заполнения обязательных полей"""
         if not self.lineEditLastName.text().strip():
@@ -226,8 +274,13 @@ class EmployeeDialog(QDialog):
         if not self.lineEditPosition.text().strip():
             return False, "Пожалуйста, заполните поле 'Должность'"
 
-        if not self.lineEditMobilePhone.text().strip():
+        # Проверка телефона
+        phone_digits = ''.join([c for c in self.lineEditMobilePhone.text().strip() if c.isdigit()])
+        if not phone_digits:
             return False, "Пожалуйста, заполните поле 'Моб. телефон'"
+
+        if len(phone_digits) != 9:
+            return False, "Введите 9 цифр номера телефона (без +375)"
 
         email = self.lineEditEmail.text().strip()
         if email and "@" not in email:
@@ -256,6 +309,10 @@ class EmployeeDialog(QDialog):
         birth_date = self.dateEditBirthDate.date().toPyDate()
         birth_date_str = birth_date.isoformat() if birth_date else None
 
+        # Получаем полный номер телефона (375 + 9 цифр)
+        phone_digits = ''.join([c for c in self.lineEditMobilePhone.text().strip() if c.isdigit()])
+        full_phone = f"375{phone_digits}" if phone_digits else ""
+
         # Генерируем пароль только для режима регистрации
         generated_password = None
         if self.is_registration_mode:
@@ -273,7 +330,7 @@ class EmployeeDialog(QDialog):
             "department_id": department_id,
             "position": self.lineEditPosition.text().strip(),
             "rights": rights,
-            "phone_number": self.lineEditMobilePhone.text().strip(),
+            "phone_number": full_phone,  # Сохраняем как 375XXXXXXXXX
             "work_number": self.lineEditWorkPhone.text().strip() or None,
             "email": self.lineEditEmail.text().strip() or None,
         }
@@ -320,7 +377,12 @@ class EmployeeDialog(QDialog):
             if role_index >= 0:
                 self.comboBoxRole.setCurrentIndex(role_index)
 
-        self.lineEditMobilePhone.setText(data.get("phone_number", ""))
+        # Загружаем номер телефона (убираем 375 в начале)
+        phone = data.get("phone_number", "")
+        if phone.startswith("375"):
+            phone = phone[3:]  # Показываем только 9 цифр
+        self.lineEditMobilePhone.setText(phone)
+
         self.lineEditWorkPhone.setText(data.get("work_number", ""))
         self.lineEditEmail.setText(data.get("email", ""))
 

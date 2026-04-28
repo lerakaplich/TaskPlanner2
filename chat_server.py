@@ -1,4 +1,5 @@
 import uvicorn
+from PyQt6.QtWidgets import QMessageBox
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from fastapi import FastAPI
 from sqlalchemy import select
@@ -9,7 +10,8 @@ from services.chat_service import ChatService
 
 # Импортируем сервис синхронизации
 from sync_service import sync_service
-from telegram_bot import pending_registrations, telegram_bot
+from shared_state import pending_registrations
+from telegram_bot import telegram_bot, start_bot  # ← импортируем функцию запуска
 
 user_sid_map = {}  # {user_id: sid}
 
@@ -29,6 +31,7 @@ async def send_telegram_message(chat_id: int, text: str, reply_markup=None):
         await telegram_bot.bot.send_message(
             chat_id, text, parse_mode="Markdown", reply_markup=reply_markup
         )
+        print(f"✅ Сообщение отправлено в чат {chat_id}")
         return True
     except Exception as e:
         print(f"❌ Ошибка отправки администратору {chat_id}: {e}")
@@ -73,6 +76,75 @@ async def disconnect(sid):
             del user_sid_map[uid]
             print(f"🚫 Пользователь {uid} отключился")
             break
+
+
+def send_to_telegram_admin(self, employee_data):
+    """Отправляет данные на одобрение администратору в Telegram"""
+    try:
+        from utils.socket_manager import get_socket_client
+
+        # Добавляем user_chat_id для отслеживания
+        # Пока None, будет заполнен после /start в боте
+        employee_data['chat_id'] = None
+        employee_data['request_id'] = None  # Будет заполнен на сервере
+
+        socket_client = get_socket_client()
+
+        if not socket_client.is_connected():
+            QMessageBox.warning(self, "Нет подключения", "Нет подключения к серверу. Попробуйте позже.")
+            return
+
+        # Отправляем запрос
+        socket_client.request_registration(employee_data)
+
+        # Показываем окно с ссылкой на бота
+        bot_link = "https://t.me/TaskPlanner2035Vikusik_bot"
+
+        msg_box = QMessageBox(self)
+        msg_box.setWindowTitle("Заявка отправлена")
+        msg_box.setIcon(QMessageBox.Icon.Information)
+        msg_box.setText(
+            f"✅ Ваша заявка на регистрацию отправлена администратору!\n\n"
+            f"📋 ФИО: {employee_data.get('last_name')} {employee_data.get('first_name')}\n"
+            f"📞 Телефон: {employee_data.get('phone_number')}\n\n"
+            f"📱 *Для получения пароля:*\n"
+            f"1. Перейдите в Telegram бота:\n"
+            f"   {bot_link}\n"
+            f"2. Нажмите /start\n"
+            f"3. Бот свяжет ваш аккаунт с заявкой\n"
+            f"4. После одобрения вы получите пароль в Telegram\n\n"
+            f"⏰ Обычно это занимает несколько минут."
+        )
+
+        # Добавляем кнопку для открытия ссылки
+        from PyQt6.QtGui import QDesktopServices
+        from PyQt6.QtCore import QUrl
+
+        open_bot_btn = msg_box.addButton("Перейти в Telegram бота", QMessageBox.ButtonRole.ActionRole)
+        open_bot_btn.clicked.connect(lambda: QDesktopServices.openUrl(QUrl(bot_link)))
+
+        msg_box.addButton(QMessageBox.StandardButton.Ok)
+        msg_box.exec()
+
+    except Exception as e:
+        QMessageBox.critical(self, "Ошибка", f"Не удалось отправить заявку: {e}")
+
+
+@sio.event
+async def request_registration(sid, data):
+    print(f"📝 Получен запрос на регистрацию: {data.get('last_name')} {data.get('first_name')}")
+
+    request_id = sid
+    data['request_id'] = request_id
+    data['chat_id'] = None  # chat_id пока нет
+    data['chat_id_bound'] = False  # флаг, что Telegram не привязан
+    pending_registrations[request_id] = data
+
+    print(f"🔑 Создана заявка с ID: {request_id}, ожидает привязки Telegram")
+    print(f"📋 Всего заявок в pending: {len(pending_registrations)}")
+
+    # НЕ ОТПРАВЛЯЕМ уведомление администратору!
+    # Ждем, пока пользователь привяжет Telegram
 
 
 @sio.event
@@ -153,91 +225,6 @@ async def send_chat_msg(sid, data):
             await sio.emit("new_message", formatted_data, room=f"chat_{data['chat_id']}")
     except Exception as e:
         print(f"❌ Server Error in send_chat_msg: {e}")
-
-
-@sio.event
-async def request_registration(sid, data):
-    """
-    Обработчик запроса на регистрацию от клиента
-    Отправляет уведомление всем администраторам
-    """
-    print(f"📝 Получен запрос на регистрацию: {data.get('last_name')} {data.get('first_name')}")
-
-    request_id = data.get('user_chat_id') or sid
-    pending_registrations[request_id] = data
-
-    with TasksSessionLocal() as session:
-        from models.employees import ExternalEmployee
-        stmt = select(ExternalEmployee).where(
-            ExternalEmployee.rights.in_(['admin', 'superadmin'])
-        )
-        admins = list(session.scalars(stmt))
-
-        if not admins:
-            print("⚠️ Нет администраторов для уведомления")
-            return
-
-        # Получаем названия отдела и подразделения
-        division_name = "Не указано"
-        department_name = "Не указано"
-
-        if data.get('division_id'):
-            from models.employees import DivisionFDW
-            div = session.get(DivisionFDW, data['division_id'])
-            division_name = div.name if div else "Не указано"
-
-        if data.get('department_id'):
-            from models.employees import DepartmentFDW
-            dept = session.get(DepartmentFDW, data['department_id'])
-            department_name = dept.name if dept else "Не указано"
-
-        # Получаем дату рождения
-        birth_date = data.get('birth_date', 'Не указана')
-        if birth_date and birth_date != 'Не указана':
-            # Форматируем дату из ISO в DD.MM.YYYY
-            try:
-                from datetime import datetime
-                birth_date_obj = datetime.fromisoformat(birth_date)
-                birth_date = birth_date_obj.strftime("%d.%m.%Y")
-            except:
-                pass
-
-        # Рабочий номер
-        work_number = data.get('work_number', 'Не указан')
-        if not work_number or work_number == '':
-            work_number = 'Не указан'
-
-        keyboard = InlineKeyboardMarkup(inline_keyboard=[
-            [
-                InlineKeyboardButton(text="✅ Одобрить", callback_data=f"approve_{request_id}"),
-                InlineKeyboardButton(text="❌ Отклонить", callback_data=f"reject_{request_id}")
-            ]
-        ])
-
-        message_text = (
-            f"🆕 *Новая заявка на регистрацию!*\n\n"
-            f"📝 *ФИО:* {data.get('last_name')} {data.get('first_name')} {data.get('middle_name') or ''}\n"
-            f"📞 *Моб. телефон:* {data.get('phone_number')}\n"
-            f"📞 *Раб. телефон:* {work_number}\n"
-            f"📧 *Email:* {data.get('email') or 'Не указан'}\n"
-            f"🎂 *Дата рождения:* {birth_date}\n"
-            f"💼 *Должность:* {data.get('position')}\n"
-            f"🏢 *Подразделение:* {division_name}\n"
-            f"📁 *Отдел:* {department_name}\n\n"
-            f"Используйте кнопки ниже для подтверждения или отклонения заявки."
-        )
-
-        # Отправляем уведомление каждому администратору
-        tasks = []
-        for admin in admins:
-            if admin.chat_id:
-                task = send_telegram_message(admin.chat_id, message_text, keyboard)
-                tasks.append(task)
-                print(f"📨 Отправка уведомления администратору {admin.id}")
-
-        if tasks:
-            await asyncio.gather(*tasks)
-            print(f"✅ Уведомления отправлены {len(admins)} администраторам")
 
 
 @sio.event
@@ -328,17 +315,26 @@ async def update_chat_settings(sid, data):
     }, room=f"chat_{chat_id}")
 
 
-if __name__ == "__main__":
-    # Запускаем синхронизацию
+async def main():
+    """Главная асинхронная функция"""
     print("🔄 Запуск синхронизации сотрудников...")
     sync_service.sync_employees()
     print("✅ Начальная синхронизация завершена")
 
     sync_service.start_background_sync()
 
-    # Запускаем Telegram бота в том же event loop
+    # Запускаем Telegram бота в фоновом режиме
     print("🤖 Запуск Telegram бота...")
+    bot_task = asyncio.create_task(start_bot())
 
-    # Запускаем сервер
+    # Запускаем сокет-сервер
     print("🌐 Запуск сокет-сервера...")
-    uvicorn.run(socket_app, host="0.0.0.0", port=8081)
+    config = uvicorn.Config(socket_app, host="0.0.0.0", port=8081, loop="asyncio")
+    server = uvicorn.Server(config)
+
+    # Ждём завершения сервера
+    await server.serve()
+
+
+if __name__ == "__main__":
+    asyncio.run(main())

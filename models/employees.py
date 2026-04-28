@@ -13,7 +13,7 @@ from sqlalchemy import (
     Time,
     ForeignKey,
     Enum,
-    Text,
+    Text, Column,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship, DeclarativeBase
 from sqlalchemy.dialects.postgresql import JSONB
@@ -62,6 +62,7 @@ class ExternalEmployee(Base):
     session_token: Mapped[Optional[str]]
     settings: Mapped[Optional[dict]] = mapped_column(JSONB)
     password_hash: Mapped[Optional[str]] = mapped_column(String(255))
+    app_session_token = Column(String(255), nullable=True)
 
 
 # =========================
@@ -111,6 +112,7 @@ class LocalEmployee(Base):
     settings: Mapped[Optional[dict]] = mapped_column(JSONB)
     password_hash: Mapped[Optional[str]] = mapped_column(String(255))
     is_from_fdw: Mapped[bool] = mapped_column(Boolean, default=True)  # 👈 ДОБАВИТЬ
+    app_session_token = Column(String(255), nullable=True)
 
 
 # =========================
