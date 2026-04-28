@@ -19,11 +19,13 @@ from models.employees import ExternalEmployee, LocalEmployee
 # Проверяем наличие passlib, если нет - используем простой хеш
 try:
     from passlib.context import CryptContext
+
     pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
     HAS_PASSLIB = True
 except ImportError:
     HAS_PASSLIB = False
     import hashlib
+
     print("⚠️ passlib не установлен, используется простой хеш SHA256")
 
 # Настройка логирования
@@ -69,7 +71,6 @@ class TelegramBot:
         if HAS_PASSLIB:
             return pwd_context.hash(password)
         else:
-            # Простой хеш SHA256 для тестирования
             return hashlib.sha256(password.encode()).hexdigest()
 
     def verify_password(self, plain_password: str, hashed_password: str) -> bool:
@@ -117,6 +118,8 @@ class TelegramBot:
                 "❓ /help - Эта справка",
                 parse_mode="Markdown"
             )
+
+        # === Обработчики регистрации через бота ===
 
         @self.dp.message(Command("login"))
         async def cmd_login(message: types.Message):
@@ -190,142 +193,12 @@ class TelegramBot:
                     parse_mode="Markdown"
                 )
 
-        @self.dp.message(Command("register"))
-        async def cmd_register(message: types.Message, state: FSMContext):
-            user_id = message.from_user.id
+        # === ОБРАБОТЧИКИ КНОПОК ОДОБРЕНИЯ/ОТКЛОНЕНИЯ ===
 
-            # Проверяем, не зарегистрирован ли уже пользователь
-            with get_tasks_session() as session:
-                stmt = select(ExternalEmployee).where(ExternalEmployee.chat_id == user_id)
-                existing = session.scalar(stmt)
-                if existing:
-                    await message.answer("❌ Вы уже зарегистрированы в системе! Используйте /login для входа.")
-                    return
-
-            await message.answer(
-                "📝 *Регистрация нового пользователя*\n\n"
-                "Пожалуйста, введите вашу фамилию:",
-                parse_mode="Markdown"
-            )
-            await state.set_state(RegistrationStates.waiting_for_last_name)
-            await state.update_data(chat_id=user_id)
-
-        @self.dp.message(RegistrationStates.waiting_for_last_name)
-        async def process_last_name(message: types.Message, state: FSMContext):
-            await state.update_data(last_name=message.text.strip())
-            await message.answer("Введите ваше имя:")
-            await state.set_state(RegistrationStates.waiting_for_first_name)
-
-        @self.dp.message(RegistrationStates.waiting_for_first_name)
-        async def process_first_name(message: types.Message, state: FSMContext):
-            await state.update_data(first_name=message.text.strip())
-            await message.answer("Введите ваше отчество (или '-' чтобы пропустить):")
-            await state.set_state(RegistrationStates.waiting_for_middle_name)
-
-        @self.dp.message(RegistrationStates.waiting_for_middle_name)
-        async def process_middle_name(message: types.Message, state: FSMContext):
-            middle_name = None if message.text == "-" else message.text.strip()
-            await state.update_data(middle_name=middle_name)
-            await message.answer("Введите ваш номер телефона (в формате 375XXXXXXXXX):")
-            await state.set_state(RegistrationStates.waiting_for_phone)
-
-        @self.dp.message(RegistrationStates.waiting_for_phone)
-        async def process_phone_reg(message: types.Message, state: FSMContext):
-            phone = message.text.strip()
-            if not (len(phone) == 12 and phone.startswith('375')):
-                await message.answer("❌ Неверный формат номера. Используйте формат 375XXXXXXXXX:")
-                return
-
-            # Проверяем, не занят ли номер
-            with get_tasks_session() as session:
-                stmt = select(ExternalEmployee).where(ExternalEmployee.phone_number == phone)
-                existing = session.scalar(stmt)
-                if existing:
-                    await message.answer("❌ Этот номер телефона уже зарегистрирован. Используйте /login для входа.")
-                    await state.clear()
-                    return
-
-            await state.update_data(phone_number=phone)
-            await message.answer("Введите ваш email (или '-' чтобы пропустить):")
-            await state.set_state(RegistrationStates.waiting_for_email)
-
-        @self.dp.message(RegistrationStates.waiting_for_email)
-        async def process_email(message: types.Message, state: FSMContext):
-            email = None if message.text == "-" else message.text.strip()
-            await state.update_data(email=email)
-            await message.answer("Введите вашу должность:")
-            await state.set_state(RegistrationStates.waiting_for_position)
-
-        @self.dp.message(RegistrationStates.waiting_for_position)
-        async def process_position(message: types.Message, state: FSMContext):
-            await state.update_data(position=message.text.strip())
-
-            # Получаем список подразделений
-            with get_tasks_session() as session:
-                from models.employees import DivisionFDW
-                stmt = select(DivisionFDW).order_by(DivisionFDW.name)
-                divisions = list(session.scalars(stmt))
-
-                if not divisions:
-                    await message.answer("❌ Нет доступных подразделений. Обратитесь к администратору.")
-                    await state.clear()
-                    return
-
-                keyboard = InlineKeyboardMarkup(inline_keyboard=[
-                    [InlineKeyboardButton(text=div.name, callback_data=f"div_{div.id}")] for div in divisions[:10]
-                ])
-                await message.answer("📁 Выберите ваше подразделение:", reply_markup=keyboard)
-                await state.set_state(RegistrationStates.waiting_for_division)
-
-        @self.dp.callback_query(lambda c: c.data.startswith("div_"))
-        async def process_division(callback: types.CallbackQuery, state: FSMContext):
-            division_id = int(callback.data.split("_")[1])
-            await state.update_data(division_id=division_id)
-
-            # Получаем список отделов для выбранного подразделения
-            with get_tasks_session() as session:
-                from models.employees import DepartmentFDW
-                stmt = select(DepartmentFDW).where(DepartmentFDW.division_id == division_id).order_by(
-                    DepartmentFDW.name)
-                departments = list(session.scalars(stmt))
-
-                if not departments:
-                    await callback.message.answer("⚠️ В этом подразделении нет отделов. Выберите другой.")
-                    await state.set_state(RegistrationStates.waiting_for_division)
-                    await callback.answer()
-                    return
-
-                keyboard = InlineKeyboardMarkup(inline_keyboard=[
-                    [InlineKeyboardButton(text=dept.name, callback_data=f"dept_{dept.id}")] for dept in departments[:10]
-                ])
-                await callback.message.answer("🏢 Выберите ваш отдел:", reply_markup=keyboard)
-                await state.set_state(RegistrationStates.waiting_for_department)
-
-            await callback.answer()
-
-        @self.dp.callback_query(lambda c: c.data.startswith("dept_"))
-        async def process_department(callback: types.CallbackQuery, state: FSMContext):
-            department_id = int(callback.data.split("_")[1])
-            await state.update_data(department_id=department_id)
-
-            registration_data = await state.get_data()
-
-            # Отправляем запрос на одобрение администраторам
-            await self.send_approval_request(callback.message.chat.id, registration_data)
-            await callback.message.answer(
-                "✅ *Заявка на регистрацию отправлена!*\n\n"
-                "Администратор рассмотрит вашу заявку и свяжется с вами.\n"
-                "Обычно это занимает несколько минут.",
-                parse_mode="Markdown"
-            )
-            await state.clear()
-            await callback.answer()
-
-        # Обработчики для одобрения/отклонения (внутри метода setup_handlers)
         @self.dp.callback_query(lambda c: c.data.startswith("approve_"))
         async def approve_registration(callback: types.CallbackQuery):
-            user_chat_id = int(callback.data.split("_")[1])
-            registration_data = pending_registrations.get(user_chat_id)
+            request_id = callback.data.split("_")[1]
+            registration_data = pending_registrations.get(request_id)
 
             if not registration_data:
                 await callback.answer("❌ Заявка не найдена", show_alert=True)
@@ -335,158 +208,128 @@ class TelegramBot:
             password = self.generate_password()
             password_hash = self.hash_password(password)
 
-            # Получаем следующий номер
             with get_employees_session() as emp_session:
-                from models.employees import LocalEmployee
-                max_number = emp_session.query(LocalEmployee.number).order_by(LocalEmployee.number.desc()).first()
-                next_number = (max_number[0] + 1) if max_number else 1
+                try:
+                    # Проверяем, есть ли уже такой пользователь
+                    from sqlalchemy import text
 
-                # Создаем сотрудника в локальной БД
-                new_employee = LocalEmployee(
-                    number=next_number,
-                    last_name=registration_data.get('last_name'),
-                    first_name=registration_data.get('first_name'),
-                    middle_name=registration_data.get('middle_name'),
-                    position=registration_data.get('position'),
-                    rights='user',
-                    phone_number=registration_data.get('phone_number'),
-                    email=registration_data.get('email'),
-                    chat_id=user_chat_id,
-                    department_id=registration_data.get('department_id'),
-                    division_id=registration_data.get('division_id'),
-                    organization_id=1,
-                    password_hash=password_hash
-                )
-                emp_session.add(new_employee)
-                emp_session.commit()
+                    # Получаем следующий номер
+                    max_number = emp_session.query(LocalEmployee.number).order_by(LocalEmployee.number.desc()).first()
+                    next_number = (max_number[0] + 1) if max_number else 1
+
+                    # Создаем сотрудника в public.employees
+                    insert_stmt = text("""
+                        INSERT INTO public.employees (
+                            number, last_name, first_name, middle_name, 
+                            position, rights, phone_number, email, chat_id,
+                            birth_date, department_id, division_id, organization_id,
+                            password_hash
+                        ) VALUES (
+                            :number, :last_name, :first_name, :middle_name,
+                            :position, :rights, :phone_number, :email, :chat_id,
+                            :birth_date, :department_id, :division_id, :organization_id,
+                            :password_hash
+                        )
+                    """)
+                    emp_session.execute(insert_stmt, {
+                        'number': next_number,
+                        'last_name': registration_data.get('last_name'),
+                        'first_name': registration_data.get('first_name'),
+                        'middle_name': registration_data.get('middle_name'),
+                        'position': registration_data.get('position'),
+                        'rights': 'user',
+                        'phone_number': registration_data.get('phone_number'),
+                        'email': registration_data.get('email'),
+                        'chat_id': registration_data.get('chat_id'),
+                        'birth_date': registration_data.get('birth_date'),
+                        'department_id': registration_data.get('department_id'),
+                        'division_id': registration_data.get('division_id'),
+                        'organization_id': 1,
+                        'password_hash': password_hash
+                    })
+                    emp_session.commit()
+
+                    # Получаем ID нового сотрудника
+                    result = emp_session.execute(text("SELECT lastval()")).scalar()
+                    employee_id = result
+
+                    print(f"✅ Сотрудник добавлен в исходную БД employees, ID: {employee_id}")
+
+                except Exception as e:
+                    emp_session.rollback()
+                    print(f"❌ Ошибка при добавлении сотрудника: {e}")
+                    await callback.answer(f"Ошибка: {e}", show_alert=True)
+                    return
 
             # Отправляем уведомление пользователю
-            await self.bot.send_message(
-                user_chat_id,
-                f"✅ *Ваша заявка одобрена!*\n\n"
-                f"📋 *Ваши данные для входа:*\n"
-                f"📞 *Телефон:* {registration_data.get('phone_number')}\n"
-                f"🔐 *Пароль:* `{password}`\n\n"
-                f"⚠️ *Сохраните этот пароль!*\n"
-                f"Вы можете изменить его в приложении TaskPlanner.\n\n"
-                f"Для входа используйте команду /login",
-                parse_mode="Markdown"
-            )
+            user_chat_id = registration_data.get('chat_id')
+            if user_chat_id:
+                try:
+                    await self.bot.send_message(
+                        user_chat_id,
+                        f"✅ *Ваша заявка одобрена!*\n\n"
+                        f"📋 *Ваши данные для входа:*\n"
+                        f"📞 *Телефон:* {registration_data.get('phone_number')}\n"
+                        f"🔐 *Пароль:* `{password}`\n\n"
+                        f"⚠️ *Сохраните этот пароль!*\n"
+                        f"Вы можете изменить его в приложении TaskPlanner.\n\n"
+                        f"Для входа используйте команду /login",
+                        parse_mode="Markdown"
+                    )
+                except Exception as e:
+                    print(f"❌ Ошибка отправки уведомления пользователю: {e}")
 
+            # Обновляем сообщение администратора
             await callback.message.edit_text(
                 f"✅ *Заявка одобрена!*\n\n"
                 f"Пользователь {registration_data.get('last_name')} {registration_data.get('first_name')} зарегистрирован.\n"
-                f"Ему отправлены данные для входа.",
+                f"📋 ID сотрудника: {employee_id}",
                 parse_mode="Markdown"
             )
 
             # Удаляем заявку
-            pending_registrations.pop(user_chat_id, None)
-            await callback.answer()
+            pending_registrations.pop(request_id, None)
+            await callback.answer("✅ Заявка одобрена")
 
         @self.dp.callback_query(lambda c: c.data.startswith("reject_"))
         async def reject_registration(callback: types.CallbackQuery):
-            user_chat_id = int(callback.data.split("_")[1])
-            registration_data = pending_registrations.get(user_chat_id)
+            request_id = callback.data.split("_")[1]
+            registration_data = pending_registrations.get(request_id)
 
             if registration_data:
                 # Уведомляем пользователя об отказе
-                await self.bot.send_message(
-                    user_chat_id,
-                    f"❌ *Ваша заявка на регистрацию отклонена.*\n\n"
-                    f"Пожалуйста, свяжитесь с администратором для уточнения причин.\n"
-                    f"Вы можете отправить заявку повторно с помощью команды /register.",
-                    parse_mode="Markdown"
-                )
+                user_chat_id = registration_data.get('chat_id')
+                if user_chat_id:
+                    try:
+                        await self.bot.send_message(
+                            user_chat_id,
+                            f"❌ *Ваша заявка на регистрацию отклонена.*\n\n"
+                            f"Пожалуйста, свяжитесь с администратором для уточнения причин.\n"
+                            f"Вы можете отправить заявку повторно через приложение TaskPlanner.",
+                            parse_mode="Markdown"
+                        )
+                    except Exception as e:
+                        print(f"❌ Ошибка отправки уведомления пользователю: {e}")
 
                 await callback.message.edit_text(
                     f"❌ *Заявка отклонена*\n\n"
                     f"Пользователь {registration_data.get('last_name')} {registration_data.get('first_name')} получил уведомление об отказе.",
                     parse_mode="Markdown"
                 )
-                pending_registrations.pop(user_chat_id, None)
+                pending_registrations.pop(request_id, None)
 
-            await callback.answer()
-
-    async def send_approval_request(self, user_chat_id: int, registration_data: dict):
-        """Отправляет запрос на одобрение всем администраторам и суперадминистраторам"""
-        with get_tasks_session() as session:
-            # Находим всех администраторов и суперадминистраторов
-            stmt = select(ExternalEmployee).where(
-                ExternalEmployee.rights.in_(['admin', 'superadmin'])
-            )
-            admins = list(session.scalars(stmt))
-
-            # Сохраняем данные заявки
-            pending_registrations[user_chat_id] = registration_data
-
-            for admin in admins:
-                if admin.chat_id:
-                    # Получаем названия отдела и подразделения
-                    division_name = ""
-                    department_name = ""
-
-                    if registration_data.get('division_id'):
-                        from models.employees import DivisionFDW
-                        div = session.get(DivisionFDW, registration_data['division_id'])
-                        division_name = div.name if div else "Не указано"
-
-                    if registration_data.get('department_id'):
-                        from models.employees import DepartmentFDW
-                        dept = session.get(DepartmentFDW, registration_data['department_id'])
-                        department_name = dept.name if dept else "Не указано"
-
-                    keyboard = InlineKeyboardMarkup(inline_keyboard=[
-                        [
-                            InlineKeyboardButton(text="✅ Одобрить", callback_data=f"approve_{user_chat_id}"),
-                            InlineKeyboardButton(text="❌ Отклонить", callback_data=f"reject_{user_chat_id}")
-                        ]
-                    ])
-
-                    await self.bot.send_message(
-                        admin.chat_id,
-                        f"🆕 *Новая заявка на регистрацию!*\n\n"
-                        f"📝 *ФИО:* {registration_data.get('last_name')} {registration_data.get('first_name')} {registration_data.get('middle_name') or ''}\n"
-                        f"📞 *Телефон:* {registration_data.get('phone_number')}\n"
-                        f"📧 *Email:* {registration_data.get('email') or 'Не указан'}\n"
-                        f"💼 *Должность:* {registration_data.get('position')}\n"
-                        f"🏢 *Подразделение:* {division_name}\n"
-                        f"📁 *Отдел:* {department_name}\n\n"
-                        f"Используйте кнопки ниже для подтверждения или отклонения заявки.",
-                        parse_mode="Markdown",
-                        reply_markup=keyboard
-                    )
-                    logger.info(f"Approval request sent to admin {admin.id}")
-
-    async def send_notification(self, user_id: int, message: str):
-        """Отправляет уведомление пользователю"""
-        try:
-            await self.bot.send_message(user_id, message, parse_mode="Markdown")
-        except Exception as e:
-            logger.error(f"Failed to send notification to {user_id}: {e}")
+            await callback.answer("❌ Заявка отклонена")
 
     async def start(self):
         """Запуск бота"""
         logger.info("Starting Telegram bot...")
         await self.dp.start_polling(self.bot)
 
-    def run(self):
-        """Запуск бота в отдельном потоке"""
-        try:
-            asyncio.run(self.start())
-        except RuntimeError:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            loop.run_until_complete(self.start())
-
 
 # Создаем глобальный экземпляр бота
 telegram_bot = TelegramBot()
 
 
-def start_telegram_bot():
-    """Запуск бота в отдельном потоке"""
-    import threading
-    bot_thread = threading.Thread(target=telegram_bot.run, daemon=True)
-    bot_thread.start()
-    return bot_thread
+def get_bot():
+    """Возвращает экземпляр бота"""
+    return telegram_bot.bot

@@ -25,7 +25,7 @@ class EmployeeDialog(QDialog):
 
         self.session = session
         self.employee_data = employee_data
-        self.is_registration_mode = is_registration_mode  # 👈 НОВЫЙ ПАРАМЕТР
+        self.is_registration_mode = is_registration_mode
         self.all_divisions = []
         self.all_departments = []
         self.departments_by_division = {}
@@ -66,28 +66,36 @@ class EmployeeDialog(QDialog):
             if hasattr(self, 'titleLabel'):
                 self.titleLabel.setText("Редактирование сотрудника")
             self.load_employee_data(employee_data)
-            # В режиме редактирования роль не блокируем
             if hasattr(self, 'comboBoxRole'):
                 self.comboBoxRole.setEnabled(True)
+            # Показываем кнопки добавления
+            self.btnAddDivision.setVisible(True)
+            self.btnAddDepartment.setVisible(True)
+
+
         elif self.is_registration_mode:
             self.setWindowTitle("Регистрация нового сотрудника")
             if hasattr(self, 'titleLabel'):
                 self.titleLabel.setText("Регистрация нового сотрудника")
-            # 👈 БЛОКИРУЕМ ВЫБОР РОЛИ И УСТАНАВЛИВАЕМ "Пользователь"
+            # Блокируем выбор роли и устанавливаем "Пользователь"
             if hasattr(self, 'comboBoxRole'):
-                # Устанавливаем "Пользователь" по умолчанию
                 user_index = self.comboBoxRole.findText("Пользователь")
                 if user_index >= 0:
                     self.comboBoxRole.setCurrentIndex(user_index)
-                # Блокируем изменение роли
                 self.comboBoxRole.setEnabled(False)
+            self.btnAddDivision.setVisible(False)
+            self.btnAddDepartment.setVisible(False)
+            self.btnSave.setText("Отправить заявку администратору")
+
         else:
             self.setWindowTitle("Добавление нового сотрудника")
             if hasattr(self, 'titleLabel'):
                 self.titleLabel.setText("Добавление нового сотрудника")
-            # В обычном режиме добавления роль доступна
             if hasattr(self, 'comboBoxRole'):
                 self.comboBoxRole.setEnabled(True)
+            # Показываем кнопки добавления
+            self.btnAddDivision.setVisible(True)
+            self.btnAddDepartment.setVisible(True)
 
         # Устанавливаем максимальную дату рождения
         self.dateEditBirthDate.setMaximumDate(QDate.currentDate())
@@ -111,7 +119,6 @@ class EmployeeDialog(QDialog):
                 from services.employee_service import EmployeeService
                 employee_service = EmployeeService(self.session)
                 self.all_departments = employee_service.get_all_departments()
-                # Группируем отделы по подразделениям
                 self.departments_by_division = {}
                 for dept in self.all_departments:
                     div_id = dept.get('division_id')
@@ -157,11 +164,9 @@ class EmployeeDialog(QDialog):
 
     def on_division_saved(self, division_data):
         """Обработка сохранения нового подразделения"""
-        # Обновляем список подразделений
         self.load_divisions_from_db()
         self.load_divisions_combo()
 
-        # Выбираем новое подразделение
         new_id = division_data.get('id')
         for i in range(self.comboBoxDivision.count()):
             if self.comboBoxDivision.itemData(i) == new_id:
@@ -188,14 +193,10 @@ class EmployeeDialog(QDialog):
 
     def on_department_saved(self, department_data):
         """Обработка сохранения нового отдела"""
-        # Обновляем список отделов
         self.load_departments_from_db()
-
-        # Обновляем отделы для текущего подразделения
         division_id = self.comboBoxDivision.currentData()
         self.on_division_changed(self.comboBoxDivision.currentIndex())
 
-        # Выбираем новый отдел
         new_id = department_data.get('id')
         for i in range(self.comboBoxDepartment.count()):
             if self.comboBoxDepartment.itemData(i) == new_id:
@@ -242,10 +243,8 @@ class EmployeeDialog(QDialog):
             "Суперадминистратор": "superadmin"
         }
 
-        # В режиме регистрации всегда "user"
         if self.is_registration_mode:
             rights = "user"
-            role_text = "Пользователь"
         else:
             role_text = self.comboBoxRole.currentText()
             rights = rights_map.get(role_text, "user")
@@ -269,7 +268,7 @@ class EmployeeDialog(QDialog):
             "last_name": self.lineEditLastName.text().strip(),
             "first_name": self.lineEditFirstName.text().strip(),
             "middle_name": self.lineEditMiddleName.text().strip() or None,
-            "birth_date": birth_date_str,  # 👈 Строка вместо date объекта
+            "birth_date": birth_date_str,
             "division_id": division_id,
             "department_id": department_id,
             "position": self.lineEditPosition.text().strip(),
@@ -295,7 +294,6 @@ class EmployeeDialog(QDialog):
             if isinstance(birth_date, date):
                 self.dateEditBirthDate.setDate(QDate(birth_date.year, birth_date.month, birth_date.day))
 
-        # Выбор подразделения
         division_id = data.get("division_id")
         if division_id:
             for i in range(self.comboBoxDivision.count()):
@@ -303,16 +301,13 @@ class EmployeeDialog(QDialog):
                     self.comboBoxDivision.setCurrentIndex(i)
                     break
 
-        # После выбора подразделения загружаются отделы, затем выбираем отдел
         department_id = data.get("department_id")
         if department_id:
-            # Небольшая задержка для загрузки отделов
             from PyQt6.QtCore import QTimer
             QTimer.singleShot(50, lambda: self.select_department(department_id))
 
         self.lineEditPosition.setText(data.get("position", ""))
 
-        # Выбор роли (только если не режим регистрации)
         if not self.is_registration_mode:
             rights = data.get("rights", "user")
             role_map = {

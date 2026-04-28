@@ -86,9 +86,8 @@ class EmployeeData(Base):
     employee: Mapped["ExternalEmployee"] = relationship()
 
 
-# =========================
-# public.employees (локальная таблица)
-# =========================
+# models/employees.py - в классе LocalEmployee добавьте:
+
 class LocalEmployee(Base):
     __tablename__ = "employees"
     __table_args__ = {"schema": "public"}
@@ -101,7 +100,7 @@ class LocalEmployee(Base):
     position: Mapped[Optional[str]]
     rights: Mapped[Optional[str]]
     phone_number: Mapped[Optional[str]]
-    work_number: Mapped[Optional[str]] = mapped_column(String(50))  # ← ДОБАВИТЬ ЭТУ СТРОКУ
+    work_number: Mapped[Optional[str]] = mapped_column(String(50))
     email: Mapped[Optional[str]]
     chat_id: Mapped[Optional[int]] = mapped_column(BigInteger)
     birth_date: Mapped[Optional[date]]
@@ -110,6 +109,8 @@ class LocalEmployee(Base):
     organization_id: Mapped[Optional[int]]
     session_token: Mapped[Optional[str]]
     settings: Mapped[Optional[dict]] = mapped_column(JSONB)
+    password_hash: Mapped[Optional[str]] = mapped_column(String(255))
+    is_from_fdw: Mapped[bool] = mapped_column(Boolean, default=True)  # 👈 ДОБАВИТЬ
 
 
 # =========================

@@ -528,6 +528,25 @@ class EmployeeService:
         db_session = self._get_employees_db_session()
         try:
             from models.employees import LocalEmployee
+            import secrets
+            import string
+
+            # Генерируем пароль, если его нет
+            password_hash = data.get('password_hash')
+            if not password_hash:
+                # Генерируем случайный пароль
+                alphabet = string.ascii_letters + string.digits
+                generated_password = ''.join(secrets.choice(alphabet) for _ in range(8))
+                # Хешируем пароль
+                try:
+                    from passlib.context import CryptContext
+                    pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+                    password_hash = pwd_context.hash(generated_password)
+                    print(f"🔐 Сгенерирован пароль для нового сотрудника: {generated_password}")
+                except:
+                    import hashlib
+                    password_hash = hashlib.sha256(generated_password.encode()).hexdigest()
+                    print(f"🔐 Сгенерирован пароль (SHA256): {generated_password}")
 
             # Получаем следующий номер
             max_number = db_session.query(LocalEmployee.number).order_by(LocalEmployee.number.desc()).first()
@@ -543,10 +562,13 @@ class EmployeeService:
                 phone_number=data.get('phone_number'),
                 work_number=data.get('work_number'),
                 email=data.get('email'),
+                chat_id=data.get('chat_id'),
                 birth_date=data.get('birth_date'),
                 department_id=data.get('department_id'),
                 division_id=data.get('division_id'),
-                organization_id=1
+                organization_id=1,
+                password_hash=password_hash,  # 👈 ИСПРАВЛЕНО
+                is_from_fdw=False
             )
 
             db_session.add(new_employee)
