@@ -20,11 +20,12 @@ class EmployeeDialog(QDialog):
     """Диалоговое окно для добавления/редактирования сотрудника"""
     employee_saved = pyqtSignal(dict)
 
-    def __init__(self, parent=None, employee_data=None, session=None):
+    def __init__(self, parent=None, employee_data=None, session=None, is_registration_mode=False):
         super().__init__(parent)
 
         self.session = session
         self.employee_data = employee_data
+        self.is_registration_mode = is_registration_mode  # 👈 НОВЫЙ ПАРАМЕТР
         self.all_divisions = []
         self.all_departments = []
         self.departments_by_division = {}
@@ -65,10 +66,28 @@ class EmployeeDialog(QDialog):
             if hasattr(self, 'titleLabel'):
                 self.titleLabel.setText("Редактирование сотрудника")
             self.load_employee_data(employee_data)
+            # В режиме редактирования роль не блокируем
+            if hasattr(self, 'comboBoxRole'):
+                self.comboBoxRole.setEnabled(True)
+        elif self.is_registration_mode:
+            self.setWindowTitle("Регистрация нового сотрудника")
+            if hasattr(self, 'titleLabel'):
+                self.titleLabel.setText("Регистрация нового сотрудника")
+            # 👈 БЛОКИРУЕМ ВЫБОР РОЛИ И УСТАНАВЛИВАЕМ "Пользователь"
+            if hasattr(self, 'comboBoxRole'):
+                # Устанавливаем "Пользователь" по умолчанию
+                user_index = self.comboBoxRole.findText("Пользователь")
+                if user_index >= 0:
+                    self.comboBoxRole.setCurrentIndex(user_index)
+                # Блокируем изменение роли
+                self.comboBoxRole.setEnabled(False)
         else:
             self.setWindowTitle("Добавление нового сотрудника")
             if hasattr(self, 'titleLabel'):
                 self.titleLabel.setText("Добавление нового сотрудника")
+            # В обычном режиме добавления роль доступна
+            if hasattr(self, 'comboBoxRole'):
+                self.comboBoxRole.setEnabled(True)
 
         # Устанавливаем максимальную дату рождения
         self.dateEditBirthDate.setMaximumDate(QDate.currentDate())
@@ -222,28 +241,48 @@ class EmployeeDialog(QDialog):
             "Администратор": "admin",
             "Суперадминистратор": "superadmin"
         }
-        role_text = self.comboBoxRole.currentText()
+
+        # В режиме регистрации всегда "user"
+        if self.is_registration_mode:
+            rights = "user"
+            role_text = "Пользователь"
+        else:
+            role_text = self.comboBoxRole.currentText()
+            rights = rights_map.get(role_text, "user")
 
         division_id = self.comboBoxDivision.currentData()
         department_id = self.comboBoxDepartment.currentData()
 
-        print(f"📋 Выбранное подразделение ID: {division_id}")
-        print(f"📋 Выбранный отдел ID: {department_id}")
+        # Получаем дату рождения как строку
+        birth_date = self.dateEditBirthDate.date().toPyDate()
+        birth_date_str = birth_date.isoformat() if birth_date else None
 
-        return {
+        # Генерируем пароль только для режима регистрации
+        generated_password = None
+        if self.is_registration_mode:
+            import secrets
+            import string
+            generated_password = ''.join(secrets.choice(string.ascii_letters + string.digits) for _ in range(8))
+
+        result = {
             "id": self.employee_data.get('id') if self.employee_data else None,
             "last_name": self.lineEditLastName.text().strip(),
             "first_name": self.lineEditFirstName.text().strip(),
             "middle_name": self.lineEditMiddleName.text().strip() or None,
-            "birth_date": self.dateEditBirthDate.date().toPyDate(),
+            "birth_date": birth_date_str,  # 👈 Строка вместо date объекта
             "division_id": division_id,
             "department_id": department_id,
             "position": self.lineEditPosition.text().strip(),
-            "rights": rights_map.get(role_text, "user"),
+            "rights": rights,
             "phone_number": self.lineEditMobilePhone.text().strip(),
             "work_number": self.lineEditWorkPhone.text().strip() or None,
             "email": self.lineEditEmail.text().strip() or None,
         }
+
+        if generated_password:
+            result["generated_password"] = generated_password
+
+        return result
 
     def load_employee_data(self, data):
         """Заполнение формы данными сотрудника"""
@@ -273,17 +312,18 @@ class EmployeeDialog(QDialog):
 
         self.lineEditPosition.setText(data.get("position", ""))
 
-        # Выбор роли
-        rights = data.get("rights", "user")
-        role_map = {
-            "user": "Пользователь",
-            "admin": "Администратор",
-            "superadmin": "Суперадминистратор"
-        }
-        role_text = role_map.get(rights, "Пользователь")
-        role_index = self.comboBoxRole.findText(role_text)
-        if role_index >= 0:
-            self.comboBoxRole.setCurrentIndex(role_index)
+        # Выбор роли (только если не режим регистрации)
+        if not self.is_registration_mode:
+            rights = data.get("rights", "user")
+            role_map = {
+                "user": "Пользователь",
+                "admin": "Администратор",
+                "superadmin": "Суперадминистратор"
+            }
+            role_text = role_map.get(rights, "Пользователь")
+            role_index = self.comboBoxRole.findText(role_text)
+            if role_index >= 0:
+                self.comboBoxRole.setCurrentIndex(role_index)
 
         self.lineEditMobilePhone.setText(data.get("phone_number", ""))
         self.lineEditWorkPhone.setText(data.get("work_number", ""))

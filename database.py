@@ -11,7 +11,7 @@ DB_TASKS = {
     "user": "postgres",
     "password": "admin",
     "database": "taskplanner",
-    "host": "10.130.191.152",
+    "host": "192.168.43.32",
     "port": 5432,
     "options": "-c search_path=foreign_data,public"
 }
@@ -24,7 +24,7 @@ DB_EMPLOYEES = {
     "user": "postgres",
     "password": "admin",
     "database": "employees",
-    "host": "10.130.191.152",  # тот же хост, но другая БД
+    "host": "192.168.43.32",  # тот же хост, но другая БД
     "port": 5432,
 }
 

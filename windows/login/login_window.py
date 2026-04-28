@@ -1,11 +1,11 @@
 # ===================================================================
 # ФАЙЛ: windows/login/login_window.py
-# PyQt6 — ПРЕМИУМ-СТРАНИЦА АВТОРИЗАЦИИ TaskPlanner
 # ===================================================================
 
 import sys
 import json
 from pathlib import Path
+from datetime import date
 
 from PyQt6 import uic
 from PyQt6.QtWidgets import (
@@ -361,34 +361,69 @@ class LoginWindow(QDialog):
             # Получаем сессию
             session = get_tasks_session()
 
-            # Создаем EmployeeService
-            employee_service = EmployeeService(session)
-
-            # Открываем диалог добавления сотрудника (без данных - режим создания)
-            dialog = EmployeeDialog(parent=self, employee_data=None, session=session)
+            # 👇 ПЕРЕДАЕМ is_registration_mode=True
+            dialog = EmployeeDialog(
+                parent=self,
+                employee_data=None,
+                session=session,
+                is_registration_mode=True
+            )
 
             # Обработчик сохранения
             def on_employee_saved(employee_data):
                 try:
-                    # Сохраняем в БД
-                    new_employee = employee_service.create_employee_in_db(employee_data)
-                    if new_employee:
-                        QMessageBox.information(
-                            self,
-                            "Заявка отправлена",
-                            f"Ваша заявка на регистрацию отправлена администратору.\n"
-                            f"После одобрения вы получите пароль для входа."
-                        )
-                    else:
-                        QMessageBox.warning(self, "Ошибка", "Не удалось сохранить данные")
+                    # Преобразуем дату в строку для JSON
+                    employee_data_for_send = self._prepare_data_for_json(employee_data)
+                    self.send_to_telegram_admin(employee_data_for_send)
                 except Exception as e:
-                    QMessageBox.critical(self, "Ошибка", f"Ошибка при сохранении: {e}")
+                    QMessageBox.critical(self, "Ошибка", f"Ошибка при отправке данных: {e}")
 
             dialog.employee_saved.connect(on_employee_saved)
             dialog.exec()
 
         except Exception as e:
             QMessageBox.critical(self, "Ошибка", f"Не удалось открыть форму регистрации: {e}")
+
+    def _prepare_data_for_json(self, data: dict) -> dict:
+        """Преобразует date объекты в строки для JSON сериализации"""
+        result = {}
+        for key, value in data.items():
+            if isinstance(value, date):
+                result[key] = value.isoformat()
+            else:
+                result[key] = value
+        return result
+
+    def send_to_telegram_admin(self, employee_data):
+        """Отправляет данные на одобрение администратору в Telegram"""
+        try:
+            from utils.socket_manager import get_socket_client
+
+            # Отправляем запрос на одобрение через сокет
+            socket_client = get_socket_client()
+
+            # Проверяем подключение
+            if not socket_client.is_connected():
+                QMessageBox.warning(
+                    self,
+                    "Нет подключения",
+                    "Нет подключения к серверу. Попробуйте позже."
+                )
+                return
+
+            # Отправляем запрос
+            socket_client.request_registration(employee_data)
+
+            QMessageBox.information(
+                self,
+                "Заявка отправлена",
+                f"✅ Ваша заявка на регистрацию отправлена администратору!\n\n"
+                f"📋 ФИО: {employee_data.get('last_name')} {employee_data.get('first_name')} {employee_data.get('middle_name') or ''}\n"
+                f"📞 Телефон: {employee_data.get('phone_number')}\n\n"
+                f"После одобрения вы получите пароль для входа в Telegram."
+            )
+        except Exception as e:
+            QMessageBox.critical(self, "Ошибка", f"Не удалось отправить заявку: {e}")
 
     def keyPressEvent(self, event):
         if event.key() == Qt.Key.Key_Escape:

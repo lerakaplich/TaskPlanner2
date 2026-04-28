@@ -1,9 +1,11 @@
 import uvicorn
+from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from fastapi import FastAPI
+from sqlalchemy import select
 import socketio
 from database import TasksSessionLocal
 from services.chat_service import ChatService
-from telegram_bot import start_telegram_bot
+from telegram_bot import start_telegram_bot, pending_registrations
 
 user_sid_map = {}  # {user_id: sid}
 
@@ -154,6 +156,69 @@ async def send_chat_msg(sid, data):
     except Exception as e:
         print(f"❌ Server Error in send_chat_msg: {e}")
 
+
+# chat_server.py - добавьте новый обработчик
+
+@sio.event
+async def request_registration(sid, data):
+    """
+    Обработчик запроса на регистрацию от клиента
+    Отправляет уведомление всем администраторам
+    """
+    print(f"📝 Получен запрос на регистрацию: {data.get('last_name')} {data.get('first_name')}")
+
+    # Генерируем ID запроса
+    request_id = data.get('user_chat_id') or sid
+
+    # Сохраняем запрос в pending_registrations
+    pending_registrations[request_id] = data
+
+    # Находим всех администраторов и суперадминистраторов
+    with TasksSessionLocal() as session:
+        from models.employees import ExternalEmployee
+        stmt = select(ExternalEmployee).where(
+            ExternalEmployee.rights.in_(['admin', 'superadmin'])
+        )
+        admins = list(session.scalars(stmt))
+
+        if not admins:
+            print("⚠️ Нет администраторов для уведомления")
+            return
+
+        # Формируем сообщение для администратора
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [
+                InlineKeyboardButton(text="✅ Одобрить", callback_data=f"approve_reg_{request_id}"),
+                InlineKeyboardButton(text="❌ Отклонить", callback_data=f"reject_reg_{request_id}")
+            ]
+        ])
+
+        message_text = (
+            f"🆕 *Новая заявка на регистрацию!*\n\n"
+            f"📝 *ФИО:* {data.get('last_name')} {data.get('first_name')} {data.get('middle_name') or ''}\n"
+            f"📞 *Телефон:* {data.get('phone_number')}\n"
+            f"📧 *Email:* {data.get('email') or 'Не указан'}\n"
+            f"💼 *Должность:* {data.get('position')}\n"
+            f"🏢 *Подразделение ID:* {data.get('division_id')}\n"
+            f"📁 *Отдел ID:* {data.get('department_id')}\n\n"
+            f"Используйте кнопки ниже для подтверждения или отклонения заявки."
+        )
+
+        # Отправляем уведомление каждому администратору
+        for admin in admins:
+            if admin.chat_id:
+                try:
+                    import asyncio
+                    from telegram_bot import telegram_bot
+                    await telegram_bot.bot.send_message(
+                        admin.chat_id,
+                        message_text,
+                        parse_mode="Markdown",
+                        reply_markup=keyboard
+                    )
+                    print(f"📨 Уведомление отправлено администратору {admin.id}")
+                except Exception as e:
+                    print(f"❌ Ошибка отправки администратору {admin.id}: {e}")
 
 @sio.event
 async def edit_chat_msg(sid, data):

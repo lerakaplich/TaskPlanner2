@@ -30,6 +30,10 @@ class SocketClient(QObject):
     auth_success = pyqtSignal(dict)
     online_users = pyqtSignal(dict)
 
+    # Сигналы регистрации
+    registration_request_sent = pyqtSignal(dict)
+    registration_response = pyqtSignal(dict)
+
     # Сигналы операций
     operation_success = pyqtSignal(dict)
     operation_error = pyqtSignal(dict)
@@ -58,6 +62,23 @@ class SocketClient(QObject):
 
         # Настройка обработчиков
         self._setup_handlers()
+
+    def request_registration(self, registration_data):
+        """
+        Отправка запроса на регистрацию администратору
+
+        Args:
+            registration_data (dict): Данные для регистрации
+        """
+        if self.sio.connected:
+            logger.info(
+                f"📝 Отправка запроса на регистрацию для {registration_data.get('last_name')} {registration_data.get('first_name')}")
+            self.sio.emit('request_registration', registration_data)
+            self.registration_request_sent.emit(registration_data)
+            return True
+        else:
+            logger.warning("⚠️ Не удалось отправить запрос на регистрацию: нет подключения к серверу")
+            return False
 
     def _setup_handlers(self):
         """Настройка всех обработчиков событий"""
@@ -164,6 +185,25 @@ class SocketClient(QObject):
             """Ошибка выполнения операции"""
             logger.error(f"❌ Ошибка операции: {data.get('error')}")
             self.operation_error.emit(data)
+
+        # ===== События регистрации =====
+        @self.sio.on('registration_approved')
+        def on_registration_approved(data):
+            """Регистрация одобрена администратором"""
+            logger.info(f"✅ Регистрация одобрена для пользователя {data.get('phone_number')}")
+            self.registration_response.emit({
+                'status': 'approved',
+                'data': data
+            })
+
+        @self.sio.on('registration_rejected')
+        def on_registration_rejected(data):
+            """Регистрация отклонена администратором"""
+            logger.info(f"❌ Регистрация отклонена для пользователя {data.get('phone_number')}")
+            self.registration_response.emit({
+                'status': 'rejected',
+                'data': data
+            })
 
     def connect_to_server(self, url="http://localhost:8081"):
         """
@@ -432,6 +472,7 @@ def get_socket_client():
     if _socket_client_instance is None:
         _socket_client_instance = SocketClient()
     return _socket_client_instance
+
 
 # Для обратной совместимости - создаем глобальный экземпляр sio
 sio = get_socket_client().sio if get_socket_client() else None

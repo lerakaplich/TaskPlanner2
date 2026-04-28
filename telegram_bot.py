@@ -31,7 +31,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Токен бота
-BOT_TOKEN = "8588263896:AAG3pbyT6HHcXxmXWOKYyc0-zdi2Gf2IAoY"
+BOT_TOKEN = "8715984575:AAE-wp9YLbVjRR57ETtzULprSjeta5n9fl8"
 
 
 # Состояния для FSM
