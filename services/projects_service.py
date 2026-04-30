@@ -1,11 +1,12 @@
 # services/projects_service.py
 
-import json  # 👈 ДОБАВИТЬ
+import json
 from datetime import datetime
 from typing import List, Optional, Dict, Any
 from sqlalchemy.orm import Session
+from sqlalchemy import text
 
-from database import get_tasks_session
+from database import get_tasks_session, get_employees_session
 from models.projects import Project
 from models.schemas.projects_dto import ProjectWithMembersDTO, ProjectCardDTO, ProjectBoardDTO, BoardColumnWithTasksDTO
 from models.schemas.tasks_dto import TaskCardDTO, TaskPriority
@@ -14,11 +15,16 @@ from repositories.task_repo import TaskRepo
 from repositories.external_employee_repo import ExternalEmployeeRepo
 from services.column_service import ColumnService
 
+# Импортируем бота для отправки уведомлений
+import asyncio
+from telegram_bot import telegram_bot
+
 
 class ProjectsService:
     def __init__(self, session=None):
         self.session = session or get_tasks_session()
         self.current_user_id = None
+        self.current_user = None
         self.project_repo = ProjectRepo(session)
         self.task_repo = TaskRepo(session)
         self.employee_repo = ExternalEmployeeRepo(session)
@@ -30,7 +36,122 @@ class ProjectsService:
     def set_current_user(self, user):
         self.current_user = user
 
-    # services/projects_service.py
+    # services/projects_service.py - исправленный метод _ensure_local_employee
+
+    def _ensure_local_employee(self, external_employee_id: int) -> Optional[int]:
+        """
+        Проверяет наличие записи сотрудника в БД taskplanner.public.employees_data
+        и создает её при необходимости.
+        Возвращает ID сотрудника.
+        """
+        try:
+            # Работаем с текущей сессией (БД taskplanner)
+            from sqlalchemy import text
+
+            # 1. Проверяем, есть ли уже запись в public.employees_data
+            check_data_stmt = text("""
+                SELECT employee_id FROM public.employees_data WHERE employee_id = :emp_id
+            """)
+            data_exists = self.session.execute(check_data_stmt, {'emp_id': external_employee_id}).first()
+
+            if not data_exists:
+                # Создаем запись в public.employees_data
+                insert_data_stmt = text("""
+                    INSERT INTO public.employees_data (employee_id, is_active, role)
+                    VALUES (:emp_id, :is_active, :role)
+                """)
+                self.session.execute(insert_data_stmt, {
+                    'emp_id': external_employee_id,
+                    'is_active': True,
+                    'role': 'user'
+                })
+                print(f"✅ Создана запись в public.employees_data для сотрудника {external_employee_id}")
+                self.session.flush()
+
+            # 2. Также проверяем наличие в public.employees (если нужно для других целей)
+            # Но это не обязательно для foreign key
+            print(f"✅ Локальная запись существует для сотрудника {external_employee_id}")
+            return external_employee_id
+
+        except Exception as e:
+            print(f"⚠️ Ошибка при создании локальной записи сотрудника: {e}")
+            import traceback
+            traceback.print_exc()
+            return None
+
+    def _send_telegram_notification(self, chat_id: int, message: str):
+        """Отправляет уведомление через Telegram бота"""
+        if not chat_id:
+            return
+        try:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            loop.run_until_complete(
+                telegram_bot.bot.send_message(chat_id=chat_id, text=message, parse_mode="Markdown")
+            )
+            loop.close()
+            print(f"✅ Уведомление отправлено в Telegram (chat_id={chat_id})")
+        except Exception as e:
+            print(f"⚠️ Ошибка отправки Telegram уведомления: {e}")
+
+    def _get_employee_full_name(self, employee) -> str:
+        """Возвращает ФИО сотрудника"""
+        if not employee:
+            return "Неизвестный"
+        parts = []
+        if employee.last_name:
+            parts.append(employee.last_name)
+        if employee.first_name:
+            parts.append(employee.first_name)
+        if employee.middle_name:
+            parts.append(employee.middle_name)
+        return " ".join(parts) if parts else f"User {employee.id}"
+
+    def _get_employee_chat_id(self, employee_id: int) -> Optional[int]:
+        """Получает chat_id сотрудника из БД employees"""
+        try:
+            with get_employees_session() as emp_session:
+                stmt = text("SELECT chat_id FROM public.employees WHERE id = :emp_id")
+                result = emp_session.execute(stmt, {'emp_id': employee_id}).first()
+                if result:
+                    return result[0]
+        except Exception as e:
+            print(f"⚠️ Ошибка получения chat_id для сотрудника {employee_id}: {e}")
+        return None
+
+    def _send_project_notification(self, project_name: str, project_description: str,
+                                   creator_name: str, participants: List[dict],
+                                   is_new: bool = True, project_id: int = None):
+        """Отправляет уведомление всем участникам проекта"""
+        if is_new:
+            title = "🆕 **НОВЫЙ ПРОЕКТ**"
+            action = "добавлены в проект"
+            footer = "Вы можете просмотреть проект в приложении TaskPlanner."
+        else:
+            title = "✏️ **ПРОЕКТ ОБНОВЛЕН**"
+            action = "проект обновлен"
+            footer = "Обновленную информацию можно посмотреть в приложении TaskPlanner."
+
+        message = f"""{title}
+
+📋 **Название:** {project_name}
+👤 **Создатель проекта:** {creator_name}
+📝 **Описание:** {project_description[:200]}{'...' if len(project_description) > 200 else ''}
+
+Вы были {action} «{project_name}».
+
+{footer}"""
+
+        for participant in participants:
+            emp_id = participant.get('id') if isinstance(participant, dict) else participant
+
+            if self.current_user_id and emp_id == self.current_user_id:
+                continue
+
+            chat_id = self._get_employee_chat_id(emp_id)
+            if chat_id:
+                self._send_telegram_notification(chat_id, message)
+                print(f"📨 Уведомление отправлено участнику ID={emp_id}")
 
     def get_projects_for_cards(self, search_query: str = "", status_filter: str = "Все", owner_filter: bool = False) -> \
     List[ProjectCardDTO]:
@@ -53,7 +174,6 @@ class ProjectsService:
                     member_count = len(proj.members) if hasattr(proj, 'members') else 0
                     admin_count = len([m for m in proj.members if m.is_admin]) if hasattr(proj, 'members') else 0
 
-                    # Получаем количество колонок из ID
                     column_ids = self.project_repo.get_selected_column_ids(proj.id)
                     columns_count = len(column_ids) if column_ids else 0
 
@@ -112,8 +232,6 @@ class ProjectsService:
             print(f"❌ Ошибка при архивации проекта: {e}")
             return False
 
-    # services/projects_service.py
-
     def create_new_project(self, raw_data: dict, creator_id: int) -> Optional[ProjectWithMembersDTO]:
         try:
             # 1. Создаем проект
@@ -130,7 +248,7 @@ class ProjectsService:
             self.session.flush()
             print(f"✅ Проект создан в БД, ID: {project.id}")
 
-            # 2. Сохраняем ID выбранных шаблонных колонок (НЕ СОЗДАЕМ НОВЫЕ)
+            # 2. Сохраняем ID выбранных шаблонных колонок
             selected_columns_data = raw_data.get('selected_columns_data', [])
             column_ids = [col.get('id') for col in selected_columns_data if col.get('id')]
 
@@ -138,8 +256,7 @@ class ProjectsService:
                 self.project_repo.save_selected_column_ids(project.id, column_ids)
                 print(f"✅ Сохранены ID шаблонных колонок: {column_ids}")
             else:
-                # Если ничего не выбрано, используем колонки по умолчанию
-                default_column_ids = [24, 25, 26, 27]  # ID шаблонных колонок
+                default_column_ids = [24, 25, 26, 27]
                 self.project_repo.save_selected_column_ids(project.id, default_column_ids)
                 print(f"✅ Сохранены ID колонок по умолчанию: {default_column_ids}")
 
@@ -155,15 +272,44 @@ class ProjectsService:
             all_members = set(member_ids) | {creator_id}
             all_admins = set(admin_ids) | {creator_id}
 
+            participants_list = []
             for emp_id in all_members:
+                # Убеждаемся, что для сотрудника есть локальная запись в БД employees
+                local_id = self._ensure_local_employee(emp_id)
+                if not local_id:
+                    print(f"⚠️ Не удалось создать локальную запись для сотрудника {emp_id}, пропускаем")
+                    continue
+
                 self.project_repo.add_member(
                     project_id=project.id,
-                    employee_id=emp_id,
+                    employee_id=local_id,
                     is_admin=(emp_id in all_admins)
                 )
-                print(f"✅ Добавлен участник ID: {emp_id}")
+                print(f"✅ Добавлен участник ID: {emp_id} (локальный ID: {local_id})")
+
+                employee = self.employee_repo.get_by_id(emp_id)
+                if employee:
+                    participants_list.append({
+                        'id': emp_id,
+                        'full_name': self._get_employee_full_name(employee)
+                    })
 
             self.session.commit()
+
+            # 4. Отправляем уведомления участникам
+            creator_employee = self.employee_repo.get_by_id(creator_id)
+            creator_name = self._get_employee_full_name(creator_employee) if creator_employee else "Создатель проекта"
+
+            if participants_list:
+                self._send_project_notification(
+                    project_name=raw_data['name'],
+                    project_description=raw_data.get('description', ''),
+                    creator_name=creator_name,
+                    participants=participants_list,
+                    is_new=True,
+                    project_id=project.id
+                )
+
             return self.get_project_for_edit(project.id)
 
         except Exception as e:
@@ -172,8 +318,6 @@ class ProjectsService:
             import traceback
             traceback.print_exc()
             return None
-
-    # services/projects_service.py
 
     def get_project_for_edit(self, project_id: int) -> Optional[ProjectWithMembersDTO]:
         project = self.project_repo.get_by_id(project_id)
@@ -184,7 +328,6 @@ class ProjectsService:
         dto.member_ids = [m.employee_id for m in project.members]
         dto.admin_ids = [m.employee_id for m in project.members if m.is_admin]
 
-        # Загружаем данные колонок по сохраненным ID
         column_ids = self.project_repo.get_selected_column_ids(project_id)
         if column_ids:
             from sqlalchemy import select
@@ -210,13 +353,13 @@ class ProjectsService:
 
         return dto
 
-    # services/projects_service.py
-
     def update_project(self, project_id: int, dto: ProjectWithMembersDTO) -> bool:
         try:
             project = self.project_repo.get_by_id(project_id)
             if not project:
                 return False
+
+            old_member_ids = {m.employee_id for m in project.members}
 
             project.name = dto.name
             project.description = dto.description
@@ -224,32 +367,61 @@ class ProjectsService:
             project.deadline = dto.deadline
             project.updated_at = datetime.now()
 
-            # 👇 СОХРАНЯЕМ ID ВЫБРАННЫХ КОЛОНОК ПРИ ОБНОВЛЕНИИ
             if hasattr(dto, 'selected_columns_data') and dto.selected_columns_data:
                 column_ids = [col.get('id') for col in dto.selected_columns_data if col.get('id')]
                 if column_ids:
                     self.project_repo.save_selected_column_ids(project_id, column_ids)
                     print(f"✅ Обновлены ID колонок проекта: {column_ids}")
 
-            # Обновление участников...
             current_members = {m.employee_id: bool(m.is_admin) for m in project.members}
             target_members = {emp_id: (emp_id in dto.admin_ids) for emp_id in dto.member_ids}
 
             current_ids = set(current_members.keys())
             target_ids = set(target_members.keys())
 
-            for emp_id in (current_ids - target_ids):
+            new_member_ids = target_ids - current_ids
+            removed_member_ids = current_ids - target_ids
+
+            for emp_id in removed_member_ids:
                 self.project_repo.remove_member(project_id, emp_id)
 
-            for emp_id in (target_ids - current_ids):
+            participants_list = []
+            for emp_id in new_member_ids:
+                # Убеждаемся, что для сотрудника есть локальная запись в БД employees
+                local_id = self._ensure_local_employee(emp_id)
+                if not local_id:
+                    print(f"⚠️ Не удалось создать локальную запись для сотрудника {emp_id}, пропускаем")
+                    continue
+
                 is_admin = target_members[emp_id]
-                self.project_repo.add_member(project_id, emp_id, is_admin=is_admin)
+                self.project_repo.add_member(project_id, local_id, is_admin=is_admin)
+
+                employee = self.employee_repo.get_by_id(emp_id)
+                if employee:
+                    participants_list.append({
+                        'id': emp_id,
+                        'full_name': self._get_employee_full_name(employee)
+                    })
 
             for emp_id in (current_ids & target_ids):
                 if current_members[emp_id] != target_members[emp_id]:
                     self.project_repo.update_member_role(project_id, emp_id, is_admin=target_members[emp_id])
 
             self.session.commit()
+
+            if participants_list:
+                creator_employee = self.employee_repo.get_by_id(project.owner)
+                creator_name = self._get_employee_full_name(creator_employee) if creator_employee else "Создатель проекта"
+
+                self._send_project_notification(
+                    project_name=project.name,
+                    project_description=project.description or '',
+                    creator_name=creator_name,
+                    participants=participants_list,
+                    is_new=False,
+                    project_id=project_id
+                )
+
             return True
 
         except Exception as e:
@@ -264,10 +436,8 @@ class ProjectsService:
         if not project:
             return None
 
-        # Получаем ID сохраненных шаблонных колонок для проекта
         column_ids = self.project_repo.get_selected_column_ids(project_id)
 
-        # Загружаем шаблонные колонки из БД
         from sqlalchemy import select
         from models.projects import BoardColumn
 
@@ -275,23 +445,18 @@ class ProjectsService:
             stmt = select(BoardColumn).where(BoardColumn.id.in_(column_ids)).order_by(BoardColumn.template_order)
             template_columns = self.session.scalars(stmt).all()
         else:
-            # Если нет сохраненных, берем все шаблонные колонки
             stmt = select(BoardColumn).where(BoardColumn.is_template == True).order_by(BoardColumn.template_order)
             template_columns = self.session.scalars(stmt).all()
 
-        # Получаем задачи проекта
         tasks = self.task_repo.get_by_project(project_id)
 
-        # Группируем задачи по шаблонным колонкам
         tasks_by_column = {}
         for task in tasks:
-            # Используем имя колонки задачи для группировки
             column_name = task.column.name if task.column else "К выполнению"
             if column_name not in tasks_by_column:
                 tasks_by_column[column_name] = []
             tasks_by_column[column_name].append(task)
 
-        # Формируем DTO для каждой шаблонной колонки
         board_columns_dto = []
         for template_col in template_columns:
             column_tasks = tasks_by_column.get(template_col.name, [])
@@ -320,7 +485,6 @@ class ProjectsService:
             )
             board_columns_dto.append(col_dto)
 
-        # Загружаем сохраненные колонки в DTO проекта
         project_dto = ProjectWithMembersDTO.model_validate(project)
         project_dto.selected_columns_data = [
             {'id': col.id, 'name': col.name, 'col_key': col.name.lower().replace(' ', '_')}

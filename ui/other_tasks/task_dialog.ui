@@ -253,16 +253,6 @@
        </property>
       </widget>
      </item>
-     <item>
-      <spacer name="horizontalSpacerDiff">
-       <property name="sizeHint" stdset="0">
-        <size>
-         <width>40</width>
-         <height>20</height>
-        </size>
-       </property>
-      </spacer>
-     </item>
     </layout>
    </item>
    <item>
@@ -419,16 +409,6 @@
         <string>Изменено:</string>
        </property>
       </widget>
-     </item>
-     <item>
-      <spacer name="horizontalSpacer">
-       <property name="sizeHint" stdset="0">
-        <size>
-         <width>40</width>
-         <height>20</height>
-        </size>
-       </property>
-      </spacer>
      </item>
     </layout>
    </item>

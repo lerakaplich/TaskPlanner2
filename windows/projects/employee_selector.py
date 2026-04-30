@@ -3,18 +3,19 @@
 import os
 import sys
 from typing import List, Dict, Optional, Set
+from collections import Counter
 from PyQt6 import uic
 from PyQt6.QtWidgets import QDialog, QApplication, QVBoxLayout, QCheckBox, QWidget, QLabel
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal
 
 from database import get_tasks_session
-from models.employees import ExternalEmployee
-from sqlalchemy import select
+from models.employees import ExternalEmployee, DivisionFDW, DepartmentFDW
+from sqlalchemy import select, func
 
 
 class EmployeeSelectorDialog(QDialog):
     """
-    Диалог выбора сотрудников с поиском и фильтрацией по отделам
+    Диалог выбора сотрудников с поиском и фильтрацией по отделам и подразделениям
     Используется для выбора как участников, так и администраторов проекта
     """
 
@@ -33,6 +34,13 @@ class EmployeeSelectorDialog(QDialog):
         self.search_timer.setSingleShot(True)
         self.search_timer.timeout.connect(self.apply_filters)
 
+        # Статистика использования сотрудников (только для сортировки)
+        self.employee_usage_count = Counter()
+
+        # Кэш для подразделений и отделов
+        self.divisions_list = []  # список всех подразделений
+        self.departments_list = []  # список всех отделов
+
         # Загрузка UI
         ui_path = os.path.join(os.path.dirname(__file__), "..", "..", "ui", "projects")
         uic.loadUi(os.path.join(ui_path, "employee_selector.ui"), self)
@@ -45,12 +53,69 @@ class EmployeeSelectorDialog(QDialog):
         self.selectBtn.clicked.connect(self.accept)
 
         # Инициализация
-        self.load_employees_from_db()  # 👈 Загружаем реальных сотрудников
+        self.load_divisions()
         self.load_departments()
+        self.load_employee_usage_stats()
+        self.load_employees_from_db()
+        self.setup_filters()
         self.selected_employees.clear()
 
         # Принудительно показываем всех сотрудников сразу
         QTimer.singleShot(0, self.apply_filters)
+
+    def load_divisions(self):
+        """Загрузка списка подразделений из БД"""
+        try:
+            session = get_tasks_session()
+            stmt = select(DivisionFDW).order_by(DivisionFDW.name)
+            divisions = session.scalars(stmt).all()
+
+            self.divisions_list = [div.name for div in divisions if div.name]
+
+            session.close()
+            print(f"✅ Загружено подразделений: {len(self.divisions_list)}")
+            for d in self.divisions_list[:5]:
+                print(f"   - {d}")
+        except Exception as e:
+            print(f"⚠️ Ошибка загрузки подразделений: {e}")
+            self.divisions_list = []
+
+    def load_departments(self):
+        """Загрузка списка отделов из БД"""
+        try:
+            session = get_tasks_session()
+            stmt = select(DepartmentFDW).order_by(DepartmentFDW.name)
+            departments = session.scalars(stmt).all()
+
+            self.departments_list = [dept.name for dept in departments if dept.name]
+
+            session.close()
+            print(f"✅ Загружено отделов: {len(self.departments_list)}")
+            for d in self.departments_list[:5]:
+                print(f"   - {d}")
+        except Exception as e:
+            print(f"⚠️ Ошибка загрузки отделов: {e}")
+            self.departments_list = []
+
+    def load_employee_usage_stats(self):
+        """Загружает статистику использования сотрудников в задачах"""
+        try:
+            from models.tasks import Task
+            session = get_tasks_session()
+
+            # Считаем количество задач, где сотрудник был исполнителем
+            stmt = select(Task.assigned_to, func.count(Task.id)).where(
+                Task.assigned_to.isnot(None)
+            ).group_by(Task.assigned_to)
+
+            results = session.execute(stmt).all()
+            for emp_id, count in results:
+                self.employee_usage_count[emp_id] = count
+
+            session.close()
+            print(f"📊 Загружена статистика использования {len(self.employee_usage_count)} сотрудников")
+        except Exception as e:
+            print(f"⚠️ Ошибка загрузки статистики: {e}")
 
     def load_employees_from_db(self):
         """Загрузка реальных сотрудников из БД"""
@@ -61,157 +126,115 @@ class EmployeeSelectorDialog(QDialog):
 
             self.all_employees = []
             for emp in employees:
-                # Определяем отдел (пока заглушка, потом можно добавить из БД)
-                department = "IT"
-                if emp.position and "директор" in emp.position.lower():
-                    department = "Руководство"
-                elif emp.position and "менеджер" in emp.position.lower():
-                    department = "Управление проектами"
+                # Формируем ФИО
+                full_name = f"{emp.last_name or ''} {emp.first_name or ''}"
+                if emp.middle_name:
+                    full_name += f" {emp.middle_name}"
+                full_name = full_name.strip()
 
-                self.all_employees.append({
-                    'id': emp.id,
-                    'last_name': emp.last_name,
-                    'first_name': emp.first_name,
-                    'middle_name': emp.middle_name or '',
-                    'position': emp.position or 'Сотрудник',
-                    'department': department,
-                    'sub_department': '',
-                    'phone': emp.phone_number or '',
-                    'is_admin': emp.rights == 'superadmin' if emp.rights else False
-                })
+                # Добавляем только если есть ФИО
+                if full_name:
+                    self.all_employees.append({
+                        'id': emp.id,
+                        'full_name': full_name,
+                        'last_name': emp.last_name or '',
+                        'first_name': emp.first_name or '',
+                        'middle_name': emp.middle_name or '',
+                        'position': emp.position or '',
+                        'phone': emp.phone_number or '',
+                        'email': emp.email or '',
+                        'is_admin': emp.rights == 'superadmin' if emp.rights else False,
+                        'usage_count': self.employee_usage_count.get(emp.id, 0)
+                    })
 
-            print(f"✅ Загружено {len(self.all_employees)} сотрудников из БД")
+            print(f"✅ Загружено сотрудников: {len(self.all_employees)}")
             session.close()
 
         except Exception as e:
             print(f"❌ Ошибка загрузки сотрудников из БД: {e}")
-            # Если не удалось загрузить, используем тестовые данные
-            self.load_test_data()
+            import traceback
+            traceback.print_exc()
 
-    def load_departments(self):
-        """Загрузка отделов БЕЗ лишних сигналов"""
-        departments = {emp['department'] for emp in self.all_employees if emp['department']}
-
+    def setup_filters(self):
+        """Настройка фильтров отделов и подразделений"""
+        # Настройка фильтра отделов
         self.departmentFilter.blockSignals(True)
         self.departmentFilter.clear()
-        self.departmentFilter.addItem("Все отделы", None)
-        for dept in sorted(departments):
-            self.departmentFilter.addItem(dept, dept)
+        self.departmentFilter.addItem("Все отделы")
+        for dept in sorted(self.departments_list):
+            self.departmentFilter.addItem(dept)
         self.departmentFilter.setCurrentIndex(0)
         self.departmentFilter.blockSignals(False)
 
-        self.load_sub_departments(None)  # для "Все отделы"
+        # Настройка фильтра подразделений
+        self.subDepartmentFilter.blockSignals(True)
+        self.subDepartmentFilter.clear()
+        self.subDepartmentFilter.addItem("Все подразделения")
+        for div in sorted(self.divisions_list):
+            self.subDepartmentFilter.addItem(div)
+        self.subDepartmentFilter.setCurrentIndex(0)
+        self.subDepartmentFilter.blockSignals(False)
+
+        # Включаем фильтры, только если есть данные
+        self.subDepartmentFilter.setEnabled(len(self.divisions_list) > 0)
 
     def showEvent(self, event):
         """Срабатывает каждый раз при открытии диалога"""
         super().showEvent(event)
         self.searchInput.clear()
-        # Сбрасываем фильтры без лишних сигналов
+        # Сбрасываем фильтры
         self.departmentFilter.blockSignals(True)
         self.departmentFilter.setCurrentIndex(0)
         self.departmentFilter.blockSignals(False)
-        self.selected_employees.clear()
-        QTimer.singleShot(0, self.apply_filters)
-
-    def load_test_data(self):
-        """Загрузка тестовых данных о сотрудниках (резервный вариант)"""
-        self.all_employees = [
-            {
-                'id': 1,
-                'last_name': 'Копейкина',
-                'first_name': 'Виктория',
-                'middle_name': 'Анатольевна',
-                'position': 'Руководитель',
-                'department': 'Руководство',
-                'sub_department': '',
-                'phone': '+375 44 574-24-34',
-                'is_admin': True
-            },
-            {
-                'id': 2,
-                'last_name': 'Каплич',
-                'first_name': 'Валерия',
-                'middle_name': 'Александровна',
-                'position': 'Разработчик',
-                'department': 'IT',
-                'sub_department': 'Разработка',
-                'phone': '+375 29 523-30-26',
-                'is_admin': False
-            },
-            {
-                'id': 3,
-                'last_name': 'Шершнева',
-                'first_name': 'Елена',
-                'middle_name': 'Сергеевна',
-                'position': 'Аналитик',
-                'department': 'Управление проектами',
-                'sub_department': 'Аналитика',
-                'phone': '+375 29 792-27-24',
-                'is_admin': False
-            }
-        ]
-        print("⚠️ Используются тестовые данные сотрудников")
-
-    def load_sub_departments(self, department):
-        """Загрузка подразделений"""
         self.subDepartmentFilter.blockSignals(True)
-        self.subDepartmentFilter.clear()
-
-        if not department or department == "Все отделы":
-            self.subDepartmentFilter.addItem("Все подразделения", None)
-            self.subDepartmentFilter.setEnabled(False)
-        else:
-            sub_departments = {emp['sub_department'] for emp in self.all_employees
-                               if emp['department'] == department and emp['sub_department']}
-            self.subDepartmentFilter.addItem("Все подразделения", None)
-            for sub in sorted(sub_departments):
-                self.subDepartmentFilter.addItem(sub, sub)
-            self.subDepartmentFilter.setEnabled(True)
-            self.subDepartmentFilter.setCurrentIndex(0)
-
+        self.subDepartmentFilter.setCurrentIndex(0)
         self.subDepartmentFilter.blockSignals(False)
+        QTimer.singleShot(0, self.apply_filters)
 
     def on_department_changed(self, department):
         """Обработка изменения выбранного отдела"""
-        self.load_sub_departments(department)
         self.apply_filters()
 
     def on_search_text_changed(self, text):
         """Запуск таймера поиска при вводе текста"""
-        self.search_timer.start(300)  # Задержка 300 мс
+        self.search_timer.start(300)
 
     def apply_filters(self):
         """Применение всех фильтров (поиск, отдел, подразделение)"""
         search_text = self.searchInput.text().lower().strip()
-        selected_dept = self.departmentFilter.currentData()
-        selected_sub = self.subDepartmentFilter.currentData()
+        selected_dept = self.departmentFilter.currentText()
+        if selected_dept == "Все отделы":
+            selected_dept = None
+        selected_sub = self.subDepartmentFilter.currentText()
+        if selected_sub == "Все подразделения":
+            selected_sub = None
 
-        self.filtered_employees = []
+        filtered = []
 
         for emp in self.all_employees:
-            # Фильтр по отделу
-            if selected_dept and selected_dept != "Все отделы":
-                if emp['department'] != selected_dept:
-                    continue
-
-            # Фильтр по подразделению
-            if selected_sub and selected_sub != "Все подразделения":
-                if emp['sub_department'] != selected_sub:
-                    continue
-
-            # Поиск по имени и фамилии
+            # Поиск по ФИО
             if search_text:
-                full_name = f"{emp['last_name']} {emp['first_name']} {emp['middle_name']}".lower()
-                if (search_text not in full_name and
-                        search_text not in emp['last_name'].lower() and
-                        search_text not in emp['first_name'].lower()):
+                if search_text not in emp['full_name'].lower():
                     continue
 
-            self.filtered_employees.append(emp)
+            filtered.append(emp)
 
+        self.filtered_employees = filtered
+        self.sort_employees()
         self.display_employees()
 
-    # windows/projects/employee_selector.py
+    def sort_employees(self):
+        """
+        Сортировка сотрудников:
+        1. Выбранные сотрудники (всегда вверху)
+        2. Остальные сортируются по частоте использования (от большего к меньшему)
+        """
+
+        def get_sort_key(emp):
+            is_selected = emp['id'] in self.selected_employees
+            return (0 if is_selected else 1, -emp.get('usage_count', 0))
+
+        self.filtered_employees.sort(key=get_sort_key)
 
     def display_employees(self):
         """Отображение отфильтрованных сотрудников с чекбоксами"""
@@ -238,54 +261,106 @@ class EmployeeSelectorDialog(QDialog):
             self.update_selected_count()
             return
 
-        # Создаём чекбоксы
-        for emp in self.filtered_employees:
-            full_name = f"{emp['last_name']} {emp['first_name']}"
-            if emp.get('middle_name'):
-                full_name += f" {emp['middle_name']}"
+        # Разделяем на выбранных и остальных
+        selected_emps = [emp for emp in self.filtered_employees if emp['id'] in self.selected_employees]
+        other_emps = [emp for emp in self.filtered_employees if emp['id'] not in self.selected_employees]
 
-            info = []
-            if emp.get('position'):
-                info.append(emp['position'])
-            if emp.get('department'):
-                info.append(f"({emp['department']})")
-            display_text = f"{full_name} — {' '.join(info)}" if info else full_name
+        # Отображаем выбранных сотрудников с разделителем
+        if selected_emps:
+            separator = QLabel("✓ ВЫБРАННЫЕ")
+            separator.setStyleSheet("""
+                QLabel {
+                    font-size: 11px;
+                    font-weight: bold;
+                    color: #D22730;
+                    padding: 8px 0px 4px 0px;
+                    border-bottom: 1px solid #D9D9D6;
+                }
+            """)
+            layout.addWidget(separator)
 
-            checkbox = QCheckBox(display_text)
-            if emp.get('phone'):
-                checkbox.setToolTip(f"Телефон: {emp['phone']}")
+            for emp in selected_emps:
+                checkbox = self._create_checkbox(emp)
+                layout.addWidget(checkbox)
+                self.checkboxes.append(checkbox)
 
-            self.employee_checkbox_map[checkbox] = emp['id']
+        # Отображаем остальных с разделителем (если есть выбранные)
+        if other_emps:
+            if selected_emps:
+                separator = QLabel("ВСЕ СОТРУДНИКИ")
+                separator.setStyleSheet("""
+                    QLabel {
+                        font-size: 11px;
+                        font-weight: bold;
+                        color: #666;
+                        padding: 16px 0px 4px 0px;
+                        border-bottom: 1px solid #D9D9D6;
+                    }
+                """)
+                layout.addWidget(separator)
 
-            if emp['id'] in self.selected_employees:
-                checkbox.setChecked(True)
-
-            # 👈 ИСПРАВЛЕНО: используем partial из functools
-            from functools import partial
-            checkbox.stateChanged.connect(partial(self._on_checkbox_changed, emp['id']))
-
-            layout.addWidget(checkbox)
-            self.checkboxes.append(checkbox)
+            for emp in other_emps:
+                checkbox = self._create_checkbox(emp)
+                layout.addWidget(checkbox)
+                self.checkboxes.append(checkbox)
 
         layout.addStretch()
         self.update_selected_count()
 
+    def _create_checkbox(self, emp: Dict) -> QCheckBox:
+        """Создает чекбокс для сотрудника (только ФИО)"""
+
+        # Только ФИО
+        display_text = emp['full_name']
+
+        checkbox = QCheckBox(display_text)
+
+        # Вся дополнительная информация в tooltip
+        tooltip_lines = []
+
+        if emp.get('position'):
+            tooltip_lines.append(f"Должность: {emp['position']}")
+
+        if emp.get('phone'):
+            tooltip_lines.append(f"Телефон: {emp['phone']}")
+
+        if emp.get('email'):
+            tooltip_lines.append(f"Email: {emp['email']}")
+
+        usage_count = emp.get('usage_count', 0)
+        if usage_count > 0:
+            tooltip_lines.append(f"📊 Использован в {usage_count} задачах")
+
+        checkbox.setToolTip("\n".join(tooltip_lines) if tooltip_lines else "Нет дополнительной информации")
+
+        self.employee_checkbox_map[checkbox] = emp['id']
+
+        if emp['id'] in self.selected_employees:
+            checkbox.setChecked(True)
+
+        from functools import partial
+        checkbox.stateChanged.connect(partial(self._on_checkbox_changed, emp['id']))
+
+        return checkbox
+
     def _on_checkbox_changed(self, emp_id: int, state):
         """Обработчик изменения состояния чекбокса"""
-        print(f"📊 Чекбокс изменен: ID={emp_id}, state={state}")  # 👈 ОТЛАДКА
-
-        if state == Qt.CheckState.Checked.value:  # 👈 ИСПРАВЛЕНО: используем .value
+        if state == Qt.CheckState.Checked.value:
             self.selected_employees.add(emp_id)
             print(f"✅ Добавлен ID: {emp_id}")
-        elif state == Qt.CheckState.Unchecked.value:  # 👈 ИСПРАВЛЕНО: используем .value
+        elif state == Qt.CheckState.Unchecked.value:
             self.selected_employees.discard(emp_id)
             print(f"❌ Удален ID: {emp_id}")
 
+        # Обновляем сортировку и отображение (выбранные уходят вверх)
+        self.sort_employees()
+        self.display_employees()
         self.update_selected_count()
         self._update_select_all_state()
 
     def _update_select_all_state(self):
-        if len(self.selected_employees) == len(self.filtered_employees):
+        """Обновление состояния чекбокса 'Выбрать всех'"""
+        if len(self.selected_employees) == len(self.filtered_employees) and len(self.filtered_employees) > 0:
             self.selectAllCheckBox.setCheckState(Qt.CheckState.Checked)
         elif self.selectAllCheckBox.checkState() == Qt.CheckState.Checked:
             self.selectAllCheckBox.setCheckState(Qt.CheckState.Unchecked)
@@ -295,20 +370,18 @@ class EmployeeSelectorDialog(QDialog):
         if state == Qt.CheckState.Checked:
             for emp in self.filtered_employees:
                 self.selected_employees.add(emp['id'])
-            for checkbox in self.checkboxes:
-                checkbox.setChecked(True)
         elif state == Qt.CheckState.Unchecked:
             for emp in self.filtered_employees:
                 self.selected_employees.discard(emp['id'])
-            for checkbox in self.checkboxes:
-                checkbox.setChecked(False)
+
+        self.sort_employees()
+        self.display_employees()
         self.update_selected_count()
 
     def update_selected_count(self):
         """Обновление счетчика выбранных сотрудников"""
         count = len(self.selected_employees)
         self.selectedCountLabel.setText(f"Выбрано: {count}")
-        print(f"📊 Выбрано сотрудников: {count}, IDs: {sorted(self.selected_employees)}")  # 👈 ОТЛАДКА
 
     def get_selected_employees(self) -> List[Dict]:
         """Получение списка выбранных сотрудников с полной информацией"""
@@ -325,6 +398,7 @@ class EmployeeSelectorDialog(QDialog):
     def set_preselected(self, employee_ids: List[int]):
         """Установка предвыбранных сотрудников"""
         self.selected_employees = set(employee_ids)
+        self.sort_employees()
         self.display_employees()
 
     def accept(self):

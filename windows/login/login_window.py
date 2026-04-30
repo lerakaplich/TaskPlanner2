@@ -59,6 +59,35 @@ class LoginWindow(QDialog):
         # Настройка "глазика" для пароля
         self.setup_password_eye()
 
+    def on_forgot_clicked(self):
+        """Обработчик кнопки 'Забыли пароль'"""
+        # Показываем окно с инструкцией по восстановлению пароля
+        bot_link = "https://t.me/TaskPlanner2035Vikusik_bot"
+
+        msg_box = QMessageBox(self)
+        msg_box.setWindowTitle("Восстановление пароля")
+        msg_box.setIcon(QMessageBox.Icon.Information)
+        msg_box.setText(
+            f"🔐 *Восстановление пароля*\n\n"
+            f"Для сброса пароля:\n\n"
+            f"1. Перейдите в Telegram бота:\n"
+            f"   {bot_link}\n"
+            f"2. Отправьте команду /reset_password\n"
+            f"3. Следуйте инструкциям бота\n\n"
+            f"⚠️ *Важно:* Новый пароль будет отправлен в Telegram.\n\n"
+            f"Если у вас нет Telegram, обратитесь к администратору."
+        )
+
+        # Добавляем кнопку для открытия ссылки
+        from PyQt6.QtGui import QDesktopServices
+        from PyQt6.QtCore import QUrl
+
+        open_bot_btn = msg_box.addButton("Перейти в Telegram бота", QMessageBox.ButtonRole.ActionRole)
+        open_bot_btn.clicked.connect(lambda: QDesktopServices.openUrl(QUrl(bot_link)))
+
+        msg_box.addButton(QMessageBox.StandardButton.Ok)
+        msg_box.exec()
+
     def setup_password_eye(self):
         """Настройка кнопки показа/скрытия пароля через QAction"""
         # Создаем действие (иконку) внутри поля
@@ -528,16 +557,6 @@ class LoginWindow(QDialog):
         except Exception as e:
             QMessageBox.critical(self, "Ошибка", f"Ошибка при подключении к базе данных: {e}")
             self._login_in_progress = False
-
-    def on_forgot_clicked(self):
-        phone = self.phoneInput.text().strip()
-        empty_mask = "+375 (  )   -  -"
-        if phone and phone != empty_mask:
-            clean_phone = self.extract_phone_digits(phone)
-            QMessageBox.information(self, "Восстановление",
-                                    f"Инструкции по восстановлению пароля отправлены на номер {self.format_phone_for_display(clean_phone)}")
-        else:
-            QMessageBox.warning(self, "Ошибка", "Введите номер телефона")
 
     def on_request_clicked(self):
         """Открытие формы регистрации нового сотрудника"""
