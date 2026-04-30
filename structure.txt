@@ -1,0 +1,310 @@
+﻿+-- __pycache__
+|  +-- chat_server.cpython-313.pyc
+|  +-- database.cpython-313.pyc
+|  +-- main.cpython-313.pyc
++-- chat_server.py
++-- database.py
++-- main.py
++-- models
+|  +-- __pycache__
+|  |  +-- chat.cpython-313.pyc
+|  |  +-- employees.cpython-313.pyc
+|  |  +-- projects.cpython-313.pyc
+|  |  +-- tasks.cpython-313.pyc
+|  +-- chat.py
+|  +-- employees.py
+|  +-- projects.py
+|  +-- schemas
+|  |  +-- __pycache__
+|  |  |  +-- chat_dto.cpython-313.pyc
+|  |  |  +-- projects_dto.cpython-313.pyc
+|  |  |  +-- tasks_dto.cpython-313.pyc
+|  |  +-- chat_dto.py
+|  |  +-- employees_dto.py
+|  |  +-- projects_dto.py
+|  |  +-- tasks_dto.py
+|  +-- tasks.py
++-- repositories
+|  +-- __pycache__
+|  |  +-- chat_repo.cpython-313.pyc
+|  |  +-- employee_repo.cpython-313.pyc
+|  |  +-- external_employee_repo.cpython-313.pyc
+|  |  +-- overtime_repo.cpython-313.pyc
+|  |  +-- project_repo.cpython-313.pyc
+|  |  +-- tag_repo.cpython-313.pyc
+|  |  +-- task_repo.cpython-313.pyc
+|  +-- chat_repo.py
+|  +-- employee_repo.py
+|  +-- external_employee_repo.py
+|  +-- local_task_repo.py
+|  +-- overtime_repo.py
+|  +-- project_repo.py
+|  +-- tag_repo.py
+|  +-- task_repo.py
++-- services
+|  +-- __pycache__
+|  |  +-- analytics_service.cpython-313.pyc
+|  |  +-- archive_service.cpython-313.pyc
+|  |  +-- chat_service.cpython-313.pyc
+|  |  +-- column_service.cpython-313.pyc
+|  |  +-- employee_service.cpython-313.pyc
+|  |  +-- excel_export_service.cpython-313.pyc
+|  |  +-- overtime_service.cpython-313.pyc
+|  |  +-- profile_service.cpython-313.pyc
+|  |  +-- projects_service.cpython-313.pyc
+|  |  +-- tag_service.cpython-313.pyc
+|  |  +-- tasks_service.cpython-313.pyc
+|  +-- access_service.py
+|  +-- analytics_service.py
+|  +-- archive_service.py
+|  +-- auth_service.py
+|  +-- chat_service.py
+|  +-- column_service.py
+|  +-- employee_service.py
+|  +-- employee_sync_service.py
+|  +-- excel_export_service.py
+|  +-- gantt_service.py
+|  +-- kanban_service.py
+|  +-- overtime_service.py
+|  +-- profile_service.py
+|  +-- projects_service.py
+|  +-- tag_service.py
+|  +-- tasks_service.py
++-- structure.txt
++-- ui
+|  +-- analytics
+|  |  +-- analytics_page.ui
+|  |  +-- employees
+|  |  |  +-- employee_card.ui
+|  |  +-- projects
+|  |  |  +-- employee_project_card.ui
+|  |  |  +-- project_card_analytics.ui
+|  |  +-- theme
+|  |  |  +-- theme_card.ui
+|  +-- archive
+|  |  +-- archive_page.ui
+|  |  +-- archived_project_card.ui
+|  |  +-- archived_task_card.ui
+|  +-- gantt
+|  |  +-- gantt_chart.ui
+|  +-- left_panel.ui
+|  +-- login
+|  |  +-- login_window.ui
+|  +-- my_tasks
+|  |  +-- my_tasks_page.ui
+|  |  +-- task_card.ui
+|  +-- other_tasks
+|  |  +-- others_tasks_page.ui
+|  |  +-- task_dialog.ui
+|  +-- overtime
+|  |  +-- add_overtime_dialog.ui
+|  |  +-- overtime_card.ui
+|  |  +-- overtime_page.ui
+|  |  +-- period_dialog.ui
+|  +-- profile
+|  |  +-- chart_widget.ui
+|  |  +-- edit_profile.ui
+|  |  +-- profile_page.ui
+|  |  +-- projects_page.ui
+|  +-- projects
+|  |  +-- column_selector.ui
+|  |  +-- employee_selector.ui
+|  |  +-- main_window.ui
+|  |  +-- project_card.ui
+|  |  +-- project_creation_dialog.ui
+|  |  +-- project_edit_dialog.ui
+|  +-- settings
+|  |  +-- base_tab.ui
+|  |  +-- columns
+|  |  |  +-- column_card.ui
+|  |  |  +-- column_dialog.ui
+|  |  |  +-- columns_tab.ui
+|  |  +-- departments
+|  |  |  +-- department_card.ui
+|  |  |  +-- department_dialog.ui
+|  |  +-- divisions
+|  |  |  +-- division_card.ui
+|  |  |  +-- division_dialog.ui
+|  |  +-- employees
+|  |  |  +-- employee_card.ui
+|  |  |  +-- employee_dialog.ui
+|  |  +-- settings_page.ui
+|  |  +-- tags
+|  |  |  +-- tag_card.ui
+|  |  |  +-- tag_dialog.ui
++-- utils
+|  +-- __pycache__
+|  |  +-- error_handler.cpython-313.pyc
+|  |  +-- socket_manager.cpython-313.pyc
+|  +-- error_handler.py
+|  +-- socket_manager.py
+|  +-- sync_employees.py
++-- windows
+|  +-- analytics
+|  |  +-- __pycache__
+|  |  |  +-- analytics_page.cpython-313.pyc
+|  |  |  +-- task_card_analytics.cpython-313.pyc
+|  |  +-- analytics_page.py
+|  |  +-- employees
+|  |  |  +-- __pycache__
+|  |  |  |  +-- employee_card.cpython-313.pyc
+|  |  |  +-- employee_card.py
+|  |  +-- projects
+|  |  |  +-- __pycache__
+|  |  |  |  +-- employee_project_card.cpython-313.pyc
+|  |  |  |  +-- project_card_analytics.cpython-313.pyc
+|  |  |  +-- employee_project_card.py
+|  |  |  +-- project_card_analytics.py
+|  |  +-- task_card_analytics.py
+|  |  +-- theme
+|  |  |  +-- __pycache__
+|  |  |  |  +-- employees_stats_view.cpython-313.pyc
+|  |  |  |  +-- theme_card.cpython-313.pyc
+|  |  |  |  +-- theme_projects_view.cpython-313.pyc
+|  |  |  +-- employees_stats_view.py
+|  |  |  +-- theme_card.py
+|  |  |  +-- theme_projects_view.py
+|  +-- archive
+|  |  +-- __pycache__
+|  |  |  +-- archive_page.cpython-313.pyc
+|  |  |  +-- archived_project_card.cpython-313.pyc
+|  |  |  +-- archived_task_card.cpython-313.pyc
+|  |  +-- archive_page.py
+|  |  +-- archived_project_card.py
+|  |  +-- archived_task_card.py
+|  +-- chat
+|  |  +-- __pycache__
+|  |  |  +-- chat_create_dialog.cpython-313.pyc
+|  |  |  +-- chat_create_view.cpython-313.pyc
+|  |  |  +-- chat_forward_dialog.cpython-313.pyc
+|  |  |  +-- chat_message_widget.cpython-313.pyc
+|  |  |  +-- chat_messages_separator.cpython-313.pyc
+|  |  |  +-- chat_page.cpython-313.pyc
+|  |  |  +-- chat_settings_dialog.cpython-313.pyc
+|  |  |  +-- chat_text_edit.cpython-313.pyc
+|  |  |  +-- chat_view.cpython-313.pyc
+|  |  +-- chat_create_dialog.py
+|  |  +-- chat_create_view.py
+|  |  +-- chat_forward_dialog.py
+|  |  +-- chat_message_widget.py
+|  |  +-- chat_messages_separator.py
+|  |  +-- chat_page.py
+|  |  +-- chat_settings_dialog.py
+|  |  +-- chat_text_edit.py
+|  |  +-- chat_view.py
+|  |  +-- employee_selection_dialog.py
+|  +-- gantt
+|  |  +-- __pycache__
+|  |  |  +-- gantt_chart.cpython-313.pyc
+|  |  +-- gantt_chart.py
+|  +-- login
+|  |  +-- __pycache__
+|  |  |  +-- login_window.cpython-313.pyc
+|  |  +-- login_window.py
+|  +-- my_tasks
+|  |  +-- __pycache__
+|  |  |  +-- my_tasks_page.cpython-313.pyc
+|  |  |  +-- task_card.cpython-313.pyc
+|  |  +-- my_tasks_page.py
+|  |  +-- task_card.py
+|  +-- other_tasks
+|  |  +-- __pycache__
+|  |  |  +-- others_task_card.cpython-313.pyc
+|  |  |  +-- others_tasks_page.cpython-313.pyc
+|  |  |  +-- task_dialog.cpython-313.pyc
+|  |  +-- others_task_card.py
+|  |  +-- others_tasks_page.py
+|  |  +-- task_dialog.py
+|  +-- overtime
+|  |  +-- __pycache__
+|  |  |  +-- add_overtime_dialog.cpython-313.pyc
+|  |  |  +-- overtime_card.cpython-313.pyc
+|  |  |  +-- overtime_page.cpython-313.pyc
+|  |  |  +-- period_dialog.cpython-313.pyc
+|  |  +-- add_overtime_dialog.py
+|  |  +-- overtime_card.py
+|  |  +-- overtime_page.py
+|  |  +-- period_dialog.py
+|  +-- profile
+|  |  +-- __pycache__
+|  |  |  +-- chart_widget.cpython-313.pyc
+|  |  |  +-- edit_profile.cpython-313.pyc
+|  |  |  +-- profile_page.cpython-313.pyc
+|  |  |  +-- projects_page.cpython-313.pyc
+|  |  +-- chart_widget.py
+|  |  +-- edit_profile.py
+|  |  +-- profile_page.py
+|  |  +-- projects_page.py
+|  +-- projects
+|  |  +-- __pycache__
+|  |  |  +-- base_project_dialog.cpython-313.pyc
+|  |  |  +-- column_selector.cpython-313.pyc
+|  |  |  +-- employee_selector.cpython-313.pyc
+|  |  |  +-- main_window.cpython-313.pyc
+|  |  |  +-- project_card.cpython-313.pyc
+|  |  |  +-- project_creation_dialog.cpython-313.pyc
+|  |  |  +-- project_edit_dialog.cpython-313.pyc
+|  |  |  +-- project_view_page.cpython-313.pyc
+|  |  +-- base_project_dialog.py
+|  |  +-- column_selector.py
+|  |  +-- employee_selector.py
+|  |  +-- main_window.py
+|  |  +-- project_card.py
+|  |  +-- project_creation_dialog.py
+|  |  +-- project_edit_dialog.py
+|  |  +-- project_view_page.py
+|  +-- settings
+|  |  +-- __pycache__
+|  |  |  +-- base_tab.cpython-313.pyc
+|  |  |  +-- settings_page.cpython-313.pyc
+|  |  +-- base_tab.py
+|  |  +-- columns
+|  |  |  +-- __pycache__
+|  |  |  |  +-- column_card.cpython-313.pyc
+|  |  |  |  +-- column_dialog.cpython-313.pyc
+|  |  |  |  +-- columns_tab.cpython-313.pyc
+|  |  |  +-- column_card.py
+|  |  |  +-- column_dialog.py
+|  |  |  +-- columns_tab.py
+|  |  +-- departments
+|  |  |  +-- __pycache__
+|  |  |  |  +-- department_card.cpython-313.pyc
+|  |  |  |  +-- department_dialog.cpython-313.pyc
+|  |  |  |  +-- departments_tab.cpython-313.pyc
+|  |  |  +-- department_card.py
+|  |  |  +-- department_dialog.py
+|  |  |  +-- departments_tab.py
+|  |  +-- divisions
+|  |  |  +-- __pycache__
+|  |  |  |  +-- division_card.cpython-313.pyc
+|  |  |  |  +-- division_dialog.cpython-313.pyc
+|  |  |  |  +-- divisions_tab.cpython-313.pyc
+|  |  |  +-- division_card.py
+|  |  |  +-- division_dialog.py
+|  |  |  +-- divisions_tab.py
+|  |  +-- employees
+|  |  |  +-- __pycache__
+|  |  |  |  +-- employee_card.cpython-313.pyc
+|  |  |  |  +-- employee_dialog.cpython-313.pyc
+|  |  |  |  +-- employees_tab.cpython-313.pyc
+|  |  |  +-- employee_card.py
+|  |  |  +-- employee_dialog.py
+|  |  |  +-- employees_tab.py
+|  |  +-- settings_page.py
+|  |  +-- tags
+|  |  |  +-- __pycache__
+|  |  |  |  +-- tag_card.cpython-313.pyc
+|  |  |  |  +-- tag_dialog.cpython-313.pyc
+|  |  |  |  +-- tags_tab.cpython-313.pyc
+|  |  |  +-- tag_card.py
+|  |  |  +-- tag_dialog.py
+|  |  |  +-- tags_tab.py
+|  +-- shared
+|  |  +-- __pycache__
+|  |  |  +-- kanban_column.cpython-313.pyc
+|  |  +-- kanban_column.py
+|  +-- widgets
+|  |  +-- __pycache__
+|  |  |  +-- color_picker_dialog.cpython-313.pyc
+|  |  +-- color_picker_dialog.py
+|  |  +-- kanban_column.py
