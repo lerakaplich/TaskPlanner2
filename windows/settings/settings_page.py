@@ -23,6 +23,7 @@ from windows.settings.employees.employees_tab import EmployeesTab
 from windows.settings.departments.departments_tab import DepartmentsTab
 from windows.settings.divisions.divisions_tab import DivisionsTab
 from services.employee_service import EmployeeService
+from database import get_employees_session
 
 
 class SettingsPage(QWidget):
@@ -35,7 +36,8 @@ class SettingsPage(QWidget):
     def __init__(self, parent=None, session=None):  # ← ДОБАВЬТЕ session
         super().__init__(parent)
 
-        self.session = session  # ← СОХРАНЯЕМ СЕССИЮ
+        self.employees_db_session = get_employees_session()  # ← ДОБАВИТЬ
+        self.session = session  # оставляем для других нужд (может не понадобиться)
 
         self.all_employees = []
         self.all_departments = []
@@ -57,11 +59,7 @@ class SettingsPage(QWidget):
 
         self.setup_tabs()
 
-        # Загружаем реальные данные из БД
-        if self.session:
-            self.load_data_from_db()
-        else:
-            self.load_sample_data()  # fallback
+        self.load_data_from_db()
 
     def setup_tabs(self):
         """Создание и настройка всех вкладок"""
@@ -143,16 +141,15 @@ class SettingsPage(QWidget):
         print(f"Изменён {item_type}: {data}")
         self.item_edited.emit(item_type, data)
 
-    # windows/settings/settings_page.py
-
     def load_data_from_db(self):
         """Загрузка реальных данных из БД"""
         from services.employee_service import EmployeeService
-        from services.column_service import ColumnService  # ← ДОБАВИТЬ
+        from services.column_service import ColumnService
         from services.tag_service import TagService
 
-        employee_service = EmployeeService(self.session)
-        column_service = ColumnService(self.session)  # ← ДОБАВИТЬ
+        # Используем ОТДЕЛЬНУЮ сессию для EmployeeService!
+        employee_service = EmployeeService(self.employees_db_session)  # ← ИСПРАВЛЕНО
+        column_service = ColumnService(self.session)  # column_service может использовать taskplanner
         tag_service = TagService(self.session)
 
         # Загружаем сотрудников
@@ -272,76 +269,3 @@ class SettingsPage(QWidget):
         tab_names = ["Сотрудники", "Отделы", "Подразделения", "Колонки", "Темы"]
         if index < len(tab_names):
             print(f"Переключено на вкладку: {tab_names[index]}")
-
-    def load_sample_data(self):
-        """Загрузка тестовых данных"""
-        # Теги
-        self.all_tags = [
-            {"id": 1, "name": "проект", "color": "#ccab6e", "count": 15},
-            {"id": 2, "name": "срочно", "color": "#ff6b6b", "count": 8},
-            {"id": 3, "name": "важно", "color": "#4ecdc4", "count": 12},
-            {"id": 4, "name": "обучение", "color": "#45b7d1", "count": 5},
-            {"id": 5, "name": "отчет", "color": "#96ceb4", "count": 10},
-        ]
-
-        # Отделы
-        self.all_departments = [
-            {"id": 1, "number": 101, "name": "IT отдел", "boss": "Иванов И.И.",
-             "phone_number": "+375 (17) 123-45-67", "division": "Северное подразделение"},
-            {"id": 2, "number": 102, "name": "HR отдел", "boss": "Петрова А.С.",
-             "division": "Центральное подразделение"},
-            {"id": 3, "number": 103, "name": "Бухгалтерия",
-             "bosses": ["Сидоров П.П.", "Козлова Е.В."], "phone_number": "+375 (17) 234-56-78",
-             "division": "Южное подразделение"},
-        ]
-
-        # Подразделения
-        self.all_divisions = [
-            {"id": 1, "number": 1, "name": "Северное подразделение", "boss": "Козлов А.А.",
-             "phone_number": "+375 (17) 111-22-33", "workshop_code": "С-001"},
-            {"id": 2, "number": 2, "name": "Южное подразделение", "boss": "Морозов В.В.",
-             "phone_number": "+375 (17) 444-55-66", "workshop_code": "Ю-002"},
-            {"id": 3, "number": 3, "name": "Центральное подразделение", "boss": "Весенний Г.Г.",
-             "workshop_code": "Ц-003"},
-        ]
-
-        # Сотрудники
-        self.all_employees = [
-            {"id": 1, "last_name": "Иванов", "first_name": "Иван", "middle_name": "Иванович",
-             "position": "Ведущий разработчик", "department": self.all_departments[0],
-             "department_id": 1, "division": self.all_divisions[0], "division_id": 1,
-             "phone_number": "+375 (29) 123-45-67", "email": "ivanov@company.com", "rights": "admin"},
-            {"id": 2, "last_name": "Петрова", "first_name": "Анна", "middle_name": "Сергеевна",
-             "position": "HR-менеджер", "department": self.all_departments[1], "department_id": 2,
-             "division": self.all_divisions[2], "division_id": 3,
-             "phone_number": "+375 (33) 234-56-78", "email": "petrova@company.com", "rights": "user"},
-            {"id": 3, "last_name": "Сидоров", "first_name": "Петр", "middle_name": "Петрович",
-             "position": "Системный администратор", "department": self.all_departments[0], "department_id": 1,
-             "division": self.all_divisions[1], "division_id": 2,
-             "phone_number": "+375 (29) 345-67-89", "rights": "superadmin"},
-            {"id": 4, "last_name": "Козлова", "first_name": "Елена", "middle_name": "Владимировна",
-             "position": "Бухгалтер", "department": self.all_departments[2], "department_id": 3,
-             "division": self.all_divisions[0], "division_id": 1,
-             "phone_number": "+375 (29) 456-78-90", "email": "kozlova@company.com", "rights": "user"},
-            {"id": 5, "last_name": "Морозов", "first_name": "Дмитрий", "middle_name": "Александрович",
-             "position": "Начальник отдела", "department": self.all_departments[0], "department_id": 1,
-             "division": self.all_divisions[2], "division_id": 3,
-             "phone_number": "+375 (33) 567-89-01", "email": "morozov@company.com", "rights": "admin"}
-        ]
-        self.all_columns = [
-            {"id": 1, "project_id": 1, "name": "К выполнению", "color": "#ccab6e", "position": 1,
-             "is_done_column": False},
-            {"id": 2, "project_id": 1, "name": "В работе", "color": "#45b7d1", "position": 2, "is_done_column": False},
-            {"id": 3, "project_id": 1, "name": "На проверке", "color": "#f9ca24", "position": 3,
-             "is_done_column": False},
-            {"id": 4, "project_id": 1, "name": "Готово", "color": "#6ab04c", "position": 4, "is_done_column": True},
-        ]
-        # Загружаем данные во вкладки
-
-        self.tags_tab.load_data(self.all_tags)
-        self.employees_tab.load_data(self.all_employees)
-        self.departments_tab.load_data(self.all_departments)
-        self.divisions_tab.load_data(self.all_divisions)
-        self.columns_tab.load_data(self.all_columns)
-        # Загружаем данные для фильтров сотрудников
-        self.employees_tab.load_filter_data(self.all_departments, self.all_divisions)

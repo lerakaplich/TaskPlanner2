@@ -1,3 +1,4 @@
+# main.py
 import sys
 from PyQt6.QtWidgets import QApplication, QMessageBox
 from PyQt6.QtCore import Qt

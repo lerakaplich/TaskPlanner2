@@ -228,18 +228,74 @@ class TelegramBot:
             print(f"📱 Пользователь {user_id} (chat_id={chat_id}) нажал /start")
 
             with get_employees_session() as session:
-                stmt = select(Employee).where(Employee.chat_id == chat_id)  # ← ИСПРАВЛЕНО
+                stmt = select(Employee).where(Employee.chat_id == chat_id)
                 existing_employee = session.scalar(stmt)
+
                 if existing_employee:
+                    phone_digits = existing_employee.phone_number
+                    saved_password = user_passwords.get(phone_digits)
+
+                    # Проверяем, есть ли пароль в кэше или в БД
+                    if saved_password:
+                        await message.answer(
+                            f"🤖 *Добро пожаловать, {existing_employee.first_name}!*\n\n"
+                            f"✅ Вы уже зарегистрированы в системе.\n\n"
+                            f"📞 Телефон: {phone_digits}\n"
+                            f"🔐 *Ваш пароль:* `{saved_password}`\n\n"
+                            f"⚠️ *Сохраните этот пароль!*\n\n"
+                            f"Используйте кнопки ниже для работы с ботом:",
+                            parse_mode="Markdown",
+                            reply_markup=get_main_keyboard()
+                        )
+                        return
+
+                    # Проверяем, есть ли пароль в БД
+                    if existing_employee.password_hash:
+                        await message.answer(
+                            f"🤖 *Добро пожаловать, {existing_employee.first_name}!*\n\n"
+                            f"✅ Вы уже зарегистрированы в системе.\n\n"
+                            f"⚠️ *Если вы забыли пароль, используйте /reset_password*\n\n"
+                            f"Используйте кнопки ниже для работы с ботом:",
+                            parse_mode="Markdown",
+                            reply_markup=get_main_keyboard()
+                        )
+                        return
+
+                    # НЕТ ПАРОЛЯ - ГЕНЕРИРУЕМ НОВЫЙ!
+                    new_password = self.generate_password()
+                    new_password_hash = self.hash_password(new_password)
+
+                    # Сохраняем пароль в БД
+                    update_stmt = text("""
+                        UPDATE public.employees 
+                        SET password_hash = :password_hash
+                        WHERE id = :employee_id
+                    """)
+                    session.execute(update_stmt, {
+                        'password_hash': new_password_hash,
+                        'employee_id': existing_employee.id
+                    })
+                    session.commit()
+
+                    # Сохраняем в кэш
+                    user_passwords[phone_digits] = new_password
+
+                    # Отправляем сообщение с паролем
                     await message.answer(
                         f"🤖 *Добро пожаловать, {existing_employee.first_name}!*\n\n"
-                        f"Вы уже зарегистрированы в системе.\n\n"
+                        f"✅ Вы уже зарегистрированы в системе.\n\n"
+                        f"📞 Телефон: {phone_digits}\n"
+                        f"🔐 *Ваш пароль:* `{new_password}`\n\n"
+                        f"⚠️ *Сохраните этот пароль!*\n\n"
+                        f"Вы можете изменить его в настройках приложения TaskPlanner.\n\n"
                         f"Используйте кнопки ниже для работы с ботом:",
                         parse_mode="Markdown",
                         reply_markup=get_main_keyboard()
                     )
+                    print(f"✅ Сгенерирован и отправлен пароль для пользователя {phone_digits} через /start")
                     return
 
+            # Если пользователь не найден по chat_id, предлагаем отправить номер
             keyboard = InlineKeyboardMarkup(inline_keyboard=[
                 [InlineKeyboardButton(text="📱 Отправить номер телефона", callback_data="send_phone")]
             ])
@@ -247,7 +303,8 @@ class TelegramBot:
             await message.answer(
                 "🔐 *Для привязки аккаунта к Telegram*\n\n"
                 "Пожалуйста, нажмите кнопку ниже и разрешите отправку номера телефона.\n"
-                "Мы проверим, зарегистрированы ли вы в системе.",
+                "Мы проверим, зарегистрированы ли вы в системе.\n\n"
+                "Если вы ещё не зарегистрированы, сначала отправьте заявку через приложение TaskPlanner.",
                 parse_mode="Markdown",
                 reply_markup=keyboard
             )
@@ -579,6 +636,7 @@ class TelegramBot:
             if len(phone_digits) == 9:
                 phone_digits = '375' + phone_digits
 
+            # Сначала проверяем, есть ли заявка в pending
             found_request_id = None
             for req_id, data in pending_registrations.items():
                 data_phone = data.get('phone_number', '')
@@ -598,35 +656,96 @@ class TelegramBot:
                 )
                 return
 
+            # Проверяем, есть ли пользователь в БД
             with get_employees_session() as emp_session:
-                select_stmt = text("SELECT id, last_name, first_name FROM public.employees WHERE phone_number = :phone")
+                select_stmt = text("""
+                    SELECT id, last_name, first_name, password_hash 
+                    FROM public.employees 
+                    WHERE phone_number = :phone
+                """)
                 employee = emp_session.execute(select_stmt, {'phone': phone_digits}).first()
 
                 if employee:
-                    update_stmt = text("UPDATE public.employees SET chat_id = :chat_id WHERE phone_number = :phone")
-                    emp_session.execute(update_stmt, {'chat_id': chat_id, 'phone': phone_digits})
-                    emp_session.commit()
+                    employee_id = employee.id
+                    last_name = employee.last_name
+                    first_name = employee.first_name
+                    existing_password_hash = employee.password_hash
 
-                    saved_password = user_passwords.get(phone_digits)
-                    if saved_password:
+                    # Проверяем, есть ли пароль
+                    if not existing_password_hash or existing_password_hash == '':
+                        # Нет пароля - генерируем новый
+                        new_password = self.generate_password()
+                        new_password_hash = self.hash_password(new_password)
+
+                        # Сохраняем пароль в БД
+                        update_stmt = text("""
+                            UPDATE public.employees 
+                            SET password_hash = :password_hash
+                            WHERE id = :employee_id
+                        """)
+                        emp_session.execute(update_stmt, {
+                            'password_hash': new_password_hash,
+                            'employee_id': employee_id
+                        })
+
+                        # Сохраняем chat_id
+                        update_chat_stmt = text("""
+                            UPDATE public.employees 
+                            SET chat_id = :chat_id
+                            WHERE id = :employee_id
+                        """)
+                        emp_session.execute(update_chat_stmt, {
+                            'chat_id': chat_id,
+                            'employee_id': employee_id
+                        })
+                        emp_session.commit()
+
+                        # Сохраняем пароль в кэш
+                        user_passwords[phone_digits] = new_password
+
+                        # Отправляем сообщение с паролем
                         await message.answer(
                             f"✅ *Вы уже зарегистрированы в системе!*\n\n"
-                            f"👤 ФИО: {employee.last_name} {employee.first_name}\n"
-                            f"🔐 *Ваш пароль:* `{saved_password}`\n\n"
-                            f"⚠️ *Сохраните этот пароль!*",
+                            f"👤 ФИО: {last_name} {first_name}\n"
+                            f"📞 Телефон: {phone_digits}\n"
+                            f"🔐 *Ваш пароль:* `{new_password}`\n\n"
+                            f"⚠️ *Сохраните этот пароль!*\n\n"
+                            f"Вы можете изменить его в настройках приложения TaskPlanner.",
                             parse_mode="Markdown",
                             reply_markup=get_main_keyboard()
                         )
+                        print(f"✅ Сгенерирован и отправлен пароль для пользователя {phone_digits}")
                     else:
-                        await message.answer(
-                            f"✅ *Вы уже зарегистрированы в системе!*\n\n"
-                            f"👤 ФИО: {employee.last_name} {employee.first_name}\n\n"
-                            f"⚠️ *Если вы забыли пароль, используйте /reset_password*",
-                            parse_mode="Markdown",
-                            reply_markup=get_main_keyboard()
-                        )
+                        # Пароль есть - просто обновляем chat_id
+                        update_chat_stmt = text("""
+                            UPDATE public.employees 
+                            SET chat_id = :chat_id
+                            WHERE phone_number = :phone
+                        """)
+                        emp_session.execute(update_chat_stmt, {'chat_id': chat_id, 'phone': phone_digits})
+                        emp_session.commit()
+
+                        saved_password = user_passwords.get(phone_digits)
+                        if saved_password:
+                            await message.answer(
+                                f"✅ *Вы уже зарегистрированы в системе!*\n\n"
+                                f"👤 ФИО: {last_name} {first_name}\n"
+                                f"🔐 *Ваш пароль:* `{saved_password}`\n\n"
+                                f"⚠️ *Сохраните этот пароль!*",
+                                parse_mode="Markdown",
+                                reply_markup=get_main_keyboard()
+                            )
+                        else:
+                            await message.answer(
+                                f"✅ *Вы уже зарегистрированы в системе!*\n\n"
+                                f"👤 ФИО: {last_name} {first_name}\n\n"
+                                f"⚠️ *Если вы забыли пароль, используйте /reset_password*",
+                                parse_mode="Markdown",
+                                reply_markup=get_main_keyboard()
+                            )
                     return
 
+            # Если ничего не нашли
             await message.answer(
                 "❌ *Не найдено ни заявки, ни зарегистрированного пользователя*\n\n"
                 "Пожалуйста, сначала отправьте заявку через приложение TaskPlanner.",

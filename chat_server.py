@@ -313,14 +313,29 @@ async def main():
     """Главная асинхронная функция"""
     print("✅ Запуск сервера (синхронизация не требуется)")
 
-    # Инициализируем сервис сотрудников (без синхронизации!)
+    # Создаем сервис
     employee_service = EmployeeService()
 
-    # Проверяем, что сотрудники доступны
-    employees = employee_service.get_all_employees()
-    print(f"📊 Загружено сотрудников: {len(employees)}")
+    try:
+        # Проверяем загрузку данных
+        departments = employee_service.get_all_departments()
+        print(f"📊 Загружено отделов: {len(departments)}")
 
-    # Запускаем Telegram бота в фоновом режиме
+        divisions = employee_service.get_all_divisions()
+        print(f"📊 Загружено подразделений: {len(divisions)}")
+
+        employees = employee_service.get_all_employees()
+        print(f"📊 Загружено сотрудников: {len(employees)}")
+
+        if employees:
+            # Показываем первого сотрудника для проверки
+            print(f"   Пример: {employees[0].get('full_name', 'N/A')}")
+    except Exception as e:
+        print(f"⚠️ Ошибка при загрузке данных: {e}")
+        import traceback
+        traceback.print_exc()
+
+    # Запускаем Telegram бота
     print("🤖 Запуск Telegram бота...")
     bot_task = asyncio.create_task(start_bot())
 
@@ -334,8 +349,6 @@ async def main():
         log_level="info"
     )
     server = uvicorn.Server(config)
-
-    # Ждём завершения сервера
     await server.serve()
 
 

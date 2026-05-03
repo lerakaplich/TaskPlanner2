@@ -1,5 +1,5 @@
+# windows/settings/employees/employee_dialog.py
 """
-employee_dialog.py
 Диалог добавления/редактирования сотрудника
 """
 
@@ -20,7 +20,6 @@ from windows.settings.divisions.division_dialog import DivisionDialog
 class PhoneValidator(QValidator):
     """Валидатор для номера телефона (только цифры, максимум 9)"""
     def validate(self, input_str, pos):
-        # Разрешаем только цифры
         filtered = ''.join([c for c in input_str if c.isdigit()])
         if len(filtered) > 9:
             filtered = filtered[:9]
@@ -117,36 +116,26 @@ class EmployeeDialog(QDialog):
 
     def setup_phone_field(self):
         """Настройка поля телефона с префиксом +375"""
-        # Устанавливаем валидатор
         validator = PhoneValidator()
         self.lineEditMobilePhone.setValidator(validator)
-
-        # Устанавливаем префикс
         self.lineEditMobilePhone.setText("")
 
-        # Обработчик ввода для автоматического добавления префикса
         def on_phone_edit(text):
-            # Убираем все нецифровые символы
             digits = ''.join([c for c in text if c.isdigit()])
-            # Ограничиваем 9 цифрами
             if len(digits) > 9:
                 digits = digits[:9]
 
-            # Если есть цифры, показываем +375 + цифры
             if digits:
                 self.lineEditMobilePhone.blockSignals(True)
                 self.lineEditMobilePhone.setText(digits)
                 self.lineEditMobilePhone.blockSignals(False)
 
         self.lineEditMobilePhone.textChanged.connect(on_phone_edit)
-
-        # Устанавливаем placeholder
         self.lineEditMobilePhone.setPlaceholderText("Введите 9 цифр (29XXXXXXX)")
 
     def get_full_phone_number(self):
         """Получает полный номер телефона в формате 375XXXXXXXXX"""
         digits = self.lineEditMobilePhone.text().strip()
-        # Убираем все нецифровые символы
         digits = ''.join([c for c in digits if c.isdigit()])
         if digits:
             return f"375{digits}"
@@ -155,11 +144,16 @@ class EmployeeDialog(QDialog):
     def load_divisions_from_db(self):
         """Загрузка подразделений из БД"""
         try:
-            if self.session:
-                from services.employee_service import EmployeeService
-                employee_service = EmployeeService(self.session)
-                self.all_divisions = employee_service.get_all_divisions()
-                print(f"✅ Загружено {len(self.all_divisions)} подразделений")
+            from services.employee_service import EmployeeService
+            from database import get_employees_session
+
+            # СОЗДАЕМ НОВУЮ СЕССИЮ ДЛЯ EMPLOYEES
+            emp_session = get_employees_session()
+            employee_service = EmployeeService(emp_session)  # ← БЕЗ self.session!
+            self.all_divisions = employee_service.get_all_divisions()
+            emp_session.close()  # ← ЗАКРЫВАЕМ СЕССИЮ
+
+            print(f"✅ Загружено {len(self.all_divisions)} подразделений")
         except Exception as e:
             print(f"❌ Ошибка загрузки подразделений: {e}")
             self.all_divisions = []
@@ -167,21 +161,24 @@ class EmployeeDialog(QDialog):
     def load_departments_from_db(self):
         """Загрузка отделов из БД"""
         try:
-            if self.session:
-                from services.employee_service import EmployeeService
-                employee_service = EmployeeService(self.session)
-                self.all_departments = employee_service.get_all_departments()
-                self.departments_by_division = {}
-                for dept in self.all_departments:
-                    div_id = dept.get('division_id')
-                    if div_id not in self.departments_by_division:
-                        self.departments_by_division[div_id] = []
-                    self.departments_by_division[div_id].append(dept)
-                print(f"✅ Загружено {len(self.all_departments)} отделов")
+            from services.employee_service import EmployeeService
+            from database import get_employees_session
+
+            emp_session = get_employees_session()
+            employee_service = EmployeeService(emp_session)  # ← БЕЗ self.session!
+            self.all_departments = employee_service.get_all_departments()
+            emp_session.close()
+
+            self.departments_by_division = {}
+            for dept in self.all_departments:
+                div_id = dept.get('division_id')
+                if div_id not in self.departments_by_division:
+                    self.departments_by_division[div_id] = []
+                self.departments_by_division[div_id].append(dept)
+            print(f"✅ Загружено {len(self.all_departments)} отделов")
         except Exception as e:
             print(f"❌ Ошибка загрузки отделов: {e}")
             self.all_departments = []
-            self.departments_by_division = {}
 
     def load_divisions_combo(self):
         """Загрузка подразделений в комбобокс"""
@@ -200,10 +197,12 @@ class EmployeeDialog(QDialog):
             return
 
         division_id = self.comboBoxDivision.currentData()
+        print(f"Выбрано подразделение ID: {division_id}")
 
         if division_id in self.departments_by_division:
             for department in self.departments_by_division[division_id]:
                 self.comboBoxDepartment.addItem(department.get("name", "Без названия"), department.get("id"))
+            print(f"Загружено {len(self.departments_by_division[division_id])} отделов для подразделения {division_id}")
 
     def add_division(self):
         """Открытие диалога добавления нового подразделения"""
@@ -330,7 +329,7 @@ class EmployeeDialog(QDialog):
             "department_id": department_id,
             "position": self.lineEditPosition.text().strip(),
             "rights": rights,
-            "phone_number": full_phone,  # Сохраняем как 375XXXXXXXXX
+            "phone_number": full_phone,
             "work_number": self.lineEditWorkPhone.text().strip() or None,
             "email": self.lineEditEmail.text().strip() or None,
         }
@@ -377,10 +376,9 @@ class EmployeeDialog(QDialog):
             if role_index >= 0:
                 self.comboBoxRole.setCurrentIndex(role_index)
 
-        # Загружаем номер телефона (убираем 375 в начале)
         phone = data.get("phone_number", "")
         if phone.startswith("375"):
-            phone = phone[3:]  # Показываем только 9 цифр
+            phone = phone[3:]
         self.lineEditMobilePhone.setText(phone)
 
         self.lineEditWorkPhone.setText(data.get("work_number", ""))
