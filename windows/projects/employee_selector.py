@@ -1,5 +1,4 @@
 # windows/projects/employee_selector.py
-
 import os
 import sys
 from typing import List, Dict, Optional, Set
@@ -8,18 +7,14 @@ from PyQt6 import uic
 from PyQt6.QtWidgets import QDialog, QApplication, QVBoxLayout, QCheckBox, QWidget, QLabel
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal
 
-from database import get_tasks_session
-from models.employees import ExternalEmployee, DivisionFDW, DepartmentFDW
+from database import get_employees_session  # Прямое подключение!
+from models.employees import Employee, Division, Department
 from sqlalchemy import select, func
 
 
 class EmployeeSelectorDialog(QDialog):
-    """
-    Диалог выбора сотрудников с поиском и фильтрацией по отделам и подразделениям
-    Используется для выбора как участников, так и администраторов проекта
-    """
+    """Диалог выбора сотрудников с поиском и фильтрацией"""
 
-    # Сигнал для возврата выбранных сотрудников
     employees_selected = pyqtSignal(list)
 
     def __init__(self, parent=None, mode="participants"):
@@ -34,12 +29,12 @@ class EmployeeSelectorDialog(QDialog):
         self.search_timer.setSingleShot(True)
         self.search_timer.timeout.connect(self.apply_filters)
 
-        # Статистика использования сотрудников (только для сортировки)
+        # Статистика использования сотрудников
         self.employee_usage_count = Counter()
 
         # Кэш для подразделений и отделов
-        self.divisions_list = []  # список всех подразделений
-        self.departments_list = []  # список всех отделов
+        self.divisions_list = []
+        self.departments_list = []
 
         # Загрузка UI
         ui_path = os.path.join(os.path.dirname(__file__), "..", "..", "ui", "projects")
@@ -60,22 +55,16 @@ class EmployeeSelectorDialog(QDialog):
         self.setup_filters()
         self.selected_employees.clear()
 
-        # Принудительно показываем всех сотрудников сразу
         QTimer.singleShot(0, self.apply_filters)
 
     def load_divisions(self):
         """Загрузка списка подразделений из БД"""
         try:
-            session = get_tasks_session()
-            stmt = select(DivisionFDW).order_by(DivisionFDW.name)
-            divisions = session.scalars(stmt).all()
-
+            session = get_employees_session()
+            divisions = session.query(Division).order_by(Division.name).all()
             self.divisions_list = [div.name for div in divisions if div.name]
-
             session.close()
             print(f"✅ Загружено подразделений: {len(self.divisions_list)}")
-            for d in self.divisions_list[:5]:
-                print(f"   - {d}")
         except Exception as e:
             print(f"⚠️ Ошибка загрузки подразделений: {e}")
             self.divisions_list = []
@@ -83,16 +72,11 @@ class EmployeeSelectorDialog(QDialog):
     def load_departments(self):
         """Загрузка списка отделов из БД"""
         try:
-            session = get_tasks_session()
-            stmt = select(DepartmentFDW).order_by(DepartmentFDW.name)
-            departments = session.scalars(stmt).all()
-
+            session = get_employees_session()
+            departments = session.query(Department).order_by(Department.name).all()
             self.departments_list = [dept.name for dept in departments if dept.name]
-
             session.close()
             print(f"✅ Загружено отделов: {len(self.departments_list)}")
-            for d in self.departments_list[:5]:
-                print(f"   - {d}")
         except Exception as e:
             print(f"⚠️ Ошибка загрузки отделов: {e}")
             self.departments_list = []
@@ -101,14 +85,12 @@ class EmployeeSelectorDialog(QDialog):
         """Загружает статистику использования сотрудников в задачах"""
         try:
             from models.tasks import Task
-            session = get_tasks_session()
+            session = get_tasks_session()  # Из taskplanner БД
 
-            # Считаем количество задач, где сотрудник был исполнителем
-            stmt = select(Task.assigned_to, func.count(Task.id)).where(
+            results = session.query(Task.assigned_to, func.count(Task.id)).filter(
                 Task.assigned_to.isnot(None)
-            ).group_by(Task.assigned_to)
+            ).group_by(Task.assigned_to).all()
 
-            results = session.execute(stmt).all()
             for emp_id, count in results:
                 self.employee_usage_count[emp_id] = count
 
@@ -118,21 +100,15 @@ class EmployeeSelectorDialog(QDialog):
             print(f"⚠️ Ошибка загрузки статистики: {e}")
 
     def load_employees_from_db(self):
-        """Загрузка реальных сотрудников из БД"""
+        """Загрузка сотрудников из БД employees"""
         try:
-            session = get_tasks_session()
-            stmt = select(ExternalEmployee).order_by(ExternalEmployee.last_name)
-            employees = session.scalars(stmt).all()
+            session = get_employees_session()
+            employees = session.query(Employee).order_by(Employee.last_name).all()
 
             self.all_employees = []
             for emp in employees:
-                # Формируем ФИО
-                full_name = f"{emp.last_name or ''} {emp.first_name or ''}"
-                if emp.middle_name:
-                    full_name += f" {emp.middle_name}"
-                full_name = full_name.strip()
+                full_name = self._get_full_name(emp)
 
-                # Добавляем только если есть ФИО
                 if full_name:
                     self.all_employees.append({
                         'id': emp.id,
@@ -144,16 +120,25 @@ class EmployeeSelectorDialog(QDialog):
                         'phone': emp.phone_number or '',
                         'email': emp.email or '',
                         'is_admin': emp.rights == 'superadmin' if emp.rights else False,
-                        'usage_count': self.employee_usage_count.get(emp.id, 0)
+                        'usage_count': self.employee_usage_count.get(emp.id, 0),
+                        'department_id': emp.department_id,
+                        'division_id': emp.division_id
                     })
 
-            print(f"✅ Загружено сотрудников: {len(self.all_employees)}")
             session.close()
+            print(f"✅ Загружено сотрудников: {len(self.all_employees)}")
 
         except Exception as e:
-            print(f"❌ Ошибка загрузки сотрудников из БД: {e}")
+            print(f"❌ Ошибка загрузки сотрудников: {e}")
             import traceback
             traceback.print_exc()
+
+    def _get_full_name(self, employee: Employee) -> str:
+        """Формирует ФИО сотрудника"""
+        parts = [employee.last_name, employee.first_name]
+        if employee.middle_name:
+            parts.append(employee.middle_name)
+        return ' '.join(parts).strip()
 
     def setup_filters(self):
         """Настройка фильтров отделов и подразделений"""

@@ -169,11 +169,11 @@ class BaseProjectDialog(QDialog):
 
             if member_ids:
                 from database import get_tasks_session
-                from models.employees import ExternalEmployee
+                from models.employees import Employee
                 from sqlalchemy import select
 
                 session = get_tasks_session()
-                stmt = select(ExternalEmployee).where(ExternalEmployee.id.in_(member_ids))
+                stmt = select(Employee).where(Employee.id.in_(member_ids))  # ← ИСПРАВЛЕНО
                 employees = session.scalars(stmt).all()
 
                 for emp in employees:

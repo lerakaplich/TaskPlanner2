@@ -1,3 +1,4 @@
+# telegram_bot.py
 import asyncio
 import logging
 import secrets
@@ -11,9 +12,9 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup, KeyboardButton
 
-from sqlalchemy import select, update
+from sqlalchemy import select, update, text
 from database import get_tasks_session, get_employees_session
-from models.employees import ExternalEmployee, LocalEmployee
+from models.employees import Employee, Department, Division  # ← ИСПРАВЛЕНО
 from shared_state import pending_registrations
 
 import hashlib
@@ -70,7 +71,6 @@ def get_main_keyboard():
 async def get_phone_by_chat(chat_id: int) -> Optional[str]:
     """Получить номер телефона пользователя по chat_id"""
     with get_employees_session() as emp_session:
-        from sqlalchemy import text
         select_stmt = text("""
             SELECT phone_number FROM public.employees WHERE chat_id = :chat_id
         """)
@@ -103,20 +103,15 @@ class TelegramBot:
     async def send_registration_to_admins(self, request_id: str, registration_data: dict):
         """Отправляет заявку на одобрение администраторам"""
         with get_tasks_session() as session:
-            from models.employees import ExternalEmployee
-            from sqlalchemy import select
-
             division_name = "Не указано"
             department_name = "Не указано"
 
             if registration_data.get('division_id'):
-                from models.employees import DivisionFDW
-                div = session.get(DivisionFDW, registration_data['division_id'])
+                div = session.get(Division, registration_data['division_id'])  # ← ИСПРАВЛЕНО
                 division_name = div.name if div else "Не указано"
 
             if registration_data.get('department_id'):
-                from models.employees import DepartmentFDW
-                dept = session.get(DepartmentFDW, registration_data['department_id'])
+                dept = session.get(Department, registration_data['department_id'])  # ← ИСПРАВЛЕНО
                 department_name = dept.name if dept else "Не указано"
 
             birth_date = registration_data.get('birth_date', 'Не указана')
@@ -152,9 +147,8 @@ class TelegramBot:
                 f"Используйте кнопки ниже для подтверждения или отклонения заявки."
             )
 
-            stmt = select(ExternalEmployee).where(
-                ExternalEmployee.rights.in_(['admin', 'superadmin'])
-            )
+            # Получаем администраторов из public.employees
+            stmt = select(Employee).where(Employee.rights.in_(['admin', 'superadmin']))  # ← ИСПРАВЛЕНО
             admins = list(session.scalars(stmt))
 
             if not admins:
@@ -177,7 +171,6 @@ class TelegramBot:
     async def get_user_projects(self, user_id: int):
         """Получить проекты где пользователь является создателем или администратором"""
         with get_employees_session() as emp_session:
-            from sqlalchemy import text
             select_stmt = text("""
                 SELECT p.id, p.name, p.created_by
                 FROM public.projects p
@@ -194,7 +187,6 @@ class TelegramBot:
     async def create_task(self, project_id: int, title: str, description: str, creator_id: int):
         """Создать новую задачу"""
         with get_employees_session() as emp_session:
-            from sqlalchemy import text
             insert_stmt = text("""
                 INSERT INTO public.tasks (project_id, title, description, status, created_by, created_at)
                 VALUES (:project_id, :title, :description, 'new', :creator_id, NOW())
@@ -213,7 +205,6 @@ class TelegramBot:
     async def get_user_tasks(self, user_id: int):
         """Получить задачи пользователя"""
         with get_employees_session() as emp_session:
-            from sqlalchemy import text
             select_stmt = text("""
                 SELECT t.id, t.title, t.status, t.created_at, p.name as project_name
                 FROM public.tasks t
@@ -228,147 +219,6 @@ class TelegramBot:
     def _setup_handlers(self):
         """Настройка обработчиков команд"""
 
-        # ========== ОБРАБОТКА ТЕКСТОВЫХ КОМАНД ==========
-
-        @self.dp.callback_query(lambda c: c.data.startswith("approve|"))
-        async def approve_registration(callback: types.CallbackQuery):
-            request_id = callback.data.replace("approve|", "")
-
-            print(f"🔍 Поиск заявки с ID: {request_id}")
-            print(f"📋 Доступные заявки: {list(pending_registrations.keys())}")
-
-            registration_data = pending_registrations.get(request_id)
-
-            if not registration_data:
-                await callback.answer("❌ Заявка не найдена", show_alert=True)
-                return
-
-            print(f"✅ Заявка найдена: {registration_data}")
-
-            password = self.generate_password()
-            password_hash = self.hash_password(password)
-
-            # Сохраняем пароль для возможного восстановления
-            phone_number = registration_data.get('phone_number')
-            if phone_number:
-                user_passwords[phone_number] = password
-                print(f"💾 Сохранен пароль для {phone_number}: {password}")
-
-            with get_employees_session() as emp_session:
-                try:
-                    from sqlalchemy import text
-
-                    max_number = emp_session.query(LocalEmployee.number).order_by(LocalEmployee.number.desc()).first()
-                    next_number = (max_number[0] + 1) if max_number else 1
-
-                    insert_stmt = text("""
-                                INSERT INTO public.employees (
-                                    number, last_name, first_name, middle_name, 
-                                    position, rights, phone_number, email,
-                                    birth_date, department_id, division_id, organization_id,
-                                    password_hash, chat_id
-                                ) VALUES (
-                                    :number, :last_name, :first_name, :middle_name,
-                                    :position, :rights, :phone_number, :email,
-                                    :birth_date, :department_id, :division_id, :organization_id,
-                                    :password_hash, :chat_id
-                                )
-                            """)
-                    emp_session.execute(insert_stmt, {
-                        'number': next_number,
-                        'last_name': registration_data.get('last_name'),
-                        'first_name': registration_data.get('first_name'),
-                        'middle_name': registration_data.get('middle_name'),
-                        'position': registration_data.get('position'),
-                        'rights': 'user',
-                        'phone_number': registration_data.get('phone_number'),
-                        'email': registration_data.get('email'),
-                        'birth_date': registration_data.get('birth_date'),
-                        'department_id': registration_data.get('department_id'),
-                        'division_id': registration_data.get('division_id'),
-                        'organization_id': 1,
-                        'password_hash': password_hash,
-                        'chat_id': registration_data.get('chat_id')
-                    })
-                    emp_session.commit()
-
-                    result = emp_session.execute(text("SELECT lastval()")).scalar()
-                    employee_id = result
-
-                    print(f"✅ Сотрудник добавлен, ID: {employee_id}")
-
-                except Exception as e:
-                    emp_session.rollback()
-                    print(f"❌ Ошибка при добавлении сотрудника: {e}")
-                    import traceback
-                    traceback.print_exc()
-                    await callback.answer(f"Ошибка: {e}", show_alert=True)
-                    return
-
-            user_chat_id = registration_data.get('chat_id')
-            if user_chat_id:
-                try:
-                    await self.bot.send_message(
-                        user_chat_id,
-                        f"✅ *Ваша заявка на регистрацию одобрена!*\n\n"
-                        f"📋 *Ваши данные для входа:*\n"
-                        f"📞 *Телефон:* {registration_data.get('phone_number')}\n"
-                        f"🔐 *Пароль:* `{password}`\n\n"
-                        f"⚠️ *Сохраните этот пароль!*\n"
-                        f"Вы можете изменить его в приложении TaskPlanner.\n\n"
-                        f"Для входа в приложение используйте:\n"
-                        f"👉 Телефон: {registration_data.get('phone_number')}\n"
-                        f"👉 Пароль: {password}\n\n"
-                        f"Также вы можете войти в Telegram бота командой /login",
-                        parse_mode="Markdown"
-                    )
-                    print(f"✅ Пароль отправлен пользователю {user_chat_id}")
-                except Exception as e:
-                    print(f"❌ Ошибка отправки уведомления пользователю: {e}")
-
-            await callback.message.edit_text(
-                f"✅ *Заявка одобрена!*\n\n"
-                f"Пользователь {registration_data.get('last_name')} {registration_data.get('first_name')} зарегистрирован.\n",
-                parse_mode="Markdown"
-            )
-
-            pending_registrations.pop(request_id, None)
-            await callback.answer("✅ Заявка одобрена")
-
-        @self.dp.callback_query(lambda c: c.data.startswith("reject|"))
-        async def reject_registration(callback: types.CallbackQuery):
-            request_id = callback.data.replace("reject|", "")
-            registration_data = pending_registrations.get(request_id)
-
-            if registration_data:
-                user_chat_id = registration_data.get('chat_id')
-                # Удаляем сохраненный пароль, если был
-                phone_number = registration_data.get('phone_number')
-                if phone_number and phone_number in user_passwords:
-                    del user_passwords[phone_number]
-                    print(f"🗑️ Удален пароль для {phone_number}")
-
-                if user_chat_id:
-                    try:
-                        await self.bot.send_message(
-                            user_chat_id,
-                            f"❌ *Ваша заявка на регистрацию отклонена.*\n\n"
-                            f"Пожалуйста, свяжитесь с администратором для уточнения причин.\n"
-                            f"Вы можете отправить заявку повторно через приложение TaskPlanner.",
-                            parse_mode="Markdown"
-                        )
-                    except Exception as e:
-                        print(f"❌ Ошибка отправки уведомления пользователю: {e}")
-
-                await callback.message.edit_text(
-                    f"❌ *Заявка отклонена*\n\n"
-                    f"Пользователь {registration_data.get('last_name')} {registration_data.get('first_name')} получил уведомление об отказе.",
-                    parse_mode="Markdown"
-                )
-                pending_registrations.pop(request_id, None)
-
-            await callback.answer("❌ Заявка отклонена")
-
         @self.dp.message(Command("start"))
         async def cmd_start(message: types.Message, state: FSMContext):
             await state.clear()
@@ -377,8 +227,8 @@ class TelegramBot:
 
             print(f"📱 Пользователь {user_id} (chat_id={chat_id}) нажал /start")
 
-            with get_tasks_session() as session:
-                stmt = select(ExternalEmployee).where(ExternalEmployee.chat_id == chat_id)
+            with get_employees_session() as session:
+                stmt = select(Employee).where(Employee.chat_id == chat_id)  # ← ИСПРАВЛЕНО
                 existing_employee = session.scalar(stmt)
                 if existing_employee:
                     await message.answer(
@@ -577,7 +427,6 @@ class TelegramBot:
 
             # Получаем реальный ID пользователя из БД
             with get_employees_session() as emp_session:
-                from sqlalchemy import text
                 select_stmt = text("SELECT id FROM public.employees WHERE chat_id = :chat_id")
                 employee = emp_session.execute(select_stmt, {'chat_id': user_id}).first()
                 if not employee:
@@ -633,7 +482,6 @@ class TelegramBot:
                 return
 
             with get_employees_session() as emp_session:
-                from sqlalchemy import text
                 select_stmt = text("""
                     SELECT id, last_name, first_name FROM public.employees WHERE phone_number = :phone
                 """)
@@ -682,7 +530,6 @@ class TelegramBot:
             new_password_hash = self.hash_password(new_password)
 
             with get_employees_session() as emp_session:
-                from sqlalchemy import text
                 update_stmt = text("""
                     UPDATE public.employees 
                     SET password_hash = :password_hash
@@ -752,7 +599,6 @@ class TelegramBot:
                 return
 
             with get_employees_session() as emp_session:
-                from sqlalchemy import text
                 select_stmt = text("SELECT id, last_name, first_name FROM public.employees WHERE phone_number = :phone")
                 employee = emp_session.execute(select_stmt, {'phone': phone_digits}).first()
 
@@ -788,14 +634,142 @@ class TelegramBot:
                 reply_markup=types.ReplyKeyboardRemove()
             )
 
-        # ========== МЕТОДЫ ДЛЯ ЗАДАЧ ==========
+        # ========== ОБРАБОТЧИКИ ОДОБРЕНИЯ/ОТКЛОНЕНИЯ ==========
+
+        @self.dp.callback_query(lambda c: c.data.startswith("approve|"))
+        async def approve_registration(callback: types.CallbackQuery):
+            request_id = callback.data.replace("approve|", "")
+            registration_data = pending_registrations.get(request_id)
+
+            if not registration_data:
+                await callback.answer("❌ Заявка не найдена", show_alert=True)
+                return
+
+            password = self.generate_password()
+            password_hash = self.hash_password(password)
+
+            phone_number = registration_data.get('phone_number')
+            if phone_number:
+                user_passwords[phone_number] = password
+
+            with get_employees_session() as emp_session:
+                try:
+                    # Получаем следующий номер
+                    max_number = emp_session.query(Employee.number).order_by(
+                        Employee.number.desc()).first()  # ← ИСПРАВЛЕНО
+                    next_number = (max_number[0] + 1) if max_number else 1
+
+                    insert_stmt = text("""
+                        INSERT INTO public.employees (
+                            number, last_name, first_name, middle_name, 
+                            position, rights, phone_number, email,
+                            birth_date, department_id, division_id, organization_id,
+                            password_hash, chat_id, is_active
+                        ) VALUES (
+                            :number, :last_name, :first_name, :middle_name,
+                            :position, :rights, :phone_number, :email,
+                            :birth_date, :department_id, :division_id, :organization_id,
+                            :password_hash, :chat_id, true
+                        )
+                        RETURNING id
+                    """)
+                    result = emp_session.execute(insert_stmt, {
+                        'number': next_number,
+                        'last_name': registration_data.get('last_name'),
+                        'first_name': registration_data.get('first_name'),
+                        'middle_name': registration_data.get('middle_name'),
+                        'position': registration_data.get('position'),
+                        'rights': 'user',
+                        'phone_number': registration_data.get('phone_number'),
+                        'email': registration_data.get('email'),
+                        'birth_date': registration_data.get('birth_date'),
+                        'department_id': registration_data.get('department_id'),
+                        'division_id': registration_data.get('division_id'),
+                        'organization_id': 1,
+                        'password_hash': password_hash,
+                        'chat_id': registration_data.get('chat_id')
+                    })
+                    emp_session.commit()
+                    new_employee_id = result.scalar()
+                    print(f"✅ Сотрудник добавлен, ID: {new_employee_id}")
+
+                    # Добавляем запись в employees_data
+                    insert_data_stmt = text("""
+                        INSERT INTO public.employees_data (employee_id, is_active, role)
+                        VALUES (:employee_id, true, 'user')
+                    """)
+                    emp_session.execute(insert_data_stmt, {'employee_id': new_employee_id})
+                    emp_session.commit()
+
+                except Exception as e:
+                    emp_session.rollback()
+                    print(f"❌ Ошибка при добавлении сотрудника: {e}")
+                    import traceback
+                    traceback.print_exc()
+                    await callback.answer(f"Ошибка: {e}", show_alert=True)
+                    return
+
+            user_chat_id = registration_data.get('chat_id')
+            if user_chat_id:
+                try:
+                    await self.bot.send_message(
+                        user_chat_id,
+                        f"✅ *Ваша заявка на регистрацию одобрена!*\n\n"
+                        f"📞 *Телефон:* {registration_data.get('phone_number')}\n"
+                        f"🔐 *Пароль:* `{password}`\n\n"
+                        f"⚠️ *Сохраните этот пароль!*\n\n"
+                        f"Теперь вы можете войти в приложение TaskPlanner.",
+                        parse_mode="Markdown"
+                    )
+                    print(f"✅ Пароль отправлен пользователю {user_chat_id}")
+                except Exception as e:
+                    print(f"❌ Ошибка отправки уведомления пользователю: {e}")
+
+            await callback.message.edit_text(
+                f"✅ *Заявка одобрена!*\n\n"
+                f"Пользователь {registration_data.get('last_name')} {registration_data.get('first_name')} зарегистрирован.\n",
+                parse_mode="Markdown"
+            )
+            pending_registrations.pop(request_id, None)
+            await callback.answer("✅ Заявка одобрена")
+
+        @self.dp.callback_query(lambda c: c.data.startswith("reject|"))
+        async def reject_registration(callback: types.CallbackQuery):
+            request_id = callback.data.replace("reject|", "")
+            registration_data = pending_registrations.get(request_id)
+
+            if registration_data:
+                user_chat_id = registration_data.get('chat_id')
+                phone_number = registration_data.get('phone_number')
+                if phone_number and phone_number in user_passwords:
+                    del user_passwords[phone_number]
+
+                if user_chat_id:
+                    try:
+                        await self.bot.send_message(
+                            user_chat_id,
+                            f"❌ *Ваша заявка на регистрацию отклонена.*\n\n"
+                            f"Пожалуйста, свяжитесь с администратором для уточнения причин.\n"
+                            f"Вы можете отправить заявку повторно через приложение TaskPlanner.",
+                            parse_mode="Markdown"
+                        )
+                    except Exception as e:
+                        print(f"❌ Ошибка отправки уведомления пользователю: {e}")
+
+                await callback.message.edit_text(
+                    f"❌ *Заявка отклонена*\n\n"
+                    f"Пользователь {registration_data.get('last_name')} {registration_data.get('first_name')} получил уведомление об отказе.",
+                    parse_mode="Markdown"
+                )
+                pending_registrations.pop(request_id, None)
+
+            await callback.answer("❌ Заявка отклонена")
 
     async def show_my_tasks(self, message: types.Message):
         """Показать задачи пользователя"""
         user_id = message.from_user.id
 
         with get_employees_session() as emp_session:
-            from sqlalchemy import text
             select_employee = text("SELECT id FROM public.employees WHERE chat_id = :chat_id")
             employee = emp_session.execute(select_employee, {'chat_id': user_id}).first()
 
@@ -838,7 +812,6 @@ class TelegramBot:
         user_id = message.from_user.id
 
         with get_employees_session() as emp_session:
-            from sqlalchemy import text
             select_employee = text("SELECT id FROM public.employees WHERE chat_id = :chat_id")
             employee = emp_session.execute(select_employee, {'chat_id': user_id}).first()
 
@@ -870,121 +843,6 @@ class TelegramBot:
             await message.answer(projects_text, parse_mode="Markdown")
             await state.set_state(RegistrationStates.waiting_for_task_project)
 
-        # ========== ОБРАБОТЧИКИ ОДОБРЕНИЯ/ОТКЛОНЕНИЯ ==========
-
-        @self.dp.callback_query(lambda c: c.data.startswith("approve|"))
-        async def approve_registration(callback: types.CallbackQuery):
-            request_id = callback.data.replace("approve|", "")
-            registration_data = pending_registrations.get(request_id)
-
-            if not registration_data:
-                await callback.answer("❌ Заявка не найдена", show_alert=True)
-                return
-
-            password = self.generate_password()
-            password_hash = self.hash_password(password)
-
-            phone_number = registration_data.get('phone_number')
-            if phone_number:
-                user_passwords[phone_number] = password
-
-            with get_employees_session() as emp_session:
-                try:
-                    from sqlalchemy import text
-                    max_number = emp_session.query(LocalEmployee.number).order_by(LocalEmployee.number.desc()).first()
-                    next_number = (max_number[0] + 1) if max_number else 1
-
-                    insert_stmt = text("""
-                        INSERT INTO public.employees (
-                            number, last_name, first_name, middle_name, 
-                            position, rights, phone_number, email,
-                            birth_date, department_id, division_id, organization_id,
-                            password_hash, chat_id
-                        ) VALUES (
-                            :number, :last_name, :first_name, :middle_name,
-                            :position, :rights, :phone_number, :email,
-                            :birth_date, :department_id, :division_id, :organization_id,
-                            :password_hash, :chat_id
-                        )
-                    """)
-                    emp_session.execute(insert_stmt, {
-                        'number': next_number,
-                        'last_name': registration_data.get('last_name'),
-                        'first_name': registration_data.get('first_name'),
-                        'middle_name': registration_data.get('middle_name'),
-                        'position': registration_data.get('position'),
-                        'rights': 'user',
-                        'phone_number': registration_data.get('phone_number'),
-                        'email': registration_data.get('email'),
-                        'birth_date': registration_data.get('birth_date'),
-                        'department_id': registration_data.get('department_id'),
-                        'division_id': registration_data.get('division_id'),
-                        'organization_id': 1,
-                        'password_hash': password_hash,
-                        'chat_id': registration_data.get('chat_id')
-                    })
-                    emp_session.commit()
-                    result = emp_session.execute(text("SELECT lastval()")).scalar()
-                    print(f"✅ Сотрудник добавлен, ID: {result}")
-                except Exception as e:
-                    emp_session.rollback()
-                    print(f"❌ Ошибка при добавлении сотрудника: {e}")
-                    await callback.answer(f"Ошибка: {e}", show_alert=True)
-                    return
-
-            user_chat_id = registration_data.get('chat_id')
-            if user_chat_id:
-                try:
-                    await self.bot.send_message(
-                        user_chat_id,
-                        f"✅ *Ваша заявка на регистрацию одобрена!*\n\n"
-                        f"📞 *Телефон:* {registration_data.get('phone_number')}\n"
-                        f"🔐 *Пароль:* `{password}`\n\n"
-                        f"⚠️ *Сохраните этот пароль!*",
-                        parse_mode="Markdown"
-                    )
-                except Exception as e:
-                    print(f"❌ Ошибка отправки уведомления пользователю: {e}")
-
-            await callback.message.edit_text(
-                f"✅ *Заявка одобрена!*\n\n"
-                f"Пользователь {registration_data.get('last_name')} {registration_data.get('first_name')} зарегистрирован.",
-                parse_mode="Markdown"
-            )
-            pending_registrations.pop(request_id, None)
-            await callback.answer("✅ Заявка одобрена")
-
-        @self.dp.callback_query(lambda c: c.data.startswith("reject|"))
-        async def reject_registration(callback: types.CallbackQuery):
-            request_id = callback.data.replace("reject|", "")
-            registration_data = pending_registrations.get(request_id)
-
-            if registration_data:
-                user_chat_id = registration_data.get('chat_id')
-                phone_number = registration_data.get('phone_number')
-                if phone_number and phone_number in user_passwords:
-                    del user_passwords[phone_number]
-
-                if user_chat_id:
-                    try:
-                        await self.bot.send_message(
-                            user_chat_id,
-                            f"❌ *Ваша заявка на регистрацию отклонена.*\n\n"
-                            f"Пожалуйста, свяжитесь с администратором.",
-                            parse_mode="Markdown"
-                        )
-                    except Exception as e:
-                        print(f"❌ Ошибка отправки уведомления пользователю: {e}")
-
-                await callback.message.edit_text(
-                    f"❌ *Заявка отклонена*\n\n"
-                    f"Пользователь {registration_data.get('last_name')} {registration_data.get('first_name')} получил уведомление.",
-                    parse_mode="Markdown"
-                )
-                pending_registrations.pop(request_id, None)
-
-            await callback.answer("❌ Заявка отклонена")
-
     async def start(self):
         logger.info("Starting Telegram bot...")
         await self.dp.start_polling(self.bot)
@@ -992,6 +850,7 @@ class TelegramBot:
 
 telegram_bot = TelegramBot()
 temp_registrations: Dict[int, str] = {}
+
 
 async def start_bot():
     await telegram_bot.start()

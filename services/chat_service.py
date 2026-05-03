@@ -1,7 +1,8 @@
+# services/chat_service.py
 from typing import List, Optional
 from sqlalchemy.orm import Session
 from repositories.chat_repo import ChatRepo
-from repositories.external_employee_repo import ExternalEmployeeRepo
+from repositories.employee_repo import EmployeeRepo  # ← ИСПРАВЛЕНО (было external_employee_repo)
 from models.schemas.chat_dto import MessageReadDTO, ChatReadDTO
 from models.chat import ChatType, ChatMessage
 
@@ -10,7 +11,7 @@ class ChatService:
     def __init__(self, db_session: Session):
         self.session = db_session
         self.chat_repo = ChatRepo(db_session)
-        self.emp_repo = ExternalEmployeeRepo(db_session)
+        self.emp_repo = EmployeeRepo(db_session)  # ← ИСПРАВЛЕНО
 
     def is_user_admin(self, chat_id: int, user_id: int) -> bool:
         """Проверяет, является ли пользователь администратором чата (без кэша)"""
@@ -28,10 +29,9 @@ class ChatService:
             # Если это личный чат, названием должно быть имя собеседника
             if c.type == ChatType.private:
                 # Находим второго участника (не текущего юзера)
-                # В реальном приложении лучше сделать через подзапрос, здесь для простоты:
                 other_participant = next((p for p in c.participants if p.employee_id != user_id), None)
                 if other_participant:
-                    display_name = self.emp_repo.get_full_name(other_participant.employee_id)
+                    display_name = self._get_full_name(other_participant.employee_id)
 
             dtos.append(ChatReadDTO(
                 id=c.id,
@@ -41,6 +41,17 @@ class ChatService:
                 display_name=display_name
             ))
         return dtos
+
+    def _get_full_name(self, employee_id: int) -> str:
+        """Получает ФИО сотрудника по ID"""
+        employee = self.emp_repo.get_by_id(employee_id)
+        if not employee:
+            return f"Сотрудник #{employee_id}"
+
+        full_name = f"{employee.last_name} {employee.first_name}"
+        if employee.middle_name:
+            full_name += f" {employee.middle_name}"
+        return full_name.strip()
 
     def load_history(self, chat_id: int, current_user_id: int, limit: int = 50, offset: int = 0) -> List[
         MessageReadDTO]:
@@ -52,7 +63,6 @@ class ChatService:
             dto = self._prepare_message_dto(m)
 
             # Устанавливаем статус прочтения (проверяем наличие записей в MessageRead)
-            # Убедитесь, что метод is_message_read_by_anyone возвращает True/False
             dto.is_read = self.chat_repo.is_message_read_by_anyone(m.id, m.sender_id)
 
             dtos.append(dto)
@@ -62,7 +72,6 @@ class ChatService:
     def save_new_message(self, chat_id: int, sender_id: int, content: str,
                          reply_to_id: int = None,
                          forward_from_id: int = None) -> MessageReadDTO:
-        # Теперь передаем все аргументы в репозиторий
         msg_orm = self.chat_repo.create_message(
             chat_id=chat_id,
             sender_id=sender_id,
@@ -75,20 +84,20 @@ class ChatService:
         return self._prepare_message_dto(msg_orm)
 
     def _prepare_message_dto(self, msg) -> MessageReadDTO:
-        sender_name = self.emp_repo.get_full_name(msg.sender_id)
+        sender_name = self._get_full_name(msg.sender_id)
 
         reply_text = None
-        reply_sender_name = None  # Новое
+        reply_sender_name = None
         if msg.replied_to_message:
             reply_text = msg.replied_to_message.content
-            # Получаем имя автора оригинального сообщения
-            reply_sender_name = self.emp_repo.get_full_name(msg.replied_to_message.sender_id)
-            if len(reply_text) > 50: reply_text = reply_text[:47] + "..."
+            reply_sender_name = self._get_full_name(msg.replied_to_message.sender_id)
+            if len(reply_text) > 50:
+                reply_text = reply_text[:47] + "..."
 
         # Получаем имя автора оригинала
         forward_from_name = None
         if msg.forward_from_id:
-            forward_from_name = self.emp_repo.get_full_name(msg.forward_from_id)
+            forward_from_name = self._get_full_name(msg.forward_from_id)
 
         dto = MessageReadDTO(
             id=msg.id,
@@ -103,7 +112,7 @@ class ChatService:
             reply_text=reply_text,
             forward_from_name=forward_from_name
         )
-        dto.reply_sender_name = reply_sender_name  # Передаем в DTO
+        dto.reply_sender_name = reply_sender_name
         return dto
 
     def _to_message_dto(self, msg: ChatMessage, user_id: int) -> MessageReadDTO:
@@ -114,23 +123,23 @@ class ChatService:
         reply_sender_name = None
         if msg.replied_to_message:
             reply_text = msg.replied_to_message.content
-            reply_sender_name = self.emp_repo.get_full_name(msg.replied_to_message.sender_id)
+            reply_sender_name = self._get_full_name(msg.replied_to_message.sender_id)
 
         # Пересылка
         forward_name = None
         if msg.forward_from_id:
-            forward_name = self.emp_repo.get_full_name(msg.forward_from_id)
+            forward_name = self._get_full_name(msg.forward_from_id)
 
         return MessageReadDTO(
             id=msg.id,
             chat_id=msg.chat_id,
             sender_id=msg.sender_id,
-            sender_name=self.emp_repo.get_full_name(msg.sender_id),
+            sender_name=self._get_full_name(msg.sender_id),
             content=msg.content,
             created_at=msg.created_at,
             time_display=msg.created_at.strftime("%H:%M"),
             is_read=is_read_by_me,
-            is_edited=msg.is_edited,  # Это @property в модели ChatMessage
+            is_edited=msg.is_edited,
             is_deleted=msg.is_deleted,
             reply_to_id=msg.reply_to_id,
             reply_text=reply_text,
@@ -142,18 +151,16 @@ class ChatService:
         """Находит позицию первого непрочитанного сообщения"""
         unread_count = self.chat_repo.get_unread_count(chat_id, user_id)
         if unread_count == 0:
-            return 0  # Все прочитано, берем последние 50
+            return 0
 
-        # Если есть непрочитанные, берем их с небольшим запасом старых сообщений (например, 10 сверху)
         return max(0, unread_count - 10)
 
     def forward_message(self, message_id: int, to_chat_id: int, current_user_id: int):
         """Пересылка сообщения в другой чат"""
         original = self.chat_repo.get_message_by_id(message_id)
-        if not original: return None
+        if not original:
+            return None
 
-        # Для пересылки forward_from_id — это либо автор оригинала,
-        # либо тот, кто уже переслал (если это цепочка)
         forward_id = original.forward_from_id or original.sender_id
 
         new_msg = self.chat_repo.create_message(
@@ -166,33 +173,25 @@ class ChatService:
         return self._prepare_message_dto(new_msg)
 
     def create_new_chat(self, creator_id: int, data: dict):
-        # Убеждаемся, что тип чата — это Enum
         chat_type = ChatType(data["type"])
 
         if chat_type == ChatType.private:
             created_chats = []
-            # Предполагаем, что в data["participants"] список ID собеседников
             for target_id in data["participants"]:
-                # Пропускаем, если пытаемся создать чат с самим собой (на всякий случай)
                 if int(target_id) == int(creator_id):
                     continue
 
-                # 1. Проверяем, существует ли уже чат 1-на-1
                 existing_chat_id = self.chat_repo.get_private_chat(creator_id, target_id)
 
                 if existing_chat_id:
                     print(f"ℹ️ Чат с пользователем {target_id} уже существует (ID: {existing_chat_id})")
                     continue
 
-                    # 2. Создаем новый приватный чат
-                # ВАЖНО: передаем None или пустую строку в title, так как это private
-                # Аргументы: title, chat_type
                 new_chat = self.chat_repo.create_chat(
                     title=None,
-                    chat_type=chat_type.value  # .value, так как в репозитории ожидается str
+                    chat_type=chat_type.value
                 )
 
-                # Добавляем участников (используем is_admin из предыдущего шага)
                 self.chat_repo.add_participant(new_chat.id, creator_id, is_admin=True)
                 self.chat_repo.add_participant(new_chat.id, target_id, is_admin=True)
 
@@ -201,18 +200,15 @@ class ChatService:
             self.session.commit()
             return created_chats
 
-        else:  # Логика для GROUP / PROJECT
-            # Исправляем порядок: сначала title, потом type
+        else:
             new_chat = self.chat_repo.create_chat(
                 title=data.get("title", "Групповой чат"),
                 chat_type=chat_type.value,
                 project_id=data.get("project_id")
             )
 
-            # Создатель — админ
             self.chat_repo.add_participant(new_chat.id, creator_id, is_admin=True)
 
-            # Остальные участники — не админы
             for emp_id in data["participants"]:
                 if int(emp_id) != int(creator_id):
                     self.chat_repo.add_participant(new_chat.id, emp_id, is_admin=False)
@@ -237,7 +233,6 @@ class ChatService:
     def mark_messages_as_read(self, user_id: int, message_ids: List[int]):
         """Помечает конкретные сообщения как прочитанные"""
         for m_id in message_ids:
-            # Не помечаем свои же сообщения как прочитанные нами
             msg = self.chat_repo.get_message_by_id(m_id)
             if msg and msg.sender_id != user_id:
                 self.chat_repo.mark_as_read(m_id, user_id)
@@ -257,7 +252,7 @@ class ChatService:
         for p in chat.participants:
             emp = self.emp_repo.get_by_id(p.employee_id)
             if emp:
-                p.full_name = f"{emp.last_name} {emp.first_name}"
+                p.full_name = self._get_full_name(p.employee_id)
             else:
                 p.full_name = f"Сотрудник #{p.employee_id}"
 
@@ -272,7 +267,6 @@ class ChatService:
 
     def update_message(self, message_id: int, new_content: str) -> bool:
         """Обновляет текст сообщения через репозиторий"""
-        # Репозиторий сам делает commit() в вашем методе update_message_content
         return self.chat_repo.update_message_content(message_id, new_content)
 
     def delete_message_for_me(self, message_id: int, user_id: int) -> bool:
@@ -291,7 +285,6 @@ class ChatService:
 
     def save_reply(self, chat_id: int, sender_id: int, content: str, reply_to_id: int) -> MessageReadDTO:
         """Сохранение ответа на сообщение"""
-        # Создаем сообщение через репозиторий с указанием reply_to_id
         msg_orm = self.chat_repo.create_message(
             chat_id=chat_id,
             sender_id=sender_id,
@@ -300,8 +293,6 @@ class ChatService:
         )
         self.session.commit()
         self.session.refresh(msg_orm)
-
-        # Возвращаем готовый DTO для отображения в интерфейсе
         return self._prepare_message_dto(msg_orm)
 
     def delete_chat(self, chat_id: int) -> bool:
@@ -312,8 +303,6 @@ class ChatService:
 
     def add_participant_to_chat(self, chat_id: int, employee_id: int) -> bool:
         """Добавляет одного участника в чат через сервис"""
-        # Метод repo.add_participant у вас уже делает commit внутри,
-        # что не совсем стандартно для паттерна репозитория, но работать будет.
         return self.chat_repo.add_participant(chat_id, employee_id, is_admin=False)
 
     def update_chat_participants(self, chat_id: int, added_ids: list[int], removed_ids: list[int]):

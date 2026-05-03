@@ -12,8 +12,9 @@ from models.schemas.projects_dto import ProjectWithMembersDTO, ProjectCardDTO, P
 from models.schemas.tasks_dto import TaskCardDTO, TaskPriority
 from repositories.project_repo import ProjectRepo
 from repositories.task_repo import TaskRepo
-from repositories.external_employee_repo import ExternalEmployeeRepo
+from repositories.employee_repo import EmployeeRepo  # ← ИСПРАВЛЕНО (было external_employee_repo)
 from services.column_service import ColumnService
+from models.employees import Employee  # ← ДОБАВЛЕНО
 
 # Импортируем бота для отправки уведомлений
 import asyncio
@@ -27,7 +28,7 @@ class ProjectsService:
         self.current_user = None
         self.project_repo = ProjectRepo(session)
         self.task_repo = TaskRepo(session)
-        self.employee_repo = ExternalEmployeeRepo(session)
+        self.employee_repo = EmployeeRepo(session)  # ← ИСПРАВЛЕНО
         self.column_service = ColumnService(session)
 
     def set_current_user_id(self, user_id):
@@ -36,8 +37,6 @@ class ProjectsService:
     def set_current_user(self, user):
         self.current_user = user
 
-    # services/projects_service.py - исправленный метод _ensure_local_employee
-
     def _ensure_local_employee(self, external_employee_id: int) -> Optional[int]:
         """
         Проверяет наличие записи сотрудника в БД taskplanner.public.employees_data
@@ -45,7 +44,6 @@ class ProjectsService:
         Возвращает ID сотрудника.
         """
         try:
-            # Работаем с текущей сессией (БД taskplanner)
             from sqlalchemy import text
 
             # 1. Проверяем, есть ли уже запись в public.employees_data
@@ -68,9 +66,6 @@ class ProjectsService:
                 print(f"✅ Создана запись в public.employees_data для сотрудника {external_employee_id}")
                 self.session.flush()
 
-            # 2. Также проверяем наличие в public.employees (если нужно для других целей)
-            # Но это не обязательно для foreign key
-            print(f"✅ Локальная запись существует для сотрудника {external_employee_id}")
             return external_employee_id
 
         except Exception as e:
@@ -110,11 +105,10 @@ class ProjectsService:
     def _get_employee_chat_id(self, employee_id: int) -> Optional[int]:
         """Получает chat_id сотрудника из БД employees"""
         try:
-            with get_employees_session() as emp_session:
-                stmt = text("SELECT chat_id FROM public.employees WHERE id = :emp_id")
-                result = emp_session.execute(stmt, {'emp_id': employee_id}).first()
-                if result:
-                    return result[0]
+            # Используем employee_repo для получения сотрудника
+            employee = self.employee_repo.get_by_id(employee_id)  # ← ИСПРАВЛЕНО
+            if employee:
+                return employee.chat_id
         except Exception as e:
             print(f"⚠️ Ошибка получения chat_id для сотрудника {employee_id}: {e}")
         return None
@@ -179,7 +173,7 @@ class ProjectsService:
 
                     owner_name = "Не назначен"
                     if proj.owner:
-                        owner = self.employee_repo.get_by_id(proj.owner)
+                        owner = self.employee_repo.get_by_id(proj.owner)  # ← ИСПРАВЛЕНО
                         if owner:
                             owner_name = f"{owner.last_name} {owner.first_name[0]}."
                             if owner.middle_name:
@@ -287,7 +281,7 @@ class ProjectsService:
                 )
                 print(f"✅ Добавлен участник ID: {emp_id} (локальный ID: {local_id})")
 
-                employee = self.employee_repo.get_by_id(emp_id)
+                employee = self.employee_repo.get_by_id(emp_id)  # ← ИСПРАВЛЕНО
                 if employee:
                     participants_list.append({
                         'id': emp_id,
@@ -297,7 +291,7 @@ class ProjectsService:
             self.session.commit()
 
             # 4. Отправляем уведомления участникам
-            creator_employee = self.employee_repo.get_by_id(creator_id)
+            creator_employee = self.employee_repo.get_by_id(creator_id)  # ← ИСПРАВЛЕНО
             creator_name = self._get_employee_full_name(creator_employee) if creator_employee else "Создатель проекта"
 
             if participants_list:
@@ -387,7 +381,6 @@ class ProjectsService:
 
             participants_list = []
             for emp_id in new_member_ids:
-                # Убеждаемся, что для сотрудника есть локальная запись в БД employees
                 local_id = self._ensure_local_employee(emp_id)
                 if not local_id:
                     print(f"⚠️ Не удалось создать локальную запись для сотрудника {emp_id}, пропускаем")
@@ -396,7 +389,7 @@ class ProjectsService:
                 is_admin = target_members[emp_id]
                 self.project_repo.add_member(project_id, local_id, is_admin=is_admin)
 
-                employee = self.employee_repo.get_by_id(emp_id)
+                employee = self.employee_repo.get_by_id(emp_id)  # ← ИСПРАВЛЕНО
                 if employee:
                     participants_list.append({
                         'id': emp_id,
@@ -410,8 +403,9 @@ class ProjectsService:
             self.session.commit()
 
             if participants_list:
-                creator_employee = self.employee_repo.get_by_id(project.owner)
-                creator_name = self._get_employee_full_name(creator_employee) if creator_employee else "Создатель проекта"
+                creator_employee = self.employee_repo.get_by_id(project.owner)  # ← ИСПРАВЛЕНО
+                creator_name = self._get_employee_full_name(
+                    creator_employee) if creator_employee else "Создатель проекта"
 
                 self._send_project_notification(
                     project_name=project.name,
@@ -463,7 +457,13 @@ class ProjectsService:
 
             task_cards = []
             for t in column_tasks:
-                assigned_name = self.employee_repo.get_full_name(t.assigned_to) if t.assigned_to else "Не назначен"
+                # Получаем имя назначенного сотрудника
+                assigned_name = "Не назначен"
+                if t.assigned_to:
+                    employee = self.employee_repo.get_by_id(t.assigned_to)  # ← ИСПРАВЛЕНО
+                    if employee:
+                        assigned_name = self._get_employee_full_name(employee)
+
                 is_overdue = (t.deadline < datetime.now()) if t.deadline else False
 
                 task_cards.append(TaskCardDTO(

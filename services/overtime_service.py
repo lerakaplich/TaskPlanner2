@@ -8,7 +8,8 @@ from database import get_tasks_session
 from repositories.overtime_repo import OvertimeRepo
 from repositories.project_repo import ProjectRepo
 from repositories.task_repo import TaskRepo
-from repositories.external_employee_repo import ExternalEmployeeRepo
+from repositories.employee_repo import EmployeeRepo  # ← ИСПРАВЛЕНО (было external_employee_repo)
+from models.employees import Employee  # ← ДОБАВЛЕНО
 
 
 class OvertimeService:
@@ -19,7 +20,7 @@ class OvertimeService:
         self.overtime_repo = OvertimeRepo(self.session)
         self.project_repo = ProjectRepo(self.session)
         self.task_repo = TaskRepo(self.session)
-        self.employee_repo = ExternalEmployeeRepo(self.session)
+        self.employee_repo = EmployeeRepo(self.session)  # ← ИСПРАВЛЕНО
         self.current_user_id = None
 
     def set_current_user_id(self, user_id: int):
@@ -32,7 +33,7 @@ class OvertimeService:
     def get_all_employees(self) -> List[Dict]:
         """Получает список всех сотрудников для выпадающего списка"""
         try:
-            employees = self.employee_repo.get_all()
+            employees = self.employee_repo.get_all()  # ← ИСПРАВЛЕНО
             print(f"📊 Загружено сотрудников из БД: {len(employees)}")
 
             result = []
@@ -131,7 +132,7 @@ class OvertimeService:
         """Преобразует ORM-объект в словарь для карточки"""
         # Получаем имя сотрудника
         employee_name = "Неизвестен"
-        employee = self.employee_repo.get_by_id(note.employee_id)
+        employee = self.employee_repo.get_by_id(note.employee_id)  # ← ИСПРАВЛЕНО
         if employee:
             employee_name = f"{employee.last_name} {employee.first_name[0]}."
             if employee.middle_name:

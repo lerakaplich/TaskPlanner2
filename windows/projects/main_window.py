@@ -182,7 +182,7 @@ class MainWindow(QMainWindow):
         """Ленивая загрузка страницы Архива"""
         return self._get_or_create_page(
             'archive',
-            lambda: ArchivePage(service=self.archive_service),  # ← используем archive_service
+            lambda: ArchivePage(service=self.archive_service),
             self.PAGE_ARCHIVE
         )
 
@@ -244,7 +244,7 @@ class MainWindow(QMainWindow):
         self.contentStack.setCurrentWidget(profile_page)
 
     # ==========================================
-    # ОСТАЛЬНЫЕ МЕТОДЫ (БЕЗ ИЗМЕНЕНИЙ)
+    # ОСТАЛЬНЫЕ МЕТОДЫ
     # ==========================================
 
     def on_auth_success(self, data):
@@ -308,9 +308,9 @@ class MainWindow(QMainWindow):
 
     def get_user_by_id(self, session, user_id):
         try:
-            from models.employees import ExternalEmployee
+            from models.employees import Employee
             from sqlalchemy import select
-            stmt = select(ExternalEmployee).where(ExternalEmployee.id == user_id)
+            stmt = select(Employee).where(Employee.id == user_id)  # ← ИСПРАВЛЕНО
             user = session.scalar(stmt)
             if user:
                 return {
@@ -461,12 +461,12 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "Ошибка", "Проект не найден")
             return
         from database import get_tasks_session
-        from models.employees import ExternalEmployee
+        from models.employees import Employee  # ← ИСПРАВЛЕНО
         from sqlalchemy import select
         session = get_tasks_session()
         participants_full = []
         if project_dto.member_ids:
-            stmt = select(ExternalEmployee).where(ExternalEmployee.id.in_(project_dto.member_ids))
+            stmt = select(Employee).where(Employee.id.in_(project_dto.member_ids))  # ← ИСПРАВЛЕНО
             employees = session.scalars(stmt).all()
             for emp in employees:
                 participants_full.append({
@@ -478,7 +478,7 @@ class MainWindow(QMainWindow):
                 })
         admins_full = []
         if project_dto.admin_ids:
-            stmt = select(ExternalEmployee).where(ExternalEmployee.id.in_(project_dto.admin_ids))
+            stmt = select(Employee).where(Employee.id.in_(project_dto.admin_ids))  # ← ИСПРАВЛЕНО
             employees = session.scalars(stmt).all()
             for emp in employees:
                 admins_full.append({

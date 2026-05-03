@@ -6,7 +6,7 @@ from windows.chat.chat_create_view import ChatCreateView
 class ChatCreateDialog(ChatCreateView):
     def __init__(self, emp_repo, current_user_id, parent=None):
         super().__init__(parent)
-        self.emp_repo = emp_repo
+        self.emp_repo = emp_repo  # Теперь это EmployeeRepo
         self.current_user_id = current_user_id
 
         # Подключаем события
@@ -31,7 +31,7 @@ class ChatCreateDialog(ChatCreateView):
         try:
             self.user_list.clear()
 
-            # Используем метод get_all() из ExternalEmployeeRepo
+            # Используем метод get_all() из EmployeeRepo
             users = self.emp_repo.get_all()
 
             if not users:
@@ -45,6 +45,8 @@ class ChatCreateDialog(ChatCreateView):
 
                 # Формируем текст для списка
                 display_text = f"{u.last_name} {u.first_name}"
+                if u.middle_name:
+                    display_text += f" {u.middle_name}"
                 if u.position:
                     display_text += f" ({u.position})"
 

@@ -7,7 +7,7 @@ from sqlalchemy import select, func, and_, or_
 
 from models.tasks import Task, TaskTag, Tag
 from models.projects import Project, EmployeeProject, BoardColumn
-from models.employees import ExternalEmployee, DepartmentFDW, DivisionFDW
+from models.employees import Employee, Department, Division  # ← ИСПРАВЛЕНО
 from repositories.tag_repo import TagRepo
 
 
@@ -17,7 +17,7 @@ class AnalyticsService:
     def __init__(self, session: Session):
         self.session = session
         self.tag_repo = TagRepo(session)
-        self.current_user_id = None  # ← ДОБАВИТЬ
+        self.current_user_id = None
 
     def set_current_user_id(self, user_id: int):
         """Устанавливает ID текущего пользователя"""
@@ -37,8 +37,8 @@ class AnalyticsService:
         - просроченные задачи
         - аналитика по тегам
         """
-        # Получаем всех сотрудников из внешней БД
-        stmt = select(ExternalEmployee).order_by(ExternalEmployee.last_name)
+        # Получаем всех сотрудников
+        stmt = select(Employee).order_by(Employee.last_name)  # ← ИСПРАВЛЕНО
         employees = list(self.session.scalars(stmt))
 
         result = []
@@ -84,7 +84,6 @@ class AnalyticsService:
         print(f"📊 Сотрудник {employee_id}: найдено проектов: {len(all_projects)}")
 
         for p in all_projects:
-            # Получаем полные данные проекта с задачами
             proj_dict = self._project_to_dict(p)
             print(f"   Проект: {p.name}, is_archived={p.is_archived}")
             if p.is_archived:
@@ -215,7 +214,7 @@ class AnalyticsService:
 
                 # Сотрудник (исполнитель)
                 if task.assigned_to:
-                    emp = self.session.get(ExternalEmployee, task.assigned_to)
+                    emp = self.session.get(Employee, task.assigned_to)  # ← ИСПРАВЛЕНО
                     if emp:
                         emp_name = self._format_employee_name(emp)
                         if emp_name not in employee_stats:
@@ -322,7 +321,6 @@ class AnalyticsService:
                 # Формируем DTO задачи для карточки
                 task_dto = self._task_to_analytics_dto(task, status, is_completed)
 
-                # 🔧 ВАЖНО: Добавляем задачу в grouped_tasks
                 if status in grouped_tasks:
                     grouped_tasks[status].append(task_dto)
                 else:
@@ -348,7 +346,7 @@ class AnalyticsService:
 
             employees = []
             for member in members:
-                emp = self.session.get(ExternalEmployee, member.employee_id)
+                emp = self.session.get(Employee, member.employee_id)  # ← ИСПРАВЛЕНО
                 if emp:
                     # Считаем статистику сотрудника в этом проекте
                     emp_tasks = [t for t in tasks if t.assigned_to == emp.id]
@@ -362,15 +360,13 @@ class AnalyticsService:
                         "is_admin": member.is_admin or False,
                         "active_tasks": active,
                         "completed_tasks": completed,
-                        "active": active,  # 🔧 Добавляем для совместимости с EmployeeProjectCard
-                        "completed": completed  # 🔧 Добавляем для совместимости с EmployeeProjectCard
+                        "active": active,
+                        "completed": completed
                     })
 
-            # 🔧 ДОБАВЛЯЕМ ОТЛАДКУ
             print(f"📊 Проект: {project.name}")
             print(f"   Всего задач: {len(tasks)}")
-            print(
-                f"   grouped_tasks: to_do={len(grouped_tasks['to_do'])}, in_progress={len(grouped_tasks['in_progress'])}, review={len(grouped_tasks['review'])}, completed={len(grouped_tasks['completed'])}")
+            print(f"   grouped_tasks: to_do={len(grouped_tasks['to_do'])}, in_progress={len(grouped_tasks['in_progress'])}, review={len(grouped_tasks['review'])}, completed={len(grouped_tasks['completed'])}")
             print(f"   Сотрудников: {len(employees)}")
 
             result.append({
@@ -386,10 +382,10 @@ class AnalyticsService:
                 "overdue_tasks": overdue_tasks,
                 "high_priority_tasks": high_priority_tasks,
                 "members": employees,
-                "employees": employees,  # 🔧 Дублируем для совместимости
+                "employees": employees,
                 "member_count": len(employees),
-                "emp_count": len(employees),  # 🔧 Для совместимости
-                "grouped_tasks": grouped_tasks,  # 🔧 Это ключевое поле!
+                "emp_count": len(employees),
+                "grouped_tasks": grouped_tasks,
                 "status_display": "Активный" if not project.is_archived else "Архивный"
             })
 
@@ -404,7 +400,7 @@ class AnalyticsService:
         # Получаем создателя
         creator_name = "Неизвестен"
         if task.created_by:
-            creator = self.session.get(ExternalEmployee, task.created_by)
+            creator = self.session.get(Employee, task.created_by)  # ← ИСПРАВЛЕНО
             if creator:
                 creator_name = self._format_employee_name(creator)
 
@@ -424,7 +420,7 @@ class AnalyticsService:
             "project_name": self.session.get(Project, task.project_id).name if task.project_id else ""
         }
 
-    def _format_employee_name(self, emp: ExternalEmployee) -> str:
+    def _format_employee_name(self, emp: Employee) -> str:  # ← ИСПРАВЛЕНО
         """Форматирует ФИО сотрудника"""
         parts = [emp.last_name, emp.first_name]
         if emp.middle_name:
@@ -435,14 +431,14 @@ class AnalyticsService:
         """Получить название отдела по ID"""
         if not department_id:
             return "—"
-        dept = self.session.get(DepartmentFDW, department_id)
+        dept = self.session.get(Department, department_id)  # ← ИСПРАВЛЕНО
         return dept.name if dept else "—"
 
     def _get_division_name(self, division_id: Optional[int]) -> str:
         """Получить название подразделения по ID"""
         if not division_id:
             return "—"
-        div = self.session.get(DivisionFDW, division_id)
+        div = self.session.get(Division, division_id)  # ← ИСПРАВЛЕНО
         return div.name if div else "—"
 
     def _project_to_dict(self, project: Project) -> Dict:

@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy.sql.functions import func
 
 from models.chat import Chat, ChatMessage, ChatParticipant, ChatType, MessageRead, DeletedMessage
-from models.employees import ExternalEmployee
+from models.employees import Employee
 from sqlalchemy.orm import selectinload
 
 class ChatRepo:
@@ -165,8 +165,8 @@ class ChatRepo:
     def get_who_read(self, message_id: int):
         """Возвращает список ФИО сотрудников, прочитавших сообщение"""
         stmt = (
-            select(ExternalEmployee.last_name, ExternalEmployee.first_name)
-            .join(MessageRead, ExternalEmployee.id == MessageRead.user_id)
+            select(Employee.last_name, Employee.first_name)  # ← ИСПРАВЛЕНО
+            .join(MessageRead, Employee.id == MessageRead.user_id)
             .where(MessageRead.message_id == message_id)
         )
         results = self.session.execute(stmt).all()

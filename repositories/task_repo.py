@@ -7,7 +7,7 @@ from datetime import datetime
 
 from models.tasks import Task, Tag, TaskTag
 from models.projects import BoardColumn
-from models.employees import ExternalEmployee
+from models.employees import Employee
 
 
 class TaskRepo:
@@ -191,8 +191,8 @@ class TaskRepo:
     # Работа с сотрудниками
     # =====================================================
 
-    def get_employee_by_id(self, employee_id: int) -> Optional[ExternalEmployee]:
-        stmt = select(ExternalEmployee).where(ExternalEmployee.id == employee_id)
+    def get_employee_by_id(self, employee_id: int) -> Optional[Employee]:  # ← ИСПРАВЛЕНО
+        stmt = select(Employee).where(Employee.id == employee_id)  # ← ИСПРАВЛЕНО
         return self.session.scalar(stmt)
 
     def get_employee_name_by_id(self, employee_id: int) -> Optional[str]:
@@ -205,7 +205,7 @@ class TaskRepo:
         return None
 
     def get_all_employees(self) -> List[Dict[str, Any]]:
-        stmt = select(ExternalEmployee).order_by(ExternalEmployee.last_name)
+        stmt = select(Employee).order_by(Employee.last_name)  # ← ИСПРАВЛЕНО
         employees = self.session.scalars(stmt).all()
         return [
             {

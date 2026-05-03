@@ -18,7 +18,7 @@ from PyQt6.QtGui import (
 from database import get_tasks_session
 from models.tasks import Task
 from models.projects import Project, EmployeeProject
-from models.employees import ExternalEmployee
+from models.employees import Employee
 
 # Константы
 PIXELS_PER_DAY = 40
@@ -474,8 +474,8 @@ class GanttChartWidget(QWidget):
                 # Получаем исполнителя
                 assignee_name = ""
                 if task.assigned_to:
-                    employee = self.session.query(ExternalEmployee).filter(
-                        ExternalEmployee.id == task.assigned_to
+                    employee = self.session.query(Employee).filter(  # ← ИСПРАВЛЕНО
+                        Employee.id == task.assigned_to
                     ).first()
                     if employee:
                         assignee_name = f"{employee.last_name} {employee.first_name[0] if employee.first_name else ''}."
@@ -495,7 +495,7 @@ class GanttChartWidget(QWidget):
                     start_date=start_date.strftime("%Y-%m-%d"),
                     end_date=end_date.strftime("%Y-%m-%d"),
                     assignee=assignee_name,
-                    is_critical=task.priority in ["high", "critical"],
+                    is_critical=task.priority in ["high", "critical"] if hasattr(task.priority, 'value') else task.priority in ["high", "critical"],
                     project_id=task.project_id,
                     status=task.column.name if task.column else "unknown",
                     is_completed=is_completed

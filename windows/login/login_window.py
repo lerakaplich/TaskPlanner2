@@ -262,7 +262,7 @@ class LoginWindow(QDialog):
             data_to_save = {
                 "user_id": int(user_data.get("id")),
                 "phone_number": str(user_data.get("phone_number")),
-                "session_token": session_token,  # Сохраняем токен
+                "session_token": session_token,
                 "last_name": str(user_data.get("last_name")),
                 "first_name": str(user_data.get("first_name")),
                 "middle_name": str(user_data.get("middle_name") or ""),
@@ -276,13 +276,13 @@ class LoginWindow(QDialog):
 
             # 2. Сохраняем токен в БД
             from database import get_tasks_session
-            from models.employees import ExternalEmployee
+            from models.employees import Employee
             from sqlalchemy import update
 
             db_session = get_tasks_session()
             try:
-                stmt = update(ExternalEmployee).where(
-                    ExternalEmployee.id == user_data.get('id')
+                stmt = update(Employee).where(  # ← ИСПРАВЛЕНО
+                    Employee.id == user_data.get('id')
                 ).values(app_session_token=session_token)
                 db_session.execute(stmt)
                 db_session.commit()
@@ -311,13 +311,13 @@ class LoginWindow(QDialog):
             # 2. Удаляем токен из БД для текущего пользователя
             if hasattr(self, '_authenticated_user') and self._authenticated_user:
                 from database import get_tasks_session
-                from models.employees import ExternalEmployee
+                from models.employees import Employee  # ← ИСПРАВЛЕНО
                 from sqlalchemy import update
 
                 db_session = get_tasks_session()
                 try:
-                    stmt = update(ExternalEmployee).where(
-                        ExternalEmployee.id == self._authenticated_user.get('id')
+                    stmt = update(Employee).where(  # ← ИСПРАВЛЕНО
+                        Employee.id == self._authenticated_user.get('id')
                     ).values(app_session_token=None)
                     db_session.execute(stmt)
                     db_session.commit()
@@ -347,14 +347,14 @@ class LoginWindow(QDialog):
 
                     # Проверяем токен в БД
                     from database import get_tasks_session
-                    from models.employees import ExternalEmployee
+                    from models.employees import Employee  # ← ИСПРАВЛЕНО
                     from sqlalchemy import select
 
                     db_session = get_tasks_session()
                     try:
-                        stmt = select(ExternalEmployee).where(
-                            ExternalEmployee.id == data.get("user_id"),
-                            ExternalEmployee.app_session_token == session_token
+                        stmt = select(Employee).where(  # ← ИСПРАВЛЕНО
+                            Employee.id == data.get("user_id"),
+                            Employee.app_session_token == session_token
                         )
                         user = db_session.scalar(stmt)
 
@@ -477,25 +477,25 @@ class LoginWindow(QDialog):
 
         try:
             from database import get_tasks_session
-            from models.employees import ExternalEmployee
+            from models.employees import Employee  # ← ИСПРАВЛЕНО
             from sqlalchemy import select
 
             session = get_tasks_session()
 
             # Ищем пользователя по номеру телефона
-            stmt = select(ExternalEmployee).where(ExternalEmployee.phone_number == clean_phone)
+            stmt = select(Employee).where(Employee.phone_number == clean_phone)  # ← ИСПРАВЛЕНО
             user = session.scalar(stmt)
 
             if not user:
                 # Пробуем другие форматы
                 if clean_phone.startswith('375'):
                     alt_phone = '8' + clean_phone[3:]
-                    stmt = select(ExternalEmployee).where(ExternalEmployee.phone_number == alt_phone)
+                    stmt = select(Employee).where(Employee.phone_number == alt_phone)  # ← ИСПРАВЛЕНО
                     user = session.scalar(stmt)
 
                 if not user:
                     plus_phone = '+' + clean_phone
-                    stmt = select(ExternalEmployee).where(ExternalEmployee.phone_number == plus_phone)
+                    stmt = select(Employee).where(Employee.phone_number == plus_phone)  # ← ИСПРАВЛЕНО
                     user = session.scalar(stmt)
 
             if user:

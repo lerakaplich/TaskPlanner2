@@ -1,3 +1,4 @@
+# chat_server.py
 import uvicorn
 from PyQt6.QtWidgets import QMessageBox
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
@@ -5,13 +6,14 @@ from fastapi import FastAPI
 from sqlalchemy import select
 import socketio
 import asyncio
-from database import TasksSessionLocal
+from database import get_tasks_session, get_employees_session  # Исправлено
 from services.chat_service import ChatService
+from services.employee_service import EmployeeService  # Добавлен новый сервис
 
-# Импортируем сервис синхронизации
-from sync_service import sync_service
+# Удаляем импорт sync_service
+# from sync_service import sync_service
 from shared_state import pending_registrations
-from telegram_bot import telegram_bot, start_bot  # ← импортируем функцию запуска
+from telegram_bot import telegram_bot, start_bot
 
 user_sid_map = {}  # {user_id: sid}
 
@@ -50,7 +52,7 @@ async def auth_user(sid, data):
         user_sid_map[user_id] = sid
         print(f"🔑 Пользователь {user_id} привязан к сокету {sid}")
 
-        with TasksSessionLocal() as session:
+        with get_tasks_session() as session:  # Исправлено
             service = ChatService(session)
             user_chats = service.get_user_chats(user_id)
             print(f"📋 Найдено чатов для пользователя {user_id}: {len(user_chats)}")
@@ -83,10 +85,8 @@ def send_to_telegram_admin(self, employee_data):
     try:
         from utils.socket_manager import get_socket_client
 
-        # Добавляем user_chat_id для отслеживания
-        # Пока None, будет заполнен после /start в боте
         employee_data['chat_id'] = None
-        employee_data['request_id'] = None  # Будет заполнен на сервере
+        employee_data['request_id'] = None
 
         socket_client = get_socket_client()
 
@@ -94,10 +94,8 @@ def send_to_telegram_admin(self, employee_data):
             QMessageBox.warning(self, "Нет подключения", "Нет подключения к серверу. Попробуйте позже.")
             return
 
-        # Отправляем запрос
         socket_client.request_registration(employee_data)
 
-        # Показываем окно с ссылкой на бота
         bot_link = "https://t.me/TaskPlanner2035Vikusik_bot"
 
         msg_box = QMessageBox(self)
@@ -116,7 +114,6 @@ def send_to_telegram_admin(self, employee_data):
             f"⏰ Обычно это занимает несколько минут."
         )
 
-        # Добавляем кнопку для открытия ссылки
         from PyQt6.QtGui import QDesktopServices
         from PyQt6.QtCore import QUrl
 
@@ -136,20 +133,17 @@ async def request_registration(sid, data):
 
     request_id = sid
     data['request_id'] = request_id
-    data['chat_id'] = None  # chat_id пока нет
-    data['chat_id_bound'] = False  # флаг, что Telegram не привязан
+    data['chat_id'] = None
+    data['chat_id_bound'] = False
     pending_registrations[request_id] = data
 
     print(f"🔑 Создана заявка с ID: {request_id}, ожидает привязки Telegram")
     print(f"📋 Всего заявок в pending: {len(pending_registrations)}")
 
-    # НЕ ОТПРАВЛЯЕМ уведомление администратору!
-    # Ждем, пока пользователь привяжет Telegram
-
 
 @sio.event
 async def create_chat(sid, data):
-    with TasksSessionLocal() as session:
+    with get_tasks_session() as session:  # Исправлено
         service = ChatService(session)
         new_chat_dto = service.create_new_chat(data['creator_id'], data)
         payload = new_chat_dto.model_dump(mode='json')
@@ -162,7 +156,7 @@ async def create_chat(sid, data):
 @sio.event
 async def delete_chat(sid, data):
     chat_id = data['chat_id']
-    with TasksSessionLocal() as session:
+    with get_tasks_session() as session:  # Исправлено
         service = ChatService(session)
         if service.delete_chat(chat_id):
             await sio.emit("chat_deleted", {"chat_id": chat_id}, room=f"chat_{chat_id}")
@@ -175,7 +169,7 @@ async def update_participants(sid, data):
     removed = data.get('removed_users', [])
 
     try:
-        with TasksSessionLocal() as session:
+        with get_tasks_session() as session:  # Исправлено
             service = ChatService(session)
             if service.update_chat_participants(chat_id, added, removed):
                 await sio.emit("participants_updated", data, room=f"chat_{chat_id}")
@@ -199,7 +193,7 @@ async def change_participant_role(sid, data):
     target_uid = data['target_user_id']
     is_admin = data['is_admin']
 
-    with TasksSessionLocal() as session:
+    with get_tasks_session() as session:  # Исправлено
         service = ChatService(session)
         if service.set_participant_admin(chat_id, target_uid, is_admin):
             await sio.emit("participant_role_changed", {
@@ -212,7 +206,7 @@ async def change_participant_role(sid, data):
 @sio.event
 async def send_chat_msg(sid, data):
     try:
-        with TasksSessionLocal() as session:
+        with get_tasks_session() as session:  # Исправлено
             service = ChatService(session)
             msg_dto = service.save_new_message(
                 chat_id=data['chat_id'],
@@ -230,7 +224,7 @@ async def send_chat_msg(sid, data):
 @sio.event
 async def edit_chat_msg(sid, data):
     try:
-        with TasksSessionLocal() as session:
+        with get_tasks_session() as session:  # Исправлено
             service = ChatService(session)
             success = service.update_message(data['message_id'], data['content'])
             if success:
@@ -246,7 +240,7 @@ async def edit_chat_msg(sid, data):
 @sio.event
 async def delete_chat_msg(sid, data):
     try:
-        with TasksSessionLocal() as session:
+        with get_tasks_session() as session:  # Исправлено
             service = ChatService(session)
             mode = data.get('mode', 'everyone')
             if mode == "everyone":
@@ -270,7 +264,7 @@ async def forward_message(sid, data):
     user_id = data.get('user_id')
 
     try:
-        with TasksSessionLocal() as session:
+        with get_tasks_session() as session:  # Исправлено
             service = ChatService(session)
             new_msg_dto = service.forward_message(msg_id, target_chat_id, user_id)
             if new_msg_dto:
@@ -283,7 +277,7 @@ async def forward_message(sid, data):
 
 @sio.event
 async def messages_seen(sid, data):
-    with TasksSessionLocal() as session:
+    with get_tasks_session() as session:  # Исправлено
         service = ChatService(session)
         service.mark_messages_as_read(data['user_id'], data['message_ids'])
         await sio.emit("messages_read_update", {
@@ -317,11 +311,14 @@ async def update_chat_settings(sid, data):
 
 async def main():
     """Главная асинхронная функция"""
-    print("🔄 Запуск синхронизации сотрудников...")
-    sync_service.sync_employees()
-    print("✅ Начальная синхронизация завершена")
+    print("✅ Запуск сервера (синхронизация не требуется)")
 
-    sync_service.start_background_sync()
+    # Инициализируем сервис сотрудников (без синхронизации!)
+    employee_service = EmployeeService()
+
+    # Проверяем, что сотрудники доступны
+    employees = employee_service.get_all_employees()
+    print(f"📊 Загружено сотрудников: {len(employees)}")
 
     # Запускаем Telegram бота в фоновом режиме
     print("🤖 Запуск Telegram бота...")
@@ -329,7 +326,13 @@ async def main():
 
     # Запускаем сокет-сервер
     print("🌐 Запуск сокет-сервера...")
-    config = uvicorn.Config(socket_app, host="0.0.0.0", port=8081, loop="asyncio")
+    config = uvicorn.Config(
+        socket_app,
+        host="0.0.0.0",
+        port=8081,
+        loop="asyncio",
+        log_level="info"
+    )
     server = uvicorn.Server(config)
 
     # Ждём завершения сервера

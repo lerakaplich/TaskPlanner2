@@ -5,10 +5,11 @@ from datetime import datetime
 from sqlalchemy import select, func, and_
 from PyQt6.QtCore import QDate
 
-from repositories.external_employee_repo import ExternalEmployeeRepo
+from repositories.employee_repo import EmployeeRepo  # ← ИСПРАВЛЕНО (было external_employee_repo)
 from repositories.project_repo import ProjectRepo
 from repositories.task_repo import TaskRepo
 from database import get_tasks_session
+from models.employees import Employee, Department  # ← ДОБАВЛЕНО
 
 
 class ProfileService:
@@ -19,7 +20,7 @@ class ProfileService:
         self.task_repo = TaskRepo(self.db_session)
         self.current_user = None
         self.project_repo = ProjectRepo(self.db_session)
-        self.employee_repo = ExternalEmployeeRepo(self.db_session)
+        self.employee_repo = EmployeeRepo(self.db_session)  # ← ИСПРАВЛЕНО
 
     @property
     def session(self):
@@ -33,12 +34,10 @@ class ProfileService:
     def get_employee_profile(self, employee_id: int) -> Dict[str, Any]:
         """Получить полный профиль сотрудника с реальными данными"""
         try:
-            from models.employees import ExternalEmployee
             from models.tasks import Task
             from models.projects import Project, EmployeeProject
 
-            stmt = select(ExternalEmployee).where(ExternalEmployee.id == employee_id)
-            employee = self.db_session.scalar(stmt)
+            employee = self.employee_repo.get_by_id(employee_id)  # ← ИСПРАВЛЕНО
 
             if not employee:
                 print(f"❌ Сотрудник с ID {employee_id} не найден")
@@ -97,7 +96,7 @@ class ProfileService:
                 'completed_tasks': completed_tasks,
                 'active_projects': active_projects,
                 'rating': rating,
-                'skills': tag_analytics,  # Используем реальные данные из тегов
+                'skills': tag_analytics,
                 'projects': projects_data
             }
 
@@ -178,8 +177,8 @@ class ProfileService:
         if not department_id:
             return "Не указан"
         try:
-            from models.employees import DepartmentFDW
-            dept = self.db_session.get(DepartmentFDW, department_id)
+            from models.employees import Department  # ← ИСПРАВЛЕНО (было DepartmentFDW)
+            dept = self.db_session.get(Department, department_id)
             if dept:
                 return dept.name
         except Exception as e:
@@ -270,21 +269,19 @@ class ProfileService:
     def update_employee_profile(self, employee_id: int, updates: Dict) -> bool:
         """Обновляет данные сотрудника в БД"""
         try:
-            from models.employees import ExternalEmployee
             from sqlalchemy import update
 
-            stmt = (
-                update(ExternalEmployee)
-                .where(ExternalEmployee.id == employee_id)
-                .values(
-                    phone_number=updates.get('phone_number'),
-                    email=updates.get('email'),
-                    birth_date=updates.get('birth_date')
-                )
-            )
-            self.db_session.execute(stmt)
-            self.db_session.commit()
-            return True
+            employee = self.employee_repo.get_by_id(employee_id)  # ← ИСПРАВЛЕНО
+            if employee:
+                if 'phone_number' in updates:
+                    employee.phone_number = updates['phone_number']
+                if 'email' in updates:
+                    employee.email = updates['email']
+                if 'birth_date' in updates:
+                    employee.birth_date = updates['birth_date']
+                self.db_session.commit()
+                return True
+            return False
 
         except Exception as e:
             print(f"❌ Ошибка обновления профиля: {e}")
@@ -335,11 +332,9 @@ class ProfileService:
                 topics = [s['topic'] for s in skills[:8]]
                 kpd_values = [s['kpd'] for s in skills[:8]]
             else:
-                # Если нет навыков, возвращаем базовые
                 topics = ['Нет данных', 'Нет данных', 'Нет данных', 'Нет данных']
                 kpd_values = [0, 0, 0, 0]
         else:
-            # Тестовые данные
             topics = ['Программирование', 'Документация', 'Управление', 'Аналитика', 'Тестирование', 'Дизайн']
             kpd_values = [0.85, 0.92, 0.65, 0.58, 0.45, 0.72]
 
@@ -374,24 +369,26 @@ class ProfileService:
             stmt = select(Task).where(
                 and_(
                     Task.assigned_to == employee_id,
-                    Task.completed == True
+                    Task.is_archived == True  # Используем is_archived вместо completed
                 )
             )
             tasks = self.db_session.scalars(stmt).all()
             return len(tasks)
         except Exception as e:
             print(f"❌ Ошибка подсчета задач: {e}")
-            return random.randint(10, 50)
+            return 0
 
     def _get_active_projects_count(self, employee_id: int) -> int:
         """Получает количество активных проектов сотрудника"""
         try:
-            from models.projects import Project
+            from models.projects import Project, EmployeeProject
             from sqlalchemy import select, and_
 
-            stmt = select(Project).where(
+            stmt = select(Project).join(
+                EmployeeProject, Project.id == EmployeeProject.project_id
+            ).where(
                 and_(
-                    Project.members.any(employee_id=employee_id),
+                    EmployeeProject.employee_id == employee_id,
                     Project.is_archived == False
                 )
             )
@@ -399,40 +396,35 @@ class ProfileService:
             return len(projects)
         except Exception as e:
             print(f"❌ Ошибка подсчета проектов: {e}")
-            return random.randint(3, 10)
+            return 0
 
     def _calculate_employee_rating(self, employee_id: int) -> float:
         """Рассчитывает рейтинг сотрудника"""
         try:
             completed = self._get_completed_tasks_count(employee_id)
-            # Простой расчет рейтинга (можно усложнить)
             rating = min(completed / 100, 1.0)
             return round(rating, 2)
         except:
-            return round(random.uniform(0.3, 0.95), 2)
+            return 0.0
 
     def _get_employee_projects(self, employee_id: int) -> List[Dict]:
         """Получает реальные проекты сотрудника из БД"""
         try:
-            from models.projects import Project
-            from sqlalchemy import select
+            from models.projects import Project, EmployeeProject
 
-            # Получаем все проекты, где сотрудник является участником
-            stmt = select(Project).where(
-                Project.members.any(employee_id=employee_id)
-            )
+            stmt = select(Project).join(
+                EmployeeProject, Project.id == EmployeeProject.project_id
+            ).where(EmployeeProject.employee_id == employee_id)
             projects = self.db_session.scalars(stmt).all()
 
             result = []
             for project in projects:
-                # Получаем задачи проекта, назначенные на этого сотрудника
                 tasks = self.task_repo.get_by_project(project.id)
                 user_tasks = [t for t in tasks if t.assigned_to == employee_id]
 
-                completed_tasks = len([t for t in user_tasks if t.completed])
+                completed_tasks = len([t for t in user_tasks if t.is_archived])
                 total_tasks = len(user_tasks)
 
-                # Рассчитываем прогресс
                 progress = 0
                 if total_tasks > 0:
                     progress = int((completed_tasks / total_tasks) * 100)
@@ -451,7 +443,7 @@ class ProfileService:
 
         except Exception as e:
             print(f"❌ Ошибка при загрузке проектов сотрудника: {e}")
-            return self._get_test_projects()
+            return []
 
     def _get_test_projects(self) -> List[Dict]:
         """Возвращает тестовые проекты"""
@@ -488,7 +480,7 @@ class ProfileService:
             skills.append({
                 'topic': topic,
                 'kpd': round(kpd, 2),
-                'tasks_completed': random.randint(5, 50)
+                'tasks_completed': 0
             })
 
         return sorted(skills, key=lambda x: x['kpd'], reverse=True)

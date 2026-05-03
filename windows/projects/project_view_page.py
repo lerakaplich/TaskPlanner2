@@ -17,8 +17,6 @@ class ProjectViewPage(QWidget):
 
     projectUpdated = pyqtSignal()
 
-    # windows/projects/project_view_page.py - исправленный метод __init__ и load_tasks
-
     def __init__(self, session=None, project_id=None, service=None, parent=None):
         super().__init__(parent)
 
@@ -53,7 +51,7 @@ class ProjectViewPage(QWidget):
             mode="all"
         )
 
-        # 👇 ПОЛУЧАЕМ КОЛОНКИ ПРОЕКТА ИЗ СОХРАНЕННЫХ ID
+        # Получаем колонки проекта из сохраненных ID
         self.project_columns = []
         if service and project_id:
             # Получаем ID сохраненных колонок
@@ -150,12 +148,12 @@ class ProjectViewPage(QWidget):
     def _task_to_dict(self, task):
         """Преобразует задачу в словарь для карточки"""
         from models.schemas.tasks_dto import TaskPriority
+        from repositories.employee_repo import EmployeeRepo  # ← ИСПРАВЛЕНО
 
         # Получаем имя исполнителя
         assignee_name = None
         if task.assigned_to:
-            from repositories.external_employee_repo import ExternalEmployeeRepo
-            emp_repo = ExternalEmployeeRepo(self.db_session)
+            emp_repo = EmployeeRepo(self.db_session)  # ← ИСПРАВЛЕНО
             assignee_name = emp_repo.get_full_name(task.assigned_to)
 
         priority_map = {
@@ -191,7 +189,7 @@ class ProjectViewPage(QWidget):
             "deadline_color": deadline_color,
             "assignee_name": assignee_name or "Не назначен",
             "created_by": task.created_by,
-            "completed": task.completed if hasattr(task, 'completed') else False,
+            "completed": task.is_archived if hasattr(task, 'is_archived') else False,
             "tags": []
         }
 
