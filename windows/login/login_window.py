@@ -274,24 +274,25 @@ class LoginWindow(QDialog):
             with open(session_path, "w", encoding="utf-8") as f:
                 json.dump(data_to_save, f, ensure_ascii=False, indent=4)
 
-            # 2. Сохраняем токен в БД
-            from database import get_tasks_session
+            # 2. Сохраняем токен в БД employees (не в taskplanner!)
+            from database import get_employees_session  # ← ИСПРАВЛЕНО!
             from models.employees import Employee
             from sqlalchemy import update
 
-            db_session = get_tasks_session()
-            try:
-                stmt = update(Employee).where(  # ← ИСПРАВЛЕНО
-                    Employee.id == user_data.get('id')
-                ).values(app_session_token=session_token)
-                db_session.execute(stmt)
-                db_session.commit()
-                print(f"✅ Токен сессии сохранен в БД для пользователя {user_data.get('id')}")
-            except Exception as db_err:
-                print(f"❌ Ошибка сохранения токена в БД: {db_err}")
-                db_session.rollback()
-            finally:
-                db_session.close()
+            db_session = get_employees_session()  # ← ИСПРАВЛЕНО!
+            if db_session:
+                try:
+                    stmt = update(Employee).where(
+                        Employee.id == user_data.get('id')
+                    ).values(app_session_token=session_token)
+                    db_session.execute(stmt)
+                    db_session.commit()
+                    print(f"✅ Токен сессии сохранен в БД для пользователя {user_data.get('id')}")
+                except Exception as db_err:
+                    print(f"❌ Ошибка сохранения токена в БД: {db_err}")
+                    db_session.rollback()
+                finally:
+                    db_session.close()
 
             print(f"✅ Сессия сохранена локально: {session_path}")
 
@@ -310,23 +311,24 @@ class LoginWindow(QDialog):
 
             # 2. Удаляем токен из БД для текущего пользователя
             if hasattr(self, '_authenticated_user') and self._authenticated_user:
-                from database import get_tasks_session
-                from models.employees import Employee  # ← ИСПРАВЛЕНО
+                from database import get_employees_session  # ← ИСПРАВЛЕНО!
+                from models.employees import Employee
                 from sqlalchemy import update
 
-                db_session = get_tasks_session()
-                try:
-                    stmt = update(Employee).where(  # ← ИСПРАВЛЕНО
-                        Employee.id == self._authenticated_user.get('id')
-                    ).values(app_session_token=None)
-                    db_session.execute(stmt)
-                    db_session.commit()
-                    print(f"✅ Токен сессии удален из БД для пользователя {self._authenticated_user.get('id')}")
-                except Exception as db_err:
-                    print(f"❌ Ошибка удаления токена из БД: {db_err}")
-                    db_session.rollback()
-                finally:
-                    db_session.close()
+                db_session = get_employees_session()  # ← ИСПРАВЛЕНО!
+                if db_session:
+                    try:
+                        stmt = update(Employee).where(
+                            Employee.id == self._authenticated_user.get('id')
+                        ).values(app_session_token=None)
+                        db_session.execute(stmt)
+                        db_session.commit()
+                        print(f"✅ Токен сессии удален из БД для пользователя {self._authenticated_user.get('id')}")
+                    except Exception as db_err:
+                        print(f"❌ Ошибка удаления токена из БД: {db_err}")
+                        db_session.rollback()
+                    finally:
+                        db_session.close()
 
         except Exception as e:
             print(f"❌ Ошибка удаления сессии: {e}")
@@ -345,51 +347,52 @@ class LoginWindow(QDialog):
                 if data.get("user_id") and data.get("phone_number"):
                     session_token = data.get("session_token")
 
-                    # Проверяем токен в БД
-                    from database import get_tasks_session
-                    from models.employees import Employee  # ← ИСПРАВЛЕНО
+                    # Проверяем токен в БД employees
+                    from database import get_employees_session  # ← ИСПРАВЛЕНО!
+                    from models.employees import Employee
                     from sqlalchemy import select
 
-                    db_session = get_tasks_session()
-                    try:
-                        stmt = select(Employee).where(  # ← ИСПРАВЛЕНО
-                            Employee.id == data.get("user_id"),
-                            Employee.app_session_token == session_token
-                        )
-                        user = db_session.scalar(stmt)
+                    db_session = get_employees_session()  # ← ИСПРАВЛЕНО!
+                    if db_session:
+                        try:
+                            stmt = select(Employee).where(
+                                Employee.id == data.get("user_id"),
+                                Employee.app_session_token == session_token
+                            )
+                            user = db_session.scalar(stmt)
 
-                        if user:
-                            print(f"✅ Найдена валидная сессия для пользователя {data.get('phone_number')}")
+                            if user:
+                                print(f"✅ Найдена валидная сессия для пользователя {data.get('phone_number')}")
 
-                            # Восстанавливаем данные пользователя
-                            user_data = {
-                                'id': user.id,
-                                'last_name': user.last_name,
-                                'first_name': user.first_name,
-                                'middle_name': user.middle_name or '',
-                                'rights': user.rights,
-                                'position': user.position or '',
-                                'phone_number': user.phone_number,
-                                'email': user.email or ''
-                            }
+                                # Восстанавливаем данные пользователя
+                                user_data = {
+                                    'id': user.id,
+                                    'last_name': user.last_name,
+                                    'first_name': user.first_name,
+                                    'middle_name': user.middle_name or '',
+                                    'rights': user.rights,
+                                    'position': user.position or '',
+                                    'phone_number': user.phone_number,
+                                    'email': user.email or ''
+                                }
 
-                            self.set_authenticated_user(user_data)
+                                self.set_authenticated_user(user_data)
 
-                            # Отправляем сигнал об успешном входе
-                            self.login_success.emit(user_data)
+                                # Отправляем сигнал об успешном входе
+                                self.login_success.emit(user_data)
 
-                            # Небольшая задержка для обработки сигнала
-                            QTimer.singleShot(100, self.accept)
-                            return True
-                        else:
-                            print(f"❌ Токен сессии недействителен, требуется повторный вход")
-                            # Удаляем невалидную сессию
-                            session_path.unlink()
+                                # Небольшая задержка для обработки сигнала
+                                QTimer.singleShot(100, self.accept)
+                                return True
+                            else:
+                                print(f"❌ Токен сессии недействителен, требуется повторный вход")
+                                # Удаляем невалидную сессию
+                                session_path.unlink()
 
-                    except Exception as db_err:
-                        print(f"❌ Ошибка проверки токена в БД: {db_err}")
-                    finally:
-                        db_session.close()
+                        except Exception as db_err:
+                            print(f"❌ Ошибка проверки токена в БД: {db_err}")
+                        finally:
+                            db_session.close()
 
         except Exception as e:
             print(f"❌ Ошибка загрузки сессии: {e}")
@@ -443,6 +446,8 @@ class LoginWindow(QDialog):
         except Exception as e:
             print(f"❌ Ошибка удаления учетных данных: {e}")
 
+    # windows/login/login_window.py - исправьте метод on_login_clicked
+
     def on_login_clicked(self):
         # Защита от двойного клика
         if self._login_in_progress:
@@ -476,26 +481,32 @@ class LoginWindow(QDialog):
             return
 
         try:
-            from database import get_tasks_session
-            from models.employees import Employee  # ← ИСПРАВЛЕНО
+            from database import get_employees_session  # ← ИСПРАВЛЕНО! было get_tasks_session
+            from models.employees import Employee
             from sqlalchemy import select
 
-            session = get_tasks_session()
+            # Используем employees_session, а не tasks_session!
+            session = get_employees_session()  # ← ИСПРАВЛЕНО!
+
+            if session is None:
+                QMessageBox.critical(self, "Ошибка", "Нет подключения к базе данных сотрудников")
+                self._login_in_progress = False
+                return
 
             # Ищем пользователя по номеру телефона
-            stmt = select(Employee).where(Employee.phone_number == clean_phone)  # ← ИСПРАВЛЕНО
+            stmt = select(Employee).where(Employee.phone_number == clean_phone)
             user = session.scalar(stmt)
 
             if not user:
                 # Пробуем другие форматы
                 if clean_phone.startswith('375'):
                     alt_phone = '8' + clean_phone[3:]
-                    stmt = select(Employee).where(Employee.phone_number == alt_phone)  # ← ИСПРАВЛЕНО
+                    stmt = select(Employee).where(Employee.phone_number == alt_phone)
                     user = session.scalar(stmt)
 
                 if not user:
                     plus_phone = '+' + clean_phone
-                    stmt = select(Employee).where(Employee.phone_number == plus_phone)  # ← ИСПРАВЛЕНО
+                    stmt = select(Employee).where(Employee.phone_number == plus_phone)
                     user = session.scalar(stmt)
 
             if user:
@@ -556,6 +567,8 @@ class LoginWindow(QDialog):
 
         except Exception as e:
             QMessageBox.critical(self, "Ошибка", f"Ошибка при подключении к базе данных: {e}")
+            import traceback
+            traceback.print_exc()
             self._login_in_progress = False
 
     def on_request_clicked(self):

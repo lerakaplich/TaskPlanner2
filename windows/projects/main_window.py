@@ -310,8 +310,24 @@ class MainWindow(QMainWindow):
         try:
             from models.employees import Employee
             from sqlalchemy import select
-            stmt = select(Employee).where(Employee.id == user_id)  # ← ИСПРАВЛЕНО
-            user = session.scalar(stmt)
+            from database import get_employees_session  # ← ДОБАВИТЬ
+
+            # Используем правильную БД!
+            emp_session = get_employees_session()  # ← ИСПРАВЛЕНО
+            if emp_session is None:
+                print("❌ Нет подключения к БД employees")
+                return {
+                    'id': user_id,
+                    'last_name': 'Неизвестен',
+                    'first_name': '',
+                    'middle_name': '',
+                    'rights': 'user'
+                }
+
+            stmt = select(Employee).where(Employee.id == user_id)
+            user = emp_session.scalar(stmt)
+            emp_session.close()  # ← ЗАКРЫВАЕМ СЕССИЮ
+
             if user:
                 return {
                     'id': user.id,
@@ -325,6 +341,9 @@ class MainWindow(QMainWindow):
                 }
         except Exception as e:
             print(f"Ошибка при загрузке пользователя: {e}")
+            import traceback
+            traceback.print_exc()
+
         return {
             'id': user_id,
             'last_name': 'Неизвестен',
@@ -460,14 +479,19 @@ class MainWindow(QMainWindow):
         if not project_dto:
             QMessageBox.warning(self, "Ошибка", "Проект не найден")
             return
-        from database import get_tasks_session
-        from models.employees import Employee  # ← ИСПРАВЛЕНО
+        from database import get_employees_session  # ← ДОБАВИТЬ
+        from models.employees import Employee
         from sqlalchemy import select
-        session = get_tasks_session()
+
+        emp_session = get_employees_session()  # ← ИСПРАВЛЕНО
+        if emp_session is None:
+            QMessageBox.warning(self, "Ошибка", "Нет подключения к БД сотрудников")
+            return
+
         participants_full = []
         if project_dto.member_ids:
-            stmt = select(Employee).where(Employee.id.in_(project_dto.member_ids))  # ← ИСПРАВЛЕНО
-            employees = session.scalars(stmt).all()
+            stmt = select(Employee).where(Employee.id.in_(project_dto.member_ids))
+            employees = emp_session.scalars(stmt).all()
             for emp in employees:
                 participants_full.append({
                     'id': emp.id,
@@ -478,8 +502,8 @@ class MainWindow(QMainWindow):
                 })
         admins_full = []
         if project_dto.admin_ids:
-            stmt = select(Employee).where(Employee.id.in_(project_dto.admin_ids))  # ← ИСПРАВЛЕНО
-            employees = session.scalars(stmt).all()
+            stmt = select(Employee).where(Employee.id.in_(project_dto.admin_ids))
+            employees = emp_session.scalars(stmt).all()
             for emp in employees:
                 admins_full.append({
                     'id': emp.id,
@@ -488,7 +512,8 @@ class MainWindow(QMainWindow):
                     'middle_name': emp.middle_name or '',
                     'position': emp.position or 'Сотрудник'
                 })
-        session.close()
+        emp_session.close()  # ← ЗАКРЫВАЕМ СЕССИЮ
+
         dialog_data = {
             'id': project_dto.id,
             'name': project_dto.name,
@@ -644,10 +669,19 @@ class MainWindow(QMainWindow):
     def join_user_chat_rooms(self):
         try:
             from services.chat_service import ChatService
-            chat_service = ChatService(self.session)
+            from database import get_tasks_session  # ← чаты в taskplanner
+
+            # Чаты хранятся в taskplanner, это правильно
+            chat_session = get_tasks_session()
+            if chat_session is None:
+                print("⚠️ Нет подключения к БД чатов")
+                return
+
+            chat_service = ChatService(chat_session)
             user_chats = chat_service.get_user_chats(self.current_user_id)
             for chat in user_chats:
                 self.socket_client.join_chat_room(chat.id)
+            chat_session.close()
         except Exception as e:
             print(f"Error joining chat rooms: {e}")
 
