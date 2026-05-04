@@ -1,108 +1,191 @@
 # services/profile_service.py
-from random import random
-from typing import Dict, List, Optional, Any
-from datetime import datetime
-from sqlalchemy import select, func, and_
-from PyQt6.QtCore import QDate
 
-from repositories.employee_repo import EmployeeRepo  # ← ИСПРАВЛЕНО (было external_employee_repo)
+from datetime import datetime
+from typing import Dict, List, Optional
+
+from PyQt6.QtCore import QDate
+from sqlalchemy.orm import Session
+from sqlalchemy import select, func
+
+from database import get_employees_session, get_tasks_session
+from repositories.employee_repo import EmployeeRepo
 from repositories.project_repo import ProjectRepo
-from repositories.task_repo import TaskRepo
-from database import get_tasks_session
-from models.employees import Employee, Department  # ← ДОБАВЛЕНО
+from models.employees import Employee, EmployeeData
+from models.projects import EmployeeProject, BoardColumn
 
 
 class ProfileService:
-    """Сервис профиля сотрудника с реальными данными из БД"""
+    """Сервис для работы с профилем сотрудника"""
 
-    def __init__(self, session=None):
-        self.db_session = session or get_tasks_session()
-        self.task_repo = TaskRepo(self.db_session)
-        self.current_user = None
-        self.project_repo = ProjectRepo(self.db_session)
-        self.employee_repo = EmployeeRepo(self.db_session)  # ← ИСПРАВЛЕНО
+    def __init__(self, session: Session = None):
+        # Сессия для taskplanner БД (проекты, задачи)
+        self.session = session or get_tasks_session()
+        # Отдельная сессия для employees БД (сотрудники)
+        self.employees_session = get_employees_session()
 
-    @property
-    def session(self):
-        """Свойство для обратной совместимости (доступ к db_session)"""
-        return self.db_session
+        # Используем employees_session для EmployeeRepo
+        self.employee_repo = EmployeeRepo(self.employees_session)
+        self.project_repo = ProjectRepo(self.session)
+        self.current_user_id = None
 
-    def set_current_user(self, user_data: Dict):
-        """Устанавливает текущего пользователя"""
-        self.current_user = user_data
-
-    def get_employee_profile(self, employee_id: int) -> Dict[str, Any]:
-        """Получить полный профиль сотрудника с реальными данными"""
+    def __del__(self):
+        """Закрываем сессию employees при удалении"""
         try:
-            from models.tasks import Task
-            from models.projects import Project, EmployeeProject
+            if hasattr(self, 'employees_session') and self.employees_session:
+                self.employees_session.close()
+        except:
+            pass
 
-            employee = self.employee_repo.get_by_id(employee_id)  # ← ИСПРАВЛЕНО
+    def set_current_user_id(self, user_id: int):
+        self.current_user_id = user_id
 
+    def calculate_rating_stars(self, rating: float) -> int:
+        """Вычисляет количество звезд для рейтинга (от 1 до 5)"""
+        if rating >= 90:
+            return 5
+        elif rating >= 70:
+            return 4
+        elif rating >= 50:
+            return 3
+        elif rating >= 30:
+            return 2
+        elif rating >= 10:
+            return 1
+        else:
+            return 0
+
+    def get_kpd_chart_data(self, employee_id: int) -> tuple:
+        """
+        Получает данные для графика КПД по темам.
+        Возвращает (список_тем, список_КПД)
+        """
+        try:
+            from services.analytics_service import AnalyticsService
+
+            analytics = AnalyticsService(self.session)
+            employee_data = analytics.get_employee_card_data(employee_id)
+
+            tag_analytics = employee_data.get("tag_analytics", [])
+
+            if not tag_analytics:
+                # Возвращаем тестовые данные, если нет реальных
+                return ["Нет данных"], [0]
+
+            topics = [item.get("tag", "Без темы") for item in tag_analytics]
+            kpd_values = [item.get("kpd", 0) for item in tag_analytics]
+
+            return topics, kpd_values
+
+        except Exception as e:
+            print(f"❌ Ошибка получения данных для графика: {e}")
+            return ["Нет данных"], [0]
+
+    def get_chart_title(self) -> str:
+        """Возвращает заголовок графика"""
+        return "Эффективность по темам"
+
+    def get_chart_updated_title(self) -> str:
+        """Возвращает заголовок после обновления"""
+        return "Данные обновлены"
+
+    def generate_random_kpd_data(self) -> tuple:
+        """
+        Генерирует тестовые данные для графика (для демонстрации)
+        """
+        topics = ["Проектирование", "Разработка", "Тестирование", "Документация", "Аналитика"]
+        import random
+        kpd_values = [round(random.uniform(0.3, 0.95), 2) for _ in range(len(topics))]
+        return topics, kpd_values
+
+    def prepare_profile_form_data(self, employee_data: Dict) -> Dict:
+        """
+        Подготавливает данные для формы редактирования профиля
+        """
+        birth_date = None
+        if employee_data.get('birth_date'):
+            try:
+                birth_date = QDate.fromString(employee_data['birth_date'], "yyyy-MM-dd")
+            except:
+                pass
+
+        return {
+            "phone_number": employee_data.get('phone_number', ''),
+            "work_number": employee_data.get('work_number', ''),
+            "email": employee_data.get('email', ''),
+            "birth_date": birth_date
+        }
+
+    def build_profile_update_data(self, phone: str = None, email: str = None,
+                                  birth_date: QDate = None) -> Dict:
+        """
+        Формирует словарь с обновлениями профиля
+        """
+        updates = {}
+        if phone is not None:
+            updates['phone_number'] = phone
+        if email is not None:
+            updates['email'] = email
+        if birth_date is not None and birth_date.isValid():
+            updates['birth_date'] = birth_date.toString("yyyy-MM-dd")
+        return updates
+
+    def update_employee_profile(self, employee_id: int, updates: Dict) -> bool:
+        """
+        Обновляет профиль сотрудника
+        """
+        return self.update_profile(employee_id, updates)
+
+    def apply_profile_updates(self, employee_data: Dict, updates: Dict) -> Dict:
+        """
+        Применяет обновления к словарю данных сотрудника
+        """
+        result = employee_data.copy()
+        result.update(updates)
+        return result
+
+    def get_employee_profile(self, employee_id: int) -> Dict:
+        """
+        Получает профиль сотрудника с данными из БД employees
+        Возвращает словарь с полями:
+        - id, last_name, first_name, middle_name
+        - position, phone_number, work_number, email, birth_date
+        - department_name, division_name, organization_name
+        - role, is_active
+        """
+        try:
+            # Получаем сотрудника из БД employees
+            employee = self.employee_repo.get_by_id(employee_id)
             if not employee:
-                print(f"❌ Сотрудник с ID {employee_id} не найден")
                 return self._get_empty_profile(employee_id)
 
-            # Получаем проекты сотрудника
-            projects_stmt = select(Project).join(
-                EmployeeProject, Project.id == EmployeeProject.project_id
-            ).where(EmployeeProject.employee_id == employee_id)
-            all_projects = list(self.db_session.scalars(projects_stmt))
+            # Получаем дополнительные данные из EmployeeData (БД taskplanner)
+            employee_data = self.session.query(EmployeeData).filter(
+                EmployeeData.employee_id == employee_id
+            ).first()
 
-            # Получаем задачи сотрудника (как исполнитель)
-            tasks_stmt = select(Task).where(Task.assigned_to == employee_id)
-            all_tasks = list(self.db_session.scalars(tasks_stmt))
+            # Получаем названия отдела и подразделения
+            department_name = self._get_department_name(employee.department_id)
+            division_name = self._get_division_name(employee.division_id)
 
-            # Статистика
-            completed_tasks = sum(1 for t in all_tasks if t.column and t.column.is_done_column)
-            active_projects = sum(1 for p in all_projects if not p.is_archived)
-
-            # Аналитика по тегам для навыков
-            tag_analytics = self._get_employee_tag_analytics(employee_id, all_tasks)
-
-            # Проекты с прогрессом
-            projects_data = []
-            for project in all_projects:
-                project_tasks = [t for t in all_tasks if t.project_id == project.id]
-                completed = sum(1 for t in project_tasks if t.column and t.column.is_done_column)
-                total = len(project_tasks)
-                progress = int((completed / total) * 100) if total > 0 else 0
-
-                projects_data.append({
-                    'id': project.id,
-                    'name': project.name,
-                    'description': project.description or '',
-                    'progress': progress,
-                    'tasks_completed': completed,
-                    'tasks_total': total,
-                    'is_archived': project.is_archived
-                })
-
-            # Рассчитываем рейтинг
-            rating = min(completed_tasks / 50, 1.0) if completed_tasks > 0 else 0
-
-            # Формируем словарь с данными
-            profile = {
-                'id': employee.id,
-                'last_name': employee.last_name or '',
-                'first_name': employee.first_name or '',
-                'middle_name': employee.middle_name or '',
-                'position': employee.position or 'Сотрудник',
-                'phone_number': employee.phone_number or '',
-                'email': employee.email or '',
-                'birth_date': employee.birth_date,
-                'rights': employee.rights or 'user',
-                'department': self._get_department_name(employee.department_id),
-                'completed_tasks': completed_tasks,
-                'active_projects': active_projects,
-                'rating': rating,
-                'skills': tag_analytics,
-                'projects': projects_data
+            return {
+                "id": employee.id,
+                "last_name": employee.last_name or "",
+                "first_name": employee.first_name or "",
+                "middle_name": employee.middle_name or "",
+                "position": employee.position or "",
+                "phone_number": employee.phone_number or "",
+                "work_number": employee.work_number or "",
+                "email": employee.email or "",
+                "birth_date": employee.birth_date.isoformat() if employee.birth_date else "",
+                "department_id": employee.department_id,
+                "department_name": department_name or "—",
+                "division_id": employee.division_id,
+                "division_name": division_name or "—",
+                "organization_id": employee.organization_id or 1,
+                "role": employee_data.role.value if employee_data and employee_data.role else "user",
+                "is_active": employee_data.is_active if employee_data else True,
+                "full_name": self._format_full_name(employee)
             }
-
-            print(f"✅ Загружен профиль: {profile['last_name']} {profile['first_name']}")
-            print(f"   Задач выполнено: {completed_tasks}, Проектов активных: {active_projects}")
-            return profile
 
         except Exception as e:
             print(f"❌ Ошибка загрузки профиля: {e}")
@@ -110,387 +193,203 @@ class ProfileService:
             traceback.print_exc()
             return self._get_empty_profile(employee_id)
 
-    def _get_employee_tag_analytics(self, employee_id: int, tasks: List) -> List[Dict]:
-        """Получить аналитику по тегам для сотрудника (навыки)"""
-        from repositories.tag_repo import TagRepo
-        tag_repo = TagRepo(self.db_session)
-
-        tag_stats = {}
-        for task in tasks:
-            task_tags = tag_repo.get_task_tags(task.id)
-            for tag in task_tags:
-                tag_name = tag.name
-                if tag_name not in tag_stats:
-                    tag_stats[tag_name] = {
-                        'topic': tag_name,
-                        'count': 0,
-                        'completed': 0,
-                        'kpd': 0.0
-                    }
-                tag_stats[tag_name]['count'] += 1
-                if task.column and task.column.is_done_column:
-                    tag_stats[tag_name]['completed'] += 1
-
-        # Рассчитываем КПД
-        for tag_name, stats in tag_stats.items():
-            if stats['count'] > 0:
-                stats['kpd'] = round(stats['completed'] / stats['count'], 2)
-            stats['tasks_completed'] = stats['count']
-
-        # Сортируем по КПД
-        result = sorted(tag_stats.values(), key=lambda x: x['kpd'], reverse=True)
-
-        # Если нет тегов, возвращаем базовые навыки
-        if not result:
-            return [
-                {'topic': 'Аналитика', 'kpd': 0.5, 'tasks_completed': 0},
-                {'topic': 'Разработка', 'kpd': 0.5, 'tasks_completed': 0},
-                {'topic': 'Тестирование', 'kpd': 0.5, 'tasks_completed': 0},
-                {'topic': 'Документация', 'kpd': 0.5, 'tasks_completed': 0},
-                {'topic': 'Координация', 'kpd': 0.5, 'tasks_completed': 0}
-            ]
-
-        return [{'topic': s['topic'], 'kpd': s['kpd'], 'tasks_completed': s['count']} for s in result]
-
     def _get_empty_profile(self, employee_id: int) -> Dict:
-        """Возвращает пустой профиль при ошибке"""
+        """Возвращает пустой профиль"""
         return {
-            'id': employee_id,
-            'last_name': 'Неизвестен',
-            'first_name': '',
-            'middle_name': '',
-            'position': 'Сотрудник',
-            'phone_number': '',
-            'email': '',
-            'birth_date': None,
-            'rights': 'user',
-            'department': 'Не указан',
-            'completed_tasks': 0,
-            'active_projects': 0,
-            'rating': 0,
-            'skills': [],
-            'projects': []
+            "id": employee_id,
+            "last_name": "",
+            "first_name": "",
+            "middle_name": "",
+            "position": "",
+            "phone_number": "",
+            "work_number": "",
+            "email": "",
+            "birth_date": "",
+            "department_id": None,
+            "department_name": "—",
+            "division_id": None,
+            "division_name": "—",
+            "organization_id": 1,
+            "role": "user",
+            "is_active": True,
+            "full_name": "Неизвестен"
         }
+
+    def _format_full_name(self, employee: Employee) -> str:
+        """Форматирует ФИО сотрудника"""
+        parts = [employee.last_name or "", employee.first_name or ""]
+        if employee.middle_name:
+            parts.append(employee.middle_name)
+        return " ".join([p for p in parts if p]) or f"ID:{employee.id}"
 
     def _get_department_name(self, department_id: Optional[int]) -> str:
-        """Получает название отдела по ID"""
+        """Получает название отдела по ID (из БД employees)"""
         if not department_id:
-            return "Не указан"
+            return "—"
         try:
-            from models.employees import Department  # ← ИСПРАВЛЕНО (было DepartmentFDW)
-            dept = self.db_session.get(Department, department_id)
-            if dept:
-                return dept.name
+            from models.employees import Department
+            dept = self.employees_session.get(Department, department_id)
+            return dept.name if dept else "—"
         except Exception as e:
-            print(f"Ошибка получения отдела: {e}")
-        return f"Отдел #{department_id}"
+            print(f"⚠️ Ошибка получения отдела: {e}")
+            return "—"
+
+    def _get_division_name(self, division_id: Optional[int]) -> str:
+        """Получает название подразделения по ID (из БД employees)"""
+        if not division_id:
+            return "—"
+        try:
+            from models.employees import Division
+            div = self.employees_session.get(Division, division_id)
+            return div.name if div else "—"
+        except Exception as e:
+            print(f"⚠️ Ошибка получения подразделения: {e}")
+            return "—"
+
+    def get_user_projects(self, user_id: int) -> List[Dict]:
+        """
+        Получает проекты пользователя (из БД taskplanner)
+        """
+        try:
+            # Получаем проекты, где пользователь участник
+            stmt = select(EmployeeProject).where(EmployeeProject.employee_id == user_id)
+            memberships = self.session.scalars(stmt).all()
+
+            result = []
+            for membership in memberships:
+                project = self.project_repo.get_by_id(membership.project_id)
+                if project and not project.is_archived:
+                    result.append({
+                        "id": project.id,
+                        "name": project.name,
+                        "description": project.description or "",
+                        "is_admin": membership.is_admin or False,
+                        "created_at": project.created_at.strftime("%d.%m.%Y") if project.created_at else ""
+                    })
+
+            # Сортируем по названию
+            return sorted(result, key=lambda x: x['name'])
+        except Exception as e:
+            print(f"❌ Ошибка загрузки проектов пользователя: {e}")
+            return []
+
+    def update_profile(self, employee_id: int, data: Dict) -> bool:
+        """
+        Обновляет профиль сотрудника
+        data может содержать: last_name, first_name, middle_name, position,
+        phone_number, work_number, email, birth_date, department_id, division_id
+        """
+        try:
+            # Обновляем только поля Employee
+            employee_fields = [
+                'last_name', 'first_name', 'middle_name', 'position',
+                'phone_number', 'work_number', 'email', 'birth_date',
+                'department_id', 'division_id', 'organization_id'
+            ]
+
+            update_data = {k: v for k, v in data.items() if k in employee_fields and v is not None}
+
+            if update_data:
+                self.employee_repo.update(employee_id, update_data)
+                self.employees_session.commit()
+
+            # Обновляем роль если передана
+            if 'role' in data and data['role']:
+                from models.employees import RoleEnum
+                role_value = data['role']
+                if isinstance(role_value, str):
+                    try:
+                        role_value = RoleEnum(role_value)
+                    except ValueError:
+                        role_value = RoleEnum.user
+                self.employee_repo.update_role(employee_id, role_value)
+                self.session.commit()
+
+            return True
+        except Exception as e:
+            self.employees_session.rollback()
+            self.session.rollback()
+            print(f"❌ Ошибка обновления профиля: {e}")
+            return False
 
     def get_all_employee_projects_with_tasks(self, employee_id: int) -> List[Dict]:
-        """Получает все проекты сотрудника с детализацией задач"""
+        """
+        Получает все проекты сотрудника с задачами (для окна проектов)
+        """
         try:
-            from models.projects import Project, EmployeeProject
             from models.tasks import Task
+            from models.projects import Project
 
-            # Получаем все проекты сотрудника
-            stmt = select(Project).join(
-                EmployeeProject, Project.id == EmployeeProject.project_id
-            ).where(EmployeeProject.employee_id == employee_id)
-            projects = list(self.db_session.scalars(stmt))
+            # Получаем проекты, где сотрудник участник
+            stmt = select(EmployeeProject).where(EmployeeProject.employee_id == employee_id)
+            memberships = self.session.scalars(stmt).all()
 
             result = []
-            for project in projects:
-                # Получаем задачи проекта, назначенные на этого сотрудника
-                tasks_stmt = select(Task).where(
-                    and_(
+            for membership in memberships:
+                project = self.project_repo.get_by_id(membership.project_id)
+                if project:
+                    # Получаем задачи проекта
+                    tasks = self.session.query(Task).filter(
                         Task.project_id == project.id,
-                        Task.assigned_to == employee_id
-                    )
-                )
-                user_tasks = list(self.db_session.scalars(tasks_stmt))
+                        Task.is_archived == False
+                    ).all()
 
-                # Группируем задачи по статусам
-                grouped_tasks = {
-                    "to_do": [],
-                    "in_progress": [],
-                    "review": [],
-                    "completed": [],
-                    "archived": []
-                }
+                    total_tasks = len(tasks)
+                    completed_tasks = sum(1 for t in tasks if t.column and t.column.is_done_column)
+                    progress = int((completed_tasks / total_tasks * 100)) if total_tasks > 0 else 0
 
-                for task in user_tasks:
-                    status_key = "to_do"
-                    if task.column:
-                        col_name = task.column.name.lower()
-                        if task.column.is_done_column:
-                            status_key = "completed"
-                        elif "проверк" in col_name:
-                            status_key = "review"
-                        elif "работ" in col_name:
-                            status_key = "in_progress"
+                    result.append({
+                        "id": project.id,
+                        "name": project.name,
+                        "description": project.description or "",
+                        "total_tasks": total_tasks,
+                        "completed_tasks": completed_tasks,
+                        "progress": progress,
+                        "is_admin": membership.is_admin or False,
+                        "created_at": project.created_at.strftime("%d.%m.%Y") if project.created_at else ""
+                    })
 
-                    if task.is_archived:
-                        status_key = "archived"
-
-                    task_dict = {
-                        "id": task.id,
-                        "title": task.title,
-                        "description": task.description or "",
-                        "priority": task.priority.value if task.priority else "medium",
-                        "status": status_key,
-                        "created_at": task.created_at.strftime("%d.%m.%Y") if task.created_at else "",
-                        "deadline": task.deadline.strftime("%d.%m.%Y") if task.deadline else None,
-                        "is_completed": status_key in ("completed", "archived"),
-                        "due_date_str": task.deadline.strftime("%d.%m.%Y") if task.deadline else None
-                    }
-                    grouped_tasks[status_key].append(task_dict)
-
-                total_tasks = len(user_tasks)
-                completed_tasks = len(grouped_tasks["completed"]) + len(grouped_tasks["archived"])
-
-                result.append({
-                    "id": project.id,
-                    "name": project.name,
-                    "description": project.description or "",
-                    "tasks": user_tasks,
-                    "grouped_tasks": grouped_tasks,
-                    "tasks_total": total_tasks,
-                    "tasks_done": completed_tasks,
-                    "is_archived": project.is_archived
-                })
-
-            return result
-
+            return sorted(result, key=lambda x: x['name'])
         except Exception as e:
-            print(f"❌ Ошибка при загрузке проектов с задачами: {e}")
-            import traceback
-            traceback.print_exc()
+            print(f"❌ Ошибка загрузки проектов сотрудника: {e}")
             return []
 
-    def update_employee_profile(self, employee_id: int, updates: Dict) -> bool:
-        """Обновляет данные сотрудника в БД"""
-        try:
-            from sqlalchemy import update
-
-            employee = self.employee_repo.get_by_id(employee_id)  # ← ИСПРАВЛЕНО
-            if employee:
-                if 'phone_number' in updates:
-                    employee.phone_number = updates['phone_number']
-                if 'email' in updates:
-                    employee.email = updates['email']
-                if 'birth_date' in updates:
-                    employee.birth_date = updates['birth_date']
-                self.db_session.commit()
-                return True
-            return False
-
-        except Exception as e:
-            print(f"❌ Ошибка обновления профиля: {e}")
-            self.db_session.rollback()
-            return False
-
-    def prepare_profile_form_data(self, employee_data: dict) -> dict:
-        """Подготовка данных профиля для формы"""
-        result = {
-            "phone_number": employee_data.get("phone_number", ""),
-            "email": employee_data.get("email", "")
-        }
-
-        birth = employee_data.get("birth_date")
-        if birth:
-            try:
-                if isinstance(birth, str):
-                    date = QDate.fromString(birth, "yyyy-MM-dd")
-                    result["birth_date"] = date if date.isValid() else None
-                else:
-                    result["birth_date"] = QDate(birth.year, birth.month, birth.day) if hasattr(birth, 'year') else None
-            except:
-                result["birth_date"] = None
-        else:
-            result["birth_date"] = None
-
-        return result
-
-    def build_profile_update_data(self, phone: str, email: str, birth_date: QDate) -> dict:
-        """Формирование данных для обновления профиля"""
-        return {
-            "phone_number": phone,
-            "email": email,
-            "birth_date": birth_date.toString("yyyy-MM-dd") if birth_date and birth_date.isValid() else None
-        }
-
-    def apply_profile_updates(self, employee_data: dict, updates: dict) -> dict:
-        """Применение изменений к данным сотрудника"""
-        employee_data.update(updates)
-        return employee_data
-
-    def get_kpd_chart_data(self, employee_id: int | None = None):
-        """Получение данных графика КПД по темам из реальных навыков"""
-        if employee_id:
-            employee = self.get_employee_profile(employee_id)
-            skills = employee.get('skills', [])
-            if skills:
-                topics = [s['topic'] for s in skills[:8]]
-                kpd_values = [s['kpd'] for s in skills[:8]]
-            else:
-                topics = ['Нет данных', 'Нет данных', 'Нет данных', 'Нет данных']
-                kpd_values = [0, 0, 0, 0]
-        else:
-            topics = ['Программирование', 'Документация', 'Управление', 'Аналитика', 'Тестирование', 'Дизайн']
-            kpd_values = [0.85, 0.92, 0.65, 0.58, 0.45, 0.72]
-
-        return topics, kpd_values
-
-    def get_chart_title(self):
-        return "📊 КПД по темам"
-
-    def get_chart_updated_title(self):
-        return "📊 КПД по темам (обновлено)"
-
-    def calculate_rating_stars(self, kpd_value: float) -> int:
-        """Расчёт количества звезд"""
-        if kpd_value >= 0.9:
-            return 5
-        elif kpd_value >= 0.7:
-            return 4
-        elif kpd_value >= 0.5:
-            return 3
-        elif kpd_value >= 0.3:
-            return 2
-        elif kpd_value >= 0.1:
-            return 1
-        return 0
-
-    def _get_completed_tasks_count(self, employee_id: int) -> int:
-        """Получает количество выполненных задач сотрудника"""
+    def get_employee_statistics(self, employee_id: int) -> Dict:
+        """
+        Получает статистику сотрудника по задачам и проектам
+        """
         try:
             from models.tasks import Task
-            from sqlalchemy import select, and_
+            from models.projects import Project
 
-            stmt = select(Task).where(
-                and_(
-                    Task.assigned_to == employee_id,
-                    Task.is_archived == True  # Используем is_archived вместо completed
-                )
-            )
-            tasks = self.db_session.scalars(stmt).all()
-            return len(tasks)
-        except Exception as e:
-            print(f"❌ Ошибка подсчета задач: {e}")
-            return 0
+            # Количество проектов
+            projects_count = self.session.query(EmployeeProject).filter(
+                EmployeeProject.employee_id == employee_id
+            ).count()
 
-    def _get_active_projects_count(self, employee_id: int) -> int:
-        """Получает количество активных проектов сотрудника"""
-        try:
-            from models.projects import Project, EmployeeProject
-            from sqlalchemy import select, and_
+            # Количество задач (как исполнитель)
+            tasks_count = self.session.query(Task).filter(
+                Task.assigned_to == employee_id,
+                Task.is_archived == False
+            ).count()
 
-            stmt = select(Project).join(
-                EmployeeProject, Project.id == EmployeeProject.project_id
-            ).where(
-                and_(
-                    EmployeeProject.employee_id == employee_id,
-                    Project.is_archived == False
-                )
-            )
-            projects = self.db_session.scalars(stmt).all()
-            return len(projects)
-        except Exception as e:
-            print(f"❌ Ошибка подсчета проектов: {e}")
-            return 0
+            # Количество выполненных задач
+            completed_tasks = self.session.query(Task).filter(
+                Task.assigned_to == employee_id,
+                Task.is_archived == False
+            ).join(Task.column).filter(
+                BoardColumn.is_done_column == True
+            ).count()
 
-    def _calculate_employee_rating(self, employee_id: int) -> float:
-        """Рассчитывает рейтинг сотрудника"""
-        try:
-            completed = self._get_completed_tasks_count(employee_id)
-            rating = min(completed / 100, 1.0)
-            return round(rating, 2)
-        except:
-            return 0.0
-
-    def _get_employee_projects(self, employee_id: int) -> List[Dict]:
-        """Получает реальные проекты сотрудника из БД"""
-        try:
-            from models.projects import Project, EmployeeProject
-
-            stmt = select(Project).join(
-                EmployeeProject, Project.id == EmployeeProject.project_id
-            ).where(EmployeeProject.employee_id == employee_id)
-            projects = self.db_session.scalars(stmt).all()
-
-            result = []
-            for project in projects:
-                tasks = self.task_repo.get_by_project(project.id)
-                user_tasks = [t for t in tasks if t.assigned_to == employee_id]
-
-                completed_tasks = len([t for t in user_tasks if t.is_archived])
-                total_tasks = len(user_tasks)
-
-                progress = 0
-                if total_tasks > 0:
-                    progress = int((completed_tasks / total_tasks) * 100)
-
-                result.append({
-                    'id': project.id,
-                    'name': project.name,
-                    'description': project.description,
-                    'progress': progress,
-                    'tasks_completed': completed_tasks,
-                    'tasks_total': total_tasks,
-                    'is_archived': project.is_archived
-                })
-
-            return result
-
-        except Exception as e:
-            print(f"❌ Ошибка при загрузке проектов сотрудника: {e}")
-            return []
-
-    def _get_test_projects(self) -> List[Dict]:
-        """Возвращает тестовые проекты"""
-        return [
-            {
-                'name': 'Разработка новой кабины',
-                'progress': 75,
-                'tasks_completed': 12,
-                'tasks_total': 16
-            },
-            {
-                'name': 'Модернизация конвейера',
-                'progress': 90,
-                'tasks_completed': 9,
-                'tasks_total': 10
-            },
-            {
-                'name': 'Внедрение ERP-системы',
-                'progress': 45,
-                'tasks_completed': 18,
-                'tasks_total': 40
+            return {
+                "projects_count": projects_count,
+                "tasks_count": tasks_count,
+                "completed_tasks": completed_tasks
             }
-        ]
-
-    def _get_employee_skills(self, employee_id: int, tasks: List) -> List[Dict]:
-        """Получает или генерирует навыки сотрудника"""
-        topics = ['Программирование', 'Дизайн', 'Аналитика', 'Тестирование',
-                  'Документация', 'Координация', 'Оптимизация', 'Управление',
-                  'Исследование', 'Внедрение']
-
-        skills = []
-        for topic in topics:
-            kpd = random.uniform(0.1, 0.95)
-            skills.append({
-                'topic': topic,
-                'kpd': round(kpd, 2),
-                'tasks_completed': 0
-            })
-
-        return sorted(skills, key=lambda x: x['kpd'], reverse=True)
-
-    def generate_random_kpd_data(self):
-        """Генерация случайных данных графика (обновление)"""
-        topics = [
-            'Программирование', 'Документация', 'Оптимизация',
-            'Управление', 'Аналитика', 'Тестирование',
-            'Дизайн', 'Координация'
-        ]
-        kpd_values = [round(random.uniform(0.3, 0.95), 2) for _ in topics]
-        return topics, kpd_values
+        except Exception as e:
+            print(f"❌ Ошибка получения статистики: {e}")
+            return {
+                "projects_count": 0,
+                "tasks_count": 0,
+                "completed_tasks": 0
+            }
