@@ -14,7 +14,7 @@ from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeybo
 
 from sqlalchemy import select, update, text
 from database import get_tasks_session, get_employees_session
-from models.employees import Employee, Department, Division  # ← ИСПРАВЛЕНО
+from models.employees import Employee, Department, Division, EmployeeData  # ← ИСПРАВЛЕНО
 from shared_state import pending_registrations
 
 import hashlib
@@ -102,16 +102,17 @@ class TelegramBot:
 
     async def send_registration_to_admins(self, request_id: str, registration_data: dict):
         """Отправляет заявку на одобрение администраторам"""
-        with get_tasks_session() as session:
+        # Используем employees_session для доступа к Division и Department
+        with get_employees_session() as emp_session:
             division_name = "Не указано"
             department_name = "Не указано"
 
             if registration_data.get('division_id'):
-                div = session.get(Division, registration_data['division_id'])  # ← ИСПРАВЛЕНО
+                div = emp_session.get(Division, registration_data['division_id'])
                 division_name = div.name if div else "Не указано"
 
             if registration_data.get('department_id'):
-                dept = session.get(Department, registration_data['department_id'])  # ← ИСПРАВЛЕНО
+                dept = emp_session.get(Department, registration_data['department_id'])
                 department_name = dept.name if dept else "Не указано"
 
             birth_date = registration_data.get('birth_date', 'Не указана')
@@ -147,13 +148,27 @@ class TelegramBot:
                 f"Используйте кнопки ниже для подтверждения или отклонения заявки."
             )
 
-            # Получаем администраторов из public.employees
-            stmt = select(Employee).where(Employee.rights.in_(['admin', 'superadmin']))  # ← ИСПРАВЛЕНО
-            admins = list(session.scalars(stmt))
+            # 1. Сначала получаем ID администраторов из БД taskplanner (employees_data)
+            with get_tasks_session() as tasks_session:
+                from models.employees import EmployeeData, RoleEnum
 
-            if not admins:
+                stmt = select(EmployeeData.employee_id).where(
+                    EmployeeData.role.in_([RoleEnum.admin, RoleEnum.superadmin])
+                )
+                admin_ids = [row[0] for row in tasks_session.execute(stmt).fetchall()]
+
+                print(f"📋 Найдены ID администраторов: {admin_ids}")
+
+            if not admin_ids:
                 print("⚠️ Нет администраторов для уведомления")
                 return
+
+            # 2. Получаем данные администраторов из БД employees
+            with get_employees_session() as emp_session2:
+                from models.employees import Employee
+
+                stmt = select(Employee).where(Employee.id.in_(admin_ids))
+                admins = list(emp_session2.scalars(stmt))
 
             for admin in admins:
                 if admin.chat_id:
@@ -164,13 +179,13 @@ class TelegramBot:
                             parse_mode="Markdown",
                             reply_markup=keyboard
                         )
-                        print(f"✅ Заявка отправлена администратору {admin.id}")
+                        print(f"✅ Заявка отправлена администратору {admin.id} ({admin.last_name} {admin.first_name})")
                     except Exception as e:
                         print(f"❌ Ошибка отправки администратору {admin.id}: {e}")
 
     async def get_user_projects(self, user_id: int):
         """Получить проекты где пользователь является создателем или администратором"""
-        with get_employees_session() as emp_session:
+        with get_tasks_session() as tasks_session:  # ← ИСПРАВЛЕНО! было get_employees_session
             select_stmt = text("""
                 SELECT p.id, p.name, p.created_by
                 FROM public.projects p
@@ -181,30 +196,30 @@ class TelegramBot:
                 AND p.is_archived = false
                 ORDER BY p.name
             """)
-            projects = emp_session.execute(select_stmt, {'user_id': user_id}).fetchall()
+            projects = tasks_session.execute(select_stmt, {'user_id': user_id}).fetchall()
             return projects
 
     async def create_task(self, project_id: int, title: str, description: str, creator_id: int):
         """Создать новую задачу"""
-        with get_employees_session() as emp_session:
+        with get_tasks_session() as tasks_session:  # ← ИСПРАВЛЕНО! было get_employees_session
             insert_stmt = text("""
                 INSERT INTO public.tasks (project_id, title, description, status, created_by, created_at)
                 VALUES (:project_id, :title, :description, 'new', :creator_id, NOW())
                 RETURNING id
             """)
-            result = emp_session.execute(insert_stmt, {
+            result = tasks_session.execute(insert_stmt, {
                 'project_id': project_id,
                 'title': title,
                 'description': description,
                 'creator_id': creator_id
             })
-            emp_session.commit()
+            tasks_session.commit()
             task_id = result.scalar()
             return task_id
 
     async def get_user_tasks(self, user_id: int):
         """Получить задачи пользователя"""
-        with get_employees_session() as emp_session:
+        with get_tasks_session() as tasks_session:  # ← ИСПРАВЛЕНО! было get_employees_session
             select_stmt = text("""
                 SELECT t.id, t.title, t.status, t.created_at, p.name as project_name
                 FROM public.tasks t
@@ -213,7 +228,7 @@ class TelegramBot:
                 ORDER BY t.created_at DESC
                 LIMIT 20
             """)
-            tasks = emp_session.execute(select_stmt, {'user_id': user_id}).fetchall()
+            tasks = tasks_session.execute(select_stmt, {'user_id': user_id}).fetchall()
             return tasks
 
     def _setup_handlers(self):
@@ -227,15 +242,15 @@ class TelegramBot:
 
             print(f"📱 Пользователь {user_id} (chat_id={chat_id}) нажал /start")
 
-            with get_employees_session() as session:
+            # 1. Ищем сотрудника в БД employees
+            with get_employees_session() as emp_session:
                 stmt = select(Employee).where(Employee.chat_id == chat_id)
-                existing_employee = session.scalar(stmt)
+                existing_employee = emp_session.scalar(stmt)
 
                 if existing_employee:
                     phone_digits = existing_employee.phone_number
                     saved_password = user_passwords.get(phone_digits)
 
-                    # Проверяем, есть ли пароль в кэше или в БД
                     if saved_password:
                         await message.answer(
                             f"🤖 *Добро пожаловать, {existing_employee.first_name}!*\n\n"
@@ -249,60 +264,70 @@ class TelegramBot:
                         )
                         return
 
-                    # Проверяем, есть ли пароль в БД
-                    if existing_employee.password_hash:
+                    # 2. Проверяем пароль в EmployeeData (БД taskplanner)
+                    with get_tasks_session() as tasks_session:
+                        employee_data = tasks_session.query(EmployeeData).filter(
+                            EmployeeData.employee_id == existing_employee.id
+                        ).first()
+
+                        if employee_data and employee_data.password_hash:
+                            await message.answer(
+                                f"🤖 *Добро пожаловать, {existing_employee.first_name}!*\n\n"
+                                f"✅ Вы уже зарегистрированы в системе.\n\n"
+                                f"⚠️ *Если вы забыли пароль, используйте /reset_password*\n\n"
+                                f"Используйте кнопки ниже для работы с ботом:",
+                                parse_mode="Markdown",
+                                reply_markup=get_main_keyboard()
+                            )
+                            return
+
+                        # 3. НЕТ ПАРОЛЯ - ГЕНЕРИРУЕМ НОВЫЙ!
+                        new_password = self.generate_password()
+                        new_password_hash = self.hash_password(new_password)
+
+                        if employee_data:
+                            employee_data.password_hash = new_password_hash
+                            employee_data.updated_at = datetime.now()
+                        else:
+                            from models.employees import RoleEnum
+                            employee_data = EmployeeData(
+                                employee_id=existing_employee.id,
+                                password_hash=new_password_hash,
+                                is_active=True,
+                                role=RoleEnum.user,
+                                created_at=datetime.now(),
+                                updated_at=datetime.now()
+                            )
+                            tasks_session.add(employee_data)
+
+                        tasks_session.commit()
+
+                        # Сохраняем в кэш
+                        user_passwords[phone_digits] = new_password
+
                         await message.answer(
                             f"🤖 *Добро пожаловать, {existing_employee.first_name}!*\n\n"
                             f"✅ Вы уже зарегистрированы в системе.\n\n"
-                            f"⚠️ *Если вы забыли пароль, используйте /reset_password*\n\n"
+                            f"📞 Телефон: {phone_digits}\n"
+                            f"🔐 *Ваш пароль:* `{new_password}`\n\n"
+                            f"⚠️ *Сохраните этот пароль!*\n\n"
+                            f"Вы можете изменить его в настройках приложения TaskPlanner.\n\n"
                             f"Используйте кнопки ниже для работы с ботом:",
                             parse_mode="Markdown",
                             reply_markup=get_main_keyboard()
                         )
+                        print(f"✅ Сгенерирован и отправлен пароль для пользователя {phone_digits} через /start")
                         return
 
-                    # НЕТ ПАРОЛЯ - ГЕНЕРИРУЕМ НОВЫЙ!
-                    new_password = self.generate_password()
-                    new_password_hash = self.hash_password(new_password)
-
-                    # Сохраняем пароль в БД
-                    update_stmt = text("""
-                        UPDATE public.employees 
-                        SET password_hash = :password_hash
-                        WHERE id = :employee_id
-                    """)
-                    session.execute(update_stmt, {
-                        'password_hash': new_password_hash,
-                        'employee_id': existing_employee.id
-                    })
-                    session.commit()
-
-                    # Сохраняем в кэш
-                    user_passwords[phone_digits] = new_password
-
-                    # Отправляем сообщение с паролем
-                    await message.answer(
-                        f"🤖 *Добро пожаловать, {existing_employee.first_name}!*\n\n"
-                        f"✅ Вы уже зарегистрированы в системе.\n\n"
-                        f"📞 Телефон: {phone_digits}\n"
-                        f"🔐 *Ваш пароль:* `{new_password}`\n\n"
-                        f"⚠️ *Сохраните этот пароль!*\n\n"
-                        f"Вы можете изменить его в настройках приложения TaskPlanner.\n\n"
-                        f"Используйте кнопки ниже для работы с ботом:",
-                        parse_mode="Markdown",
-                        reply_markup=get_main_keyboard()
-                    )
-                    print(f"✅ Сгенерирован и отправлен пароль для пользователя {phone_digits} через /start")
-                    return
-
-            # Если пользователь не найден по chat_id, предлагаем отправить номер
-            keyboard = InlineKeyboardMarkup(inline_keyboard=[
-                [InlineKeyboardButton(text="📱 Отправить номер телефона", callback_data="send_phone")]
-            ])
-
+            # Если пользователь не найден по chat_id, предлагаем отправить номер (СРАЗУ с кнопкой)
+            keyboard = types.ReplyKeyboardMarkup(
+                keyboard=[[types.KeyboardButton(text="📱 Отправить номер", request_contact=True)]],
+                resize_keyboard=True,
+                one_time_keyboard=True
+            )
             await message.answer(
                 "🔐 *Для привязки аккаунта к Telegram*\n\n"
-                "Пожалуйста, нажмите кнопку ниже и разрешите отправку номера телефона.\n"
+                "Нажмите кнопку ниже и разрешите отправку номера телефона.\n"
                 "Мы проверим, зарегистрированы ли вы в системе.\n\n"
                 "Если вы ещё не зарегистрированы, сначала отправьте заявку через приложение TaskPlanner.",
                 parse_mode="Markdown",
@@ -482,13 +507,13 @@ class TelegramBot:
             title = data.get('task_title')
             user_id = msg.from_user.id
 
-            # Получаем реальный ID пользователя из БД
+            # Получаем реальный ID пользователя из БД employees
             with get_employees_session() as emp_session:
                 select_stmt = text("SELECT id FROM public.employees WHERE chat_id = :chat_id")
                 employee = emp_session.execute(select_stmt, {'chat_id': user_id}).first()
                 if not employee:
                     await msg.answer(
-                        "❌ Вы не авторизованы. Используйте /login для входа.",
+                        "❌ Вы не авторизованы. Отправьте заявку + используйте /start для привязки номера телефона к аккаунту.",
                         reply_markup=get_main_keyboard()
                     )
                     await state.clear()
@@ -496,6 +521,7 @@ class TelegramBot:
                 db_user_id = employee[0]
 
             try:
+                # create_task теперь использует правильную сессию (tasks_session)
                 task_id = await self.create_task(project_id, title, description, db_user_id)
                 await msg.answer(
                     f"✅ *Задача успешно создана!*\n\n"
@@ -513,8 +539,6 @@ class TelegramBot:
                 )
 
             await state.clear()
-
-        # ========== ОСТАЛЬНЫЕ ОБРАБОТЧИКИ ==========
 
         @self.dp.message(lambda msg: user_sessions.get(msg.from_user.id, {}).get("awaiting_reset_phone", False))
         async def process_reset_phone(message: types.Message):
@@ -569,7 +593,7 @@ class TelegramBot:
 
         @self.dp.message(lambda msg: user_sessions.get(msg.from_user.id, {}).get("awaiting_new_password", False))
         async def process_new_password(message: types.Message):
-            """Установка нового пароля"""
+            """Установка нового пароля (сохраняем в EmployeeData в taskplanner)"""
             user_id = message.from_user.id
             new_password = message.text.strip()
             session_data = user_sessions.get(user_id, {})
@@ -584,19 +608,31 @@ class TelegramBot:
                 return
 
             phone_digits = session_data.get("reset_phone")
+            employee_id = session_data.get("employee_id")
             new_password_hash = self.hash_password(new_password)
 
-            with get_employees_session() as emp_session:
-                update_stmt = text("""
-                    UPDATE public.employees 
-                    SET password_hash = :password_hash
-                    WHERE phone_number = :phone
-                """)
-                emp_session.execute(update_stmt, {
-                    'password_hash': new_password_hash,
-                    'phone': phone_digits
-                })
-                emp_session.commit()
+            # Сохраняем пароль в EmployeeData (БД taskplanner)
+            with get_tasks_session() as tasks_session:
+                employee_data = tasks_session.query(EmployeeData).filter(
+                    EmployeeData.employee_id == employee_id
+                ).first()
+
+                if employee_data:
+                    employee_data.password_hash = new_password_hash
+                    employee_data.updated_at = datetime.now()
+                else:
+                    from models.employees import RoleEnum
+                    employee_data = EmployeeData(
+                        employee_id=employee_id,
+                        password_hash=new_password_hash,
+                        is_active=True,
+                        role=RoleEnum.user,
+                        created_at=datetime.now(),
+                        updated_at=datetime.now()
+                    )
+                    tasks_session.add(employee_data)
+
+                tasks_session.commit()
                 user_passwords[phone_digits] = new_password
                 print(f"✅ Пароль изменен для пользователя {phone_digits}")
 
@@ -610,20 +646,6 @@ class TelegramBot:
             )
 
             user_sessions.pop(user_id, None)
-
-        # ========== КОЛБЭКИ ==========
-
-        @self.dp.callback_query(lambda c: c.data == "send_phone")
-        async def request_phone(callback: types.CallbackQuery):
-            await callback.message.answer(
-                "📱 Пожалуйста, отправьте ваш номер телефона, нажав на кнопку ниже:",
-                reply_markup=types.ReplyKeyboardMarkup(
-                    keyboard=[[types.KeyboardButton(text="📱 Отправить номер", request_contact=True)]],
-                    resize_keyboard=True,
-                    one_time_keyboard=True
-                )
-            )
-            await callback.answer()
 
         @self.dp.message(lambda msg: msg.contact is not None)
         async def process_contact(message: types.Message):
@@ -656,10 +678,10 @@ class TelegramBot:
                 )
                 return
 
-            # Проверяем, есть ли пользователь в БД
+            # Проверяем, есть ли пользователь в БД employees
             with get_employees_session() as emp_session:
                 select_stmt = text("""
-                    SELECT id, last_name, first_name, password_hash 
+                    SELECT id, last_name, first_name 
                     FROM public.employees 
                     WHERE phone_number = :phone
                 """)
@@ -669,80 +691,89 @@ class TelegramBot:
                     employee_id = employee.id
                     last_name = employee.last_name
                     first_name = employee.first_name
-                    existing_password_hash = employee.password_hash
 
-                    # Проверяем, есть ли пароль
-                    if not existing_password_hash or existing_password_hash == '':
-                        # Нет пароля - генерируем новый
-                        new_password = self.generate_password()
-                        new_password_hash = self.hash_password(new_password)
+                    # Проверяем пароль в EmployeeData (БД taskplanner)
+                    with get_tasks_session() as tasks_session:
+                        employee_data = tasks_session.query(EmployeeData).filter(
+                            EmployeeData.employee_id == employee_id
+                        ).first()
 
-                        # Сохраняем пароль в БД
-                        update_stmt = text("""
-                            UPDATE public.employees 
-                            SET password_hash = :password_hash
-                            WHERE id = :employee_id
-                        """)
-                        emp_session.execute(update_stmt, {
-                            'password_hash': new_password_hash,
-                            'employee_id': employee_id
-                        })
+                        # Проверяем, есть ли пароль
+                        if not employee_data or not employee_data.password_hash:
+                            # Нет пароля - генерируем новый
+                            new_password = self.generate_password()
+                            new_password_hash = self.hash_password(new_password)
 
-                        # Сохраняем chat_id
-                        update_chat_stmt = text("""
-                            UPDATE public.employees 
-                            SET chat_id = :chat_id
-                            WHERE id = :employee_id
-                        """)
-                        emp_session.execute(update_chat_stmt, {
-                            'chat_id': chat_id,
-                            'employee_id': employee_id
-                        })
-                        emp_session.commit()
+                            if employee_data:
+                                employee_data.password_hash = new_password_hash
+                                employee_data.updated_at = datetime.now()
+                            else:
+                                from models.employees import RoleEnum
+                                employee_data = EmployeeData(
+                                    employee_id=employee_id,
+                                    password_hash=new_password_hash,
+                                    is_active=True,
+                                    role=RoleEnum.user,
+                                    created_at=datetime.now(),
+                                    updated_at=datetime.now()
+                                )
+                                tasks_session.add(employee_data)
 
-                        # Сохраняем пароль в кэш
-                        user_passwords[phone_digits] = new_password
+                            # Сохраняем chat_id в Employee
+                            update_chat_stmt = text("""
+                                UPDATE public.employees 
+                                SET chat_id = :chat_id
+                                WHERE id = :employee_id
+                            """)
+                            emp_session.execute(update_chat_stmt, {
+                                'chat_id': chat_id,
+                                'employee_id': employee_id
+                            })
+                            emp_session.commit()
+                            tasks_session.commit()
 
-                        # Отправляем сообщение с паролем
-                        await message.answer(
-                            f"✅ *Вы уже зарегистрированы в системе!*\n\n"
-                            f"👤 ФИО: {last_name} {first_name}\n"
-                            f"📞 Телефон: {phone_digits}\n"
-                            f"🔐 *Ваш пароль:* `{new_password}`\n\n"
-                            f"⚠️ *Сохраните этот пароль!*\n\n"
-                            f"Вы можете изменить его в настройках приложения TaskPlanner.",
-                            parse_mode="Markdown",
-                            reply_markup=get_main_keyboard()
-                        )
-                        print(f"✅ Сгенерирован и отправлен пароль для пользователя {phone_digits}")
-                    else:
-                        # Пароль есть - просто обновляем chat_id
-                        update_chat_stmt = text("""
-                            UPDATE public.employees 
-                            SET chat_id = :chat_id
-                            WHERE phone_number = :phone
-                        """)
-                        emp_session.execute(update_chat_stmt, {'chat_id': chat_id, 'phone': phone_digits})
-                        emp_session.commit()
+                            # Сохраняем пароль в кэш
+                            user_passwords[phone_digits] = new_password
 
-                        saved_password = user_passwords.get(phone_digits)
-                        if saved_password:
                             await message.answer(
                                 f"✅ *Вы уже зарегистрированы в системе!*\n\n"
                                 f"👤 ФИО: {last_name} {first_name}\n"
-                                f"🔐 *Ваш пароль:* `{saved_password}`\n\n"
-                                f"⚠️ *Сохраните этот пароль!*",
+                                f"📞 Телефон: {phone_digits}\n"
+                                f"🔐 *Ваш пароль:* `{new_password}`\n\n"
+                                f"⚠️ *Сохраните этот пароль!*\n\n"
+                                f"Вы можете изменить его в настройках приложения TaskPlanner.",
                                 parse_mode="Markdown",
                                 reply_markup=get_main_keyboard()
                             )
+                            print(f"✅ Сгенерирован и отправлен пароль для пользователя {phone_digits}")
                         else:
-                            await message.answer(
-                                f"✅ *Вы уже зарегистрированы в системе!*\n\n"
-                                f"👤 ФИО: {last_name} {first_name}\n\n"
-                                f"⚠️ *Если вы забыли пароль, используйте /reset_password*",
-                                parse_mode="Markdown",
-                                reply_markup=get_main_keyboard()
-                            )
+                            # Пароль есть - просто обновляем chat_id
+                            update_chat_stmt = text("""
+                                UPDATE public.employees 
+                                SET chat_id = :chat_id
+                                WHERE phone_number = :phone
+                            """)
+                            emp_session.execute(update_chat_stmt, {'chat_id': chat_id, 'phone': phone_digits})
+                            emp_session.commit()
+
+                            saved_password = user_passwords.get(phone_digits)
+                            if saved_password:
+                                await message.answer(
+                                    f"✅ *Вы уже зарегистрированы в системе!*\n\n"
+                                    f"👤 ФИО: {last_name} {first_name}\n"
+                                    f"🔐 *Ваш пароль:* `{saved_password}`\n\n"
+                                    f"⚠️ *Сохраните этот пароль!*",
+                                    parse_mode="Markdown",
+                                    reply_markup=get_main_keyboard()
+                                )
+                            else:
+                                await message.answer(
+                                    f"✅ *Вы уже зарегистрированы в системе!*\n\n"
+                                    f"👤 ФИО: {last_name} {first_name}\n\n"
+                                    f"⚠️ *Если вы забыли пароль, используйте /reset_password*",
+                                    parse_mode="Markdown",
+                                    reply_markup=get_main_keyboard()
+                                )
                     return
 
             # Если ничего не нашли
@@ -752,8 +783,6 @@ class TelegramBot:
                 parse_mode="Markdown",
                 reply_markup=types.ReplyKeyboardRemove()
             )
-
-        # ========== ОБРАБОТЧИКИ ОДОБРЕНИЯ/ОТКЛОНЕНИЯ ==========
 
         @self.dp.callback_query(lambda c: c.data.startswith("approve|"))
         async def approve_registration(callback: types.CallbackQuery):
@@ -771,24 +800,26 @@ class TelegramBot:
             if phone_number:
                 user_passwords[phone_number] = password
 
+            # Используем employees_session для работы с Employee
             with get_employees_session() as emp_session:
                 try:
                     # Получаем следующий номер
-                    max_number = emp_session.query(Employee.number).order_by(
-                        Employee.number.desc()).first()  # ← ИСПРАВЛЕНО
-                    next_number = (max_number[0] + 1) if max_number else 1
+                    from sqlalchemy import func
+                    max_number = emp_session.query(func.max(Employee.number)).scalar()
+                    next_number = (max_number + 1) if max_number else 1
 
+                    # ВНИМАНИЕ: в employees НЕ сохраняем password_hash!
                     insert_stmt = text("""
                         INSERT INTO public.employees (
                             number, last_name, first_name, middle_name, 
-                            position, rights, phone_number, email,
+                            position, phone_number, email,
                             birth_date, department_id, division_id, organization_id,
-                            password_hash, chat_id, is_active
+                            chat_id, work_number
                         ) VALUES (
                             :number, :last_name, :first_name, :middle_name,
-                            :position, :rights, :phone_number, :email,
+                            :position, :phone_number, :email,
                             :birth_date, :department_id, :division_id, :organization_id,
-                            :password_hash, :chat_id, true
+                            :chat_id, :work_number
                         )
                         RETURNING id
                     """)
@@ -798,27 +829,30 @@ class TelegramBot:
                         'first_name': registration_data.get('first_name'),
                         'middle_name': registration_data.get('middle_name'),
                         'position': registration_data.get('position'),
-                        'rights': 'user',
                         'phone_number': registration_data.get('phone_number'),
                         'email': registration_data.get('email'),
                         'birth_date': registration_data.get('birth_date'),
                         'department_id': registration_data.get('department_id'),
                         'division_id': registration_data.get('division_id'),
                         'organization_id': 1,
-                        'password_hash': password_hash,
-                        'chat_id': registration_data.get('chat_id')
+                        'chat_id': registration_data.get('chat_id'),
+                        'work_number': registration_data.get('work_number')
                     })
                     emp_session.commit()
                     new_employee_id = result.scalar()
                     print(f"✅ Сотрудник добавлен, ID: {new_employee_id}")
 
-                    # Добавляем запись в employees_data
-                    insert_data_stmt = text("""
-                        INSERT INTO public.employees_data (employee_id, is_active, role)
-                        VALUES (:employee_id, true, 'user')
-                    """)
-                    emp_session.execute(insert_data_stmt, {'employee_id': new_employee_id})
-                    emp_session.commit()
+                    # Добавляем запись в employees_data (в БД taskplanner!)
+                    with get_tasks_session() as tasks_session:
+                        insert_data_stmt = text("""
+                            INSERT INTO public.employees_data (employee_id, is_active, role, password_hash, created_at, updated_at)
+                            VALUES (:employee_id, true, 'user', :password_hash, NOW(), NOW())
+                        """)
+                        tasks_session.execute(insert_data_stmt, {
+                            'employee_id': new_employee_id,
+                            'password_hash': password_hash  # ← ВАЖНО: добавляем password_hash!
+                        })
+                        tasks_session.commit()
 
                 except Exception as e:
                     emp_session.rollback()
@@ -894,7 +928,7 @@ class TelegramBot:
 
             if not employee:
                 await message.answer(
-                    "❌ Вы не авторизованы. Используйте /login для входа.",
+                    "❌ Вы не авторизованы. Отправьте заявку + используйте /start для привязки номера телефона к аккаунту.",
                     reply_markup=get_main_keyboard()
                 )
                 return
@@ -930,37 +964,40 @@ class TelegramBot:
         """Начать создание задачи - показать список проектов"""
         user_id = message.from_user.id
 
+        # Получаем ID сотрудника из БД employees (по chat_id)
         with get_employees_session() as emp_session:
             select_employee = text("SELECT id FROM public.employees WHERE chat_id = :chat_id")
             employee = emp_session.execute(select_employee, {'chat_id': user_id}).first()
 
             if not employee:
                 await message.answer(
-                    "❌ Вы не авторизованы. Используйте /login для входа.",
+                    "❌ Вы не авторизованы. Отправьте заявку + используйте /start для привязки номера телефона к аккаунту.",
                     reply_markup=get_main_keyboard()
                 )
                 return
 
             db_user_id = employee[0]
-            projects = await self.get_user_projects(db_user_id)
 
-            if not projects:
-                await message.answer(
-                    "❌ *У вас нет проектов, в которых вы можете создавать задачи*\n\n"
-                    "Вы можете создавать задачи только в проектах, где вы являетесь создателем или администратором.",
-                    parse_mode="Markdown",
-                    reply_markup=get_main_keyboard()
-                )
-                return
+        # Получаем проекты из БД taskplanner (используем исправленный метод)
+        projects = await self.get_user_projects(db_user_id)
 
-            projects_text = "📁 *Выберите проект для создания задачи:*\n\n"
-            for project in projects:
-                projects_text += f"📌 `{project.id}` - {project.name}\n"
+        if not projects:
+            await message.answer(
+                "❌ *У вас нет проектов, в которых вы можете создавать задачи*\n\n"
+                "Вы можете создавать задачи только в проектах, где вы являетесь создателем или администратором.",
+                parse_mode="Markdown",
+                reply_markup=get_main_keyboard()
+            )
+            return
 
-            projects_text += "\nВведите номер проекта из списка:"
+        projects_text = "📁 *Выберите проект для создания задачи:*\n\n"
+        for project in projects:
+            projects_text += f"📌 `{project.id}` - {project.name}\n"
 
-            await message.answer(projects_text, parse_mode="Markdown")
-            await state.set_state(RegistrationStates.waiting_for_task_project)
+        projects_text += "\nВведите номер проекта из списка:"
+
+        await message.answer(projects_text, parse_mode="Markdown")
+        await state.set_state(RegistrationStates.waiting_for_task_project)
 
     async def start(self):
         logger.info("Starting Telegram bot...")

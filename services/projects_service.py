@@ -23,13 +23,28 @@ from telegram_bot import telegram_bot
 
 class ProjectsService:
     def __init__(self, session=None):
+        # Сессия для taskplanner БД (проекты, задачи)
         self.session = session or get_tasks_session()
+        # Отдельная сессия для employees БД (сотрудники)
+        self.employees_session = get_employees_session()
+
         self.current_user_id = None
         self.current_user = None
-        self.project_repo = ProjectRepo(session)
-        self.task_repo = TaskRepo(session)
-        self.employee_repo = EmployeeRepo(session)  # ← ИСПРАВЛЕНО
-        self.column_service = ColumnService(session)
+        self.project_repo = ProjectRepo(self.session)
+        self.task_repo = TaskRepo(self.session)
+        # Используем ОТДЕЛЬНУЮ сессию для EmployeeRepo
+        self.employee_repo = EmployeeRepo(self.employees_session)  # ← ИСПРАВЛЕНО
+        self.column_service = ColumnService(self.session)
+
+    def __del__(self):
+        """Закрываем сессии при удалении объекта"""
+        try:
+            if hasattr(self, 'employees_session') and self.employees_session:
+                self.employees_session.close()
+            if hasattr(self, 'session') and self.session:
+                self.session.close()
+        except:
+            pass
 
     def set_current_user_id(self, user_id):
         self.current_user_id = user_id
@@ -40,20 +55,15 @@ class ProjectsService:
     def _ensure_local_employee(self, external_employee_id: int) -> Optional[int]:
         """
         Проверяет наличие записи сотрудника в БД taskplanner.public.employees_data
-        и создает её при необходимости.
-        Возвращает ID сотрудника.
         """
         try:
-            from sqlalchemy import text
-
-            # 1. Проверяем, есть ли уже запись в public.employees_data
+            # Проверяем и создаем запись в taskplanner.employee_data (НЕ в employees!)
             check_data_stmt = text("""
                 SELECT employee_id FROM public.employees_data WHERE employee_id = :emp_id
             """)
             data_exists = self.session.execute(check_data_stmt, {'emp_id': external_employee_id}).first()
 
             if not data_exists:
-                # Создаем запись в public.employees_data
                 insert_data_stmt = text("""
                     INSERT INTO public.employees_data (employee_id, is_active, role)
                     VALUES (:emp_id, :is_active, :role)
@@ -90,17 +100,17 @@ class ProjectsService:
             print(f"⚠️ Ошибка отправки Telegram уведомления: {e}")
 
     def _get_employee_full_name(self, employee) -> str:
-        """Возвращает ФИО сотрудника"""
+        """Возвращает ФИО сотрудника из employees БД"""
         if not employee:
             return "Неизвестный"
         parts = []
-        if employee.last_name:
+        if hasattr(employee, 'last_name') and employee.last_name:
             parts.append(employee.last_name)
-        if employee.first_name:
+        if hasattr(employee, 'first_name') and employee.first_name:
             parts.append(employee.first_name)
-        if employee.middle_name:
+        if hasattr(employee, 'middle_name') and employee.middle_name:
             parts.append(employee.middle_name)
-        return " ".join(parts) if parts else f"User {employee.id}"
+        return " ".join(parts) if parts else f"User {employee.id if hasattr(employee, 'id') else '?'}"
 
     def _get_employee_chat_id(self, employee_id: int) -> Optional[int]:
         """Получает chat_id сотрудника из БД employees"""

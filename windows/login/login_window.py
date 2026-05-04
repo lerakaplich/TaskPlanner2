@@ -2,21 +2,20 @@
 # ФАЙЛ: windows/login/login_window.py
 # ===================================================================
 
-import sys
-import json
-from pathlib import Path
-from datetime import date
-
-from PyQt6 import uic
-from PyQt6.QtWidgets import (
-    QDialog, QMessageBox, QGraphicsDropShadowEffect, QLineEdit, QPushButton, QApplication
-)
-from PyQt6.QtCore import Qt, QSize, QTimer, pyqtSignal
-from PyQt6.QtGui import QPixmap, QIcon, QColor, QAction
-
 # Убираем passlib, используем только hashlib
 import hashlib
+import json
 import secrets
+from datetime import date
+from datetime import datetime
+from pathlib import Path
+
+from PyQt6 import uic
+from PyQt6.QtCore import Qt, QTimer, pyqtSignal
+from PyQt6.QtGui import QPixmap, QIcon, QColor, QAction
+from PyQt6.QtWidgets import (
+    QDialog, QMessageBox, QGraphicsDropShadowEffect, QLineEdit
+)
 
 
 def hash_password(password: str) -> str:
@@ -249,7 +248,7 @@ class LoginWindow(QDialog):
         return phone_digits
 
     def save_session(self, user_data):
-        """Сохраняет сессию для автологина (локально и в БД)"""
+        """Сохраняет сессию для автологина (локально и в БД taskplanner.employees_data)"""
         try:
             # Генерируем уникальный токен сессии
             session_token = secrets.token_hex(32)
@@ -274,20 +273,20 @@ class LoginWindow(QDialog):
             with open(session_path, "w", encoding="utf-8") as f:
                 json.dump(data_to_save, f, ensure_ascii=False, indent=4)
 
-            # 2. Сохраняем токен в БД employees (не в taskplanner!)
-            from database import get_employees_session  # ← ИСПРАВЛЕНО!
-            from models.employees import Employee
+            # 2. Сохраняем токен в БД taskplanner.employees_data (НЕ в employees!)
+            from database import get_tasks_session  # ← ИСПРАВЛЕНО! используем tasks_session
+            from models.employees import EmployeeData
             from sqlalchemy import update
 
-            db_session = get_employees_session()  # ← ИСПРАВЛЕНО!
+            db_session = get_tasks_session()  # ← ИСПРАВЛЕНО!
             if db_session:
                 try:
-                    stmt = update(Employee).where(
-                        Employee.id == user_data.get('id')
-                    ).values(app_session_token=session_token)
+                    stmt = update(EmployeeData).where(
+                        EmployeeData.employee_id == user_data.get('id')
+                    ).values(app_session_token=session_token, updated_at=datetime.now())
                     db_session.execute(stmt)
                     db_session.commit()
-                    print(f"✅ Токен сессии сохранен в БД для пользователя {user_data.get('id')}")
+                    print(f"✅ Токен сессии сохранен в employees_data для пользователя {user_data.get('id')}")
                 except Exception as db_err:
                     print(f"❌ Ошибка сохранения токена в БД: {db_err}")
                     db_session.rollback()
@@ -300,7 +299,7 @@ class LoginWindow(QDialog):
             print(f"❌ Ошибка сохранения сессии: {e}")
 
     def clear_session(self):
-        """Удаляет сохраненную сессию (локально и в БД)"""
+        """Удаляет сохраненную сессию (локально и в БД taskplanner.employees_data)"""
         try:
             # 1. Удаляем локальный файл
             config_dir = Path.home() / ".taskplanner"
@@ -309,21 +308,22 @@ class LoginWindow(QDialog):
                 session_path.unlink()
                 print("✅ Локальная сессия очищена")
 
-            # 2. Удаляем токен из БД для текущего пользователя
+            # 2. Удаляем токен из БД taskplanner.employees_data для текущего пользователя
             if hasattr(self, '_authenticated_user') and self._authenticated_user:
-                from database import get_employees_session  # ← ИСПРАВЛЕНО!
-                from models.employees import Employee
+                from database import get_tasks_session  # ← ИСПРАВЛЕНО!
+                from models.employees import EmployeeData
                 from sqlalchemy import update
 
-                db_session = get_employees_session()  # ← ИСПРАВЛЕНО!
+                db_session = get_tasks_session()  # ← ИСПРАВЛЕНО!
                 if db_session:
                     try:
-                        stmt = update(Employee).where(
-                            Employee.id == self._authenticated_user.get('id')
-                        ).values(app_session_token=None)
+                        stmt = update(EmployeeData).where(
+                            EmployeeData.employee_id == self._authenticated_user.get('id')
+                        ).values(app_session_token=None, updated_at=datetime.now())
                         db_session.execute(stmt)
                         db_session.commit()
-                        print(f"✅ Токен сессии удален из БД для пользователя {self._authenticated_user.get('id')}")
+                        print(
+                            f"✅ Токен сессии удален из employees_data для пользователя {self._authenticated_user.get('id')}")
                     except Exception as db_err:
                         print(f"❌ Ошибка удаления токена из БД: {db_err}")
                         db_session.rollback()
@@ -334,7 +334,7 @@ class LoginWindow(QDialog):
             print(f"❌ Ошибка удаления сессии: {e}")
 
     def load_saved_credentials(self):
-        """Загружает сохраненные учетные данные и выполняет автовход с проверкой токена в БД"""
+        """Загружает сохраненные учетные данные и выполняет автовход с проверкой токена в БД taskplanner.employees_data"""
         try:
             config_dir = Path.home() / ".taskplanner"
             session_path = config_dir / "session.json"
@@ -347,55 +347,80 @@ class LoginWindow(QDialog):
                 if data.get("user_id") and data.get("phone_number"):
                     session_token = data.get("session_token")
 
-                    # Проверяем токен в БД employees
-                    from database import get_employees_session  # ← ИСПРАВЛЕНО!
-                    from models.employees import Employee
+                    # 1. Сначала проверяем токен в БД taskplanner.employees_data
+                    from database import get_tasks_session
+                    from models.employees import EmployeeData
                     from sqlalchemy import select
 
-                    db_session = get_employees_session()  # ← ИСПРАВЛЕНО!
-                    if db_session:
+                    tasks_session = get_tasks_session()
+                    if tasks_session:
                         try:
-                            stmt = select(Employee).where(
-                                Employee.id == data.get("user_id"),
-                                Employee.app_session_token == session_token
+                            # Получаем employee_id, у которого есть такой токен
+                            stmt = select(EmployeeData.employee_id).where(
+                                EmployeeData.employee_id == data.get("user_id"),
+                                EmployeeData.app_session_token == session_token
                             )
-                            user = db_session.scalar(stmt)
+                            employee_id = tasks_session.scalar(stmt)
 
-                            if user:
-                                print(f"✅ Найдена валидная сессия для пользователя {data.get('phone_number')}")
+                            if employee_id:
+                                print(f"✅ Токен валиден для employee_id={employee_id}")
 
-                                # Восстанавливаем данные пользователя
-                                user_data = {
-                                    'id': user.id,
-                                    'last_name': user.last_name,
-                                    'first_name': user.first_name,
-                                    'middle_name': user.middle_name or '',
-                                    'rights': user.rights,
-                                    'position': user.position or '',
-                                    'phone_number': user.phone_number,
-                                    'email': user.email or ''
-                                }
+                                # 2. Получаем данные сотрудника из БД employees
+                                from database import get_employees_session
+                                from models.employees import Employee
 
-                                self.set_authenticated_user(user_data)
+                                emp_session = get_employees_session()
+                                if emp_session:
+                                    user = emp_session.get(Employee, employee_id)
 
-                                # Отправляем сигнал об успешном входе
-                                self.login_success.emit(user_data)
+                                    if user:
+                                        print(f"✅ Найдена валидная сессия для пользователя {data.get('phone_number')}")
 
-                                # Небольшая задержка для обработки сигнала
-                                QTimer.singleShot(100, self.accept)
-                                return True
+                                        # Восстанавливаем данные пользователя
+                                        user_data = {
+                                            'id': user.id,
+                                            'last_name': user.last_name,
+                                            'first_name': user.first_name,
+                                            'middle_name': user.middle_name or '',
+                                            'position': user.position or '',
+                                            'phone_number': user.phone_number,
+                                            'email': user.email or ''
+                                        }
+
+                                        # Получаем роль из EmployeeData
+                                        role_stmt = select(EmployeeData.role).where(
+                                            EmployeeData.employee_id == employee_id
+                                        )
+                                        role = tasks_session.scalar(role_stmt)
+                                        user_data['rights'] = role.value if role else 'user'
+
+                                        self.set_authenticated_user(user_data)
+
+                                        # Отправляем сигнал об успешном входе
+                                        self.login_success.emit(user_data)
+
+                                        # Небольшая задержка для обработки сигнала
+                                        QTimer.singleShot(100, self.accept)
+                                        return True
+                                    else:
+                                        print(f"❌ Сотрудник с ID {employee_id} не найден в БД employees")
+                                        session_path.unlink()
+                                emp_session.close()
                             else:
                                 print(f"❌ Токен сессии недействителен, требуется повторный вход")
-                                # Удаляем невалидную сессию
                                 session_path.unlink()
 
                         except Exception as db_err:
                             print(f"❌ Ошибка проверки токена в БД: {db_err}")
+                            import traceback
+                            traceback.print_exc()
                         finally:
-                            db_session.close()
+                            tasks_session.close()
 
         except Exception as e:
             print(f"❌ Ошибка загрузки сессии: {e}")
+            import traceback
+            traceback.print_exc()
 
         return False
 
@@ -445,8 +470,6 @@ class LoginWindow(QDialog):
                 print("✅ Учетные данные очищены")
         except Exception as e:
             print(f"❌ Ошибка удаления учетных данных: {e}")
-
-    # windows/login/login_window.py - исправьте метод on_login_clicked
 
     def on_login_clicked(self):
         # Защита от двойного клика
@@ -533,12 +556,29 @@ class LoginWindow(QDialog):
                         self._login_in_progress = False
                         return
 
+                # Получаем роль из EmployeeData (БД taskplanner)
+                from database import get_tasks_session
+                from models.employees import EmployeeData
+                from sqlalchemy import select
+
+                role = 'user'
+                tasks_session = get_tasks_session()
+                if tasks_session:
+                    try:
+                        role_stmt = select(EmployeeData.role).where(EmployeeData.employee_id == user_id)
+                        role_obj = tasks_session.scalar(role_stmt)
+                        role = role_obj.value if role_obj else 'user'
+                    except Exception as e:
+                        print(f"⚠️ Ошибка получения роли: {e}")
+                    finally:
+                        tasks_session.close()
+
                 user_data = {
                     'id': user_id,
                     'last_name': user.last_name,
                     'first_name': user.first_name,
                     'middle_name': user.middle_name,
-                    'rights': user.rights,
+                    'rights': role,  # ← используем роль из EmployeeData
                     'position': user.position,
                     'phone_number': user.phone_number,
                     'email': user.email

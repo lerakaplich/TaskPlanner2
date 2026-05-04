@@ -1,4 +1,5 @@
-# employees_dto.py
+# employees_dto.py - ИСПРАВЛЕННАЯ ВЕРСИЯ
+
 from datetime import date, datetime
 from typing import Optional, List
 from pydantic import BaseModel, ConfigDict
@@ -18,9 +19,13 @@ class EmployeeDTO(BaseModel):
     middle_name: Optional[str] = None
     position: Optional[str] = None
     phone_number: Optional[str] = None
+    work_number: Optional[str] = None  # ← ДОБАВЛЕНО (было в модели)
     email: Optional[str] = None
     chat_id: Optional[int] = None
     birth_date: Optional[date] = None
+    department_id: Optional[int] = None  # ← ДОБАВЛЕНО
+    division_id: Optional[int] = None  # ← ДОБАВЛЕНО
+    organization_id: Optional[int] = None  # ← ДОБАВЛЕНО
 
     # Добавляем поле для ФИО (удобно для отображения)
     full_name: Optional[str] = None
@@ -43,16 +48,19 @@ class EmployeeDTO(BaseModel):
 # DTO для профиля (расширенный)
 # =========================
 class EmployeeProfileDTO(EmployeeDTO):
-    """Расширенный DTO для профиля сотрудника"""
-    department_id: Optional[int] = None
-    division_id: Optional[int] = None
-    organization_id: Optional[int] = None
+    """Расширенный DTO для профиля сотрудника (с данными из EmployeeData)"""
+    # Данные из EmployeeData (служебные)
     role: Optional[str] = None
     is_active: Optional[bool] = None
     last_login: Optional[datetime] = None
-    work_number: Optional[str] = None  # Добавляем рабочий телефон
-    department_name: Optional[str] = None  # Название отдела
-    division_name: Optional[str] = None  # Название подразделения
+    session_token: Optional[str] = None  # ← ДОБАВЛЕНО
+    app_session_token: Optional[str] = None  # ← ДОБАВЛЕНО
+    created_at: Optional[datetime] = None  # ← ДОБАВЛЕНО
+    updated_at: Optional[datetime] = None  # ← ДОБАВЛЕНО
+
+    # Для отображения
+    department_name: Optional[str] = None
+    division_name: Optional[str] = None
 
 
 # =========================
@@ -66,7 +74,7 @@ class EmployeeCardDTO(BaseModel):
     active_projects: int
     completed_tasks: int
     overdue_tasks: int
-    efficiency: Optional[float] = None  # Эффективность в процентах
+    efficiency: Optional[float] = None
 
 
 # =========================
@@ -97,8 +105,8 @@ class EmployeeCreateDTO(BaseModel):
     birth_date: Optional[date] = None
     department_id: Optional[int] = None
     division_id: Optional[int] = None
-    rights: Optional[str] = "user"
-    password: Optional[str] = None  # Пароль (будет захэширован)
+    # rights удален (используется role в EmployeeData)
+    # password удален (аутентификация через Telegram)
 
 
 class EmployeeUpdateDTO(BaseModel):
@@ -114,12 +122,13 @@ class EmployeeUpdateDTO(BaseModel):
     birth_date: Optional[date] = None
     department_id: Optional[int] = None
     division_id: Optional[int] = None
-    rights: Optional[str] = None
+    # is_active теперь в EmployeeData, но оставляем для удобства API
     is_active: Optional[bool] = None
+    role: Optional[str] = None  # ← ДОБАВЛЕНО (для обновления роли)
 
 
 # =========================
-# DTO для отдела
+# DTO для отдела (без изменений)
 # =========================
 class DepartmentDTO(BaseModel):
     """DTO для отдела"""
@@ -136,7 +145,7 @@ class DepartmentDTO(BaseModel):
 
 
 # =========================
-# DTO для подразделения
+# DTO для подразделения (без изменений)
 # =========================
 class DivisionDTO(BaseModel):
     """DTO для подразделения"""
@@ -165,15 +174,19 @@ def employee_to_dto(employee) -> EmployeeDTO:
         middle_name=employee.middle_name,
         position=employee.position,
         phone_number=employee.phone_number,
+        work_number=employee.work_number,
         email=employee.email,
         chat_id=employee.chat_id,
-        birth_date=employee.birth_date
+        birth_date=employee.birth_date,
+        department_id=employee.department_id,
+        division_id=employee.division_id,
+        organization_id=employee.organization_id,
     )
 
 
 def employee_to_profile_dto(employee, employee_data=None, department_name=None,
                             division_name=None) -> EmployeeProfileDTO:
-    """Конвертирует модель Employee в EmployeeProfileDTO с дополнительными данными"""
+    """Конвертирует модель Employee в EmployeeProfileDTO с данными из EmployeeData"""
     return EmployeeProfileDTO(
         id=employee.id,
         number=employee.number,
@@ -182,22 +195,25 @@ def employee_to_profile_dto(employee, employee_data=None, department_name=None,
         middle_name=employee.middle_name,
         position=employee.position,
         phone_number=employee.phone_number,
+        work_number=employee.work_number,
         email=employee.email,
         chat_id=employee.chat_id,
         birth_date=employee.birth_date,
         department_id=employee.department_id,
         division_id=employee.division_id,
         organization_id=employee.organization_id,
-        work_number=getattr(employee, 'work_number', None),
-        role=employee_data.role.value if employee_data else None,
-        is_active=employee.is_active if hasattr(employee, 'is_active') else True,
+        role=employee_data.role.value if employee_data and employee_data.role else None,
+        is_active=employee_data.is_active if employee_data else True,
         last_login=employee_data.last_login if employee_data else None,
+        app_session_token=employee_data.app_session_token if employee_data else None,
+        created_at=employee_data.created_at if employee_data else None,
+        updated_at=employee_data.updated_at if employee_data else None,
         department_name=department_name,
         division_name=division_name
     )
 
 
-def employee_to_short_dto(employee, department_name=None) -> EmployeeShortDTO:
+def employee_to_short_dto(employee, employee_data=None, department_name=None) -> EmployeeShortDTO:
     """Конвертирует модель Employee в EmployeeShortDTO"""
     full_name = f"{employee.last_name} {employee.first_name}"
     if employee.middle_name:
@@ -208,7 +224,7 @@ def employee_to_short_dto(employee, department_name=None) -> EmployeeShortDTO:
         full_name=full_name.strip(),
         position=employee.position,
         department_name=department_name,
-        is_active=getattr(employee, 'is_active', True)
+        is_active=employee_data.is_active if employee_data else True
     )
 
 

@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>500</width>
-    <height>450</height>
+    <height>605</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -17,7 +17,80 @@
    <string notr="true">QDialog {
     background-color: #F5F5F7;
     font-family: 'Segoe UI', Arial;
-}</string>
+}
+
+QLineEdit, QTextEdit, QComboBox, QDateEdit {
+        background-color: white;
+        border: 2px solid #e9ecef;
+        border-radius: 8px;
+        padding: 8px 12px;
+        font-size: 14px;
+        color: #2c3e50;
+        min-height: 20px;
+    }
+    QComboBox {
+        background-color: white;
+        border-radius: 8px;
+        padding: 8px 12px;
+        font-size: 14px;
+        color: #2c3e50;
+        min-height: 20px;
+    }
+    QLineEdit:focus, QTextEdit:focus, QComboBox:focus, QDateEdit:focus {
+        border: 2px solid #D22730;
+        background-color: #fff5f5;
+    }
+
+    QLineEdit:hover, QTextEdit:hover, QComboBox:hover, QDateEdit:hover {
+        border: 2px solid #ccab6e;
+        background-color: #fffaf0;
+    }
+
+    QComboBox {
+        min-height: 35px;
+        max-height: 35px;
+        padding: 0 16px;
+        text-align: left;
+    }
+
+    QComboBox::drop-down {
+        border: none;
+        width: 30px;
+    }
+
+    QComboBox::down-arrow {
+        image: none;
+        border-left: 6px solid transparent;
+        border-right: 6px solid transparent;
+        border-top: 6px solid #D22730;
+        width: 0;
+        height: 0;
+    }
+
+    QComboBox QAbstractItemView {
+        border: 2px solid #e9ecef;     /* светлая серая граница */
+        border-radius: 8px;
+        background-color: white;
+        selection-background-color: #D22730;
+        selection-color: white;
+        outline: none;
+        padding: 4px;
+    }
+
+    QGroupBox {
+        font-weight: bold;
+        border: 2px solid #e9ecef;
+        border-radius: 8px;
+        margin-top: 10px;
+        padding-top: 10px;
+    }
+
+    QGroupBox::title {
+        subcontrol-origin: margin;
+        left: 10px;
+        padding: 0 5px 0 5px;
+        color: #D22730;
+    }</string>
   </property>
   <property name="modal">
    <bool>true</bool>
@@ -61,7 +134,7 @@
      <property name="minimumSize">
       <size>
        <width>0</width>
-       <height>45</height>
+       <height>48</height>
       </size>
      </property>
      <property name="styleSheet">
@@ -86,7 +159,7 @@ QLineEdit:focus {
      <property name="minimumSize">
       <size>
        <width>0</width>
-       <height>120</height>
+       <height>48</height>
       </size>
      </property>
      <property name="styleSheet">
@@ -121,7 +194,7 @@ QTextEdit:focus {
        </property>
        <property name="font">
         <font>
-         <weight>75</weight>
+         <pointsize>-1</pointsize>
          <bold>true</bold>
         </font>
        </property>
@@ -161,7 +234,7 @@ QPushButton:pressed {
        </property>
        <property name="font">
         <font>
-         <weight>75</weight>
+         <pointsize>-1</pointsize>
          <bold>true</bold>
         </font>
        </property>
@@ -203,7 +276,7 @@ QPushButton:pressed {
      </property>
      <property name="font">
       <font>
-       <weight>75</weight>
+       <pointsize>-1</pointsize>
        <bold>true</bold>
       </font>
      </property>
@@ -231,6 +304,52 @@ QPushButton:pressed {
      <property name="text">
       <string>Колонки проекта</string>
      </property>
+    </widget>
+   </item>
+   <item>
+    <widget class="QGroupBox" name="groupBoxManagers">
+     <property name="sizePolicy">
+      <sizepolicy hsizetype="Preferred" vsizetype="Minimum">
+       <horstretch>0</horstretch>
+       <verstretch>0</verstretch>
+      </sizepolicy>
+     </property>
+     <property name="maximumSize">
+      <size>
+       <width>16777215</width>
+       <height>85</height>
+      </size>
+     </property>
+     <property name="title">
+      <string>Выбор куратора</string>
+     </property>
+     <layout class="QVBoxLayout" name="verticalLayoutManagers">
+      <property name="spacing">
+       <number>10</number>
+      </property>
+      <property name="leftMargin">
+       <number>15</number>
+      </property>
+      <property name="topMargin">
+       <number>15</number>
+      </property>
+      <property name="rightMargin">
+       <number>15</number>
+      </property>
+      <property name="bottomMargin">
+       <number>15</number>
+      </property>
+      <item>
+       <widget class="QComboBox" name="comboManagers">
+        <property name="editable">
+         <bool>true</bool>
+        </property>
+        <property name="placeholderText">
+         <string>Выберите руководителей</string>
+        </property>
+       </widget>
+      </item>
+     </layout>
     </widget>
    </item>
    <item>
@@ -303,7 +422,7 @@ QCheckBox::indicator:checked {
      </property>
      <property name="font">
       <font>
-       <weight>75</weight>
+       <pointsize>-1</pointsize>
        <bold>true</bold>
       </font>
      </property>

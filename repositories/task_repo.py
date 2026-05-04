@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import select, func, and_, update, delete
 from datetime import datetime
 
+from database import get_employees_session
 from models.tasks import Task, Tag, TaskTag
 from models.projects import BoardColumn
 from models.employees import Employee
@@ -16,7 +17,16 @@ class TaskRepo:
     """
 
     def __init__(self, session: Session):
-        self.session = session
+        self.session = session  # для taskplanner БД
+        self.employees_session = get_employees_session()  # ← ОТДЕЛЬНАЯ сессия для employees
+
+    def __del__(self):
+        """Закрываем сессию employees при удалении"""
+        try:
+            if hasattr(self, 'employees_session') and self.employees_session:
+                self.employees_session.close()
+        except:
+            pass
 
     # =====================================================
     # CRUD операции с задачами
@@ -188,31 +198,35 @@ class TaskRepo:
         return self.session.scalar(stmt) or 0
 
     # =====================================================
-    # Работа с сотрудниками
+    # Работа с сотрудниками - ИСПРАВЛЕНО
     # =====================================================
 
-    def get_employee_by_id(self, employee_id: int) -> Optional[Employee]:  # ← ИСПРАВЛЕНО
-        stmt = select(Employee).where(Employee.id == employee_id)  # ← ИСПРАВЛЕНО
-        return self.session.scalar(stmt)
+    def get_employee_by_id(self, employee_id: int) -> Optional[Employee]:
+        """Получает сотрудника из БД employees"""
+        stmt = select(Employee).where(Employee.id == employee_id)
+        return self.employees_session.scalar(stmt)  # ← используем employees_session
 
     def get_employee_name_by_id(self, employee_id: int) -> Optional[str]:
         emp = self.get_employee_by_id(employee_id)
         if emp:
-            parts = [emp.last_name, emp.first_name]
+            parts = [emp.last_name or "", emp.first_name or ""]
             if emp.middle_name:
                 parts.append(emp.middle_name)
-            return " ".join(parts)
+            # Убираем пустые части
+            name = " ".join([p for p in parts if p])
+            return name if name else f"ID:{employee_id}"
         return None
 
     def get_all_employees(self) -> List[Dict[str, Any]]:
-        stmt = select(Employee).order_by(Employee.last_name)  # ← ИСПРАВЛЕНО
-        employees = self.session.scalars(stmt).all()
+        """Получает всех сотрудников из БД employees"""
+        stmt = select(Employee).order_by(Employee.last_name)
+        employees = self.employees_session.scalars(stmt).all()  # ← используем employees_session
         return [
             {
                 "id": e.id,
-                "last_name": e.last_name,
-                "first_name": e.first_name,
-                "middle_name": e.middle_name
+                "last_name": e.last_name or "",
+                "first_name": e.first_name or "",
+                "middle_name": e.middle_name or ""
             }
             for e in employees
         ]

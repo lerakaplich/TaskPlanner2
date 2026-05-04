@@ -1,5 +1,7 @@
-# repositories/employee_repo.py
+# repositories/employee_repo.py - ИСПРАВЛЕННАЯ ВЕРСИЯ
+
 from typing import Optional, List
+from datetime import datetime  # ← ДОБАВИТЬ
 from sqlalchemy.orm import Session
 from sqlalchemy import select, update, delete, func
 
@@ -32,9 +34,23 @@ class EmployeeRepo:
     def get_all(self, active_only: bool = True) -> List[Employee]:
         """Получить всех сотрудников"""
         stmt = select(Employee).order_by(Employee.last_name)
+
         if active_only:
-            stmt = stmt.where(Employee.is_active == True)
+            # Фильтруем через join с EmployeeData
+            stmt = stmt.join(EmployeeData).where(EmployeeData.is_active == True)
+
         return list(self.session.scalars(stmt))
+
+    def get_all_with_data(self, active_only: bool = True) -> List[tuple]:
+        """Получить всех сотрудников вместе с EmployeeData"""
+        stmt = select(Employee, EmployeeData).join(
+            EmployeeData, Employee.id == EmployeeData.employee_id
+        ).order_by(Employee.last_name)
+
+        if active_only:
+            stmt = stmt.where(EmployeeData.is_active == True)
+
+        return list(self.session.execute(stmt))
 
     def get_by_department(self, department_id: int) -> List[Employee]:
         """Получить сотрудников по отделу"""
@@ -56,6 +72,11 @@ class EmployeeRepo:
         ).order_by(Employee.last_name)
         return list(self.session.scalars(stmt))
 
+    def get_employee_data(self, employee_id: int) -> Optional[EmployeeData]:
+        """Получить служебные данные сотрудника"""
+        stmt = select(EmployeeData).where(EmployeeData.employee_id == employee_id)
+        return self.session.scalar(stmt)
+
     # =========================
     # Создание
     # =========================
@@ -76,7 +97,9 @@ class EmployeeRepo:
         employee_data = EmployeeData(
             employee_id=employee.id,
             is_active=True,
-            role=RoleEnum.user
+            role=RoleEnum.user,
+            created_at=datetime.now(),
+            updated_at=datetime.now()
         )
         self.session.add(employee_data)
 
@@ -86,13 +109,18 @@ class EmployeeRepo:
     # Обновление
     # =========================
     def update(self, employee_id: int, data: dict) -> Optional[Employee]:
-        """Обновить данные сотрудника"""
+        """Обновить данные сотрудника (только поля Employee)"""
         employee = self.get_by_id(employee_id)
         if not employee:
             return None
 
+        # Обновляем только поля Employee
+        employee_fields = ['last_name', 'first_name', 'middle_name', 'position',
+                           'department_id', 'division_id', 'organization_id',
+                           'work_number', 'phone_number', 'email', 'chat_id', 'birth_date']
+
         for key, value in data.items():
-            if hasattr(employee, key) and value is not None:
+            if key in employee_fields and value is not None:
                 setattr(employee, key, value)
 
         return employee
@@ -102,30 +130,41 @@ class EmployeeRepo:
         stmt = (
             update(EmployeeData)
             .where(EmployeeData.employee_id == employee_id)
-            .values(role=role)
+            .values(role=role, updated_at=datetime.now())
         )
         self.session.execute(stmt)
 
     def set_active(self, employee_id: int, is_active: bool):
-        """Установить статус активности"""
+        """Установить статус активности (в EmployeeData)"""
         stmt = (
             update(EmployeeData)
             .where(EmployeeData.employee_id == employee_id)
-            .values(is_active=is_active)
+            .values(is_active=is_active, updated_at=datetime.now())
         )
         self.session.execute(stmt)
 
-        # Также обновляем в основной таблице
-        employee = self.get_by_id(employee_id)
-        if employee:
-            employee.is_active = is_active
+    def update_session_token(self, employee_id: int, session_token: str, is_app: bool = False):
+        """Обновить токен сессии"""
+        if is_app:
+            stmt = (
+                update(EmployeeData)
+                .where(EmployeeData.employee_id == employee_id)
+                .values(app_session_token=session_token, updated_at=datetime.now())
+            )
+        else:
+            stmt = (
+                update(EmployeeData)
+                .where(EmployeeData.employee_id == employee_id)
+                .values(session_token=session_token, updated_at=datetime.now())
+            )
+        self.session.execute(stmt)
 
     def update_last_login(self, employee_id: int):
         """Обновить время последнего входа"""
         stmt = (
             update(EmployeeData)
             .where(EmployeeData.employee_id == employee_id)
-            .values(last_login=datetime.now())
+            .values(last_login=datetime.now(), updated_at=datetime.now())
         )
         self.session.execute(stmt)
 
@@ -133,13 +172,26 @@ class EmployeeRepo:
     # Удаление
     # =========================
     def delete(self, employee_id: int) -> bool:
-        """Удалить сотрудника (мягкое удаление)"""
+        """Мягкое удаление сотрудника (установить is_active=False)"""
         return self.set_active(employee_id, False)
 
     def hard_delete(self, employee_id: int) -> bool:
-        """Полностью удалить сотрудника"""
+        """Полностью удалить сотрудника (удалит и EmployeeData благодаря cascade)"""
         employee = self.get_by_id(employee_id)
         if employee:
             self.session.delete(employee)
             return True
         return False
+
+    # =========================
+    # Проверки
+    # =========================
+    def is_active(self, employee_id: int) -> bool:
+        """Проверить, активен ли сотрудник"""
+        employee_data = self.get_employee_data(employee_id)
+        return employee_data.is_active if employee_data else False
+
+    def get_role(self, employee_id: int) -> Optional[RoleEnum]:
+        """Получить роль сотрудника"""
+        employee_data = self.get_employee_data(employee_id)
+        return employee_data.role if employee_data else None

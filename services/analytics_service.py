@@ -5,6 +5,7 @@ from datetime import datetime
 from sqlalchemy.orm import Session
 from sqlalchemy import select, func, and_, or_
 
+from database import get_employees_session
 from models.tasks import Task, TaskTag, Tag
 from models.projects import Project, EmployeeProject, BoardColumn
 from models.employees import Employee, Department, Division  # ← ИСПРАВЛЕНО
@@ -15,9 +16,21 @@ class AnalyticsService:
     """Сервис для аналитики по сотрудникам, темам и проектам"""
 
     def __init__(self, session: Session):
+        # Сессия для taskplanner БД (проекты, задачи)
         self.session = session
+        # Отдельная сессия для employees БД (сотрудники)
+        self.employees_session = get_employees_session()  # ← ДОБАВИТЬ
+
         self.tag_repo = TagRepo(session)
         self.current_user_id = None
+
+    def __del__(self):
+        """Закрываем сессию employees при удалении"""
+        try:
+            if hasattr(self, 'employees_session') and self.employees_session:
+                self.employees_session.close()
+        except:
+            pass
 
     def set_current_user_id(self, user_id: int):
         """Устанавливает ID текущего пользователя"""
@@ -37,9 +50,9 @@ class AnalyticsService:
         - просроченные задачи
         - аналитика по тегам
         """
-        # Получаем всех сотрудников
-        stmt = select(Employee).order_by(Employee.last_name)  # ← ИСПРАВЛЕНО
-        employees = list(self.session.scalars(stmt))
+        # Получаем всех сотрудников из БД employees
+        stmt = select(Employee).order_by(Employee.last_name)
+        employees = list(self.employees_session.scalars(stmt))  # ← ИСПРАВЛЕНО
 
         result = []
         for emp in employees:
@@ -70,7 +83,7 @@ class AnalyticsService:
         """Получить статистику сотрудника"""
         from datetime import datetime
 
-        # 1. Проекты сотрудника
+        # 1. Проекты сотрудника (из taskplanner)
         projects_stmt = select(Project).join(
             EmployeeProject, Project.id == EmployeeProject.project_id
         ).where(EmployeeProject.employee_id == employee_id)
@@ -91,7 +104,7 @@ class AnalyticsService:
             else:
                 active_projects.append(proj_dict)
 
-        # 2. Задачи сотрудника (как исполнитель или создатель)
+        # 2. Задачи сотрудника (как исполнитель или создатель) - из taskplanner
         tasks_stmt = select(Task).where(
             or_(
                 Task.assigned_to == employee_id,
@@ -214,7 +227,7 @@ class AnalyticsService:
 
                 # Сотрудник (исполнитель)
                 if task.assigned_to:
-                    emp = self.session.get(Employee, task.assigned_to)  # ← ИСПРАВЛЕНО
+                    emp = self.employees_session.get(Employee, task.assigned_to)
                     if emp:
                         emp_name = self._format_employee_name(emp)
                         if emp_name not in employee_stats:
@@ -346,7 +359,7 @@ class AnalyticsService:
 
             employees = []
             for member in members:
-                emp = self.session.get(Employee, member.employee_id)  # ← ИСПРАВЛЕНО
+                emp = self.employees_session.get(Employee, member.employee_id)
                 if emp:
                     # Считаем статистику сотрудника в этом проекте
                     emp_tasks = [t for t in tasks if t.assigned_to == emp.id]
@@ -391,16 +404,38 @@ class AnalyticsService:
 
         return result
 
+    def _get_department_name(self, department_id: Optional[int]) -> str:
+        """Получить название отдела по ID (из БД employees)"""
+        if not department_id:
+            return "—"
+        dept = self.employees_session.get(Department, department_id)  # ← ИСПРАВЛЕНО
+        return dept.name if dept else "—"
+
+    def _get_division_name(self, division_id: Optional[int]) -> str:
+        """Получить название подразделения по ID (из БД employees)"""
+        if not division_id:
+            return "—"
+        div = self.employees_session.get(Division, division_id)  # ← ИСПРАВЛЕНО
+        return div.name if div else "—"
+
+    def _format_employee_name(self, emp: Employee) -> str:
+        """Форматирует ФИО сотрудника"""
+        parts = [emp.last_name or "", emp.first_name or ""]
+        if emp.middle_name:
+            parts.append(emp.middle_name)
+        # Убираем пустые части
+        return " ".join([p for p in parts if p]) or f"ID:{emp.id}"
+
     def _task_to_analytics_dto(self, task: Task, status: str, is_completed: bool) -> Dict:
         """Преобразует задачу в DTO для аналитики"""
         # Получаем теги
         task_tags = self.tag_repo.get_task_tags(task.id)
         tags_list = [tag.name for tag in task_tags]
 
-        # Получаем создателя
+        # Получаем создателя (из БД employees)
         creator_name = "Неизвестен"
         if task.created_by:
-            creator = self.session.get(Employee, task.created_by)  # ← ИСПРАВЛЕНО
+            creator = self.employees_session.get(Employee, task.created_by)
             if creator:
                 creator_name = self._format_employee_name(creator)
 
@@ -419,27 +454,6 @@ class AnalyticsService:
             "tags_list": tags_list,
             "project_name": self.session.get(Project, task.project_id).name if task.project_id else ""
         }
-
-    def _format_employee_name(self, emp: Employee) -> str:  # ← ИСПРАВЛЕНО
-        """Форматирует ФИО сотрудника"""
-        parts = [emp.last_name, emp.first_name]
-        if emp.middle_name:
-            parts.append(emp.middle_name)
-        return " ".join(parts)
-
-    def _get_department_name(self, department_id: Optional[int]) -> str:
-        """Получить название отдела по ID"""
-        if not department_id:
-            return "—"
-        dept = self.session.get(Department, department_id)  # ← ИСПРАВЛЕНО
-        return dept.name if dept else "—"
-
-    def _get_division_name(self, division_id: Optional[int]) -> str:
-        """Получить название подразделения по ID"""
-        if not division_id:
-            return "—"
-        div = self.session.get(Division, division_id)  # ← ИСПРАВЛЕНО
-        return div.name if div else "—"
 
     def _project_to_dict(self, project: Project) -> Dict:
         """Преобразует проект в словарь для карточки сотрудника"""
