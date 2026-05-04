@@ -5,6 +5,8 @@ from PyQt6.QtCore import Qt
 
 
 class EmployeeProjectCard(QFrame):
+    """Карточка сотрудника в проекте - только отображение данных"""
+
     def __init__(self, employee_data, project_id, parent=None):
         super().__init__(parent)
         self.setObjectName("EmployeeProjectCard")
@@ -29,7 +31,7 @@ class EmployeeProjectCard(QFrame):
         info_layout = QVBoxLayout()
         info_layout.setSpacing(2)
 
-        # Безопасное получение имени
+        # Получаем данные (уже подготовлены сервисом)
         name = employee_data.get("name", employee_data.get("employee_name", "Неизвестен"))
         position = employee_data.get("position", "")
 

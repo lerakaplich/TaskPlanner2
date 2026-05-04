@@ -44,5 +44,4 @@ class ChatReadDTO(BaseModel):
     type: str  # 'project', 'group', 'private'
     project_id: Optional[int]
 
-    # Для UI: имя чата может вычисляться (например, имя собеседника в private)
     display_name: str

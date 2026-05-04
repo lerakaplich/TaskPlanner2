@@ -2,8 +2,19 @@
 |  +-- chat_server.cpython-313.pyc
 |  +-- database.cpython-313.pyc
 |  +-- main.cpython-313.pyc
+|  +-- shared_state.cpython-313.pyc
+|  +-- sync_service.cpython-313.pyc
+|  +-- telegram_bot.cpython-313.pyc
 +-- chat_server.py
 +-- database.py
++-- images
+|  +-- checkbox.png
+|  +-- clock.png
+|  +-- eye_closed.png
+|  +-- eye_open.png
+|  +-- gear.png
+|  +-- logo.png
+|  +-- qr.jpg
 +-- main.py
 +-- models
 |  +-- __pycache__
@@ -35,7 +46,6 @@
 |  |  +-- task_repo.cpython-313.pyc
 |  +-- chat_repo.py
 |  +-- employee_repo.py
-|  +-- external_employee_repo.py
 |  +-- local_task_repo.py
 |  +-- overtime_repo.py
 |  +-- project_repo.py
@@ -61,7 +71,6 @@
 |  +-- chat_service.py
 |  +-- column_service.py
 |  +-- employee_service.py
-|  +-- employee_sync_service.py
 |  +-- excel_export_service.py
 |  +-- gantt_service.py
 |  +-- kanban_service.py
@@ -70,7 +79,9 @@
 |  +-- projects_service.py
 |  +-- tag_service.py
 |  +-- tasks_service.py
++-- shared_state.py
 +-- structure.txt
++-- telegram_bot.py
 +-- ui
 |  +-- analytics
 |  |  +-- analytics_page.ui
@@ -138,7 +149,6 @@
 |  |  +-- socket_manager.cpython-313.pyc
 |  +-- error_handler.py
 |  +-- socket_manager.py
-|  +-- sync_employees.py
 +-- windows
 |  +-- analytics
 |  |  +-- __pycache__

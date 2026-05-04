@@ -20,11 +20,6 @@ def exception_hook(exctype, value, tb):
     if app:
         show_error_window(traceback_formated, str(value))
 
-    # Не закрываем приложение принудительно,
-    # чтобы можно было скопировать текст
-    # sys.exit(1) # Раскомментируй, если хочешь, чтобы приложение всё же падало
-
-
 def show_error_window(traceback_text, error_message):
     msg_box = QMessageBox()
     msg_box.setIcon(QMessageBox.Icon.Critical)

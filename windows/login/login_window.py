@@ -504,87 +504,90 @@ class LoginWindow(QDialog):
             return
 
         try:
-            from database import get_employees_session  # ← ИСПРАВЛЕНО! было get_tasks_session
-            from models.employees import Employee
+            from database import get_employees_session, get_tasks_session
+            from models.employees import Employee, EmployeeData
             from sqlalchemy import select
 
-            # Используем employees_session, а не tasks_session!
-            session = get_employees_session()  # ← ИСПРАВЛЕНО!
-
-            if session is None:
+            # 1. Получаем сотрудника из БД employees
+            emp_session = get_employees_session()
+            if emp_session is None:
                 QMessageBox.critical(self, "Ошибка", "Нет подключения к базе данных сотрудников")
                 self._login_in_progress = False
                 return
 
-            # Ищем пользователя по номеру телефона
             stmt = select(Employee).where(Employee.phone_number == clean_phone)
-            user = session.scalar(stmt)
+            user = emp_session.scalar(stmt)
 
             if not user:
                 # Пробуем другие форматы
                 if clean_phone.startswith('375'):
                     alt_phone = '8' + clean_phone[3:]
                     stmt = select(Employee).where(Employee.phone_number == alt_phone)
-                    user = session.scalar(stmt)
+                    user = emp_session.scalar(stmt)
 
                 if not user:
                     plus_phone = '+' + clean_phone
                     stmt = select(Employee).where(Employee.phone_number == plus_phone)
-                    user = session.scalar(stmt)
+                    user = emp_session.scalar(stmt)
 
             if user:
                 user_id = user.id
 
-                # Проверяем пароль через SHA256
-                if user.password_hash:
-                    if not verify_password(password, user.password_hash):
-                        QMessageBox.warning(self, "Ошибка", "Неверный пароль")
-                        session.close()
-                        self._login_in_progress = False
-                        return
-                else:
-                    # Для старых аккаунтов без пароля - предупреждение
-                    reply = QMessageBox.question(
-                        self,
-                        "Внимание",
-                        "У вашей учетной записи нет пароля. Рекомендуем установить пароль в настройках профиля.\n\n"
-                        "Продолжить вход без пароля?",
-                        QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
-                    )
-                    if reply != QMessageBox.StandardButton.Yes:
-                        session.close()
-                        self._login_in_progress = False
-                        return
-
-                # Получаем роль из EmployeeData (БД taskplanner)
-                from database import get_tasks_session
-                from models.employees import EmployeeData
-                from sqlalchemy import select
-
-                role = 'user'
+                # 2. Получаем данные из EmployeeData (пароль, роль) из БД taskplanner
                 tasks_session = get_tasks_session()
                 if tasks_session:
                     try:
-                        role_stmt = select(EmployeeData.role).where(EmployeeData.employee_id == user_id)
-                        role_obj = tasks_session.scalar(role_stmt)
-                        role = role_obj.value if role_obj else 'user'
+                        employee_data = tasks_session.query(EmployeeData).filter(
+                            EmployeeData.employee_id == user_id
+                        ).first()
+
+                        # Проверяем пароль
+                        if employee_data and employee_data.password_hash:
+                            if not verify_password(password, employee_data.password_hash):
+                                QMessageBox.warning(self, "Ошибка", "Неверный пароль")
+                                emp_session.close()
+                                tasks_session.close()
+                                self._login_in_progress = False
+                                return
+                        else:
+                            # Нет пароля - предупреждение
+                            reply = QMessageBox.question(
+                                self,
+                                "Внимание",
+                                "У вашей учетной записи нет пароля. Рекомендуем установить пароль в настройках профиля.\n\n"
+                                "Продолжить вход без пароля?",
+                                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+                            )
+                            if reply != QMessageBox.StandardButton.Yes:
+                                emp_session.close()
+                                tasks_session.close()
+                                self._login_in_progress = False
+                                return
+
+                        # Получаем роль
+                        role = employee_data.role.value if employee_data and employee_data.role else 'user'
+
                     except Exception as e:
-                        print(f"⚠️ Ошибка получения роли: {e}")
+                        print(f"⚠️ Ошибка получения EmployeeData: {e}")
+                        role = 'user'
                     finally:
                         tasks_session.close()
+
+                else:
+                    role = 'user'
 
                 user_data = {
                     'id': user_id,
                     'last_name': user.last_name,
                     'first_name': user.first_name,
                     'middle_name': user.middle_name,
-                    'rights': role,  # ← используем роль из EmployeeData
+                    'rights': role,
                     'position': user.position,
                     'phone_number': user.phone_number,
                     'email': user.email
                 }
 
-                session.close()
+                emp_session.close()
 
                 # Логика "Запомнить меня"
                 if self.rememberCheckbox.isChecked():
@@ -600,7 +603,7 @@ class LoginWindow(QDialog):
 
                 self.accept()
             else:
-                session.close()
+                emp_session.close()
                 QMessageBox.warning(self, "Ошибка",
                                     f"Пользователь с номером {self.format_phone_for_display(clean_phone)} не найден")
                 self._login_in_progress = False

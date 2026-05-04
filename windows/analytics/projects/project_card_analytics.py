@@ -1,8 +1,6 @@
 # windows/analytics/projects/project_card_analytics.py
 
 import os
-from datetime import datetime
-
 from PyQt6 import uic
 from PyQt6.QtWidgets import QFrame, QSizePolicy, QPushButton, QVBoxLayout, QLabel, QTableWidget, QTableWidgetItem, \
     QHeaderView
@@ -13,8 +11,11 @@ from windows.analytics.task_card_analytics import TaskCard
 
 
 class ProjectCard(QFrame):
-    def __init__(self, project_data, parent=None):
+    def __init__(self, project_data, parent=None, analytics_service=None):
         super().__init__(parent)
+
+        self.analytics_service = analytics_service
+        self.data = project_data
 
         # Определяем путь к UI-файлу
         ui_path = os.path.join(
@@ -26,25 +27,28 @@ class ProjectCard(QFrame):
         # Проверяем существование UI файла
         if os.path.exists(ui_path):
             uic.loadUi(ui_path, self)
-            # Удаляем старые панели из UI, если они есть
             self._remove_old_ui_panels()
         else:
-            # Создаем UI программно
             self._create_ui_programmatically()
-
-        self.data = project_data
 
         self.setMinimumHeight(200)
         self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
 
         # Основная информация
+        self._setup_basic_info()
+
+        # Создаем секции (все скрыты по умолчанию)
+        self._setup_tasks_section()
+        self._setup_employees_section()
+
+    def _setup_basic_info(self):
+        """Заполняет основную информацию о проекте"""
         if hasattr(self, 'name_btn'):
             self.name_btn.setText(self.data.get("name", "Без названия"))
 
         if hasattr(self, 'info_label'):
             start_date = self.data.get('created_at_str', self.data.get('created_at', '—'))
-            status = self.data.get('status_display',
-                                   'Активный' if not self.data.get('is_archived', False) else 'Архивный')
+            status = self.data.get('status_display', 'Активный')
             emp_count = self.data.get('member_count', self.data.get('emp_count', 0))
 
             self.info_label.setText(
@@ -53,12 +57,8 @@ class ProjectCard(QFrame):
                 f"Сотрудников: {emp_count}"
             )
 
-        # Создаем новые секции (все скрыты по умолчанию)
-        self._setup_tasks_section()
-        self._setup_employees_section()
-
     def _remove_old_ui_panels(self):
-        """Удаляет старые панели из UI файла, чтобы не дублировались"""
+        """Удаляет старые панели из UI файла"""
         old_widgets = ['tasks_btn', 'employees_btn', 'tasks_panel', 'employees_panel']
         for widget_name in old_widgets:
             if hasattr(self, widget_name):
@@ -75,7 +75,7 @@ class ProjectCard(QFrame):
         # Кнопка-заголовок
         btn = QPushButton(f"▶ Задачи", self)
         btn.setCheckable(True)
-        btn.setChecked(False)  # Скрыто по умолчанию
+        btn.setChecked(False)
         btn.setStyleSheet("""
             QPushButton {
                 background-color: #F0F0F0;
@@ -92,7 +92,7 @@ class ProjectCard(QFrame):
 
         # Панель задач
         panel = QFrame(self)
-        panel.setVisible(False)  # Скрыта по умолчанию
+        panel.setVisible(False)
         panel.setStyleSheet("background-color: #FAFAFA; border-radius: 6px;")
         panel.setMinimumHeight(100)
 
@@ -109,9 +109,11 @@ class ProjectCard(QFrame):
                 if not tasks:
                     continue
 
-                status_btn = QPushButton(f"▶ {self._get_status_name(status_key)} ({len(tasks)})")
+                status_name = self.analytics_service.get_status_name(
+                    status_key) if self.analytics_service else status_key
+                status_btn = QPushButton(f"▶ {status_name} ({len(tasks)})")
                 status_btn.setCheckable(True)
-                status_btn.setChecked(False)  # Скрыто по умолчанию
+                status_btn.setChecked(False)
                 status_btn.setStyleSheet("""
                     QPushButton {
                         background-color: #1B232A;
@@ -171,7 +173,7 @@ class ProjectCard(QFrame):
         # Кнопка-заголовок
         btn = QPushButton(f"▶ Сотрудники ({len(employees)})", self)
         btn.setCheckable(True)
-        btn.setChecked(False)  # Скрыто по умолчанию
+        btn.setChecked(False)
         btn.setStyleSheet("""
             QPushButton {
                 background-color: #F0F0F0;
@@ -188,7 +190,7 @@ class ProjectCard(QFrame):
 
         # Панель сотрудников
         panel = QFrame(self)
-        panel.setVisible(False)  # Скрыта по умолчанию
+        panel.setVisible(False)
         panel.setStyleSheet("background-color: #FAFAFA; border-radius: 6px;")
         panel.setMinimumHeight(100)
 
@@ -231,16 +233,6 @@ class ProjectCard(QFrame):
 
         # Подключаем сигнал
         btn.toggled.connect(lambda checked, p=panel, b=btn: self._toggle_panel(checked, p, b))
-
-    def _get_status_name(self, status_key):
-        """Возвращает русское название статуса"""
-        status_names = {
-            'to_do': 'К выполнению',
-            'in_progress': 'В работе',
-            'review': 'На проверке',
-            'completed': 'Выполнено'
-        }
-        return status_names.get(status_key, status_key)
 
     def _toggle_panel(self, checked, panel, button):
         """Переключает видимость панели и текст кнопки"""

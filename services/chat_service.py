@@ -1,6 +1,8 @@
 # services/chat_service.py
 from typing import List, Optional
 from sqlalchemy.orm import Session
+
+from database import get_employees_session
 from repositories.chat_repo import ChatRepo
 from repositories.employee_repo import EmployeeRepo  # ← ИСПРАВЛЕНО (было external_employee_repo)
 from models.schemas.chat_dto import MessageReadDTO, ChatReadDTO
@@ -9,9 +11,21 @@ from models.chat import ChatType, ChatMessage
 
 class ChatService:
     def __init__(self, db_session: Session):
+        # Сессия для чатов (taskplanner)
         self.session = db_session
         self.chat_repo = ChatRepo(db_session)
-        self.emp_repo = EmployeeRepo(db_session)  # ← ИСПРАВЛЕНО
+
+        # Отдельная сессия для сотрудников (employees)
+        self.employees_session = get_employees_session()  # ← ДОБАВИТЬ
+        self.emp_repo = EmployeeRepo(self.employees_session)  # ← используем правильную сессию
+
+    def __del__(self):
+        """Закрываем сессию employees при удалении"""
+        try:
+            if hasattr(self, 'employees_session') and self.employees_session:
+                self.employees_session.close()
+        except:
+            pass
 
     def is_user_admin(self, chat_id: int, user_id: int) -> bool:
         """Проверяет, является ли пользователь администратором чата (без кэша)"""

@@ -16,10 +16,10 @@ class EmployeeService:
 
     def __init__(self, session: Session = None):
         # Сессия для employees (сотрудники, отделы, подразделения)
-        self.session = session or get_employees_session()
+        self.session = session or get_employees_session()  # ← Используем employees_session
         # Сессия для taskplanner (employees_data)
         self.tasks_session = get_tasks_session()
-        self.repo = EmployeeRepo(self.session)
+        self.repo = EmployeeRepo(self.session)  # ← репозиторий использует ту же сессию
         self._own_session = session is None
 
     def close(self):

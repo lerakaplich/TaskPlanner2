@@ -5,13 +5,13 @@ from PyQt6.QtCore import Qt
 
 
 class EmployeesStatsView(QWidget):
-    def __init__(self, theme_name, stats_data, parent=None):
-        super().__init__(parent)
-        self.theme_name = theme_name
-        self.all_stats = stats_data if isinstance(stats_data, list) else []
+    """Виджет для отображения статистики сотрудников по теме - только UI"""
 
+    def __init__(self, parent=None):
+        super().__init__(parent)
         self._init_ui()
-        self.refresh_table()
+        self._search_callback = None
+        self._display_data = []
 
     def _init_ui(self):
         layout = QVBoxLayout(self)
@@ -19,7 +19,7 @@ class EmployeesStatsView(QWidget):
 
         self.search_edit = QLineEdit()
         self.search_edit.setPlaceholderText("🔍 Поиск по сотруднику...")
-        self.search_edit.textChanged.connect(self.filter_table)
+        self.search_edit.textChanged.connect(self._on_search)
         layout.addWidget(self.search_edit)
 
         self.table = QTableWidget()
@@ -33,50 +33,66 @@ class EmployeesStatsView(QWidget):
         self.table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         layout.addWidget(self.table)
 
-    def refresh_table(self, filter_text=""):
+    def set_search_callback(self, callback):
+        """Устанавливает callback для поиска"""
+        self._search_callback = callback
+
+    def _on_search(self, text):
+        """Обработчик поиска"""
+        if self._search_callback:
+            self._search_callback(text)
+
+    def display_data(self, employees_data: list):
+        """
+        Отображает данные сотрудников.
+        employees_data - список словарей с ключами:
+        - employee_name, avg_kpi, completed_count, low, medium, high, critical
+        """
+        self._display_data = employees_data
+        self._refresh_table()
+
+    def _refresh_table(self):
+        """Обновляет таблицу с данными"""
         self.table.setSortingEnabled(False)
         self.table.setRowCount(0)
 
-        if not self.all_stats:
-            # Показываем сообщение об отсутствии данных
-            self.table.setRowCount(1)
-            self.table.setSpan(0, 0, 1, 7)
-            no_data_item = QTableWidgetItem("Нет данных по сотрудникам")
-            no_data_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
-            self.table.setItem(0, 0, no_data_item)
+        if not self._display_data:
+            self._show_no_data_message()
             self.table.setSortingEnabled(True)
             return
 
         row = 0
-        for stat in self.all_stats:
+        for stat in self._display_data:
             if not isinstance(stat, dict):
                 continue
 
-            employee_name = stat.get("employee_name", stat.get("employee", "Неизвестно"))
-
-            if filter_text.lower() not in employee_name.lower():
-                continue
-
             self.table.insertRow(row)
-            self.table.setItem(row, 0, QTableWidgetItem(employee_name))
+
+            # Сотрудник
+            self.table.setItem(row, 0, QTableWidgetItem(stat.get("employee_name", "Неизвестно")))
 
             # КПД
             kpi_value = stat.get('avg_kpi', 0)
-            kpi_item = QTableWidgetItem(f"{kpi_value:.1f}%" if isinstance(kpi_value, (int, float)) else str(kpi_value))
-            self.table.setItem(row, 1, kpi_item)
+            kpi_text = f"{kpi_value:.1f}%" if isinstance(kpi_value, (int, float)) else str(kpi_value)
+            self.table.setItem(row, 1, QTableWidgetItem(kpi_text))
 
             # Выполнено
-            completed_count = stat.get("completed_count", 0)
-            self.table.setItem(row, 2, QTableWidgetItem(str(completed_count)))
+            self.table.setItem(row, 2, QTableWidgetItem(str(stat.get("completed_count", 0))))
 
             # Приоритеты
             self.table.setItem(row, 3, QTableWidgetItem(str(stat.get("low", 0))))
             self.table.setItem(row, 4, QTableWidgetItem(str(stat.get("medium", 0))))
             self.table.setItem(row, 5, QTableWidgetItem(str(stat.get("high", 0))))
             self.table.setItem(row, 6, QTableWidgetItem(str(stat.get("critical", 0))))
+
             row += 1
 
         self.table.setSortingEnabled(True)
 
-    def filter_table(self, text):
-        self.refresh_table(text)
+    def _show_no_data_message(self):
+        """Показывает сообщение об отсутствии данных"""
+        self.table.setRowCount(1)
+        self.table.setSpan(0, 0, 1, 7)
+        no_data_item = QTableWidgetItem("Нет данных по сотрудникам")
+        no_data_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.table.setItem(0, 0, no_data_item)

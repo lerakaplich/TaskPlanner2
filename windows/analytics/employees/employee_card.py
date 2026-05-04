@@ -20,7 +20,6 @@ class EmployeeCard(QFrame):
         full_ui_path = os.path.join(ui_path, "employee_card.ui")
         if os.path.exists(full_ui_path):
             uic.loadUi(full_ui_path, self)
-            # Удаляем старые панели из UI, если они есть
             self._remove_old_ui_panels()
         else:
             self._create_ui_programmatically()
@@ -38,12 +37,12 @@ class EmployeeCard(QFrame):
                 f"{emp_data.get('subdivision', '—')}"
             )
 
-        # Создаем новые таблицы
+        # Получаем данные из emp_data (уже сформированы сервисом)
         active_projects = emp_data.get("active_projects", [])
         completed_projects = emp_data.get("completed_projects", [])
         tag_analytics = emp_data.get("tag_analytics", [])
 
-        # Создаем панели и таблицы (все скрыты по умолчанию)
+        # Создаем панели и таблицы
         self._setup_projects_section("Активные проекты", active_projects, 1)
         self._setup_projects_section("Выполненные проекты", completed_projects, 2)
         self._setup_analytics_section(tag_analytics)
@@ -52,7 +51,7 @@ class EmployeeCard(QFrame):
         self.setMinimumHeight(200)
 
     def _remove_old_ui_panels(self):
-        """Удаляет старые панели из UI файла, чтобы не дублировались"""
+        """Удаляет старые панели из UI файла"""
         old_widgets = ['projects_btn', 'completed_projects_btn', 'analytics_btn',
                        'projects_panel', 'completed_projects_panel', 'analytics_panel']
 
@@ -64,11 +63,10 @@ class EmployeeCard(QFrame):
                     delattr(self, widget_name)
 
     def _setup_projects_section(self, title, projects, section_num):
-        """Создает секцию с проектами - по умолчанию скрыта"""
-        # Создаем кнопку-заголовок (всегда со стрелкой "▶" - скрыто)
+        """Создает секцию с проектами"""
         btn = QPushButton(f"▶ {title}", self)
         btn.setCheckable(True)
-        btn.setChecked(False)  # 👈 ВСЕГДА СКРЫТО ПО УМОЛЧАНИЮ
+        btn.setChecked(False)
         btn.setStyleSheet("""
             QPushButton {
                 background-color: #F0F0F0;
@@ -83,13 +81,11 @@ class EmployeeCard(QFrame):
             }
         """)
 
-        # Создаем панель - скрыта по умолчанию
         panel = QFrame(self)
-        panel.setVisible(False)  # 👈 ВСЕГДА СКРЫТО ПО УМОЛЧАНИЮ
+        panel.setVisible(False)
         panel.setStyleSheet("background-color: #FAFAFA; border-radius: 6px;")
         panel.setMinimumHeight(100)
 
-        # Layout для панели
         panel_layout = QVBoxLayout(panel)
 
         if not projects:
@@ -98,7 +94,6 @@ class EmployeeCard(QFrame):
             label.setStyleSheet("color: #999; padding: 20px;")
             panel_layout.addWidget(label)
         else:
-            # Создаем таблицу с фиксированной высотой
             table = QTableWidget()
             table.setColumnCount(3)
             table.setHorizontalHeaderLabels(["Название проекта", "Всего задач", "Выполнено"])
@@ -114,24 +109,21 @@ class EmployeeCard(QFrame):
 
             panel_layout.addWidget(table)
 
-        # Добавляем в основной layout
         layout = self.layout()
         if layout:
             layout.addWidget(btn)
             layout.addWidget(panel)
 
-        # Сохраняем ссылки
         setattr(self, f"projects_btn_{section_num}", btn)
         setattr(self, f"projects_panel_{section_num}", panel)
 
-        # Подключаем сигнал
         btn.toggled.connect(lambda checked, p=panel, b=btn: self._toggle_panel(checked, p, b))
 
     def _setup_analytics_section(self, analytics_data):
-        """Создает секцию с аналитикой по темам - по умолчанию скрыта"""
+        """Создает секцию с аналитикой по темам"""
         btn = QPushButton("▶ Аналитика по темам", self)
         btn.setCheckable(True)
-        btn.setChecked(False)  # 👈 ВСЕГДА СКРЫТО ПО УМОЛЧАНИЮ
+        btn.setChecked(False)
         btn.setStyleSheet("""
             QPushButton {
                 background-color: #F0F0F0;
@@ -147,7 +139,7 @@ class EmployeeCard(QFrame):
         """)
 
         panel = QFrame(self)
-        panel.setVisible(False)  # 👈 ВСЕГДА СКРЫТО ПО УМОЛЧАНИЮ
+        panel.setVisible(False)
         panel.setStyleSheet("background-color: #FAFAFA; border-radius: 6px;")
         panel.setMinimumHeight(100)
 

@@ -308,12 +308,12 @@ class MainWindow(QMainWindow):
 
     def get_user_by_id(self, session, user_id):
         try:
-            from models.employees import Employee
+            from models.employees import Employee, EmployeeData
             from sqlalchemy import select
-            from database import get_employees_session  # ← ДОБАВИТЬ
+            from database import get_employees_session, get_tasks_session
 
-            # Используем правильную БД!
-            emp_session = get_employees_session()  # ← ИСПРАВЛЕНО
+            # 1. Получаем сотрудника из БД employees
+            emp_session = get_employees_session()
             if emp_session is None:
                 print("❌ Нет подключения к БД employees")
                 return {
@@ -326,19 +326,48 @@ class MainWindow(QMainWindow):
 
             stmt = select(Employee).where(Employee.id == user_id)
             user = emp_session.scalar(stmt)
-            emp_session.close()  # ← ЗАКРЫВАЕМ СЕССИЮ
 
-            if user:
+            if not user:
+                emp_session.close()
                 return {
-                    'id': user.id,
-                    'last_name': user.last_name,
-                    'first_name': user.first_name,
-                    'middle_name': user.middle_name,
-                    'rights': user.rights,
-                    'position': user.position,
-                    'phone_number': user.phone_number,
-                    'email': user.email
+                    'id': user_id,
+                    'last_name': 'Неизвестен',
+                    'first_name': '',
+                    'middle_name': '',
+                    'rights': 'user'
                 }
+
+            # 2. Получаем роль из EmployeeData (БД taskplanner)
+            role = 'user'
+            tasks_session = get_tasks_session()
+            if tasks_session:
+                try:
+                    emp_data = tasks_session.query(EmployeeData).filter(
+                        EmployeeData.employee_id == user_id
+                    ).first()
+                    if emp_data and emp_data.role:
+                        role = emp_data.role.value
+                    else:
+                        role = 'user'
+                except Exception as e:
+                    print(f"⚠️ Ошибка получения роли: {e}")
+                finally:
+                    tasks_session.close()
+
+            user_data = {
+                'id': user.id,
+                'last_name': user.last_name,
+                'first_name': user.first_name,
+                'middle_name': user.middle_name or '',
+                'rights': role,  # ← используем роль из EmployeeData
+                'position': user.position or '',
+                'phone_number': user.phone_number or '',
+                'email': user.email or ''
+            }
+
+            emp_session.close()
+            return user_data
+
         except Exception as e:
             print(f"Ошибка при загрузке пользователя: {e}")
             import traceback

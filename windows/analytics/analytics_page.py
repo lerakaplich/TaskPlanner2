@@ -3,7 +3,7 @@
 import os
 from typing import List, Dict, Any
 from PyQt6 import uic
-from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import (
     QWidget, QTabWidget, QGridLayout, QScrollArea,
     QVBoxLayout, QLabel, QFrame, QSizePolicy, QMessageBox
@@ -12,14 +12,19 @@ from PyQt6.QtWidgets import (
 from windows.analytics.employees.employee_card import EmployeeCard
 from windows.analytics.theme.theme_card import ThemeCard
 from windows.analytics.projects.project_card_analytics import ProjectCard
+from windows.analytics.task_card_analytics import TaskCard
 from services.analytics_service import AnalyticsService
 
 
 class AnalyticsPage(QWidget):
-    """Страница аналитики с вкладками: Сотрудники, Темы, Проекты"""
+    """Страница аналитики - только отображение, логика в сервисе"""
 
     def __init__(self, session=None, parent=None):
         super().__init__(parent)
+
+        # Инициализируем сервис
+        self.session = session
+        self.service = AnalyticsService(session) if session else None
 
         # Загружаем UI
         ui_path = os.path.join(
@@ -28,72 +33,64 @@ class AnalyticsPage(QWidget):
             "ui", "analytics", "analytics_page.ui"
         )
 
-        # Проверяем существование файла
         if os.path.exists(ui_path):
             uic.loadUi(ui_path, self)
             self._setup_ui_from_file()
         else:
-            print(f"⚠️ UI файл не найден: {ui_path}, создаем страницу программно")
             self._create_ui_programmatically()
 
-        # Инициализируем сервис
-        self.session = session
-        self.service = AnalyticsService(session) if session else None
-
         # Кэш для данных
-        self.employees_data = []
-        self.themes_data = []
-        self.projects_data = []
+        self._employees_data = []
+        self._themes_data = []
+        self._projects_data = []
 
         # Загружаем данные
         if self.service:
             self.load_all_data()
         else:
-            print("⚠️ Сервис аналитики не инициализирован (нет сессии)")
             self._show_placeholder()
 
     def _setup_ui_from_file(self):
         """Настраивает UI из загруженного файла"""
 
-        # ========== Вкладка Сотрудники ==========
+        # Для вкладки Сотрудники - используем существующие контейнеры из UI
         if hasattr(self, 'employeesContainer'):
-            if self.employeesContainer.layout():
-                self.employees_grid = self.employeesContainer.layout()
-            else:
+            # Получаем существующий grid layout
+            self.employees_grid = self.employeesContainer.layout()
+            if self.employees_grid is None:
+                # Если layout нет, создаем новый
                 self.employees_grid = QGridLayout(self.employeesContainer)
                 self.employees_grid.setHorizontalSpacing(15)
                 self.employees_grid.setVerticalSpacing(15)
+                self.employees_grid.setAlignment(Qt.AlignmentFlag.AlignTop)
+                self.employeesContainer.setLayout(self.employees_grid)
+            print("✅ Настроен employees_grid")
         else:
-            self.employeesContainer = QWidget()
-            self.employees_grid = QGridLayout(self.employeesContainer)
-            self.employees_grid.setHorizontalSpacing(15)
-            self.employees_grid.setVerticalSpacing(15)
-            if hasattr(self, 'employeesScroll'):
-                self.employeesScroll.setWidget(self.employeesContainer)
+            print("❌ employeesContainer не найден в UI")
+            # Создаем принудительно
+            self._create_employees_container()
 
-        # ========== Вкладка Темы - УДАЛЯЕМ placeholder и СОЗДАЕМ КОНТЕЙНЕР ==========
-        self._setup_tab_container('themesTab', 'themesContainer', 'themesGrid')
+        # Для вкладки Темы - создаем контейнер принудительно, так как в UI его нет
+        self._setup_tab_container_force('themesTab', 'themesContainer', 'themesGrid')
 
-        # ========== Вкладка Проекты - УДАЛЯЕМ placeholder и СОЗДАЕМ КОНТЕЙНЕР ==========
-        self._setup_tab_container('projectsTab', 'projectsContainer', 'projectsGrid')
+        # Для вкладки Проекты - создаем контейнер принудительно
+        self._setup_tab_container_force('projectsTab', 'projectsContainer', 'projectsGrid')
 
-    def _setup_tab_container(self, tab_name, container_name, grid_name):
-        """Настраивает контейнер для вкладки (удаляет placeholder, создает scroll и grid)"""
+    def _setup_tab_container_force(self, tab_name, container_name, grid_name):
+        """Принудительно создает контейнер для вкладки"""
         tab = getattr(self, tab_name, None)
         if not tab:
-            print(f"⚠️ Вкладка {tab_name} не найдена")
+            print(f"❌ {tab_name} не найден")
             return
 
-        # Очищаем вкладку - удаляем все старые виджеты
+        # Очищаем вкладку
         old_layout = tab.layout()
         if old_layout:
-            # Удаляем все виджеты из старого layout
             while old_layout.count():
                 item = old_layout.takeAt(0)
                 if item.widget():
                     item.widget().deleteLater()
         else:
-            # Создаем новый layout
             layout = QVBoxLayout(tab)
             layout.setContentsMargins(15, 15, 15, 15)
             tab.setLayout(layout)
@@ -103,7 +100,6 @@ class AnalyticsPage(QWidget):
         scroll.setWidgetResizable(True)
         scroll.setStyleSheet("border: none; background-color: transparent;")
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
 
         # Создаем контейнер
         container = QWidget()
@@ -118,73 +114,116 @@ class AnalyticsPage(QWidget):
         scroll.setWidget(container)
         tab.layout().addWidget(scroll)
 
-        # Сохраняем ссылки
+        setattr(self, container_name, container)
+        setattr(self, grid_name, grid)
+        print(f"✅ Создан контейнер для {tab_name}")
+
+    def _create_employees_container(self):
+        """Создает контейнер для сотрудников принудительно"""
+        if not hasattr(self, 'employeesTab'):
+            print("❌ employeesTab не найден")
+            return
+
+        # Очищаем вкладку
+        old_layout = self.employeesTab.layout()
+        if old_layout:
+            while old_layout.count():
+                item = old_layout.takeAt(0)
+                if item.widget():
+                    item.widget().deleteLater()
+        else:
+            layout = QVBoxLayout(self.employeesTab)
+            layout.setContentsMargins(15, 15, 15, 15)
+            self.employeesTab.setLayout(layout)
+
+        # Создаем ScrollArea
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setStyleSheet("border: none; background-color: transparent;")
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+
+        # Создаем контейнер
+        container = QWidget()
+        container.setStyleSheet("background-color: transparent;")
+
+        # Создаем GridLayout
+        self.employees_grid = QGridLayout(container)
+        self.employees_grid.setHorizontalSpacing(15)
+        self.employees_grid.setVerticalSpacing(15)
+        self.employees_grid.setAlignment(Qt.AlignmentFlag.AlignTop)
+
+        scroll.setWidget(container)
+        self.employeesTab.layout().addWidget(scroll)
+
+        self.employeesContainer = container
+        print("✅ Контейнер для сотрудников создан принудительно")
+
+    def _setup_tab_container(self, tab_name, container_name, grid_name):
+        """Настраивает контейнер для вкладки"""
+        tab = getattr(self, tab_name, None)
+        if not tab:
+            return
+
+        # Очищаем вкладку
+        old_layout = tab.layout()
+        if old_layout:
+            while old_layout.count():
+                item = old_layout.takeAt(0)
+                if item.widget():
+                    item.widget().deleteLater()
+        else:
+            layout = QVBoxLayout(tab)
+            layout.setContentsMargins(15, 15, 15, 15)
+            tab.setLayout(layout)
+
+        # Создаем ScrollArea
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setStyleSheet("border: none; background-color: transparent;")
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+
+        # Создаем контейнер
+        container = QWidget()
+        container.setStyleSheet("background-color: transparent;")
+
+        # Создаем GridLayout
+        grid = QGridLayout(container)
+        grid.setHorizontalSpacing(15)
+        grid.setVerticalSpacing(15)
+        grid.setAlignment(Qt.AlignmentFlag.AlignTop)
+
+        scroll.setWidget(container)
+        tab.layout().addWidget(scroll)
+
         setattr(self, container_name, container)
         setattr(self, grid_name, grid)
 
-        print(f"✅ Создан контейнер для вкладки {tab_name}: {grid_name}")
-
     def _create_ui_programmatically(self):
-        """Создает UI программно, если файл не найден"""
+        """Создает UI программно"""
         self.setObjectName("AnalyticsPage")
-        self.setStyleSheet("""
-            QWidget {
-                background-color: #F5F5F7;
-                font-family: 'Segoe UI', Arial, sans-serif;
-            }
-        """)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(20, 20, 20, 20)
 
         # Заголовок
         self.titleLabel = QLabel("Аналитика / Навыки")
-        self.titleLabel.setStyleSheet("""
-            font-size: 24px;
-            font-weight: bold;
-            color: #1B232A;
-            padding: 10px 0;
-        """)
+        self.titleLabel.setStyleSheet("font-size: 24px; font-weight: bold; color: #1B232A; padding: 10px 0;")
         layout.addWidget(self.titleLabel)
 
         # Tab Widget
         self.tabWidget = QTabWidget()
         self.tabWidget.setStyleSheet("""
-            QTabBar::tab {
-                background-color: white;
-                color: #666;
-                padding: 12px 20px;
-                margin-right: 2px;
-                border-top-left-radius: 8px;
-                border-top-right-radius: 8px;
-                border: 1px solid #E0E0E0;
-                border-bottom: none;
-                font-weight: bold;
-                font-size: 14px;
-            }
-            QTabBar::tab:selected {
-                background-color: #1B232A;
-                color: white;
-                border-color: #1B232A;
-            }
-            QTabBar::tab:hover:!selected {
-                background-color: #F0F0F0;
-            }
-            QTabWidget::pane {
-                background-color: white;
-                border: 1px solid #E0E0E0;
-                border-radius: 0px 8px 8px 8px;
-                margin-top: -1px;
-            }
+            QTabBar::tab { background-color: white; color: #666; padding: 12px 20px;
+                margin-right: 2px; border-top-left-radius: 8px; border-top-right-radius: 8px;
+                border: 1px solid #E0E0E0; border-bottom: none; font-weight: bold; font-size: 14px; }
+            QTabBar::tab:selected { background-color: #1B232A; color: white; }
+            QTabWidget::pane { background-color: white; border: 1px solid #E0E0E0;
+                border-radius: 0px 8px 8px 8px; margin-top: -1px; }
         """)
 
-        # Вкладка Сотрудники
+        # Вкладки
         self._add_tab("Сотрудники", "employeesTab", "employeesScroll", "employeesContainer", "employeesGrid")
-
-        # Вкладка Темы
         self._add_tab("Темы", "themesTab", "themesScroll", "themesContainer", "themesGrid")
-
-        # Вкладка Проекты
         self._add_tab("Проекты", "projectsTab", "projectsScroll", "projectsContainer", "projectsGrid")
 
         layout.addWidget(self.tabWidget)
@@ -198,7 +237,6 @@ class AnalyticsPage(QWidget):
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setStyleSheet("border: none; background-color: transparent;")
-        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
 
         container = QWidget()
         container.setStyleSheet("background-color: transparent;")
@@ -209,24 +247,12 @@ class AnalyticsPage(QWidget):
 
         scroll.setWidget(container)
         tab_layout.addWidget(scroll)
-
         self.tabWidget.addTab(tab, title)
 
         setattr(self, tab_name, tab)
         setattr(self, scroll_name, scroll)
         setattr(self, container_name, container)
         setattr(self, grid_name, grid)
-
-    def _show_placeholder(self):
-        """Показывает заглушку при отсутствии данных"""
-        for grid_attr in ['employeesGrid', 'themesGrid', 'projectsGrid']:
-            grid = getattr(self, grid_attr, None)
-            if grid:
-                self._clear_grid(grid)
-                label = QLabel("Нет данных для отображения")
-                label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-                label.setStyleSheet("font-size: 18px; color: #666; padding: 50px;")
-                grid.addWidget(label, 0, 0)
 
     def _clear_grid(self, grid):
         """Очищает grid layout"""
@@ -236,99 +262,100 @@ class AnalyticsPage(QWidget):
             item = grid.takeAt(0)
             if item.widget():
                 item.widget().deleteLater()
-            elif item.layout():
-                self._clear_layout(item.layout())
 
-    def _clear_layout(self, layout):
-        """Рекурсивно очищает layout"""
-        while layout.count():
-            item = layout.takeAt(0)
-            if item.widget():
-                item.widget().deleteLater()
-            elif item.layout():
-                self._clear_layout(item.layout())
+    def _show_placeholder(self):
+        """Показывает заглушку"""
+        for grid_attr in ['employees_grid', 'themesGrid', 'projectsGrid']:
+            grid = getattr(self, grid_attr, None)
+            if grid:
+                self._clear_grid(grid)
+                label = QLabel("Нет данных для отображения")
+                label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+                label.setStyleSheet("font-size: 18px; color: #666; padding: 50px;")
+                grid.addWidget(label, 0, 0)
 
     def load_all_data(self):
-        """Загружает все данные из БД"""
+        """Загружает все данные через сервис"""
         if not self.service:
             return
 
         try:
-            # Загружаем сотрудников
-            self.employees_data = self.service.get_all_employees_with_stats()
-            print(f"📊 Загружено сотрудников: {len(self.employees_data)}")
+            self._employees_data = self.service.get_all_employees_with_stats()
+            print(f"📊 Загружено сотрудников: {len(self._employees_data)}")
 
-            # Загружаем темы
-            self.themes_data = self.service.get_themes_stats()
-            print(f"📊 Загружено тем: {len(self.themes_data)}")
+            self._themes_data = self.service.get_themes_stats()
+            print(f"📊 Загружено тем: {len(self._themes_data)}")
 
-            # Загружаем проекты
-            self.projects_data = self.service.get_projects_stats()
-            print(f"📊 Загружено проектов: {len(self.projects_data)}")
+            self._projects_data = self.service.get_projects_stats()
+            print(f"📊 Загружено проектов: {len(self._projects_data)}")
 
-            # Отображаем данные
             self.populate_employees_tab()
             self.populate_themes_tab()
             self.populate_projects_tab()
 
         except Exception as e:
-            print(f"❌ Ошибка при загрузке данных аналитики: {e}")
+            print(f"❌ Ошибка загрузки: {e}")
             import traceback
             traceback.print_exc()
-            QMessageBox.warning(self, "Ошибка", f"Не удалось загрузить данные: {str(e)}")
 
     def populate_employees_tab(self):
         """Заполняет вкладку сотрудников"""
-        if not hasattr(self, 'employeesGrid') or self.employeesGrid is None:
-            print("❌ employeesGrid не найден")
+        if not hasattr(self, 'employees_grid'):
+            print("❌ employees_grid не найден")
             return
 
-        self._clear_grid(self.employeesGrid)
+        self._clear_grid(self.employees_grid)
 
-        if not self.employees_data:
-            label = QLabel("Нет данных о сотрудниках")
-            label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            label.setStyleSheet("font-size: 18px; color: #666; padding: 50px;")
-            self.employeesGrid.addWidget(label, 0, 0)
+        if not self._employees_data:
+            print("❌ self._employees_data пуст")
+            self._show_empty_message(self.employees_grid, "Нет данных о сотрудниках")
             return
 
-        row = 0
-        col = 0
-        max_cols = 3
+        print(f"📊 Попытка отобразить {len(self._employees_data)} сотрудников")
 
-        for emp_data in self.employees_data:
-            card = EmployeeCard(emp_data)
-            card.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
-            self.employeesGrid.addWidget(card, row, col, alignment=Qt.AlignmentFlag.AlignTop)
+        # Выводим первых несколько для проверки
+        for i, emp_data in enumerate(self._employees_data[:3]):
+            print(f"   Сотрудник {i}: {emp_data.get('name')} - {emp_data.get('position')}")
 
-            col += 1
-            if col >= max_cols:
-                col = 0
-                row += 1
+        row, col, max_cols = 0, 0, 3
+        for emp_data in self._employees_data:
+            try:
+                card = EmployeeCard(emp_data)
+                card.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
+                self.employees_grid.addWidget(card, row, col, alignment=Qt.AlignmentFlag.AlignTop)
+                print(f"   ✅ Добавлена карточка для {emp_data.get('name')}")
+                col += 1
+                if col >= max_cols:
+                    col = 0
+                    row += 1
+            except Exception as e:
+                print(f"   ❌ Ошибка при создании карточки для {emp_data.get('name')}: {e}")
+                import traceback
+                traceback.print_exc()
 
-        print(f"✅ Отображено {len(self.employees_data)} сотрудников")
+        # Принудительно обновляем контейнер
+        if hasattr(self, 'employeesContainer'):
+            self.employeesContainer.update()
+            self.employeesContainer.repaint()
+
+        print(f"✅ Отображено {len(self._employees_data)} сотрудников")
 
     def populate_themes_tab(self):
         """Заполняет вкладку тем"""
-        if not hasattr(self, 'themesGrid') or self.themesGrid is None:
-            print("❌ themesGrid не найден")
+        if not hasattr(self, 'themesGrid'):
             return
 
         self._clear_grid(self.themesGrid)
 
-        if not self.themes_data:
-            label = QLabel("Нет данных о темах")
-            label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            label.setStyleSheet("font-size: 18px; color: #666; padding: 50px;")
-            self.themesGrid.addWidget(label, 0, 0)
+        if not self._themes_data:
+            self._show_empty_message(self.themesGrid, "Нет данных о темах")
             return
 
-        row = 0
-        col = 0
-        max_cols = 3
-
-        for theme_data in self.themes_data:
-            card = ThemeCard(theme_data)
+        row, col, max_cols = 0, 0, 3
+        for theme_data in self._themes_data:
+            # Подготавливаем данные через сервис
+            card_data = self.service.get_theme_card_data(theme_data)
+            card = ThemeCard(card_data, analytics_service=self.service)
             card.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
             self.themesGrid.addWidget(card, row, col, alignment=Qt.AlignmentFlag.AlignTop)
 
@@ -337,31 +364,25 @@ class AnalyticsPage(QWidget):
                 col = 0
                 row += 1
 
-        print(f"✅ Отображено {len(self.themes_data)} тем")
+        print(f"✅ Отображено {len(self._themes_data)} тем")
 
     def populate_projects_tab(self):
         """Заполняет вкладку проектов"""
-        if not hasattr(self, 'projectsGrid') or self.projectsGrid is None:
-            print("❌ projectsGrid не найден")
+        if not hasattr(self, 'projectsGrid'):
             return
 
         self._clear_grid(self.projectsGrid)
 
-        if not self.projects_data:
-            label = QLabel("Нет данных о проектах")
-            label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            label.setStyleSheet("font-size: 18px; color: #666; padding: 50px;")
-            self.projectsGrid.addWidget(label, 0, 0)
+        if not self._projects_data:
+            self._show_empty_message(self.projectsGrid, "Нет данных о проектах")
             return
 
-        row = 0
-        col = 0
-        max_cols = 3
-
-        for proj_data in self.projects_data:
-            # Показываем только активные проекты (не архивные)
+        row, col, max_cols = 0, 0, 3
+        for proj_data in self._projects_data:
+            # Показываем только активные проекты
             if not proj_data.get("is_archived", False):
-                card = ProjectCard(proj_data)
+                card_data = self.service.get_project_card_data(proj_data)
+                card = ProjectCard(card_data, analytics_service=self.service)
                 card.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
                 self.projectsGrid.addWidget(card, row, col, alignment=Qt.AlignmentFlag.AlignTop)
 
@@ -371,6 +392,14 @@ class AnalyticsPage(QWidget):
                     row += 1
 
         print(f"✅ Отображено проектов: {row * max_cols + col}")
+
+    def _show_empty_message(self, grid, message):
+        """Показывает сообщение об отсутствии данных"""
+        self._clear_grid(grid)
+        label = QLabel(message)
+        label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        label.setStyleSheet("font-size: 18px; color: #666; padding: 50px;")
+        grid.addWidget(label, 0, 0)
 
     def refresh(self):
         """Обновляет все данные"""
