@@ -9,6 +9,7 @@ from database import get_tasks_session
 from services.analytics_service import AnalyticsService
 from services.archive_service import ArchiveService
 from services.chat_service import ChatService
+from services.gantt_service import GanttService
 from services.overtime_service import OvertimeService
 from services.projects_service import ProjectsService
 from windows.analytics.analytics_page import AnalyticsPage
@@ -136,7 +137,7 @@ class MainWindow(QMainWindow):
         """Ленивая загрузка страницы Ганта"""
         return self._get_or_create_page(
             'gantt',
-            lambda: GanttChartWidget(service=self.project_service),
+            lambda: GanttChartWidget(service=GanttService(self.session, self.current_user_id)),
             self.PAGE_GANTT
         )
 
