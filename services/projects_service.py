@@ -1,23 +1,15 @@
 # services/projects_service.py
-
-import json
+import asyncio
 from datetime import datetime
 from typing import List, Optional, Dict, Any
-from sqlalchemy.orm import Session
 from sqlalchemy import text
-
 from database import get_tasks_session, get_employees_session
-from models.projects import Project
 from models.schemas.projects_dto import ProjectWithMembersDTO, ProjectCardDTO, ProjectBoardDTO, BoardColumnWithTasksDTO
 from models.schemas.tasks_dto import TaskCardDTO, TaskPriority
+from repositories.employee_repo import EmployeeRepo  # ← ИСПРАВЛЕНО (было external_employee_repo)
 from repositories.project_repo import ProjectRepo
 from repositories.task_repo import TaskRepo
-from repositories.employee_repo import EmployeeRepo  # ← ИСПРАВЛЕНО (было external_employee_repo)
 from services.column_service import ColumnService
-from models.employees import Employee  # ← ДОБАВЛЕНО
-
-# Импортируем бота для отправки уведомлений
-import asyncio
 from telegram_bot import telegram_bot
 
 
@@ -183,11 +175,20 @@ class ProjectsService:
 
                     owner_name = "Не назначен"
                     if proj.owner:
-                        owner = self.employee_repo.get_by_id(proj.owner)  # ← ИСПРАВЛЕНО
+                        owner = self.employee_repo.get_by_id(proj.owner)
                         if owner:
                             owner_name = f"{owner.last_name} {owner.first_name[0]}."
                             if owner.middle_name:
                                 owner_name += f"{owner.middle_name[0]}."
+
+                    # ← ДОБАВЛЯЕМ ПОЛУЧЕНИЕ ИМЕНИ КУРАТОРА
+                    manager_name = None
+                    if proj.manager_id:
+                        manager = self.employee_repo.get_by_id(proj.manager_id)
+                        if manager:
+                            manager_name = f"{manager.last_name} {manager.first_name[0]}."
+                            if manager.middle_name:
+                                manager_name += f"{manager.middle_name[0]}."
 
                     created_at_str = None
                     if proj.created_at:
@@ -206,7 +207,8 @@ class ProjectsService:
                         owner_name=owner_name,
                         owner_id=proj.owner,
                         created_at=created_at_str,
-                        columns_count=columns_count
+                        columns_count=columns_count,
+                        manager_name=manager_name  # ← ДОБАВЛЯЕМ
                     )
 
                     result.append(card_dto)
@@ -246,7 +248,8 @@ class ProjectsService:
                 created_by=creator_id,
                 created_at=datetime.now(),
                 updated_at=datetime.now(),
-                is_archived=not raw_data.get('is_active', True)
+                is_archived=not raw_data.get('is_active', True),
+                manager_id=raw_data.get('manager_id')
             )
 
             self.session.flush()
@@ -331,6 +334,13 @@ class ProjectsService:
         dto = ProjectWithMembersDTO.model_validate(project)
         dto.member_ids = [m.employee_id for m in project.members]
         dto.admin_ids = [m.employee_id for m in project.members if m.is_admin]
+        dto.manager_id = project.manager_id
+
+        # Получаем имя куратора
+        if project.manager_id:
+            manager = self.employee_repo.get_by_id(project.manager_id)
+            if manager:
+                dto.manager_name = self._get_employee_full_name(manager)
 
         column_ids = self.project_repo.get_selected_column_ids(project_id)
         if column_ids:
@@ -370,6 +380,7 @@ class ProjectsService:
             project.is_archived = dto.is_archived
             project.deadline = dto.deadline
             project.updated_at = datetime.now()
+            project.manager_id = dto.manager_id
 
             if hasattr(dto, 'selected_columns_data') and dto.selected_columns_data:
                 column_ids = [col.get('id') for col in dto.selected_columns_data if col.get('id')]

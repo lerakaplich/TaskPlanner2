@@ -23,14 +23,16 @@ class ProjectDTO(BaseModel):
     updated_at: datetime
     deadline: Optional[time] = None
     owner: int
-    selected_column_ids: Optional[str] = None  # 👈 Строка с ID через запятую
+    selected_column_ids: Optional[str] = None
+    manager_id: Optional[int] = None
 
 
 class ProjectWithMembersDTO(ProjectDTO):
     member_ids: List[int] = []
     admin_ids: List[int] = []
     is_admin: Optional[bool] = None
-    selected_columns_data: List[Dict[str, Any]] = []  # Для UI
+    selected_columns_data: List[Dict[str, Any]] = []
+    manager_name: Optional[str] = None
 
 # =========================
 # DTO карточки проекта
@@ -47,7 +49,8 @@ class ProjectCardDTO(BaseModel):
     owner_name: str = "Не назначен"
     owner_id: Optional[int] = None
     created_at: Optional[str] = None
-    columns_count: int = 0  # 👈 ДОБАВИТЬ: количество колонок
+    columns_count: int = 0
+    manager_name: Optional[str] = None
 
 
 class ProjectAnalyticsDTO(BaseModel):

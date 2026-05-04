@@ -131,7 +131,15 @@ class ProjectCard(QFrame):
 
         # Владелец
         owner_name = getattr(project_data, 'owner_name', 'Не назначен')
-        self.projectInfo.setText(f"Владелец: {owner_name}")
+
+        # Куратор
+        manager_name = getattr(project_data, 'manager_name', None)
+
+        # Формируем строку информации
+        if manager_name:
+            self.projectInfo.setText(f"Владелец: {owner_name} | Куратор: {manager_name}")
+        else:
+            self.projectInfo.setText(f"Владелец: {owner_name}")
 
         # Дата создания
         created_at = getattr(project_data, 'created_at', None)
@@ -150,7 +158,7 @@ class ProjectCard(QFrame):
         admins_text = f"Админы: {admin_count} чел."
         self.admins.setText(admins_text)
 
-        # 👇 ЗАДАЧИ
+        # Задачи
         tasks_total = getattr(project_data, 'tasks_total', 0)
         tasks_done = getattr(project_data, 'tasks_done', 0)
 
@@ -181,11 +189,10 @@ class ProjectCard(QFrame):
                 }
             """)
 
-        # 👇 КОЛОНКИ
+        # Колонки
         columns_count = getattr(project_data, 'columns_count', 0)
         columns_text = f"Колонок: {columns_count}"
         self.columnsLabel.setText(columns_text)
-
 
         # Увеличиваем высоту карточки
         self.setMinimumHeight(285)

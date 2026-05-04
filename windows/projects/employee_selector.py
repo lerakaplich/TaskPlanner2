@@ -1,4 +1,5 @@
 # windows/projects/employee_selector.py
+
 import os
 import sys
 from typing import List, Dict, Optional, Set
@@ -7,8 +8,8 @@ from PyQt6 import uic
 from PyQt6.QtWidgets import QDialog, QApplication, QVBoxLayout, QCheckBox, QWidget, QLabel
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal
 
-from database import get_employees_session  # Прямое подключение!
-from models.employees import Employee, Division, Department
+from database import get_employees_session, get_tasks_session  # ← ДОБАВИТЬ get_tasks_session
+from models.employees import Employee, Division, Department, EmployeeData  # ← ДОБАВИТЬ EmployeeData
 from sqlalchemy import select, func
 
 
@@ -31,6 +32,8 @@ class EmployeeSelectorDialog(QDialog):
 
         # Статистика использования сотрудников
         self.employee_usage_count = Counter()
+        # Кэш для ролей сотрудников
+        self.employee_role_cache = {}
 
         # Кэш для подразделений и отделов
         self.divisions_list = []
@@ -50,6 +53,7 @@ class EmployeeSelectorDialog(QDialog):
         # Инициализация
         self.load_divisions()
         self.load_departments()
+        self.load_employee_roles()  # ← НОВЫЙ МЕТОД
         self.load_employee_usage_stats()
         self.load_employees_from_db()
         self.setup_filters()
@@ -81,21 +85,37 @@ class EmployeeSelectorDialog(QDialog):
             print(f"⚠️ Ошибка загрузки отделов: {e}")
             self.departments_list = []
 
+    def load_employee_roles(self):
+        """Загружает роли сотрудников из EmployeeData (БД taskplanner)"""
+        try:
+            tasks_session = get_tasks_session()
+            if tasks_session:
+                results = tasks_session.query(EmployeeData.employee_id, EmployeeData.role).all()
+                for emp_id, role in results:
+                    if role:
+                        self.employee_role_cache[emp_id] = role.value if hasattr(role, 'value') else str(role)
+                tasks_session.close()
+                print(f"📊 Загружены роли для {len(self.employee_role_cache)} сотрудников")
+        except Exception as e:
+            print(f"⚠️ Ошибка загрузки ролей: {e}")
+
     def load_employee_usage_stats(self):
         """Загружает статистику использования сотрудников в задачах"""
         try:
             from models.tasks import Task
-            session = get_tasks_session()  # Из taskplanner БД
+            from database import get_tasks_session
 
-            results = session.query(Task.assigned_to, func.count(Task.id)).filter(
-                Task.assigned_to.isnot(None)
-            ).group_by(Task.assigned_to).all()
+            session = get_tasks_session()
+            if session:
+                results = session.query(Task.assigned_to, func.count(Task.id)).filter(
+                    Task.assigned_to.isnot(None)
+                ).group_by(Task.assigned_to).all()
 
-            for emp_id, count in results:
-                self.employee_usage_count[emp_id] = count
+                for emp_id, count in results:
+                    self.employee_usage_count[emp_id] = count
 
-            session.close()
-            print(f"📊 Загружена статистика использования {len(self.employee_usage_count)} сотрудников")
+                session.close()
+                print(f"📊 Загружена статистика использования {len(self.employee_usage_count)} сотрудников")
         except Exception as e:
             print(f"⚠️ Ошибка загрузки статистики: {e}")
 
@@ -110,6 +130,9 @@ class EmployeeSelectorDialog(QDialog):
                 full_name = self._get_full_name(emp)
 
                 if full_name:
+                    role = self.employee_role_cache.get(emp.id, 'user')
+                    is_admin = role in ['admin', 'superadmin']
+
                     self.all_employees.append({
                         'id': emp.id,
                         'full_name': full_name,
@@ -119,10 +142,11 @@ class EmployeeSelectorDialog(QDialog):
                         'position': emp.position or '',
                         'phone': emp.phone_number or '',
                         'email': emp.email or '',
-                        'is_admin': emp.rights == 'superadmin' if emp.rights else False,
+                        'is_admin': is_admin,  # ← ИСПРАВЛЕНО
                         'usage_count': self.employee_usage_count.get(emp.id, 0),
                         'department_id': emp.department_id,
-                        'division_id': emp.division_id
+                        'division_id': emp.division_id,
+                        'role': role  # ← ДОБАВИМ для информации
                     })
 
             session.close()
@@ -174,7 +198,15 @@ class EmployeeSelectorDialog(QDialog):
         self.subDepartmentFilter.blockSignals(True)
         self.subDepartmentFilter.setCurrentIndex(0)
         self.subDepartmentFilter.blockSignals(False)
-        QTimer.singleShot(0, self.apply_filters)
+        QTimer.singleShot(0, self._refresh_filters)
+
+    def _refresh_filters(self):
+        """Обновляет фильтры и отображение"""
+        # Перезагружаем роли и статистику
+        self.load_employee_roles()
+        self.load_employee_usage_stats()
+        self.load_employees_from_db()
+        self.apply_filters()
 
     def on_department_changed(self, department):
         """Обработка изменения выбранного отдела"""
@@ -311,6 +343,10 @@ class EmployeeSelectorDialog(QDialog):
 
         if emp.get('email'):
             tooltip_lines.append(f"Email: {emp['email']}")
+
+        if emp.get('role'):
+            role_display = {'user': 'Пользователь', 'admin': 'Администратор', 'superadmin': 'Суперадминистратор'}
+            tooltip_lines.append(f"Роль: {role_display.get(emp['role'], emp['role'])}")
 
         usage_count = emp.get('usage_count', 0)
         if usage_count > 0:

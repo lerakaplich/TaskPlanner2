@@ -2,11 +2,10 @@
 
 import os
 import sys
-from typing import List, Dict, Any
-
+from typing import List, Dict, Optional
 from PyQt6 import uic
-from PyQt6.QtWidgets import QDialog, QMessageBox
 from PyQt6.QtCore import QDate, pyqtSignal, Qt
+from PyQt6.QtWidgets import QDialog, QMessageBox
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
@@ -33,7 +32,7 @@ class BaseProjectDialog(QDialog):
         self.selected_columns_data = []
         self.selected_columns_keys = []
 
-        # Загружаем шаблонные колонки из БД
+        # Сначала загружаем шаблонные колонки
         self.template_columns = self._load_template_columns()
 
         # Базовая настройка UI
@@ -49,6 +48,11 @@ class BaseProjectDialog(QDialog):
             self.columnBtn.setCursor(Qt.CursorShape.PointingHandCursor)
             self.update_columns_button_text()
 
+        # Добавляем выбор куратора в UI (до загрузки данных!)
+        if hasattr(self, 'comboManagers') or hasattr(self, 'comboManager'):
+            self.setup_manager_selector()
+
+        # Теперь загружаем данные проекта (после инициализации комбобокса!)
         if project_data:
             self.load_project_data()
             if 'selected_columns_data' in project_data:
@@ -149,6 +153,13 @@ class BaseProjectDialog(QDialog):
             is_active = is_active.lower() == 'true'
         self.activeCheckbox.setChecked(is_active)
 
+        # 👇 ИСПРАВЛЯЕМ: загружаем куратора СИНХРОННО
+        manager_id = self.project_data.get('manager_id')
+        if manager_id:
+            # Заполняем комбобокс ПЕРЕД установкой значения
+            self._ensure_manager_combo_filled()
+            self._set_manager_by_id(manager_id)
+
         # Загружаем колонки, если они есть
         if 'selected_columns_data' in self.project_data and self.project_data['selected_columns_data']:
             self.selected_columns_data = self.project_data['selected_columns_data']
@@ -157,6 +168,60 @@ class BaseProjectDialog(QDialog):
             print(f"📊 Загружено {len(self.selected_columns_data)} колонок")
 
         self.load_participants_and_admins()
+
+    def _ensure_manager_combo_filled(self):
+        """Гарантирует, что комбобокс куратора заполнен"""
+        combo = self._get_manager_combo()
+        if combo is None:
+            print("⚠️ Не найден comboManager/comboManagers в UI")
+            return
+
+        # Если уже заполнен (есть хотя бы один сотрудник + "Выберите куратора")
+        if combo.count() > 1:
+            return
+
+        combo.clear()
+        combo.addItem("Выберите куратора", None)
+
+        from database import get_employees_session
+        from models.employees import Employee
+        from sqlalchemy import select
+
+        emp_session = get_employees_session()
+        if emp_session:
+            stmt = select(Employee).order_by(Employee.last_name)
+            employees = emp_session.scalars(stmt).all()
+
+            for emp in employees:
+                full_name = f"{emp.last_name} {emp.first_name}"
+                if emp.middle_name:
+                    full_name += f" {emp.middle_name}"
+                combo.addItem(full_name, emp.id)
+
+            emp_session.close()
+            print(f"✅ Загружено {combo.count() - 1} сотрудников в комбобокс куратора")
+
+    def _set_manager_by_id(self, manager_id: int):
+        """Устанавливает куратора по ID"""
+        combo = self._get_manager_combo()
+        if combo is None:
+            return
+
+        for i in range(combo.count()):
+            if combo.itemData(i) == manager_id:
+                combo.setCurrentIndex(i)
+                print(f"✅ Установлен куратор с ID={manager_id}, индекс={i}, текст={combo.currentText()}")
+                return
+
+        print(f"⚠️ Куратор с ID={manager_id} не найден в списке. Доступно {combo.count()} вариантов")
+
+    def _get_manager_combo(self):
+        """Возвращает комбобокс куратора"""
+        if hasattr(self, 'comboManager'):
+            return self.comboManager
+        elif hasattr(self, 'comboManagers'):
+            return self.comboManagers
+        return None
 
     def load_participants_and_admins(self):
         """Загрузка участников и администраторов из project_data"""
@@ -248,6 +313,52 @@ class BaseProjectDialog(QDialog):
         except Exception as e:
             QMessageBox.warning(self, "Ошибка", f"Ошибка при выборе участников: {e}")
 
+    def setup_manager_selector(self):
+        """Настройка выбора куратора проекта"""
+        combo = self._get_manager_combo()
+        if combo is None:
+            print("⚠️ Не найден comboManager/comboManagers в UI")
+            return
+
+        # Если уже заполнен, не заполняем заново
+        if combo.count() > 1:
+            return
+
+        combo.clear()
+        combo.addItem("Выберите куратора", None)
+
+        from database import get_employees_session
+        from models.employees import Employee
+        from sqlalchemy import select
+
+        emp_session = get_employees_session()
+        if emp_session:
+            stmt = select(Employee).order_by(Employee.last_name)
+            employees = emp_session.scalars(stmt).all()
+
+            for emp in employees:
+                full_name = f"{emp.last_name} {emp.first_name}"
+                if emp.middle_name:
+                    full_name += f" {emp.middle_name}"
+                combo.addItem(full_name, emp.id)
+
+            emp_session.close()
+            print(f"✅ Загружено {combo.count() - 1} сотрудников в комбобокс куратора")
+
+    def get_manager_id(self) -> Optional[int]:
+        """Возвращает ID выбранного куратора"""
+        combo = self._get_manager_combo()
+        if combo:
+            return combo.currentData()
+        return None
+
+    def get_manager_name(self) -> Optional[str]:
+        """Возвращает имя выбранного куратора"""
+        combo = self._get_manager_combo()
+        if combo:
+            return combo.currentText()
+        return None
+
     def select_admins(self):
         """Открыть диалог выбора администраторов"""
         try:
@@ -319,4 +430,5 @@ class BaseProjectDialog(QDialog):
             'admins': self.admins,
             'is_active': self.activeCheckbox.isChecked(),
             'updated_date': QDate.currentDate().toString("dd.MM.yyyy"),
+            'manager_id': self.get_manager_id(),  # ← ДОЛЖНО БЫТЬ
         }

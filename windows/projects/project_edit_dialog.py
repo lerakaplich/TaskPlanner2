@@ -102,7 +102,11 @@ class ProjectEditDialog(BaseProjectDialog):
         if original.get('is_active') != current['is_active']:
             return True
 
-        # 👇 ИСПРАВЛЯЕМ: убираем проверку column_visibility
+        # 👇 ДОБАВЛЯЕМ СРАВНЕНИЕ КУРАТОРА
+        if original.get('manager_id') != current.get('manager_id'):
+            print(f"🔍 Изменен куратор: {original.get('manager_id')} -> {current.get('manager_id')}")
+            return True
+
         # Сравниваем выбранные колонки
         original_columns = original.get('selected_columns_data', [])
         current_columns = self.selected_columns_data

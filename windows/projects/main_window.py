@@ -509,11 +509,11 @@ class MainWindow(QMainWindow):
         if not project_dto:
             QMessageBox.warning(self, "Ошибка", "Проект не найден")
             return
-        from database import get_employees_session  # ← ДОБАВИТЬ
+        from database import get_employees_session
         from models.employees import Employee
         from sqlalchemy import select
 
-        emp_session = get_employees_session()  # ← ИСПРАВЛЕНО
+        emp_session = get_employees_session()
         if emp_session is None:
             QMessageBox.warning(self, "Ошибка", "Нет подключения к БД сотрудников")
             return
@@ -542,7 +542,7 @@ class MainWindow(QMainWindow):
                     'middle_name': emp.middle_name or '',
                     'position': emp.position or 'Сотрудник'
                 })
-        emp_session.close()  # ← ЗАКРЫВАЕМ СЕССИЮ
+        emp_session.close()
 
         dialog_data = {
             'id': project_dto.id,
@@ -554,8 +554,13 @@ class MainWindow(QMainWindow):
             'admins': admins_full,
             'participants_ids': project_dto.member_ids,
             'admins_ids': project_dto.admin_ids,
-            'selected_columns_data': project_dto.selected_columns_data
+            'selected_columns_data': project_dto.selected_columns_data,
+            'manager_id': project_dto.manager_id,  # ← ЭТА СТРОКА ОТСУТСТВОВАЛА!
         }
+
+        # Добавим отладку
+        print(f"🔍 DEBUG: manager_id в dialog_data = {dialog_data.get('manager_id')}")
+
         dialog = ProjectEditDialog(dialog_data, parent=self)
         if dialog.exec() == QDialog.DialogCode.Accepted:
             raw_results = dialog.get_project_data()
@@ -563,6 +568,7 @@ class MainWindow(QMainWindow):
             project_dto.description = raw_results['description']
             project_dto.is_archived = not raw_results.get('is_active', True)
             project_dto.selected_columns_data = raw_results.get('selected_columns_data', [])
+            project_dto.manager_id = raw_results.get('manager_id')  # ← ДОБАВЬТЕ ЭТУ СТРОКУ!
 
             def str_to_ids(s):
                 return [int(i.strip()) for i in s.split(',') if i.strip().isdigit()]

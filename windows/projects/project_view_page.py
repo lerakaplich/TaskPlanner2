@@ -148,13 +148,17 @@ class ProjectViewPage(QWidget):
     def _task_to_dict(self, task):
         """Преобразует задачу в словарь для карточки"""
         from models.schemas.tasks_dto import TaskPriority
-        from repositories.employee_repo import EmployeeRepo  # ← ИСПРАВЛЕНО
+        from repositories.employee_repo import EmployeeRepo
+        from database import get_employees_session  # ← ДОБАВИТЬ
 
-        # Получаем имя исполнителя
+        # Получаем имя исполнителя - используем ОТДЕЛЬНУЮ сессию для employees
         assignee_name = None
         if task.assigned_to:
-            emp_repo = EmployeeRepo(self.db_session)  # ← ИСПРАВЛЕНО
-            assignee_name = emp_repo.get_full_name(task.assigned_to)
+            emp_session = get_employees_session()  # ← ПРАВИЛЬНАЯ СЕССИЯ ДЛЯ EMPLOYEES
+            if emp_session:
+                emp_repo = EmployeeRepo(emp_session)
+                assignee_name = emp_repo.get_full_name(task.assigned_to)
+                emp_session.close()
 
         priority_map = {
             TaskPriority.low: ("Низкий", "#4CAF50"),

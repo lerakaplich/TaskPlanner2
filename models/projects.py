@@ -34,6 +34,7 @@ class Project(Base):
 
     # 👇 ДОБАВЛЯЕМ ПОЛЕ ДЛЯ ХРАНЕНИЯ ID КОЛОНОК ЧЕРЕЗ ЗАПЯТУЮ
     selected_column_ids: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    manager_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
 
     # relationships
     columns: Mapped[List["BoardColumn"]] = relationship(

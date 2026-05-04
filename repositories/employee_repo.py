@@ -168,6 +168,27 @@ class EmployeeRepo:
         )
         self.session.execute(stmt)
 
+    def get_full_name(self, employee_id: int) -> str:
+        """Возвращает ФИО сотрудника по ID"""
+        try:
+            employee = self.get_by_id(employee_id)
+            if not employee:
+                return "Не назначен"
+
+            parts = []
+            if hasattr(employee, 'last_name') and employee.last_name:
+                parts.append(employee.last_name)
+            if hasattr(employee, 'first_name') and employee.first_name:
+                parts.append(employee.first_name)
+            if hasattr(employee, 'middle_name') and employee.middle_name:
+                parts.append(employee.middle_name)
+
+            full_name = ' '.join(parts).strip()
+            return full_name if full_name else f"ID: {employee_id}"
+        except Exception as e:
+            print(f"⚠️ Ошибка в get_full_name: {e}")
+            return f"ID: {employee_id}"
+
     # =========================
     # Удаление
     # =========================
