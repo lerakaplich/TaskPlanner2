@@ -9,7 +9,7 @@ from PyQt6.QtCore import Qt, pyqtSignal, QPoint
 from PyQt6.QtGui import QFont, QDragEnterEvent, QDropEvent
 
 from database import get_tasks_session
-from services.tasks_service import TasksService
+from services.tasks_service.tasks_service import TasksService
 from windows.other_tasks.others_task_card import OthersTaskCard
 from windows.other_tasks.task_dialog import TaskDialog
 from PyQt6 import uic

@@ -4,17 +4,16 @@ import os
 from typing import Dict
 
 from PyQt6 import uic
-from PyQt6.QtWidgets import QWidget, QScrollArea, QHBoxLayout
+from PyQt6.QtWidgets import QWidget, QScrollArea, QHBoxLayout, QMessageBox
 from PyQt6.QtCore import Qt, pyqtSignal, QPoint
 from PyQt6.QtGui import QDragEnterEvent, QDropEvent, QDragMoveEvent
 
+from services.tasks_service.tasks_service import TasksService
 from windows.my_tasks.task_card import TaskCard
 from windows.widgets.kanban_column import KanbanColumn
-from services.tasks_service import TasksService
-
 
 class MyTasksPage(QWidget):
-    """Страница Мои задачи (UI слой)"""
+    """Страница Мои задачи (только UI слой)"""
 
     task_moved = pyqtSignal()
 
@@ -26,9 +25,9 @@ class MyTasksPage(QWidget):
             "..", "..",
             "ui", "my_tasks"
         )
-
         uic.loadUi(os.path.join(ui_path, "my_tasks_page.ui"), self)
 
+        # Сервис - режим "my" (только мои задачи)
         self.service = TasksService(
             db_session=db_session,
             current_user=current_user,
@@ -42,18 +41,21 @@ class MyTasksPage(QWidget):
         self.setup_board()
         self.load_tasks()
 
-        # Настройка Drag & Drop для страницы
+        # Drag & Drop
         self.setAcceptDrops(True)
 
-        # фильтры
-        self.priorityFilter.currentTextChanged.connect(self.filter_tasks)
-        self.projectFilter.currentTextChanged.connect(self.filter_tasks)
+        # Фильтры
+        self.priorityFilter.currentTextChanged.connect(self._on_filter_changed)
+
+    # ==========================================================
+    # Настройка UI
+    # ==========================================================
 
     def setup_board(self):
-        """Создает колонки канбан-доски с горизонтальной прокруткой"""
+        """Создает колонки канбан-доски"""
         self.clear_layout(self.kanbanLayout)
 
-        column_data = self.service.get_column_data()
+        column_data = self.service.get_columns_for_board()
         if not column_data:
             print("⚠️ Нет колонок для отображения")
             return
@@ -77,9 +79,6 @@ class MyTasksPage(QWidget):
                 background: #c0c0c0;
                 border-radius: 5px;
             }
-            QScrollBar::handle:horizontal:hover {
-                background: #a0a0a0;
-            }
         """)
 
         columns_container = QWidget()
@@ -100,7 +99,7 @@ class MyTasksPage(QWidget):
         columns_layout.addStretch()
         scroll_area.setWidget(columns_container)
 
-        # Вертикальный скролл для всего контента
+        # Вертикальный скролл
         vertical_scroll = QScrollArea()
         vertical_scroll.setWidgetResizable(True)
         vertical_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
@@ -127,7 +126,7 @@ class MyTasksPage(QWidget):
         print(f"✅ Создано {len(self.column_widgets)} колонок")
 
     def clear_layout(self, layout):
-        """Очищает layout."""
+        """Очищает layout"""
         if layout:
             while layout.count():
                 item = layout.takeAt(0)
@@ -137,9 +136,13 @@ class MyTasksPage(QWidget):
                 else:
                     self.clear_layout(item.layout())
 
+    # ==========================================================
+    # Загрузка и отображение задач
+    # ==========================================================
+
     def load_tasks(self):
-        """Загрузка задач (только мои)"""
-        tasks = self.service.load_tasks()
+        """Загружает и отображает задачи"""
+        tasks = self.service.get_tasks_for_board()
 
         print(f"\n📊 Загрузка моих задач: {len(tasks)}")
         for task in tasks:
@@ -149,6 +152,7 @@ class MyTasksPage(QWidget):
 
         for task in tasks:
             task_card = TaskCard(task)
+            self._connect_task_card_signals(task_card)
 
             column_name = task.get("status")
             if column_name in self.columns:
@@ -156,39 +160,52 @@ class MyTasksPage(QWidget):
                 column.add_task(task_card)
                 print(f"  ✅ Добавлена задача '{task.get('title')}' в колонку '{column_name}'")
             else:
-                print(f"  ⚠️ Колонка '{column_name}' не найдена для задачи '{task.get('title')}'")
+                print(f"  ⚠️ Колонка '{column_name}' не найдена")
 
         self.update_statistics()
 
     def clear_all_columns(self):
-        """Очищает все колонки от карточек."""
+        """Очищает все колонки от карточек"""
         for column in self.column_widgets:
             column.clear_tasks()
 
-    def filter_tasks(self):
-        priority = self.priorityFilter.currentText()
+    def _connect_task_card_signals(self, card):
+        """Подключает сигналы карточки"""
+        card.edit_requested.connect(self._on_edit_task)
+        card.delete_requested.connect(self._on_delete_task)
+        card.archive_requested.connect(self._on_archive_task)
+        card.duplicate_requested.connect(self._on_duplicate_task)
+        card.drag_started.connect(self._on_drag_started)
 
-        all_tasks = []
+    # ==========================================================
+    # Обновление UI
+    # ==========================================================
+
+    def update_task_card(self, updated_task: Dict):
+        """Обновляет карточку задачи в UI"""
         for column in self.column_widgets:
             for card in column.get_tasks():
-                all_tasks.append(card.task_data)
+                if hasattr(card, 'task_id') and card.task_id == updated_task["id"]:
+                    old_status = card.task_data.get("status")
+                    new_status = updated_task.get("status")
 
-        filtered = self.service.filter_tasks_by_priority(all_tasks, priority)
+                    if old_status != new_status:
+                        column.remove_task(card)
+                        new_column = self.columns.get(new_status)
+                        if new_column:
+                            new_column.add_task(card)
+                            print(f"✅ Задача '{card.task_data.get('title')}' перемещена в колонку '{new_status}'")
 
-        filtered_ids = {t["id"] for t in filtered}
-        for column in self.column_widgets:
-            for card in column.get_tasks():
-                if card.task_data["id"] in filtered_ids:
-                    card.show()
-                else:
-                    card.hide()
+                    card.update_task_data(updated_task)
+                    return
 
     def update_statistics(self):
+        """Обновляет статистику"""
         stats = self.service.get_statistics_for_display()
 
         for column in self.column_widgets:
-            tasks_in_column = column.get_tasks()
-            column.update_count(len(tasks_in_column))
+            tasks_in_column = len(column.get_tasks())
+            column.update_count(tasks_in_column)
 
         if hasattr(self, 'totalTasksLabel'):
             self.totalTasksLabel.setText(f"📊 Всего задач: {stats['total']}")
@@ -202,22 +219,80 @@ class MyTasksPage(QWidget):
         if hasattr(self, 'overallProgress'):
             self.overallProgress.setValue(self.service.get_progress_percent())
 
-    # =====================================================
-    # DRAG & DROP
-    # =====================================================
+    # ==========================================================
+    # Обработчики действий (вызывают сервис)
+    # ==========================================================
+
+    def _on_edit_task(self, task_id: int):
+        """Редактирование задачи"""
+        print(f"✏️ Редактирование задачи {task_id}")
+        # TODO: открыть диалог редактирования
+
+    def _on_delete_task(self, task_id: int):
+        """Удаление задачи"""
+        reply = QMessageBox.question(
+            self, "Удаление",
+            "Вы уверены, что хотите удалить задачу?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+        )
+        if reply == QMessageBox.StandardButton.Yes:
+            if self.service.delete_task_by_id(task_id):
+                self.load_tasks()
+                QMessageBox.information(self, "Успех", "Задача удалена")
+
+    def _on_archive_task(self, task_id: int):
+        """Архивирование задачи"""
+        if self.service.archive_task_by_id(task_id):
+            self.load_tasks()
+            QMessageBox.information(self, "Успех", "Задача архивирована")
+
+    def _on_duplicate_task(self, task_id: int):
+        """Дублирование задачи"""
+        new_task = self.service.duplicate_task(task_id)
+        if new_task:
+            self.load_tasks()
+            QMessageBox.information(self, "Успех", "Задача дублирована")
+
+    def _on_drag_started(self, task_data: dict):
+        """Начало перетаскивания задачи"""
+        print(f"🖱️ Начато перетаскивание задачи {task_data.get('id')}")
+
+    def _on_filter_changed(self):
+        """Изменение фильтра"""
+        self.filter_tasks()
+
+    def filter_tasks(self):
+        """Фильтрация задач по приоритету"""
+        priority = self.priorityFilter.currentText()
+
+        all_tasks = []
+        for column in self.column_widgets:
+            for card in column.get_tasks():
+                all_tasks.append(card.task_data)
+
+        filtered = self.service.filter_tasks_by_priority(all_tasks, priority)
+
+        filtered_ids = {t["id"] for t in filtered}
+        for column in self.column_widgets:
+            for card in column.get_tasks():
+                if card.task_id in filtered_ids:
+                    card.show()
+                else:
+                    card.hide()
+
+    # ==========================================================
+    # Drag & Drop
+    # ==========================================================
 
     def dragEnterEvent(self, event: QDragEnterEvent):
-        """Обработка входа перетаскивания"""
         if event.mimeData().hasFormat("application/x-task"):
             event.acceptProposedAction()
 
     def dragMoveEvent(self, event: QDragMoveEvent):
-        """Обработка движения перетаскивания"""
         if event.mimeData().hasFormat("application/x-task"):
             event.acceptProposedAction()
 
     def dropEvent(self, event: QDropEvent):
-        """Обработка сброса задачи"""
         data = self.service.deserialize_task_from_drag(
             event.mimeData().data("application/x-task")
         )
@@ -240,11 +315,10 @@ class MyTasksPage(QWidget):
 
         print(f"🔄 Перемещение задачи {task_id}: {old_status} -> {new_status}")
 
-        # Перемещаем задачу в новую колонку
+        # Используем метод из TasksMoveService
         result = self.service.move_task(task_id, new_status)
         if result:
             old_column_name, task = result
-            # Обновляем UI
             self.update_task_card(task)
             self.update_statistics()
             self.task_moved.emit()
@@ -258,23 +332,3 @@ class MyTasksPage(QWidget):
             if column.geometry().contains(pos):
                 return column
         return None
-
-    def update_task_card(self, updated_task: Dict):
-        """Обновляет карточку задачи в UI"""
-        for column in self.column_widgets:
-            for card in column.get_tasks():
-                if hasattr(card, 'task_data') and card.task_data["id"] == updated_task["id"]:
-                    old_status = card.task_data.get("status")
-                    new_status = updated_task.get("status")
-
-                    if old_status != new_status:
-                        # Перемещаем в другую колонку
-                        column.remove_task(card)
-                        new_column = self.columns.get(new_status)
-                        if new_column:
-                            new_column.add_task(card)
-                            print(f"✅ Задача '{card.task_data.get('title')}' перемещена в колонку '{new_status}'")
-
-                    # Обновляем данные карточки
-                    card.update_task_data(updated_task)
-                    return

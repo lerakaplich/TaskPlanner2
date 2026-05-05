@@ -7,7 +7,7 @@ from PyQt6.QtCore import pyqtSignal, Qt, QMimeData
 from PyQt6.QtGui import QAction, QPixmap, QPainter, QDrag
 
 from windows.my_tasks.task_card import TaskCard
-from services.tasks_service import TasksService
+from services.tasks_service.tasks_service import TasksService
 
 
 class OthersTaskCard(TaskCard):
@@ -77,7 +77,7 @@ class OthersTaskCard(TaskCard):
 
         # Обновляем сложность
         difficulty = self.task_data.get("difficulty", 0)
-        self.set_difficulty_display(difficulty)
+        self._set_difficulty_display(difficulty)
 
     def update_deadline_color(self):
         """Обновляет цвет дедлайна."""

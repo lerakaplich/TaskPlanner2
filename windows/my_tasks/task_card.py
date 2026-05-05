@@ -1,3 +1,5 @@
+# windows/my_tasks/task_card.py
+
 import json
 import os
 
@@ -8,17 +10,21 @@ from PyQt6.QtWidgets import QFrame, QPushButton, QMenu, QApplication, QSizePolic
 
 
 class TaskCard(QFrame):
-    """UI карточки задачи"""
+    """UI карточки задачи - только отображение и сигналы"""
 
-    edit_requested = pyqtSignal(dict)
-    delete_requested = pyqtSignal(dict)
-    archive_requested = pyqtSignal(dict)
-    duplicate_requested = pyqtSignal(dict)
+    # Сигналы для передачи в сервис
+    edit_requested = pyqtSignal(int)  # task_id
+    delete_requested = pyqtSignal(int)  # task_id
+    archive_requested = pyqtSignal(int)  # task_id
+    duplicate_requested = pyqtSignal(int)  # task_id
+    move_requested = pyqtSignal(int, str)  # task_id, new_status
+    drag_started = pyqtSignal(dict)  # task_data
 
     def __init__(self, task_data, parent=None):
         super().__init__(parent)
 
         self.task_data = task_data
+        self.task_id = task_data.get("id")
         self.drag_start_position = None
 
         ui_path = os.path.join(
@@ -32,67 +38,22 @@ class TaskCard(QFrame):
         self.setObjectName("TaskCard")
         self.setAcceptDrops(True)
 
-        # 👇 КЛЮЧЕВОЕ: Minimum по вертикали, Preferred по горизонтали
+        # Настройка размеров
         self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
         self.setMaximumWidth(330)
         self.setMinimumWidth(300)
         self.setMinimumHeight(0)
-
-        # Отключаем растяжение
         self.setContentsMargins(0, 0, 0, 0)
 
         self.fill_ui()
+        self.menuButton.clicked.connect(self._show_context_menu)
 
-        self.menuButton.clicked.connect(self.show_context_menu)
-
-    def set_difficulty_display(self, difficulty):
-        """Устанавливает отображение сложности (цифра со звездой)"""
-        if not hasattr(self, 'difficultyValueLabel'):
-            return
-
-        try:
-            value = float(difficulty) if difficulty else 0
-        except (ValueError, TypeError):
-            value = 0
-
-        value = max(0, min(5, value))
-
-        if value == int(value):
-            display_value = int(value)
-        else:
-            display_value = value
-
-        self.difficultyValueLabel.setText(f"{display_value}⭐")
-
-        if value >= 4:
-            color = "#D22730"
-            bg_color = "#FFEBEE"
-        elif value >= 3:
-            color = "#FF9800"
-            bg_color = "#FFF3E0"
-        elif value >= 1:
-            color = "#4CAF50"
-            bg_color = "#E8F5E9"
-        else:
-            color = "#9E9E9E"
-            bg_color = "#F5F5F5"
-
-        self.difficultyValueLabel.setStyleSheet(f"""
-            font-size: 12px;
-            font-weight: bold;
-            color: {color};
-            background-color: {bg_color};
-            border-radius: 10px;
-            padding: 2px 8px;
-        """)
-
-        difficulty_widget = self.difficultyLayout.parentWidget()
-        if difficulty_widget:
-            difficulty_widget.setVisible(value > 0)
+    # ==========================================================
+    # Заполнение UI данными
+    # ==========================================================
 
     def fill_ui(self):
-        """Заполнение карточки готовыми данными"""
-
+        """Заполнение карточки данными из task_data"""
         # Название задачи
         title = self.task_data.get("title", "")
         self.taskTitleLabel.setText(title if title else "Без названия")
@@ -126,7 +87,7 @@ class TaskCard(QFrame):
         # Описание
         description = self.task_data.get("description", "")
         if description and description.strip():
-            self.descriptionText.setPlainText(description)
+            self.descriptionText.setPlainText(description[:100] + ("..." if len(description) > 100 else ""))
             self.descriptionText.show()
             doc_height = self.descriptionText.document().size().height()
             self.descriptionText.setFixedHeight(min(int(doc_height) + 10, 80))
@@ -181,16 +142,61 @@ class TaskCard(QFrame):
 
         # Сложность
         difficulty = self.task_data.get("difficulty", 0)
-        self.set_difficulty_display(difficulty)
+        self._set_difficulty_display(difficulty)
 
         # Теги
-        self.setup_tags()
+        self._setup_tags()
 
         # Обновляем размер
         self.adjustSize()
         self.updateGeometry()
 
-    def setup_tags(self):
+    def _set_difficulty_display(self, difficulty):
+        """Устанавливает отображение сложности"""
+        if not hasattr(self, 'difficultyValueLabel'):
+            return
+
+        try:
+            value = float(difficulty) if difficulty else 0
+        except (ValueError, TypeError):
+            value = 0
+
+        value = max(0, min(5, value))
+
+        if value == int(value):
+            display_value = int(value)
+        else:
+            display_value = value
+
+        self.difficultyValueLabel.setText(f"{display_value}⭐")
+
+        if value >= 4:
+            color = "#D22730"
+            bg_color = "#FFEBEE"
+        elif value >= 3:
+            color = "#FF9800"
+            bg_color = "#FFF3E0"
+        elif value >= 1:
+            color = "#4CAF50"
+            bg_color = "#E8F5E9"
+        else:
+            color = "#9E9E9E"
+            bg_color = "#F5F5F5"
+
+        self.difficultyValueLabel.setStyleSheet(f"""
+            font-size: 12px;
+            font-weight: bold;
+            color: {color};
+            background-color: {bg_color};
+            border-radius: 10px;
+            padding: 2px 8px;
+        """)
+
+        difficulty_widget = self.difficultyLayout.parentWidget()
+        if difficulty_widget:
+            difficulty_widget.setVisible(value > 0)
+
+    def _setup_tags(self):
         """Настройка отображения тегов"""
         for i in reversed(range(self.tagsLayout.count())):
             w = self.tagsLayout.itemAt(i).widget()
@@ -201,8 +207,7 @@ class TaskCard(QFrame):
 
         tags_widget = self.tagsLayout.parentWidget()
         if tags:
-            for tag in tags:
-                # Преобразуем tag в строку, если это не строка
+            for tag in tags[:3]:
                 tag_str = tag.name if hasattr(tag, 'name') else str(tag)
                 tag_button = QPushButton(tag_str)
                 tag_button.setStyleSheet("""
@@ -219,6 +224,20 @@ class TaskCard(QFrame):
                 tag_button.setFixedHeight(22)
                 self.tagsLayout.addWidget(tag_button)
 
+            if len(tags) > 3:
+                more_btn = QPushButton(f"+{len(tags) - 3}")
+                more_btn.setStyleSheet("""
+                    QPushButton{
+                        font-size: 10px;
+                        padding: 2px 8px;
+                        border-radius: 10px;
+                        background: #EEEEEE;
+                        color: #555555;
+                        border: none;
+                    }
+                """)
+                self.tagsLayout.addWidget(more_btn)
+
             if tags_widget:
                 tags_widget.show()
         else:
@@ -227,21 +246,13 @@ class TaskCard(QFrame):
 
         self.tagsLayout.addStretch()
 
-    def update_task_data(self, new_data):
-        """Обновляет данные карточки"""
-        self.task_data.update(new_data)
-        self.fill_ui()
+    # ==========================================================
+    # Контекстное меню
+    # ==========================================================
 
-    def show_context_menu(self):
-        """Показать контекстное меню"""
+    def _show_context_menu(self):
+        """Показывает контекстное меню"""
         menu = QMenu(self)
-
-        edit_action = menu.addAction("Редактировать")
-        duplicate_action = menu.addAction("Дублировать")
-        menu.addSeparator()
-        delete_action = menu.addAction("Удалить")
-        archive_action = menu.addAction("Архивировать")
-
         menu.setStyleSheet("""
             QMenu {
                 background-color: #ffffff;
@@ -262,20 +273,26 @@ class TaskCard(QFrame):
             }
         """)
 
-        action = menu.exec(
-            self.menuButton.mapToGlobal(
-                QPoint(0, self.menuButton.height())
-            )
-        )
+        edit_action = menu.addAction("Редактировать")
+        duplicate_action = menu.addAction("Дублировать")
+        menu.addSeparator()
+        delete_action = menu.addAction("Удалить")
+        archive_action = menu.addAction("Архивировать")
+
+        action = menu.exec(self.menuButton.mapToGlobal(QPoint(0, self.menuButton.height())))
 
         if action == edit_action:
-            self.edit_requested.emit(self.task_data)
+            self.edit_requested.emit(self.task_id)
         elif action == delete_action:
-            self.delete_requested.emit(self.task_data)
+            self.delete_requested.emit(self.task_id)
         elif action == archive_action:
-            self.archive_requested.emit(self.task_data)
+            self.archive_requested.emit(self.task_id)
         elif action == duplicate_action:
-            self.duplicate_requested.emit(self.task_data)
+            self.duplicate_requested.emit(self.task_id)
+
+    # ==========================================================
+    # Drag & Drop
+    # ==========================================================
 
     def mousePressEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
@@ -291,6 +308,9 @@ class TaskCard(QFrame):
 
         if (event.pos() - self.drag_start_position).manhattanLength() < QApplication.startDragDistance():
             return
+
+        # Сигнал о начале перетаскивания
+        self.drag_started.emit(self.task_data)
 
         drag = QDrag(self)
         mime = QMimeData()
@@ -312,3 +332,13 @@ class TaskCard(QFrame):
         drag.setHotSpot(event.pos())
 
         drag.exec(Qt.DropAction.MoveAction)
+
+    # ==========================================================
+    # Обновление данных
+    # ==========================================================
+
+    def update_task_data(self, new_data):
+        """Обновляет данные карточки"""
+        self.task_data.update(new_data)
+        self.task_id = self.task_data.get("id")
+        self.fill_ui()

@@ -6,7 +6,7 @@ from PyQt6 import uic, QtWidgets
 from PyQt6.QtWidgets import QDialog, QMessageBox, QVBoxLayout, QWidget, QScrollArea, QLineEdit, QPushButton, QHBoxLayout
 from PyQt6.QtCore import QDate, QDateTime, pyqtSignal, Qt, QEvent, QPoint
 
-from services.tasks_service import TasksService
+from services.tasks_service.tasks_service import TasksService
 
 
 class TaskDialog(QDialog):

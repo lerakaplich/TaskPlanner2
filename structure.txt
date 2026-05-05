@@ -55,15 +55,16 @@
 |  +-- __pycache__
 |  |  +-- analytics_service.cpython-313.pyc
 |  |  +-- archive_service.cpython-313.pyc
+|  |  +-- auth_service.cpython-313.pyc
 |  |  +-- chat_service.cpython-313.pyc
 |  |  +-- column_service.cpython-313.pyc
 |  |  +-- employee_service.cpython-313.pyc
 |  |  +-- excel_export_service.cpython-313.pyc
+|  |  +-- gantt_service.cpython-313.pyc
 |  |  +-- overtime_service.cpython-313.pyc
 |  |  +-- profile_service.cpython-313.pyc
 |  |  +-- projects_service.cpython-313.pyc
 |  |  +-- tag_service.cpython-313.pyc
-|  |  +-- tasks_service.cpython-313.pyc
 |  +-- access_service.py
 |  +-- analytics_service.py
 |  +-- archive_service.py
@@ -78,7 +79,22 @@
 |  +-- profile_service.py
 |  +-- projects_service.py
 |  +-- tag_service.py
-|  +-- tasks_service.py
+|  +-- tasks_service
+|  |  +-- __pycache__
+|  |  |  +-- tasks_bulk_service.cpython-313.pyc
+|  |  |  +-- tasks_crud_service.cpython-313.pyc
+|  |  |  +-- tasks_filter_service.cpython-313.pyc
+|  |  |  +-- tasks_move_service.cpython-313.pyc
+|  |  |  +-- tasks_service.cpython-313.pyc
+|  |  |  +-- tasks_statistics_service.cpython-313.pyc
+|  |  |  +-- tasks_tag_service.cpython-313.pyc
+|  |  +-- tasks_bulk_service.py
+|  |  +-- tasks_crud_service.py
+|  |  +-- tasks_filter_service.py
+|  |  +-- tasks_move_service.py
+|  |  +-- tasks_service.py
+|  |  +-- tasks_statistics_service.py
+|  |  +-- tasks_tag_service.py
 +-- shared_state.py
 +-- structure.txt
 +-- telegram_bot.py
@@ -206,7 +222,9 @@
 |  +-- gantt
 |  |  +-- __pycache__
 |  |  |  +-- gantt_chart.cpython-313.pyc
+|  |  |  +-- gantt_task_item.cpython-313.pyc
 |  |  +-- gantt_chart.py
+|  |  +-- gantt_task_item.py
 |  +-- login
 |  |  +-- __pycache__
 |  |  |  +-- login_window.cpython-313.pyc
@@ -309,12 +327,9 @@
 |  |  |  +-- tag_card.py
 |  |  |  +-- tag_dialog.py
 |  |  |  +-- tags_tab.py
-|  +-- shared
-|  |  +-- __pycache__
-|  |  |  +-- kanban_column.cpython-313.pyc
-|  |  +-- kanban_column.py
 |  +-- widgets
 |  |  +-- __pycache__
 |  |  |  +-- color_picker_dialog.cpython-313.pyc
+|  |  |  +-- kanban_column.cpython-313.pyc
 |  |  +-- color_picker_dialog.py
 |  |  +-- kanban_column.py

@@ -8,10 +8,9 @@ from PyQt6.QtGui import QDragEnterEvent, QDropEvent, QDragMoveEvent
 class KanbanColumn(QFrame):
     """Универсальная колонка канбан-доски - только UI"""
 
-    # Сигналы для передачи событий в сервис
-    task_dropped = pyqtSignal(int, int)  # task_id, column_id
-    task_position_changed = pyqtSignal(int, int)  # task_id, new_position
-    column_cleared = pyqtSignal(int)  # column_id
+    task_dropped = pyqtSignal(int, int)
+    task_position_changed = pyqtSignal(int, int)
+    column_cleared = pyqtSignal(int)
 
     def __init__(self, column_data: dict, parent=None):
         super().__init__(parent)
@@ -21,15 +20,12 @@ class KanbanColumn(QFrame):
         self.column_color = column_data.get("color", "#2196F3")
         self.is_done_column = column_data.get("is_done", False)
 
-        self.task_cards = []  # Список UI карточек в колонке
+        self.task_cards = []
         self._drag_over_index = -1
+        self._stretch = None  # Сохраняем ссылку на растяжение
 
         self.setup_ui()
         self.setAcceptDrops(True)
-
-    # ==========================================================
-    # Настройка UI
-    # ==========================================================
 
     def setup_ui(self):
         """Настройка UI колонки"""
@@ -48,21 +44,17 @@ class KanbanColumn(QFrame):
         main_layout.setSpacing(8)
         main_layout.setContentsMargins(10, 10, 10, 10)
 
-        # Заголовок
         self._setup_header(main_layout)
 
-        # Разделитель
         line = QFrame()
         line.setFrameShape(QFrame.Shape.HLine)
         line.setStyleSheet("background-color: #e0e0e0; max-height: 1px;")
         main_layout.addWidget(line)
 
-        # Область задач с прокруткой
         self._setup_tasks_area(main_layout)
 
         self.setLayout(main_layout)
 
-        # Для обратной совместимости
         self.tasksLayout = self.tasks_layout
         self.countLabel = self.count_label
         self.titleLabel = self.title_label
@@ -129,11 +121,12 @@ class KanbanColumn(QFrame):
         self.tasks_container = QWidget()
         self.tasks_container.setStyleSheet("background-color: transparent;")
 
-        self.tasks_layout = QVBoxLayout()
+        self.tasks_layout = QVBoxLayout(self.tasks_container)
         self.tasks_layout.setSpacing(8)
         self.tasks_layout.setContentsMargins(2, 2, 2, 2)
-        self.tasks_layout.addStretch()
-        self.tasks_container.setLayout(self.tasks_layout)
+
+        # Сохраняем ссылку на растяжение
+        self._stretch = self.tasks_layout.addStretch()
 
         scroll.setWidget(self.tasks_container)
         parent_layout.addWidget(scroll)
@@ -147,10 +140,26 @@ class KanbanColumn(QFrame):
         if task_card is None:
             return
 
+        # Получаем индекс растяжения
+        stretch_index = -1
+        for i in range(self.tasks_layout.count()):
+            item = self.tasks_layout.itemAt(i)
+            if item and item.widget() == self._stretch:
+                stretch_index = i
+                break
+
         # Вставляем перед растяжением
-        stretch_index = self.tasks_layout.count() - 1
-        self.tasks_layout.insertWidget(stretch_index, task_card)
+        if stretch_index >= 0:
+            self.tasks_layout.insertWidget(stretch_index, task_card)
+        else:
+            self.tasks_layout.addWidget(task_card)
+
         self.task_cards.append(task_card)
+
+        # Принудительно обновляем
+        task_card.show()
+        task_card.updateGeometry()
+        self.tasks_container.updateGeometry()
 
     def remove_task(self, task_card):
         """Удаляет карточку задачи из колонки"""
@@ -178,15 +187,24 @@ class KanbanColumn(QFrame):
         self.count_label.setText(str(count))
 
     def reorder_tasks(self, task_widgets_order: list):
-        """Переупорядочивает карточки согласно переданному порядку"""
-        # Удаляем все карточки из layout
+        """Переупорядочивает карточки"""
+        # Очищаем layout от карточек, но сохраняем растяжение
         for card in self.task_cards:
             self.tasks_layout.removeWidget(card)
 
         # Добавляем в новом порядке
-        for card in task_widgets_order:
-            stretch_index = self.tasks_layout.count() - 1
-            self.tasks_layout.insertWidget(stretch_index, card)
+        stretch_index = -1
+        for i in range(self.tasks_layout.count()):
+            item = self.tasks_layout.itemAt(i)
+            if item and item.widget() == self._stretch:
+                stretch_index = i
+                break
+
+        for i, card in enumerate(task_widgets_order):
+            if stretch_index >= 0:
+                self.tasks_layout.insertWidget(stretch_index + i, card)
+            else:
+                self.tasks_layout.addWidget(card)
 
         self.task_cards = task_widgets_order
 
@@ -195,25 +213,19 @@ class KanbanColumn(QFrame):
     # ==========================================================
 
     def dragEnterEvent(self, event: QDragEnterEvent):
-        """Обработка входа перетаскивания"""
         if event.mimeData().hasFormat("application/x-task"):
             event.acceptProposedAction()
         else:
             event.ignore()
 
     def dragMoveEvent(self, event: QDragMoveEvent):
-        """Обработка движения перетаскивания"""
         if not event.mimeData().hasFormat("application/x-task"):
             event.ignore()
             return
-
-        # Вычисляем позицию вставки
-        pos = event.position().toPoint()
-        self._drag_over_index = self._get_drop_index(pos)
+        self._drag_over_index = len(self.task_cards)
         event.acceptProposedAction()
 
     def dropEvent(self, event: QDropEvent):
-        """Обработка сброса задачи"""
         if not event.mimeData().hasFormat("application/x-task"):
             event.ignore()
             return
@@ -231,39 +243,6 @@ class KanbanColumn(QFrame):
         except Exception as e:
             print(f"❌ Ошибка обработки drop: {e}")
             event.ignore()
-
-    def _get_drop_index(self, pos) -> int:
-        """Вычисляет индекс вставки по позиции мыши"""
-        # Простая логика - добавляем в конец
-        return len(self.task_cards)
-
-    # ==========================================================
-    # Подсветка при перетаскивании
-    # ==========================================================
-
-    def _highlight(self):
-        """Подсвечивает колонку при наведении"""
-        self.setStyleSheet("""
-            QFrame {
-                background-color: #f0f0f0;
-                border-radius: 8px;
-                border: 2px solid #ccab6e;
-            }
-        """)
-
-    def _unhighlight(self):
-        """Убирает подсветку"""
-        self.setStyleSheet("""
-            QFrame {
-                background-color: #f9f9f9;
-                border-radius: 8px;
-                border: 1px solid #ddd;
-            }
-        """)
-
-    # ==========================================================
-    # Вспомогательные методы
-    # ==========================================================
 
     def sizeHint(self):
         return QSize(300, 500)
