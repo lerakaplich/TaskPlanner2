@@ -1,11 +1,9 @@
 import os
-import sys
 
 from PyQt6 import uic
-from PyQt6.QtWidgets import QApplication, QMainWindow, QSizePolicy, QSpacerItem, QWidget, QDialog
+from PyQt6.QtWidgets import QMainWindow, QSizePolicy, QSpacerItem, QDialog
 from PyQt6.QtWidgets import QMessageBox
 
-from database import get_tasks_session
 from services.analytics_service import AnalyticsService
 from services.archive_service import ArchiveService
 from services.chat_service import ChatService
@@ -19,7 +17,6 @@ from windows.gantt.gantt_chart import GanttChartWidget
 from windows.my_tasks.my_tasks_page import MyTasksPage
 from windows.other_tasks.others_tasks_page import OthersTasksPage
 from windows.overtime.overtime_page import OvertimePage
-from windows.profile.profile_page import ProfilePage
 from windows.projects.project_card import ProjectCard
 from windows.projects.project_edit_dialog import ProjectEditDialog
 from windows.settings.settings_page import SettingsPage

@@ -15,6 +15,7 @@ class KanbanColumn(QFrame):
         self.column_name = column_data["name"]
         self.column_color = column_data.get("color", "#2196F3")
         self.is_done_column = column_data.get("is_done", False)
+        self.stretch = None  # Будем хранить ссылку на растяжение
 
         print(f"📌 Создаем колонку: id={self.column_id}, name='{self.column_name}'")
 
@@ -27,21 +28,71 @@ class KanbanColumn(QFrame):
         tasks = []
         for i in range(self.tasks_layout.count()):
             widget = self.tasks_layout.itemAt(i).widget()
-            if widget and hasattr(widget, 'task_data'):
+            if widget:
                 tasks.append(widget)
         return tasks
 
     def clear_tasks(self):
         """Очищает все карточки из колонки."""
+        print(f"🗑️ Очистка колонки '{self.column_name}'")
+
+        # Удаляем все виджеты, кроме растяжения
         while self.tasks_layout.count() > 0:
             item = self.tasks_layout.takeAt(0)
             if item and item.widget():
-                item.widget().deleteLater()
+                widget = item.widget()
+                # Не удаляем растяжение
+                if widget != self.stretch:
+                    print(f"   Удаляем виджет: {widget}")
+                    widget.deleteLater()
+
+        # Убеждаемся, что растяжение есть в конце
+        if self.stretch is None or self.stretch not in [self.tasks_layout.itemAt(i) for i in
+                                                        range(self.tasks_layout.count())]:
+            self.stretch = self.tasks_layout.addStretch()
 
     def add_task(self, task_card):
-        """Добавляет карточку задачи в колонку с выравниванием по верху."""
-        # 👇 КЛЮЧЕВОЕ: добавляем с выравниванием по верху
-        self.tasks_layout.addWidget(task_card, 0, Qt.AlignmentFlag.AlignTop)
+        """Добавляет карточку задачи в колонку."""
+        if task_card is None:
+            print(f"⚠️ Попытка добавить None в колонку '{self.column_name}'")
+            return
+
+        # Убеждаемся, что карточка видима
+        task_card.setVisible(True)
+
+        # Устанавливаем правильный размер policy для карточки
+        task_card.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
+
+        # Получаем индекс растяжения (оно всегда последнее)
+        stretch_index = -1
+        for i in range(self.tasks_layout.count()):
+            item = self.tasks_layout.itemAt(i)
+            if item and item.widget() == self.stretch:
+                stretch_index = i
+                break
+
+        # Вставляем карточку перед растяжением
+        if stretch_index >= 0:
+            self.tasks_layout.insertWidget(stretch_index, task_card)
+        else:
+            # Если растяжения нет, добавляем в конец и затем добавляем растяжение
+            self.tasks_layout.addWidget(task_card)
+            self.stretch = self.tasks_layout.addStretch()
+
+        # Принудительно обновляем layout
+        task_card.updateGeometry()
+        self.tasks_container.updateGeometry()
+
+        print(f"   ✅ Добавлена карточка в колонку '{self.column_name}', теперь задач: {self.get_tasks_count()}")
+
+    def get_tasks_count(self):
+        """Возвращает количество карточек в колонке (без учета растяжения)."""
+        count = 0
+        for i in range(self.tasks_layout.count()):
+            item = self.tasks_layout.itemAt(i)
+            if item and item.widget() and item.widget() != self.stretch:
+                count += 1
+        return count
 
     def remove_task(self, task_card):
         """Удаляет карточку задачи из колонки."""
@@ -63,7 +114,8 @@ class KanbanColumn(QFrame):
             }
         """)
 
-        self.setFixedWidth(350)  # Немного шире для комфорта
+        self.setFixedWidth(350)
+        self.setMinimumHeight(400)
 
         # Главный layout
         main_layout = QVBoxLayout()
@@ -117,13 +169,15 @@ class KanbanColumn(QFrame):
         # ========== ОБЛАСТЬ ЗАДАЧ С ПРОКРУТКОЙ ==========
         self.tasks_container = QWidget()
         self.tasks_container.setStyleSheet("background-color: transparent;")
+        self.tasks_container.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.MinimumExpanding)
 
         self.tasks_layout = QVBoxLayout(self.tasks_container)
         self.tasks_layout.setSpacing(8)
-        self.tasks_layout.setContentsMargins(2, 2, 2, 2)
-        self.tasks_layout.setAlignment(Qt.AlignmentFlag.AlignTop)  # Прижимаем к верху
-        # 👇 Убираем растяжение у карточек
-        self.tasks_layout.setStretch(0, 0)
+        self.tasks_layout.setContentsMargins(2, 2, 2, 10)
+        self.tasks_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
+
+        # Добавляем растяжение в конец (сохраняем ссылку)
+        self.stretch = self.tasks_layout.addStretch()
 
         # Scroll area
         scroll_area = QScrollArea()
@@ -158,7 +212,6 @@ class KanbanColumn(QFrame):
         self.tasksLayout = self.tasks_layout
         self.countLabel = self.count_label
         self.titleLabel = self.title_label
-        self.tasks_container.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
 
         print(f"  ✅ Колонка '{self.column_name}' готова")
 

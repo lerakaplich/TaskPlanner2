@@ -71,10 +71,8 @@ class DepartmentCard(QFrame):
         label = QLabel(boss_name)
         label.setObjectName("bossLabel")
         label.setStyleSheet("""
-            QLabel#bossLabel {
-                background-color: #F0F0F0;
-                padding: 3px 12px;
-                border-radius: 12px;
+            QLabel#bossLabel 
+                padding: 3px 6px;
                 font-size: 12px;
                 color: #1B232A;
             }
@@ -115,6 +113,19 @@ class DepartmentCard(QFrame):
         # Руководители - преобразуем ID в ФИО
         self.clear_bosses_container()
 
+        # Убираем фон у контейнера руководителей
+        if hasattr(self, 'bossesContainer'):
+            self.bossesContainer.setStyleSheet("""
+                QWidget#bossesContainer {
+                    background-color: transparent;
+                    border: none;
+                }
+            """)
+            # Также настраиваем layout контейнера
+            if self.bossesContainer.layout():
+                self.bossesContainer.layout().setContentsMargins(0, 0, 0, 0)
+                self.bossesContainer.layout().setSpacing(4)
+
         boss_field = self.department_data.get('boss', '')
         boss_ids = self._parse_boss_ids(boss_field)
 
@@ -129,9 +140,25 @@ class DepartmentCard(QFrame):
             self.bossesSectionLabel.setVisible(len(boss_names) > 0)
 
         if hasattr(self, 'bossesContainer'):
-            self.bossesContainer.setVisible(len(boss_names) > 0)
-            for boss in boss_names:
-                self.add_boss_label(boss)
+            if boss_names:
+                # Отображаем руководителей через запятую в одной метке
+                boss_text = ", ".join(boss_names)
+                label = QLabel(boss_text)
+                label.setObjectName("bossLabel")
+                label.setStyleSheet("""
+                    QLabel#bossLabel {
+                        background-color: transparent;
+                        font-size: 12px;
+                        color: #1B232A;
+                        word-wrap: break-word;
+                        padding: 0px;
+                    }
+                """)
+                self.bossesContainer.layout().addWidget(label)
+                self.boss_labels.append(label)
+                self.bossesContainer.setVisible(True)
+            else:
+                self.bossesContainer.setVisible(False)
 
         # Телефон
         phone = self.department_data.get('phone_number', '')

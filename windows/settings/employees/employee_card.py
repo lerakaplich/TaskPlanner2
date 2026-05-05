@@ -42,7 +42,13 @@ class EmployeeCard(QFrame):
         self.nameLabel.setText(fio)
 
         # === РОЛЬ ===
-        rights = self.employee_data.get('rights', 'user')
+        role = self.employee_data.get('role', 'user')
+        # Если пришло поле 'rights' (старое), используем его
+        if not role or role == 'user':
+            rights = self.employee_data.get('rights', 'user')
+        else:
+            rights = role
+
         role_text = {
             'superadmin': 'Суперадминистратор',
             'admin': 'Администратор',
@@ -70,69 +76,102 @@ class EmployeeCard(QFrame):
 
         # Должность
         position = self.employee_data.get('position', '—')
+        if position is None or position == '':
+            position = '—'
         if hasattr(self, 'positionValue'):
             self.positionValue.setText(position)
 
-        # Отдел
-        dept_name = '—'
-        if self.employee_data.get('department'):
+        # ===== ОТДЕЛ =====
+        # Пробуем получить название отдела из разных полей
+        department_name = '—'
+
+        # 1. Сначала пробуем department_name (уже готовое название)
+        if self.employee_data.get('department_name') and self.employee_data.get('department_name') != '—':
+            department_name = self.employee_data.get('department_name')
+        # 2. Пробуем department (объект)
+        elif self.employee_data.get('department'):
             dept = self.employee_data['department']
-            dept_name = dept.get('name', str(dept)) if isinstance(dept, dict) else str(dept)
-        elif self.employee_data.get('department_id'):
+            if isinstance(dept, dict):
+                department_name = dept.get('name', '—')
+            else:
+                department_name = str(dept) if str(dept) != '—' else '—'
+        # 3. Пробуем получить из parent через get_department_name
+        elif self.employee_data.get('department_id') and self.employee_data.get('department_id') != '—':
             dept_id = self.employee_data.get('department_id')
             if hasattr(self, 'parent') and hasattr(self.parent(), 'get_department_name'):
                 dept_name = self.parent().get_department_name(dept_id)
-            else:
-                dept_name = f"Отдел ID: {dept_id}"
-        elif self.employee_data.get('department_name'):
-            dept_name = self.employee_data.get('department_name')
+                if dept_name and dept_name != '—':
+                    department_name = dept_name
 
         if hasattr(self, 'departmentValue'):
-            self.departmentValue.setText(dept_name)
+            self.departmentValue.setText(department_name)
+            # Показываем секцию только если есть название
+            has_dept = department_name != '—'
             if hasattr(self, 'departmentSectionLabel'):
-                self.departmentSectionLabel.setVisible(dept_name != '—')
-            self.departmentValue.setVisible(dept_name != '—')
+                self.departmentSectionLabel.setVisible(has_dept)
+            self.departmentValue.setVisible(has_dept)
 
-        # Подразделение
-        div_name = '—'
-        if self.employee_data.get('division'):
+        # ===== ПОДРАЗДЕЛЕНИЕ =====
+        division_name = '—'
+
+        # 1. Сначала пробуем division_name (уже готовое название)
+        if self.employee_data.get('division_name') and self.employee_data.get('division_name') != '—':
+            division_name = self.employee_data.get('division_name')
+        # 2. Пробуем division (объект)
+        elif self.employee_data.get('division'):
             div = self.employee_data['division']
-            div_name = div.get('name', str(div)) if isinstance(div, dict) else str(div)
-        elif self.employee_data.get('division_id'):
+            if isinstance(div, dict):
+                division_name = div.get('name', '—')
+            else:
+                division_name = str(div) if str(div) != '—' else '—'
+        # 3. Пробуем получить из parent через get_division_name
+        elif self.employee_data.get('division_id') and self.employee_data.get('division_id') != '—':
             div_id = self.employee_data.get('division_id')
             if hasattr(self, 'parent') and hasattr(self.parent(), 'get_division_name'):
                 div_name = self.parent().get_division_name(div_id)
-            else:
-                div_name = f"Подразделение ID: {div_id}"
-        elif self.employee_data.get('division_name'):
-            div_name = self.employee_data.get('division_name')
+                if div_name and div_name != '—':
+                    division_name = div_name
 
         if hasattr(self, 'divisionValue'):
-            self.divisionValue.setText(div_name)
+            self.divisionValue.setText(division_name)
+            has_div = division_name != '—'
             if hasattr(self, 'divisionSectionLabel'):
-                self.divisionSectionLabel.setVisible(div_name != '—')
-            self.divisionValue.setVisible(div_name != '—')
+                self.divisionSectionLabel.setVisible(has_div)
+            self.divisionValue.setVisible(has_div)
 
         # Мобильный телефон
         phone = self.employee_data.get('phone_number', '')
+        if phone:
+            # Убираем +375 если есть для отображения
+            display_phone = phone
+            if phone.startswith('375'):
+                display_phone = '+' + phone
+            elif phone.startswith('+'):
+                display_phone = phone
+        else:
+            display_phone = '—'
+
         if hasattr(self, 'mobilePhoneValue'):
-            self.mobilePhoneValue.setText(phone if phone else '—')
-            self.mobilePhoneValue.setVisible(bool(phone))
+            self.mobilePhoneValue.setText(display_phone)
+            has_phone = phone and phone != ''
+            self.mobilePhoneValue.setVisible(has_phone)
             if hasattr(self, 'mobilePhoneLabel'):
-                self.mobilePhoneLabel.setVisible(bool(phone))
+                self.mobilePhoneLabel.setVisible(has_phone)
 
         # Рабочий телефон
         work_phone = self.employee_data.get('work_number', '')
         if hasattr(self, 'workPhoneValue'):
             self.workPhoneValue.setText(work_phone if work_phone else '—')
-            self.workPhoneValue.setVisible(bool(work_phone))
+            has_work_phone = work_phone and work_phone != ''
+            self.workPhoneValue.setVisible(has_work_phone)
             if hasattr(self, 'workPhoneLabel'):
-                self.workPhoneLabel.setVisible(bool(work_phone))
+                self.workPhoneLabel.setVisible(has_work_phone)
 
         # Email
         email = self.employee_data.get('email', '')
         if hasattr(self, 'emailValue'):
             self.emailValue.setText(email if email else '—')
-            self.emailValue.setVisible(bool(email))
+            has_email = bool(email and email != '')  # ← ПРЕОБРАЗУЕМ В BOOL
+            self.emailValue.setVisible(has_email)
             if hasattr(self, 'emailLabel'):
-                self.emailLabel.setVisible(bool(email))
+                self.emailLabel.setVisible(has_email)

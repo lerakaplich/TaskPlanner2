@@ -153,8 +153,13 @@ class EmployeeService:
 
     def get_employee_by_id(self, employee_id: int) -> Optional[Dict[str, Any]]:
         """Получить сотрудника по ID"""
-        employee = self.repo.get_by_id(employee_id)
-        return self._employee_to_dict(employee) if employee else None
+        try:
+            self._ensure_session_valid()
+            employee = self.repo.get_by_id(employee_id)
+            return self._employee_to_dict(employee) if employee else None
+        except Exception as e:
+            print(f"❌ Ошибка при получении сотрудника {employee_id}: {e}")
+            return None
 
     def get_employee_by_chat_id(self, chat_id: int) -> Optional[Dict[str, Any]]:
         """Получить сотрудника по chat_id"""
@@ -183,17 +188,27 @@ class EmployeeService:
     def update_employee(self, employee_id: int, data: Dict[str, Any]) -> bool:
         """Обновить данные сотрудника"""
         try:
+            self._ensure_session_valid()
+
+            # Получаем сотрудника через репозиторий
+            employee = self.repo.get_by_id(employee_id)
+            if not employee:
+                print(f"❌ Сотрудник с ID {employee_id} не найден")
+                return False
+
             # Отделяем поля Employee от полей EmployeeData
             employee_fields = ['last_name', 'first_name', 'middle_name', 'position',
                                'department_id', 'division_id', 'organization_id',
                                'work_number', 'phone_number', 'email', 'chat_id', 'birth_date']
 
-            employee_data = {k: v for k, v in data.items() if k in employee_fields and v is not None}
+            # Обновляем поля Employee
+            for key, value in data.items():
+                if key in employee_fields and value is not None:
+                    setattr(employee, key, value)
 
-            if employee_data:
-                employee = self.repo.update(employee_id, employee_data)
+            self.session.commit()
 
-            # Обновляем роль если передана
+            # Обновляем роль если передана (в EmployeeData)
             if 'role' in data and data['role']:
                 role_value = data['role']
                 if isinstance(role_value, str):
@@ -204,11 +219,20 @@ class EmployeeService:
             if 'is_active' in data and data['is_active'] is not None:
                 self.repo.set_active(employee_id, data['is_active'])
 
-            self.session.commit()
+            # Коммитим изменения в EmployeeData
+            if self.tasks_session:
+                self.tasks_session.commit()
+
+            print(f"✅ Сотрудник {employee_id} успешно обновлен")
             return True
+
         except Exception as e:
             self.session.rollback()
+            if self.tasks_session:
+                self.tasks_session.rollback()
             print(f"❌ Ошибка при обновлении сотрудника: {e}")
+            import traceback
+            traceback.print_exc()
             return False
 
     def delete_employee(self, employee_id: int) -> bool:
@@ -224,40 +248,44 @@ class EmployeeService:
             print(f"❌ Ошибка при удалении сотрудника: {e}")
             return False
 
+    # services/employee_service.py - проверьте эту часть
+
     def _employee_to_dict(self, employee: Employee) -> Dict[str, Any]:
         """Преобразует модель сотрудника в словарь"""
         if employee is None:
             return {}
 
-        # Получаем данные из employees_data (в БД taskplanner!)
-        employee_data = None
-        if self.tasks_session:
-            try:
-                employee_data = self.tasks_session.query(EmployeeData).filter(
-                    EmployeeData.employee_id == employee.id
-                ).first()
-            except Exception as e:
-                print(f"⚠️ Ошибка получения EmployeeData для {employee.id}: {e}")
-
-        # Получаем название отдела (из БД employees)
-        department_name = None
+        department_name = '—'
         if employee.department_id:
             try:
-                dept = self.session.query(Department).filter(Department.id == employee.department_id).first()
-                department_name = dept.name if dept else None
+                result = self.session.execute(
+                    text("SELECT name FROM departments WHERE id = :dept_id"),
+                    {'dept_id': employee.department_id}
+                ).fetchone()
+                if result:
+                    department_name = result[0]
+                    print(f"  ✓ Найден отдел: ID={employee.department_id} -> '{department_name}'")
+                else:
+                    print(f"  ✗ Отдел с ID={employee.department_id} не найден")
             except Exception as e:
                 print(f"⚠️ Ошибка получения отдела: {e}")
 
-        # Получаем название подразделения (из БД employees)
-        division_name = None
+        division_name = '—'
         if employee.division_id:
             try:
-                div = self.session.query(Division).filter(Division.id == employee.division_id).first()
-                division_name = div.name if div else None
+                result = self.session.execute(
+                    text("SELECT name FROM divisions WHERE id = :div_id"),
+                    {'div_id': employee.division_id}
+                ).fetchone()
+                if result:
+                    division_name = result[0]
+                    print(f"  ✓ Найдено подразделение: ID={employee.division_id} -> '{division_name}'")
+                else:
+                    print(f"  ✗ Подразделение с ID={employee.division_id} не найдено")
             except Exception as e:
                 print(f"⚠️ Ошибка получения подразделения: {e}")
 
-        return {
+        result_dict = {
             'id': employee.id,
             'number': employee.number,
             'last_name': employee.last_name,
@@ -271,14 +299,16 @@ class EmployeeService:
             'chat_id': employee.chat_id,
             'birth_date': employee.birth_date,
             'department_id': employee.department_id,
-            'department_name': department_name or '—',
+            'department_name': department_name,  # ← ДОЛЖНО БЫТЬ vvv, ккаа и т.д.
             'division_id': employee.division_id,
-            'division_name': division_name or '—',
-            # Данные из EmployeeData
-            'is_active': employee_data.is_active if employee_data else True,
-            'role': employee_data.role.value if employee_data and employee_data.role else 'user',
-            'last_login': employee_data.last_login.isoformat() if employee_data and employee_data.last_login else None,
+            'division_name': division_name,  # ← ДОЛЖНО БЫТЬ чсмпильдбэ
+            'is_active': True,
+            'role': 'user',
+            'last_login': None,
         }
+
+        print(f"  Результат для сотрудника {employee.id}: отдел='{department_name}', подразделение='{division_name}'")
+        return result_dict
 
     def _get_full_name(self, employee: Employee) -> str:
         """Формирует ФИО сотрудника"""
@@ -298,6 +328,104 @@ class EmployeeService:
         except Exception as e:
             print(f"❌ Ошибка загрузки отдела {department_id}: {e}")
             return None
+
+    def delete_division_cascade(self, division_id: int) -> bool:
+        """Каскадное удаление подразделения вместе с отделами и сотрудниками"""
+        try:
+            self._ensure_session_valid()
+
+            # Получаем все отделы в подразделении
+            departments = self.session.query(Department).filter(Department.division_id == division_id).all()
+
+            for dept in departments:
+                # Удаляем сотрудников в отделе
+                employees = self.session.query(Employee).filter(Employee.department_id == dept.id).all()
+                for emp in employees:
+                    self.repo.delete(emp.id)
+                # Удаляем отдел
+                self.session.delete(dept)
+
+            # Удаляем подразделение
+            division = self.session.get(Division, division_id)
+            if division:
+                self.session.delete(division)
+                self.session.commit()
+                return True
+            return False
+        except Exception as e:
+            self.session.rollback()
+            print(f"❌ Ошибка при каскадном удалении подразделения: {e}")
+            return False
+
+    def reassign_division_dependencies(self, from_division_id: int, to_division_id: int) -> bool:
+        """Переназначение всех отделов и сотрудников из одного подразделения в другое"""
+        try:
+            self._ensure_session_valid()
+
+            # Обновляем отделы
+            self.session.query(Department).filter(
+                Department.division_id == from_division_id
+            ).update({Department.division_id: to_division_id})
+
+            # Обновляем сотрудников (через отделы уже обновились)
+            # Но также есть сотрудники, у которых division_id напрямую
+            self.session.query(Employee).filter(
+                Employee.division_id == from_division_id
+            ).update({Employee.division_id: to_division_id})
+
+            self.session.commit()
+            return True
+        except Exception as e:
+            self.session.rollback()
+            print(f"❌ Ошибка при переназначении: {e}")
+            return False
+
+    def delete_department_cascade(self, department_id: int) -> bool:
+        """Каскадное удаление отдела вместе со всеми сотрудниками"""
+        try:
+            self._ensure_session_valid()
+
+            # Получаем всех сотрудников в отделе
+            employees = self.session.query(Employee).filter(Employee.department_id == department_id).all()
+
+            # Удаляем сотрудников (мягкое удаление через EmployeeData)
+            for emp in employees:
+                self.repo.delete(emp.id)  # мягкое удаление
+                if self.tasks_session:
+                    self.tasks_session.commit()
+
+            # Удаляем сам отдел
+            department = self.session.get(Department, department_id)
+            if department:
+                self.session.delete(department)
+                self.session.commit()
+                return True
+
+            return False
+        except Exception as e:
+            self.session.rollback()
+            if self.tasks_session:
+                self.tasks_session.rollback()
+            print(f"❌ Ошибка при каскадном удалении отдела: {e}")
+            return False
+
+    def reassign_department_employees(self, from_department_id: int, to_department_id: int) -> bool:
+        """Переназначение всех сотрудников из одного отдела в другой"""
+        try:
+            self._ensure_session_valid()
+
+            # Обновляем department_id у всех сотрудников
+            result = self.session.query(Employee).filter(
+                Employee.department_id == from_department_id
+            ).update({Employee.department_id: to_department_id})
+
+            self.session.commit()
+            print(f"✅ Переназначено {result} сотрудников из отдела {from_department_id} в отдел {to_department_id}")
+            return True
+        except Exception as e:
+            self.session.rollback()
+            print(f"❌ Ошибка при переназначении сотрудников: {e}")
+            return False
 
     def create_department(self, data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """Создать отдел (в БД employees)"""

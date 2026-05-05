@@ -112,17 +112,15 @@ class DivisionsTab(BaseTab):
         print("Новое подразделение:", division_data)
 
         if self.employee_service:
-            # Сохраняем в БД
-            new_division = self.employee_service.create_division_in_db(division_data)
+            # Исправляем: create_division_in_db -> create_division
+            new_division = self.employee_service.create_division(division_data)
             if new_division:
-                # Добавляем в локальный список
                 self.divisions.append(new_division)
                 self.refresh_cards()
                 QMessageBox.information(self, "Успех", f"Подразделение '{division_data.get('name')}' создано")
             else:
                 QMessageBox.warning(self, "Ошибка", "Не удалось сохранить подразделение в БД")
         else:
-            # Просто добавляем в локальный список (без БД)
             self.divisions.append(division_data)
             self.refresh_cards()
 
@@ -142,8 +140,8 @@ class DivisionsTab(BaseTab):
         print("Редактирование подразделения:", division_data)
 
         if self.employee_service:
-            # Обновляем в БД
-            success = self.employee_service.update_division_in_db(
+            # Исправляем: update_division_in_db -> update_division
+            success = self.employee_service.update_division(
                 division_data.get('id'),
                 division_data
             )
@@ -323,7 +321,6 @@ class DivisionsTab(BaseTab):
         btn_cancel.setObjectName("btnCancel")
         btn_cancel.setFixedHeight(35)
 
-        # Обновляем видимость кнопок при смене радио
         def update_buttons():
             is_reassign = radio_reassign.isChecked()
             btn_delete.setVisible(not is_reassign)
@@ -337,11 +334,11 @@ class DivisionsTab(BaseTab):
         btn_layout.addWidget(btn_cancel)
         layout.addLayout(btn_layout)
 
-        # Обработчики
         def do_delete():
             if radio_delete_all.isChecked():
-                # Каскадное удаление
                 if self.employee_service:
+                    # Исправляем: delete_division_cascade -> delete_division (или нужно добавить метод)
+                    # Если нужен каскадный метод, добавьте его в employee_service
                     success = self.employee_service.delete_division_cascade(division_id)
                     if success:
                         self.divisions = [d for d in self.divisions if d.get('id') != division_id]
@@ -355,17 +352,16 @@ class DivisionsTab(BaseTab):
                     self.refresh_cards()
                     dialog.accept()
             else:
-                # Переназначение
                 target_division_id = self.reassign_combo.currentData()
                 if not target_division_id:
                     QMessageBox.warning(dialog, "Ошибка", "Выберите подразделение для переназначения")
                     return
 
                 if self.employee_service:
+                    # Исправляем: reassign_division_dependencies -> нужно добавить метод
                     success = self.employee_service.reassign_division_dependencies(division_id, target_division_id)
                     if success:
-                        # Удаляем исходное подразделение
-                        self.employee_service.delete_division_in_db(division_id)
+                        self.employee_service.delete_division(division_id)  # ← исправлено
                         self.divisions = [d for d in self.divisions if d.get('id') != division_id]
                         self.refresh_cards()
                         QMessageBox.information(self, "Успех",
@@ -390,15 +386,14 @@ class DivisionsTab(BaseTab):
 
         if item_type == "division":
             if self.employee_service:
-                success = self.employee_service.delete_division_in_db(item_id)
+                # Исправляем: delete_division_in_db -> delete_division
+                success = self.employee_service.delete_division(item_id)
                 if success:
-                    # Удаляем из локального списка
                     self.divisions = [d for d in self.divisions if d.get('id') != item_id]
                     self.refresh_cards()
                     QMessageBox.information(self, "Успех", "Подразделение удалено")
                 else:
                     QMessageBox.warning(self, "Ошибка", "Не удалось удалить подразделение")
             else:
-                # Просто удаляем из локального списка
                 self.divisions = [d for d in self.divisions if d.get('id') != item_id]
                 self.refresh_cards()

@@ -202,7 +202,9 @@ class TaskCard(QFrame):
         tags_widget = self.tagsLayout.parentWidget()
         if tags:
             for tag in tags:
-                tag_button = QPushButton(tag)
+                # Преобразуем tag в строку, если это не строка
+                tag_str = tag.name if hasattr(tag, 'name') else str(tag)
+                tag_button = QPushButton(tag_str)
                 tag_button.setStyleSheet("""
                     QPushButton{
                         font-size: 10px;

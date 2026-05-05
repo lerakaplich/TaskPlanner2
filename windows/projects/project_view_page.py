@@ -2,7 +2,7 @@
 
 import os
 from typing import Dict
-from PyQt6.QtWidgets import QWidget, QFrame, QHBoxLayout, QLabel, QPushButton, QScrollArea
+from PyQt6.QtWidgets import QWidget, QFrame, QHBoxLayout, QLabel, QPushButton, QScrollArea, QVBoxLayout
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6 import uic
 
@@ -10,6 +10,8 @@ from windows.other_tasks.others_task_card import OthersTaskCard
 from windows.shared.kanban_column import KanbanColumn
 from services.tasks_service import TasksService
 from database import get_tasks_session
+from repositories.employee_repo import EmployeeRepo
+from database import get_employees_session
 
 
 class ProjectViewPage(QWidget):
@@ -44,10 +46,20 @@ class ProjectViewPage(QWidget):
 
         # Создаем сервис задач в режиме "all" (показываем все задачи проекта)
         self.db_session = session or get_tasks_session()
-        temp_user = {"id": 1, "last_name": "Копейкина", "first_name": "Виктория"}
+
+        # Получаем текущего пользователя из parent (MainWindow)
+        self.current_user = None
+        self.current_user_id = None
+        if parent and hasattr(parent, 'current_user'):
+            self.current_user = parent.current_user
+            self.current_user_id = parent.current_user_id
+        else:
+            self.current_user = {"id": 1, "last_name": "Копейкина", "first_name": "Виктория"}
+            self.current_user_id = 1
+
         self.service = TasksService(
             db_session=self.db_session,
-            current_user=temp_user,
+            current_user=self.current_user,
             mode="all"
         )
 
@@ -90,16 +102,20 @@ class ProjectViewPage(QWidget):
 
         # Настройка UI
         self.setup_kanban()
-        self.load_tasks()
         self.setup_project_ui()
+
+        # Загружаем задачи ПОСЛЕ создания колонок
+        self.load_tasks()
 
     def _get_default_project_data(self):
         """Возвращает данные проекта по умолчанию"""
-        return {
-            'id': self.project_id or 1,
-            'name': f'Проект #{self.project_id or 1}',
-            'description': 'Описание проекта'
-        }
+
+        class ProjectData:
+            def __init__(self, id, name):
+                self.id = id
+                self.name = name
+
+        return ProjectData(self.project_id or 1, f'Проект #{self.project_id or 1}')
 
     def get_column_data(self):
         """Возвращает колонки текущего проекта"""
@@ -108,6 +124,7 @@ class ProjectViewPage(QWidget):
     def load_tasks(self):
         """Загружает задачи ТОЛЬКО текущего проекта"""
         if not self.project_service or not self.project_id:
+            print("❌ Нет project_service или project_id")
             return
 
         # Получаем все задачи проекта через TaskRepo
@@ -139,25 +156,33 @@ class ProjectViewPage(QWidget):
                 for task in tasks:
                     task_dict = self._task_to_dict(task)
                     task_card = self.create_task_card(task_dict)
-                    self.connect_task_card_signals(task_card)
                     col_widget.add_task(task_card)
+                    print(f"    ✅ Добавлена карточка задачи '{task.title}' в колонку '{column_name}'")
                 print(f"  Колонка '{column_name}': добавлено {len(tasks)} задач")
 
         self.update_statistics()
 
     def _task_to_dict(self, task):
-        """Преобразует задачу в словарь для карточки"""
+        """Преобразует задачу в словарь для карточки с полным набором данных"""
         from models.schemas.tasks_dto import TaskPriority
-        from repositories.employee_repo import EmployeeRepo
-        from database import get_employees_session  # ← ДОБАВИТЬ
+        from datetime import datetime
 
-        # Получаем имя исполнителя - используем ОТДЕЛЬНУЮ сессию для employees
+        # Получаем имя исполнителя
         assignee_name = None
         if task.assigned_to:
-            emp_session = get_employees_session()  # ← ПРАВИЛЬНАЯ СЕССИЯ ДЛЯ EMPLOYEES
+            emp_session = get_employees_session()
             if emp_session:
                 emp_repo = EmployeeRepo(emp_session)
                 assignee_name = emp_repo.get_full_name(task.assigned_to)
+                emp_session.close()
+
+        # Получаем имя автора
+        author_name = None
+        if task.created_by:
+            emp_session = get_employees_session()
+            if emp_session:
+                emp_repo = EmployeeRepo(emp_session)
+                author_name = emp_repo.get_full_name(task.created_by)
                 emp_session.close()
 
         priority_map = {
@@ -174,11 +199,27 @@ class ProjectViewPage(QWidget):
 
         deadline_text = ""
         deadline_color = "#666"
+        deadline_obj = None
         if task.deadline:
             deadline_text = task.deadline.strftime("%d.%m.%Y")
-            from datetime import datetime
+            deadline_obj = task.deadline
             if task.deadline.date() < datetime.now().date():
                 deadline_color = "#D22730"
+
+        # Форматируем даты
+        created_text = task.created_at.strftime("%d.%m.%Y") if task.created_at else ""
+        updated_text = task.updated_at.strftime("%d.%m.%Y") if task.updated_at else ""
+
+        # Преобразуем теги в строки
+        tags = []
+        if hasattr(task, 'tags') and task.tags:
+            for tag_obj in task.tags:
+                if hasattr(tag_obj, 'name'):
+                    tags.append(tag_obj.name)
+                elif isinstance(tag_obj, str):
+                    tags.append(tag_obj)
+                else:
+                    tags.append(str(tag_obj))
 
         return {
             "id": task.id,
@@ -190,24 +231,53 @@ class ProjectViewPage(QWidget):
             "priority_text": priority_text,
             "priority_color": priority_color,
             "deadline": deadline_text,
+            "deadline_obj": deadline_obj,
             "deadline_color": deadline_color,
             "assignee_name": assignee_name or "Не назначен",
+            "assigned_to": task.assigned_to,
             "created_by": task.created_by,
+            "author_text": author_name or "Неизвестен",
+            "created_text": created_text,
+            "updated_text": updated_text,
+            "executor_text": assignee_name or "Не назначен",
             "completed": task.is_archived if hasattr(task, 'is_archived') else False,
-            "tags": []
+            "difficulty": task.difficulty if hasattr(task, 'difficulty') else 0,
+            "tags": tags,  # ← ТЕПЕРЬ ЭТО СПИСОК СТРОК
+            "project_id": task.project_id,
+            "project_name": self.project_data.name if hasattr(self.project_data, 'name') else str(self.project_id)
         }
 
     def create_task_card(self, task_data: Dict) -> QWidget:
         """Создает карточку задачи"""
         # Проверяем, является ли текущий пользователь создателем
-        is_creator = (task_data.get('created_by') == self.current_user.get('id')) if hasattr(self,
-                                                                                             'current_user') else False
-        return OthersTaskCard(task_data, service=self.service, is_creator=is_creator)
+        is_creator = (task_data.get('created_by') == self.current_user_id)
 
-    def connect_task_card_signals(self, card):
-        """Подключает сигналы карточки"""
-        # Можно добавить обработчики при необходимости
-        pass
+        card = OthersTaskCard(task_data, service=self.service, is_creator=is_creator)
+
+        # Подключаем сигналы карточки
+        card.editRequested.connect(self._on_edit_task)
+        card.deleteRequested.connect(self._on_delete_task)
+        card.archiveRequested.connect(self._on_archive_task)
+        card.moveToDoneColumn.connect(self._on_move_to_done)
+
+        return card
+
+    def _on_edit_task(self, task_id: int):
+        """Обработчик редактирования задачи"""
+        print(f"✏️ Редактирование задачи {task_id}")
+        # Здесь можно открыть диалог редактирования задачи
+
+    def _on_delete_task(self, task_id: int):
+        """Обработчик удаления задачи"""
+        print(f"🗑️ Удаление задачи {task_id}")
+
+    def _on_archive_task(self, task_id: int):
+        """Обработчик архивации задачи"""
+        print(f"📦 Архивация задачи {task_id}")
+
+    def _on_move_to_done(self, task_id: int):
+        """Обработчик перемещения задачи в колонку Готово"""
+        print(f"✅ Задача {task_id} отмечена как выполненная")
 
     def clear_all_columns(self):
         """Очищает все колонки от карточек"""
@@ -243,9 +313,9 @@ class ProjectViewPage(QWidget):
             layout.setContentsMargins(15, 10, 15, 10)
 
             # Название проекта
-            title_label = QLabel(
-                f"📋 Проект: {self.project_data.name if hasattr(self.project_data, 'name') else self.project_data.get('name', '')}"
-            )
+            project_name = self.project_data.name if hasattr(self.project_data, 'name') else self.project_data.get(
+                'name', '')
+            title_label = QLabel(f"📋 Проект: {project_name}")
             title_label.setStyleSheet("font-size: 16px; font-weight: bold; color: #1B232A;")
             layout.addWidget(title_label)
 
@@ -294,6 +364,7 @@ class ProjectViewPage(QWidget):
 
     def setup_kanban(self):
         """Создает колонки канбан-доски"""
+        # Очищаем существующий kanbanLayout
         self.clear_layout(self.kanbanLayout)
 
         column_data = self.get_column_data()
@@ -305,28 +376,13 @@ class ProjectViewPage(QWidget):
             self.kanbanLayout.addWidget(empty_label)
             return
 
-        # Вертикальный скролл
-        main_scroll = QScrollArea()
-        main_scroll.setWidgetResizable(True)
-        main_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
-        main_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        main_scroll.setStyleSheet("""
-            QScrollArea {
-                border: none;
-                background-color: transparent;
-            }
-            QScrollBar:vertical {
-                background: #f0f0f0;
-                width: 10px;
-                border-radius: 5px;
-            }
-            QScrollBar::handle:vertical {
-                background: #c0c0c0;
-                border-radius: 5px;
-            }
-        """)
+        # Основной контейнер с горизонтальным скроллом
+        scroll_widget = QWidget()
+        main_layout = QHBoxLayout(scroll_widget)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(0)
 
-        # Горизонтальный скролл
+        # Создаем горизонтальный скролл
         horizontal_scroll = QScrollArea()
         horizontal_scroll.setWidgetResizable(True)
         horizontal_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
@@ -365,8 +421,33 @@ class ProjectViewPage(QWidget):
 
         columns_layout.addStretch()
         horizontal_scroll.setWidget(columns_container)
-        main_scroll.setWidget(horizontal_scroll)
-        self.kanbanLayout.addWidget(main_scroll)
+
+        # Добавляем в основной layout с вертикальным скроллом
+        main_layout.addWidget(horizontal_scroll)
+
+        # Вертикальный скролл для всего
+        vertical_scroll = QScrollArea()
+        vertical_scroll.setWidgetResizable(True)
+        vertical_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        vertical_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        vertical_scroll.setStyleSheet("""
+            QScrollArea {
+                border: none;
+                background-color: transparent;
+            }
+            QScrollBar:vertical {
+                background: #f0f0f0;
+                width: 10px;
+                border-radius: 5px;
+            }
+            QScrollBar::handle:vertical {
+                background: #c0c0c0;
+                border-radius: 5px;
+            }
+        """)
+        vertical_scroll.setWidget(scroll_widget)
+
+        self.kanbanLayout.addWidget(vertical_scroll)
 
         print(f"✅ Создано {len(self.column_widgets)} колонок для проекта {self.project_id}")
 
@@ -379,4 +460,5 @@ class ProjectViewPage(QWidget):
                 if widget:
                     widget.deleteLater()
                 else:
-                    self.clear_layout(item.layout())
+                    if item.layout():
+                        self.clear_layout(item.layout())

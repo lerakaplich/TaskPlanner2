@@ -63,24 +63,26 @@ class SettingsPage(QWidget):
 
     def setup_tabs(self):
         """Создание и настройка всех вкладок"""
-        # Создаём вкладки
         self.tags_tab = TagsTab()
         self.employees_tab = EmployeesTab()
         self.departments_tab = DepartmentsTab()
         self.divisions_tab = DivisionsTab()
         self.columns_tab = ColumnsTab()
 
-        # Если есть сессия, передаём сервис во вкладку сотрудников
-        if hasattr(self, 'session') and self.session:
-            employee_service = EmployeeService(self.session)
+        # ===== ИСПРАВЛЕНИЕ: используем employees_db_session, а не session! =====
+        if hasattr(self, 'employees_db_session') and self.employees_db_session:
+            employee_service = EmployeeService(self.employees_db_session)  # ← ПРАВИЛЬНО
             self.employees_tab.set_employee_service(employee_service)
-            self.employees_tab.set_session(self.session)
+            self.employees_tab.set_session(self.employees_db_session)  # ← тоже employees
 
-            # Передаём session во вкладки
-            self.departments_tab.set_session(self.session)
-            self.divisions_tab.set_session(self.session)
-            self.columns_tab.set_session(self.session)
-            self.tags_tab.set_session(self.session)  # ← ДОБАВЛЯЕМ
+            # Передаём employees_db_session во вкладки (не session)
+            self.departments_tab.set_session(self.employees_db_session)
+            self.divisions_tab.set_session(self.employees_db_session)
+            self.columns_tab.set_session(self.session)  # ← колонки в taskplanner, тут правильно
+            self.tags_tab.set_session(self.session)  # ← теги в taskplanner
+        else:
+            # Fallback если нет employees_db_session
+            print("⚠️ Нет employees_db_session для EmployeeService")
 
         # Подключаем сигналы
         self.tags_tab.item_deleted.connect(self.on_tag_deleted)  # ← ДОБАВЛЯЕМ отдельный обработчик
@@ -147,10 +149,9 @@ class SettingsPage(QWidget):
         from services.column_service import ColumnService
         from services.tag_service import TagService
 
-        # Используем ОТДЕЛЬНУЮ сессию для EmployeeService!
-        employee_service = EmployeeService(self.employees_db_session)  # ← ИСПРАВЛЕНО
-        column_service = ColumnService(self.session)  # column_service может использовать taskplanner
-        tag_service = TagService(self.session)
+        employee_service = EmployeeService(self.employees_db_session)  # ← employees
+        column_service = ColumnService(self.session)  # ← taskplanner (колонки)
+        tag_service = TagService(self.session)  # ← taskplanner (теги)
 
         # Загружаем сотрудников
         self.all_employees = employee_service.get_all_employees()
@@ -185,9 +186,10 @@ class SettingsPage(QWidget):
         """Обработка удаления подразделения"""
         if item_type == "division":
             from services.employee_service import EmployeeService
-            employee_service = EmployeeService(self.session)
+            employee_service = EmployeeService(self.employees_db_session)  # ← ИСПРАВЛЕНО
 
-            if employee_service.delete_division_in_db(division_id):
+            # Используйте существующий метод delete_division (не delete_division_in_db)
+            if employee_service.delete_division(division_id):  # ← ИСПРАВЛЕНО
                 # Обновляем локальный список
                 self.all_divisions = [d for d in self.all_divisions if d.get('id') != division_id]
                 self.divisions_tab.load_data(self.all_divisions)

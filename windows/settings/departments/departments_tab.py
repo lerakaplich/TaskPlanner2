@@ -99,17 +99,21 @@ class DepartmentsTab(BaseTab):
         return ''
 
     def _get_employee_name(self, employee_id: int) -> str:
-        """Получить ФИО сотрудника по ID"""
+        """Получить ФИО сотрудника по ID в кратком формате Фамилия И.О."""
         for emp in self.all_employees:
             if emp.get('id') == employee_id:
                 last_name = emp.get('last_name', '')
                 first_name = emp.get('first_name', '')
                 middle_name = emp.get('middle_name', '')
 
-                full_name = f"{last_name} {first_name}"
+                # Формируем краткое ФИО: Фамилия И.О.
+                initials = ""
+                if first_name:
+                    initials += first_name[0] + "."
                 if middle_name:
-                    full_name += f" {middle_name}"
-                return full_name
+                    initials += middle_name[0] + "."
+
+                return f"{last_name} {initials}".strip()
         return str(employee_id)
 
     def on_add_clicked(self):
@@ -123,7 +127,8 @@ class DepartmentsTab(BaseTab):
         print("Новый отдел:", department_data)
 
         if self.employee_service:
-            new_department = self.employee_service.create_department_in_db(department_data)
+            # Исправляем: create_department_in_db -> create_department
+            new_department = self.employee_service.create_department(department_data)
             if new_department:
                 new_department['division'] = self._get_division_name(new_department.get('division_id'))
                 self.departments.append(new_department)
@@ -167,7 +172,8 @@ class DepartmentsTab(BaseTab):
         print("Редактирование отдела:", department_data)
 
         if self.employee_service:
-            success = self.employee_service.update_department_in_db(
+            # Исправляем: update_department_in_db -> update_department
+            success = self.employee_service.update_department(
                 department_data.get('id'),
                 department_data
             )
@@ -190,6 +196,7 @@ class DepartmentsTab(BaseTab):
             else:
                 QMessageBox.warning(self, "Ошибка", "Не удалось обновить отдел в БД")
         else:
+            # Fallback для тестовых данных
             for i, dept in enumerate(self.departments):
                 if dept.get('id') == department_data.get('id'):
                     self.departments[i] = department_data
@@ -359,9 +366,9 @@ class DepartmentsTab(BaseTab):
 
         def do_delete():
             if radio_delete_all.isChecked():
-                # Каскадное удаление
                 if self.employee_service:
-                    success = self.employee_service.delete_department_cascade(department_id)
+                    success = self.employee_service.delete_department_cascade(department_id)  # если есть такой метод
+                    # или просто delete_department если каскадное удаление настроено в БД
                     if success:
                         self.departments = [d for d in self.departments if d.get('id') != department_id]
                         self.refresh_cards()
@@ -374,7 +381,6 @@ class DepartmentsTab(BaseTab):
                     self.refresh_cards()
                     dialog.accept()
             else:
-                # Переназначение
                 target_department_id = self.reassign_combo.currentData()
                 if not target_department_id:
                     QMessageBox.warning(dialog, "Ошибка", "Выберите отдел для переназначения")
@@ -383,7 +389,7 @@ class DepartmentsTab(BaseTab):
                 if self.employee_service:
                     success = self.employee_service.reassign_department_employees(department_id, target_department_id)
                     if success:
-                        self.employee_service.delete_department_in_db(department_id)
+                        self.employee_service.delete_department(department_id)  # исправлено
                         self.departments = [d for d in self.departments if d.get('id') != department_id]
                         self.refresh_cards()
                         QMessageBox.information(self, "Успех",
@@ -408,7 +414,8 @@ class DepartmentsTab(BaseTab):
 
         if item_type == "department":
             if self.employee_service:
-                success = self.employee_service.delete_department_in_db(item_id)
+                # Исправляем: delete_department_in_db -> delete_department
+                success = self.employee_service.delete_department(item_id)
                 if success:
                     self.departments = [d for d in self.departments if d.get('id') != item_id]
                     self.refresh_cards()
