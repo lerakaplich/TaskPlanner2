@@ -2,11 +2,12 @@
 
 import os
 from typing import Dict
-from PyQt6.QtWidgets import QWidget, QFrame, QHBoxLayout, QLabel, QPushButton, QScrollArea, QVBoxLayout
+from PyQt6.QtWidgets import QWidget, QFrame, QHBoxLayout, QLabel, QPushButton, QScrollArea, QVBoxLayout, QMessageBox
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6 import uic
 
 from windows.other_tasks.others_task_card import OthersTaskCard
+from windows.archive.archived_task_card import ArchivedTaskCard
 from windows.shared.kanban_column import KanbanColumn
 from services.tasks_service import TasksService
 from database import get_tasks_session
@@ -43,6 +44,10 @@ class ProjectViewPage(QWidget):
                 self.project_data = self._get_default_project_data()
         else:
             self.project_data = self._get_default_project_data()
+
+        # Проверяем, архивирован ли проект
+        self.is_archived_project = self.project_data.is_archived if hasattr(self.project_data, 'is_archived') else False
+        print(f"📋 Проект {self.project_id}, архивирован: {self.is_archived_project}")
 
         # Создаем сервис задач в режиме "all" (показываем все задачи проекта)
         self.db_session = session or get_tasks_session()
@@ -114,6 +119,7 @@ class ProjectViewPage(QWidget):
             def __init__(self, id, name):
                 self.id = id
                 self.name = name
+                self.is_archived = False
 
         return ProjectData(self.project_id or 1, f'Проект #{self.project_id or 1}')
 
@@ -122,7 +128,7 @@ class ProjectViewPage(QWidget):
         return self.project_columns
 
     def load_tasks(self):
-        """Загружает задачи ТОЛЬКО текущего проекта"""
+        """Загружает задачи ТОЛЬКО текущего проекта (включая архивированные для архивного проекта)"""
         if not self.project_service or not self.project_id:
             print("❌ Нет project_service или project_id")
             return
@@ -130,9 +136,18 @@ class ProjectViewPage(QWidget):
         # Получаем все задачи проекта через TaskRepo
         from repositories.task_repo import TaskRepo
         task_repo = TaskRepo(self.db_session)
-        project_tasks = task_repo.get_by_project(self.project_id, load_column=True)
 
-        print(f"\n📊 Загрузка задач для проекта {self.project_id}: {len(project_tasks)} задач")
+        # Если проект архивирован - загружаем ВСЕ задачи (включая архивированные)
+        # Если проект активен - загружаем только активные задачи
+        include_archived = self.is_archived_project
+        project_tasks = task_repo.get_by_project(
+            self.project_id,
+            load_column=True,
+            include_archived=include_archived
+        )
+
+        print(
+            f"\n📊 Загрузка задач для проекта {self.project_id} (архивирован={self.is_archived_project}): {len(project_tasks)} задач")
         print(f"Колонки проекта: {[c['name'] for c in self.project_columns]}")
 
         # Очищаем все колонки
@@ -155,9 +170,10 @@ class ProjectViewPage(QWidget):
                 tasks = tasks_by_column.get(column_name, [])
                 for task in tasks:
                     task_dict = self._task_to_dict(task)
-                    task_card = self.create_task_card(task_dict)
+                    task_card = self.create_task_card(task_dict, task)
                     col_widget.add_task(task_card)
-                    print(f"    ✅ Добавлена карточка задачи '{task.title}' в колонку '{column_name}'")
+                    print(f"    ✅ Добавлена карточка задачи '{task.title}' в колонку '{column_name}'"
+                          f" (архивирована={task.is_archived})")
                 print(f"  Колонка '{column_name}': добавлено {len(tasks)} задач")
 
         self.update_statistics()
@@ -221,6 +237,11 @@ class ProjectViewPage(QWidget):
                 else:
                     tags.append(str(tag_obj))
 
+        # Получаем дату архивации
+        archived_at = ""
+        if task.is_archived and task.archived_at:
+            archived_at = task.archived_at.strftime("%d.%m.%Y")
+
         return {
             "id": task.id,
             "title": task.title,
@@ -242,30 +263,68 @@ class ProjectViewPage(QWidget):
             "executor_text": assignee_name or "Не назначен",
             "completed": task.is_archived if hasattr(task, 'is_archived') else False,
             "difficulty": task.difficulty if hasattr(task, 'difficulty') else 0,
-            "tags": tags,  # ← ТЕПЕРЬ ЭТО СПИСОК СТРОК
+            "tags": tags,
             "project_id": task.project_id,
-            "project_name": self.project_data.name if hasattr(self.project_data, 'name') else str(self.project_id)
+            "project_name": self.project_data.name if hasattr(self.project_data, 'name') else str(self.project_id),
+            "is_archived": task.is_archived if hasattr(task, 'is_archived') else False,
+            "archived_at": archived_at
         }
 
-    def create_task_card(self, task_data: Dict) -> QWidget:
+    def create_task_card(self, task_data: Dict, task=None) -> QWidget:
         """Создает карточку задачи"""
-        # Проверяем, является ли текущий пользователь создателем
-        is_creator = (task_data.get('created_by') == self.current_user_id)
+        is_archived = task_data.get('is_archived', False)
 
-        card = OthersTaskCard(task_data, service=self.service, is_creator=is_creator)
+        # Если задача архивирована или проект архивирован - используем ArchivedTaskCard
+        if is_archived or self.is_archived_project:
+            card = ArchivedTaskCard(task_data, self)
+            # Подключаем сигналы для архивированной карточки
+            card.restore_requested.connect(self._on_restore_task)
+            card.delete_permanently_requested.connect(self._on_delete_task_permanently)
+            return card
+        else:
+            # Обычная карточка для активных задач
+            is_creator = (task_data.get('created_by') == self.current_user_id)
+            card = OthersTaskCard(task_data, service=self.service, is_creator=is_creator)
+            card.editRequested.connect(self._on_edit_task)
+            card.deleteRequested.connect(self._on_delete_task)
+            card.archiveRequested.connect(self._on_archive_task)
+            card.moveToDoneColumn.connect(self._on_move_to_done)
+            return card
 
-        # Подключаем сигналы карточки
-        card.editRequested.connect(self._on_edit_task)
-        card.deleteRequested.connect(self._on_delete_task)
-        card.archiveRequested.connect(self._on_archive_task)
-        card.moveToDoneColumn.connect(self._on_move_to_done)
+    def _on_restore_task(self, task_id: int):
+        """Восстановление задачи из архива"""
+        if self.project_service:
+            # Восстанавливаем задачу через сервис
+            from repositories.task_repo import TaskRepo
+            task_repo = TaskRepo(self.db_session)
+            task = task_repo.get_by_id(task_id)
+            if task:
+                task.is_archived = False
+                task.archived_at = None
+                self.db_session.commit()
+                # Перезагружаем страницу
+                self.load_tasks()
+                print(f"✅ Задача {task_id} восстановлена")
 
-        return card
+    def _on_delete_task_permanently(self, task_id: int):
+        """Полное удаление задачи"""
+        reply = QMessageBox.question(
+            self,
+            "Удаление задачи",
+            "Вы уверены, что хотите удалить задачу навсегда?\nЭто действие нельзя отменить.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+        )
+        if reply == QMessageBox.StandardButton.Yes:
+            from repositories.task_repo import TaskRepo
+            task_repo = TaskRepo(self.db_session)
+            task_repo.hard_delete(task_id)
+            self.db_session.commit()
+            self.load_tasks()
+            print(f"🗑️ Задача {task_id} удалена навсегда")
 
     def _on_edit_task(self, task_id: int):
         """Обработчик редактирования задачи"""
         print(f"✏️ Редактирование задачи {task_id}")
-        # Здесь можно открыть диалог редактирования задачи
 
     def _on_delete_task(self, task_id: int):
         """Обработчик удаления задачи"""
@@ -319,16 +378,27 @@ class ProjectViewPage(QWidget):
             title_label.setStyleSheet("font-size: 16px; font-weight: bold; color: #1B232A;")
             layout.addWidget(title_label)
 
-            # Статус
-            status_label = QLabel("Активен")
-            status_label.setStyleSheet("""
-                font-size: 12px;
-                font-weight: bold;
-                color: white;
-                background-color: #4CAF50;
-                border-radius: 10px;
-                padding: 4px 12px;
-            """)
+            # Статус (если проект архивирован, показываем архивный статус)
+            if self.is_archived_project:
+                status_label = QLabel("В архиве")
+                status_label.setStyleSheet("""
+                    font-size: 12px;
+                    font-weight: bold;
+                    color: white;
+                    background-color: #999999;
+                    border-radius: 10px;
+                    padding: 4px 12px;
+                """)
+            else:
+                status_label = QLabel("Активен")
+                status_label.setStyleSheet("""
+                    font-size: 12px;
+                    font-weight: bold;
+                    color: white;
+                    background-color: #4CAF50;
+                    border-radius: 10px;
+                    padding: 4px 12px;
+                """)
             layout.addWidget(status_label)
 
             # Кнопка возврата к проектам

@@ -31,6 +31,9 @@ ArchivedProjectCard:hover {
    <enum>QFrame::Raised</enum>
   </property>
   <layout class="QVBoxLayout" name="main_layout">
+   <property name="spacing">
+    <number>10</number>
+   </property>
    <property name="leftMargin">
     <number>15</number>
    </property>
@@ -43,9 +46,6 @@ ArchivedProjectCard:hover {
    <property name="bottomMargin">
     <number>15</number>
    </property>
-   <property name="spacing">
-    <number>10</number>
-   </property>
    <item>
     <layout class="QVBoxLayout" name="header_layout">
      <property name="spacing">
@@ -54,6 +54,9 @@ ArchivedProjectCard:hover {
      <item>
       <widget class="QWidget" name="title_row" native="true">
        <layout class="QVBoxLayout" name="title_layout">
+        <property name="spacing">
+         <number>8</number>
+        </property>
         <property name="leftMargin">
          <number>0</number>
         </property>
@@ -66,33 +69,30 @@ ArchivedProjectCard:hover {
         <property name="bottomMargin">
          <number>0</number>
         </property>
-        <property name="spacing">
-         <number>8</number>
-        </property>
         <item>
          <widget class="QLabel" name="name_label">
-          <property name="text">
-           <string>Без названия</string>
-          </property>
           <property name="styleSheet">
            <string notr="true">font-size: 18px;
 font-weight: bold;
 color: #1B232A;</string>
           </property>
+          <property name="text">
+           <string>Без названия</string>
+          </property>
          </widget>
         </item>
         <item>
          <widget class="QLabel" name="desc_label">
+          <property name="styleSheet">
+           <string notr="true">color: #666666;
+font-size: 13px;
+margin-top: 2px;</string>
+          </property>
           <property name="text">
            <string/>
           </property>
           <property name="wordWrap">
            <bool>true</bool>
-          </property>
-          <property name="styleSheet">
-           <string notr="true">color: #666666;
-font-size: 13px;
-margin-top: 2px;</string>
           </property>
          </widget>
         </item>
@@ -102,6 +102,9 @@ margin-top: 2px;</string>
      <item>
       <widget class="QWidget" name="info_row" native="true">
        <layout class="QVBoxLayout" name="info_layout">
+        <property name="spacing">
+         <number>8</number>
+        </property>
         <property name="leftMargin">
          <number>0</number>
         </property>
@@ -114,26 +117,23 @@ margin-top: 2px;</string>
         <property name="bottomMargin">
          <number>0</number>
         </property>
-        <property name="spacing">
-         <number>8</number>
-        </property>
         <item>
          <widget class="QLabel" name="date_label">
-          <property name="text">
-           <string>Архивация: Неизвестно</string>
-          </property>
           <property name="styleSheet">
            <string notr="true">color: #888888; font-size: 11px;</string>
+          </property>
+          <property name="text">
+           <string>Архивация: Неизвестно</string>
           </property>
          </widget>
         </item>
         <item>
          <widget class="QLabel" name="tasks_label">
+          <property name="styleSheet">
+           <string notr="true">color: #888888; font-size: 11px; background-color: transparent;</string>
+          </property>
           <property name="text">
            <string>Задач: 0</string>
-          </property>
-          <property name="styleSheet">
-           <string notr="true">color: #888888; font-size: 11px;</string>
           </property>
          </widget>
         </item>
@@ -149,9 +149,6 @@ margin-top: 2px;</string>
      </property>
      <item>
       <widget class="QPushButton" name="restore_button">
-       <property name="text">
-        <string>Восстановить проект</string>
-       </property>
        <property name="styleSheet">
         <string notr="true">QPushButton {
     background-color: #ccab6e;
@@ -170,13 +167,13 @@ QPushButton:pressed {
     background-color: #7a6a50;
 }</string>
        </property>
+       <property name="text">
+        <string>Восстановить проект</string>
+       </property>
       </widget>
      </item>
      <item>
       <widget class="QPushButton" name="delete_button">
-       <property name="text">
-        <string>Удалить навсегда</string>
-       </property>
        <property name="styleSheet">
         <string notr="true">QPushButton {
     background-color: #D22730;
@@ -194,6 +191,9 @@ QPushButton:hover {
 QPushButton:pressed {
     background-color: #6a1e29;
 }</string>
+       </property>
+       <property name="text">
+        <string>Удалить навсегда</string>
        </property>
       </widget>
      </item>

@@ -17,6 +17,11 @@ class ArchivePage(QWidget):
     def __init__(self, service: ArchiveService = None, parent=None):
         super().__init__(parent)
         self.setObjectName("archivePage")
+        self.archive_service = service
+
+        # Состояние
+        self.current_project_id = None
+        self.current_search_text = ""
 
         # Загрузка UI
         ui_path = os.path.join(
@@ -26,14 +31,7 @@ class ArchivePage(QWidget):
         )
         uic.loadUi(ui_path, self)
 
-        # Сервис
-        self.archive_service = service
-
-        # Состояние
-        self.current_project_id = None
-        self.current_search_text = ""
-
-        # Сигналы
+        # Подключение сигналов
         self.back_button.clicked.connect(self.show_projects_list)
         if hasattr(self, "search_input"):
             self.search_input.textChanged.connect(self.on_search)
@@ -42,10 +40,11 @@ class ArchivePage(QWidget):
         self.show_projects_list()
 
     # ==========================================================
-    # Отображение проектов
+    # Навигация
     # ==========================================================
 
     def show_projects_list(self):
+        """Показывает список архивированных проектов"""
         self.current_project_id = None
         self.current_search_text = ""
 
@@ -54,30 +53,44 @@ class ArchivePage(QWidget):
 
         self.section_title.setText("Архивированные проекты")
         self.back_button.hide()
-
         self.projects_widget.show()
         self.tasks_widget.hide()
-
         self._update_projects_view()
+
+    def show_project_tasks(self, project_id: int):
+        """Показывает задачи архивированного проекта"""
+        self.current_project_id = project_id
+        self.current_search_text = ""
+
+        if hasattr(self, "search_input"):
+            self.search_input.clear()
+
+        project_name = self.archive_service.get_project_name(project_id)
+        self.section_title.setText(f"Задачи проекта: {project_name}")
+        self.back_button.show()
+        self.projects_widget.hide()
+        self.tasks_widget.show()
+        self._update_tasks_view()
+
+    # ==========================================================
+    # Обновление отображения
+    # ==========================================================
 
     def _update_projects_view(self):
         """Обновляет отображение проектов"""
         self._clear_projects()
-
         projects = self.archive_service.search_projects(self.current_search_text)
 
         if not projects:
-            self.empty_label.setText("📭 Нет архивированных проектов")
+            self.empty_label.setText("Нет архивированных проектов")
             self.empty_label.show()
             self.projects_widget.hide()
             return
 
         self.empty_label.hide()
-
         from windows.archive.archived_project_card import ArchivedProjectCard
 
         columns = self._calculate_columns()
-
         for i, project in enumerate(projects):
             card = ArchivedProjectCard(project, self)
             card.clicked.connect(self._on_project_clicked)
@@ -90,34 +103,10 @@ class ArchivePage(QWidget):
 
         self._add_bottom_spacer(projects, columns)
 
-    # ==========================================================
-    # Отображение задач
-    # ==========================================================
-
-    def show_project_tasks(self, project_id: int):
-        self.current_project_id = project_id
-        self.current_search_text = ""
-
-        if hasattr(self, "search_input"):
-            self.search_input.clear()
-
-        project_name = self.archive_service.get_project_name(project_id)
-        self.section_title.setText(f"Задачи проекта: {project_name}")
-        self.back_button.show()
-
-        self.projects_widget.hide()
-        self.tasks_widget.show()
-
-        self._update_tasks_view()
-
     def _update_tasks_view(self):
         """Обновляет отображение задач"""
         self._clear_tasks()
-
-        tasks = self.archive_service.search_tasks(
-            self.current_project_id,
-            self.current_search_text
-        )
+        tasks = self.archive_service.search_tasks(self.current_project_id, self.current_search_text)
 
         if not tasks:
             self._show_empty_tasks_message()
@@ -126,7 +115,6 @@ class ArchivePage(QWidget):
         from windows.archive.archived_task_card import ArchivedTaskCard
 
         columns = self._calculate_columns()
-
         for i, task in enumerate(tasks):
             card = ArchivedTaskCard(task, self)
             card.restore_requested.connect(self._on_restore_task)
@@ -134,42 +122,52 @@ class ArchivePage(QWidget):
 
             row = i // columns
             col = i % columns
-            self.tasks_layout.addWidget(card, row, col)
+            self.tasks_layout.addWidget(card, row, col, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
+
+        # Настройка растяжения
+        for col in range(columns):
+            self.tasks_layout.setColumnStretch(col, 0)
+        if columns > 0:
+            self.tasks_layout.setColumnStretch(columns - 1, 1)
+        last_row = (len(tasks) + columns - 1) // columns
+        if last_row > 0:
+            self.tasks_layout.setRowStretch(last_row, 1)
 
     def _show_empty_tasks_message(self):
         """Показывает сообщение об отсутствии задач"""
-        label = QLabel("📭 В этом проекте нет архивированных задач")
+        label = QLabel("В этом проекте нет архивированных задач")
         label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         label.setStyleSheet("color: #999999; font-size: 18px; padding: 50px;")
-        self.tasks_layout.addWidget(label, 0, 0, 1, self._calculate_columns())
+        self.tasks_layout.addWidget(label, 0, 0, 1, self._calculate_columns(), Qt.AlignmentFlag.AlignCenter)
 
     # ==========================================================
     # Поиск
     # ==========================================================
 
     def on_search(self, text: str):
+        """Обработчик изменения текста поиска"""
         self.current_search_text = text.strip()
-
         if self.current_project_id is None:
             self._update_projects_view()
         else:
             self._update_tasks_view()
 
     # ==========================================================
-    # Обработчики действий
+    # Обработчики действий (вызывают сервис)
     # ==========================================================
 
     def _on_project_clicked(self, project_id: int):
+        """Клик по проекту - показать задачи"""
         self.show_project_tasks(project_id)
 
     def _on_restore_project(self, project_id: int):
+        """Восстановление проекта"""
         name = self.archive_service.get_project_name(project_id)
         if not name:
             return
 
         reply = QMessageBox.question(
-            self,
-            "Восстановление проекта",
+            self, "Восстановление проекта",
             f"Восстановить проект '{name}'?",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
         )
@@ -180,13 +178,13 @@ class ArchivePage(QWidget):
                 QMessageBox.information(self, "Успех", "Проект восстановлен")
 
     def _on_restore_task(self, task_id: int):
+        """Восстановление задачи"""
         title = self.archive_service.get_task_title(task_id)
         if not title:
             return
 
         reply = QMessageBox.question(
-            self,
-            "Восстановление задачи",
+            self, "Восстановление задачи",
             f"Восстановить задачу '{title}'?",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
         )
@@ -197,9 +195,9 @@ class ArchivePage(QWidget):
                 QMessageBox.information(self, "Успех", "Задача восстановлена")
 
     def _on_delete_project_permanently(self, project_id: int):
+        """Полное удаление проекта"""
         reply = QMessageBox.warning(
-            self,
-            "Удаление проекта",
+            self, "Удаление проекта",
             "Вы уверены? Это действие нельзя отменить.",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
         )
@@ -210,9 +208,9 @@ class ArchivePage(QWidget):
                 QMessageBox.information(self, "Удалено", "Проект удалён")
 
     def _on_delete_task_permanently(self, task_id: int):
+        """Полное удаление задачи"""
         reply = QMessageBox.warning(
-            self,
-            "Удаление задачи",
+            self, "Удаление задачи",
             "Вы уверены? Это действие нельзя отменить.",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
         )
@@ -227,18 +225,21 @@ class ArchivePage(QWidget):
     # ==========================================================
 
     def _clear_projects(self):
+        """Очищает список проектов"""
         while self.projects_layout.count():
             item = self.projects_layout.takeAt(0)
             if item.widget():
                 item.widget().deleteLater()
 
     def _clear_tasks(self):
+        """Очищает список задач"""
         while self.tasks_layout.count():
             item = self.tasks_layout.takeAt(0)
             if item.widget():
                 item.widget().deleteLater()
 
-    def _calculate_columns(self):
+    def _calculate_columns(self) -> int:
+        """Рассчитывает количество колонок в зависимости от ширины окна"""
         width = self.width()
         if width > 1400:
             return 4
@@ -249,11 +250,13 @@ class ArchivePage(QWidget):
         return 1
 
     def _add_bottom_spacer(self, items, columns):
+        """Добавляет растяжение внизу списка"""
         rows = (len(items) + columns - 1) // columns
         spacer = QSpacerItem(20, 40, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Expanding)
         self.projects_layout.addItem(spacer, rows, 0, 1, columns)
 
     def resizeEvent(self, event):
+        """Обработчик изменения размера окна"""
         super().resizeEvent(event)
         if self.current_project_id is None:
             self._update_projects_view()

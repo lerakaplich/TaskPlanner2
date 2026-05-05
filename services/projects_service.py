@@ -229,9 +229,21 @@ class ProjectsService:
             if not project:
                 return False
 
+            # Архивируем проект
             project.is_archived = True
             project.updated_at = datetime.now()
+
+            # Архивируем все задачи проекта
+            tasks = self.task_repo.get_by_project(project_id)
+            archived_tasks_count = 0
+            for task in tasks:
+                if not task.is_archived:
+                    task.is_archived = True
+                    task.archived_at = datetime.now()
+                    archived_tasks_count += 1
+
             self.session.commit()
+            print(f"✅ Проект {project_id} архивирован вместе с {archived_tasks_count} задачами")
             return True
         except Exception as e:
             self.session.rollback()
