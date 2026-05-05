@@ -14,7 +14,7 @@ from windows.other_tasks.others_task_card import OthersTaskCard
 from windows.other_tasks.task_dialog import TaskDialog
 from PyQt6 import uic
 
-from windows.shared.kanban_column import KanbanColumn
+from windows.widgets.kanban_column import KanbanColumn
 
 
 class OthersTasksPage(QWidget):

@@ -1,13 +1,5 @@
-# ===================================================================
-# ФАЙЛ: windows/login/login_window.py
-# ===================================================================
+# windows/login/login_window.py
 
-# Убираем passlib, используем только hashlib
-import hashlib
-import json
-import secrets
-from datetime import date
-from datetime import datetime
 from pathlib import Path
 
 from PyQt6 import uic
@@ -17,30 +9,20 @@ from PyQt6.QtWidgets import (
     QDialog, QMessageBox, QGraphicsDropShadowEffect, QLineEdit
 )
 
-
-def hash_password(password: str) -> str:
-    """Хеширование пароля SHA256"""
-    return hashlib.sha256(password.encode()).hexdigest()
-
-
-def verify_password(plain_password: str, hashed_password: str) -> bool:
-    """Проверка пароля"""
-    if not hashed_password:
-        return False
-    return hashlib.sha256(plain_password.encode()).hexdigest() == hashed_password
+from services.auth_service import AuthService
 
 
 class LoginWindow(QDialog):
     login_success = pyqtSignal(dict)
 
-    def __init__(self, parent=None, auth_service=None):
+    def __init__(self, parent=None, auth_service: AuthService = None):
         super().__init__(parent)
 
-        self.auth_service = auth_service
+        self.auth_service = auth_service or AuthService()
         self.project_root = Path(__file__).parent.parent.parent
         self._login_in_progress = False
 
-        # Загружаем UI
+        # Загрузка UI
         ui_path = self.project_root / "ui" / "login" / "login_window.ui"
         if not ui_path.exists():
             raise FileNotFoundError(f"Файл интерфейса не найден: {ui_path}")
@@ -48,88 +30,14 @@ class LoginWindow(QDialog):
         uic.loadUi(str(ui_path), self)
 
         self.showMaximized()
-
-        # Настройка
         self.setup_ui()
         self.setup_signals()
-        self.load_saved_credentials()
-        self.load_side_images()
-
-        # Настройка "глазика" для пароля
         self.setup_password_eye()
+        self._try_auto_login()
 
-    def on_forgot_clicked(self):
-        """Обработчик кнопки 'Забыли пароль'"""
-        # Показываем окно с инструкцией по восстановлению пароля
-        bot_link = "https://t.me/TaskPlanner2035Vikusik_bot"
-
-        msg_box = QMessageBox(self)
-        msg_box.setWindowTitle("Восстановление пароля")
-        msg_box.setIcon(QMessageBox.Icon.Information)
-        msg_box.setText(
-            f"🔐 *Восстановление пароля*\n\n"
-            f"Для сброса пароля:\n\n"
-            f"1. Перейдите в Telegram бота:\n"
-            f"   {bot_link}\n"
-            f"2. Отправьте команду /reset_password\n"
-            f"3. Следуйте инструкциям бота\n\n"
-            f"⚠️ *Важно:* Новый пароль будет отправлен в Telegram.\n\n"
-            f"Если у вас нет Telegram, обратитесь к администратору."
-        )
-
-        # Добавляем кнопку для открытия ссылки
-        from PyQt6.QtGui import QDesktopServices
-        from PyQt6.QtCore import QUrl
-
-        open_bot_btn = msg_box.addButton("Перейти в Telegram бота", QMessageBox.ButtonRole.ActionRole)
-        open_bot_btn.clicked.connect(lambda: QDesktopServices.openUrl(QUrl(bot_link)))
-
-        msg_box.addButton(QMessageBox.StandardButton.Ok)
-        msg_box.exec()
-
-    def setup_password_eye(self):
-        """Настройка кнопки показа/скрытия пароля через QAction"""
-        # Создаем действие (иконку) внутри поля
-        self.toggle_password_action = QAction(self.passwordInput)
-        self.password_visible = False
-        self.update_eye_icon(False)
-
-        self.passwordInput.addAction(
-            self.toggle_password_action,
-            QLineEdit.ActionPosition.TrailingPosition
-        )
-
-        self.toggle_password_action.triggered.connect(self.toggle_password_visibility_new)
-
-        # Убираем старую кнопку, если она была создана
-        if hasattr(self, 'togglePasswordBtn'):
-            self.togglePasswordBtn.deleteLater()
-
-    def update_eye_icon(self, visible):
-        """Обновляет иконку глаза в зависимости от состояния"""
-        images_dir = self.project_root / "images"
-        icon_name = "eye_open.png" if visible else "eye_closed.png"
-        icon_path = images_dir / icon_name
-
-        if icon_path.exists():
-            self.toggle_password_action.setIcon(QIcon(str(icon_path)))
-        else:
-            self.toggle_password_action.setText("👁" if visible else "👁‍🗨")
-
-    def toggle_password_visibility_new(self):
-        """Переключение видимости пароля (новая версия)"""
-        self.password_visible = not self.password_visible
-        mode = QLineEdit.EchoMode.Normal if self.password_visible else QLineEdit.EchoMode.Password
-        self.passwordInput.setEchoMode(mode)
-        self.update_eye_icon(self.password_visible)
-
-    def get_authenticated_user(self):
-        """Возвращает данные авторизованного пользователя"""
-        return getattr(self, '_authenticated_user', None)
-
-    def set_authenticated_user(self, user_data):
-        """Устанавливает данные авторизованного пользователя"""
-        self._authenticated_user = user_data
+    # ==========================================================
+    # Настройка UI
+    # ==========================================================
 
     def setup_ui(self):
         """Настройка UI элементов"""
@@ -149,7 +57,7 @@ class LoginWindow(QDialog):
         logo_shadow.setColor(QColor(0, 0, 0, 40))
         self.logoLabel.setGraphicsEffect(logo_shadow)
 
-        # Логотип компании
+        # Логотип
         logo_path = self.project_root / "images" / "logo.png"
         if logo_path.exists():
             pixmap = QPixmap(str(logo_path))
@@ -159,7 +67,7 @@ class LoginWindow(QDialog):
                 self.logoLabel.setPixmap(scaled)
                 self.logoLabel.setStyleSheet("background: transparent;")
 
-        # НАСТРОЙКА ПОЛЯ ТЕЛЕФОНА С МАСКОЙ
+        # Настройка поля телефона с маской
         self.phoneInput.setInputMask("+375 (99) 999-99-99")
         self.phoneInput.setText("")
         self.phoneInput.setPlaceholderText("+375 (XX) XXX-XX-XX")
@@ -173,317 +81,99 @@ class LoginWindow(QDialog):
             Qt.WindowType.WindowMaximizeButtonHint
         )
 
-    def load_side_images(self):
+        self._load_side_images()
+
+    def _load_side_images(self):
         """Загрузка боковых изображений"""
         images_dir = self.project_root / "images"
 
-        # Загрузка checkbox - 150x150
-        checkbox_path = images_dir / "checkbox.png"
-        if checkbox_path.exists():
-            pixmap = QPixmap(str(checkbox_path))
-            if not pixmap.isNull():
-                scaled = pixmap.scaled(150, 150, Qt.AspectRatioMode.KeepAspectRatio,
-                                       Qt.TransformationMode.SmoothTransformation)
-                self.checkboxImageLabel.setPixmap(scaled)
-                self.checkboxImageLabel.setScaledContents(False)
+        image_configs = [
+            ("checkbox.png", self.checkboxImageLabel, 150),
+            ("qr.jpg", self.qrImageLabel, 250),
+            ("clock.png", self.clockImageLabel, 150),
+            ("gear.png", self.gearImageLabel, 150),
+        ]
 
-        # Загрузка QR - 250x250
-        qr_path = images_dir / "qr.jpg"
-        if qr_path.exists():
-            pixmap = QPixmap(str(qr_path))
-            if not pixmap.isNull():
-                scaled = pixmap.scaled(250, 250, Qt.AspectRatioMode.KeepAspectRatio,
-                                       Qt.TransformationMode.SmoothTransformation)
-                self.qrImageLabel.setPixmap(scaled)
-                self.qrImageLabel.setScaledContents(False)
+        for filename, label, size in image_configs:
+            path = images_dir / filename
+            if path.exists():
+                pixmap = QPixmap(str(path))
+                if not pixmap.isNull():
+                    scaled = pixmap.scaled(size, size, Qt.AspectRatioMode.KeepAspectRatio,
+                                           Qt.TransformationMode.SmoothTransformation)
+                    label.setPixmap(scaled)
+                    label.setScaledContents(False)
 
-        # Загрузка часов - 150x150
-        clock_path = images_dir / "clock.png"
-        if clock_path.exists():
-            pixmap = QPixmap(str(clock_path))
-            if not pixmap.isNull():
-                scaled = pixmap.scaled(150, 150, Qt.AspectRatioMode.KeepAspectRatio,
-                                       Qt.TransformationMode.SmoothTransformation)
-                self.clockImageLabel.setPixmap(scaled)
-                self.clockImageLabel.setScaledContents(False)
+    def setup_password_eye(self):
+        """Настройка кнопки показа/скрытия пароля"""
+        self.toggle_password_action = QAction(self.passwordInput)
+        self.password_visible = False
+        self._update_eye_icon(False)
 
-        # Загрузка шестеренки - 150x150
-        gear_path = images_dir / "gear.png"
-        if gear_path.exists():
-            pixmap = QPixmap(str(gear_path))
-            if not pixmap.isNull():
-                scaled = pixmap.scaled(150, 150, Qt.AspectRatioMode.KeepAspectRatio,
-                                       Qt.TransformationMode.SmoothTransformation)
-                self.gearImageLabel.setPixmap(scaled)
-                self.gearImageLabel.setScaledContents(False)
+        self.passwordInput.addAction(
+            self.toggle_password_action,
+            QLineEdit.ActionPosition.TrailingPosition
+        )
+        self.toggle_password_action.triggered.connect(self._toggle_password_visibility)
 
-    def resizeEvent(self, event):
-        super().resizeEvent(event)
+        # Удаляем старую кнопку
+        if hasattr(self, 'togglePasswordBtn'):
+            self.togglePasswordBtn.deleteLater()
 
-    def toggle_password_visibility(self):
-        """Старый метод - оставлен для совместимости"""
-        self.toggle_password_visibility_new()
+    def _update_eye_icon(self, visible: bool):
+        """Обновляет иконку глаза"""
+        images_dir = self.project_root / "images"
+        icon_name = "eye_open.png" if visible else "eye_closed.png"
+        icon_path = images_dir / icon_name
+
+        if icon_path.exists():
+            self.toggle_password_action.setIcon(QIcon(str(icon_path)))
+        else:
+            self.toggle_password_action.setText("👁" if visible else "👁‍🗨")
+
+    def _toggle_password_visibility(self):
+        """Переключение видимости пароля"""
+        self.password_visible = not self.password_visible
+        mode = QLineEdit.EchoMode.Normal if self.password_visible else QLineEdit.EchoMode.Password
+        self.passwordInput.setEchoMode(mode)
+        self._update_eye_icon(self.password_visible)
 
     def setup_signals(self):
         """Настройка сигналов"""
-        self.loginBtn.clicked.connect(self.on_login_clicked)
-        self.forgotPasswordBtn.clicked.connect(self.on_forgot_clicked)
-        self.requestBtn.clicked.connect(self.on_request_clicked)
-        self.phoneInput.returnPressed.connect(self.on_login_clicked)
-        self.passwordInput.returnPressed.connect(self.on_login_clicked)
+        self.loginBtn.clicked.connect(self._on_login_clicked)
+        self.forgotPasswordBtn.clicked.connect(self._on_forgot_clicked)
+        self.requestBtn.clicked.connect(self._on_request_clicked)
+        self.phoneInput.returnPressed.connect(self._on_login_clicked)
+        self.passwordInput.returnPressed.connect(self._on_login_clicked)
 
-    def validate_phone(self, phone):
-        """Проверка, что номер телефона имеет правильный формат (375xxxxxxxxx)"""
-        digits = ''.join(filter(str.isdigit, phone))
-        return len(digits) == 12 and digits.startswith('375')
+    # ==========================================================
+    # Автологин
+    # ==========================================================
 
-    def extract_phone_digits(self, phone):
-        """Извлекает только цифры из номера телефона"""
-        return ''.join(filter(str.isdigit, phone))
+    def _try_auto_login(self):
+        """Попытка автоматического входа по сохраненной сессии"""
+        user_data = self.auth_service.load_session()
+        if user_data:
+            self.auth_service.set_current_user(user_data)
+            self.login_success.emit(user_data)
+            QTimer.singleShot(100, self.accept)
 
-    def format_phone_for_display(self, phone_digits):
-        """Форматирует номер телефона для отображения в поле ввода"""
-        if len(phone_digits) == 12 and phone_digits.startswith('375'):
-            return f"+{phone_digits[0:3]} ({phone_digits[3:5]}) {phone_digits[5:8]}-{phone_digits[8:10]}-{phone_digits[10:12]}"
-        return phone_digits
+    # ==========================================================
+    # Обработчики действий
+    # ==========================================================
 
-    def save_session(self, user_data):
-        """Сохраняет сессию для автологина (локально и в БД taskplanner.employees_data)"""
-        try:
-            # Генерируем уникальный токен сессии
-            session_token = secrets.token_hex(32)
-
-            # 1. Сохраняем локально
-            config_dir = Path.home() / ".taskplanner"
-            config_dir.mkdir(exist_ok=True)
-            session_path = config_dir / "session.json"
-
-            data_to_save = {
-                "user_id": int(user_data.get("id")),
-                "phone_number": str(user_data.get("phone_number")),
-                "session_token": session_token,
-                "last_name": str(user_data.get("last_name")),
-                "first_name": str(user_data.get("first_name")),
-                "middle_name": str(user_data.get("middle_name") or ""),
-                "rights": str(user_data.get("rights")),
-                "position": str(user_data.get("position") or ""),
-                "email": str(user_data.get("email") or "")
-            }
-
-            with open(session_path, "w", encoding="utf-8") as f:
-                json.dump(data_to_save, f, ensure_ascii=False, indent=4)
-
-            # 2. Сохраняем токен в БД taskplanner.employees_data (НЕ в employees!)
-            from database import get_tasks_session  # ← ИСПРАВЛЕНО! используем tasks_session
-            from models.employees import EmployeeData
-            from sqlalchemy import update
-
-            db_session = get_tasks_session()  # ← ИСПРАВЛЕНО!
-            if db_session:
-                try:
-                    stmt = update(EmployeeData).where(
-                        EmployeeData.employee_id == user_data.get('id')
-                    ).values(app_session_token=session_token, updated_at=datetime.now())
-                    db_session.execute(stmt)
-                    db_session.commit()
-                    print(f"✅ Токен сессии сохранен в employees_data для пользователя {user_data.get('id')}")
-                except Exception as db_err:
-                    print(f"❌ Ошибка сохранения токена в БД: {db_err}")
-                    db_session.rollback()
-                finally:
-                    db_session.close()
-
-            print(f"✅ Сессия сохранена локально: {session_path}")
-
-        except Exception as e:
-            print(f"❌ Ошибка сохранения сессии: {e}")
-
-    def clear_session(self):
-        """Удаляет сохраненную сессию (локально и в БД taskplanner.employees_data)"""
-        try:
-            # 1. Удаляем локальный файл
-            config_dir = Path.home() / ".taskplanner"
-            session_path = config_dir / "session.json"
-            if session_path.exists():
-                session_path.unlink()
-                print("✅ Локальная сессия очищена")
-
-            # 2. Удаляем токен из БД taskplanner.employees_data для текущего пользователя
-            if hasattr(self, '_authenticated_user') and self._authenticated_user:
-                from database import get_tasks_session  # ← ИСПРАВЛЕНО!
-                from models.employees import EmployeeData
-                from sqlalchemy import update
-
-                db_session = get_tasks_session()  # ← ИСПРАВЛЕНО!
-                if db_session:
-                    try:
-                        stmt = update(EmployeeData).where(
-                            EmployeeData.employee_id == self._authenticated_user.get('id')
-                        ).values(app_session_token=None, updated_at=datetime.now())
-                        db_session.execute(stmt)
-                        db_session.commit()
-                        print(
-                            f"✅ Токен сессии удален из employees_data для пользователя {self._authenticated_user.get('id')}")
-                    except Exception as db_err:
-                        print(f"❌ Ошибка удаления токена из БД: {db_err}")
-                        db_session.rollback()
-                    finally:
-                        db_session.close()
-
-        except Exception as e:
-            print(f"❌ Ошибка удаления сессии: {e}")
-
-    def load_saved_credentials(self):
-        """Загружает сохраненные учетные данные и выполняет автовход с проверкой токена в БД taskplanner.employees_data"""
-        try:
-            config_dir = Path.home() / ".taskplanner"
-            session_path = config_dir / "session.json"
-
-            if session_path.exists():
-                with open(session_path, "r", encoding="utf-8") as f:
-                    data = json.load(f)
-
-                # Если есть сохраненная сессия
-                if data.get("user_id") and data.get("phone_number"):
-                    session_token = data.get("session_token")
-
-                    # 1. Сначала проверяем токен в БД taskplanner.employees_data
-                    from database import get_tasks_session
-                    from models.employees import EmployeeData
-                    from sqlalchemy import select
-
-                    tasks_session = get_tasks_session()
-                    if tasks_session:
-                        try:
-                            # Получаем employee_id, у которого есть такой токен
-                            stmt = select(EmployeeData.employee_id).where(
-                                EmployeeData.employee_id == data.get("user_id"),
-                                EmployeeData.app_session_token == session_token
-                            )
-                            employee_id = tasks_session.scalar(stmt)
-
-                            if employee_id:
-                                print(f"✅ Токен валиден для employee_id={employee_id}")
-
-                                # 2. Получаем данные сотрудника из БД employees
-                                from database import get_employees_session
-                                from models.employees import Employee
-
-                                emp_session = get_employees_session()
-                                if emp_session:
-                                    user = emp_session.get(Employee, employee_id)
-
-                                    if user:
-                                        print(f"✅ Найдена валидная сессия для пользователя {data.get('phone_number')}")
-
-                                        # Восстанавливаем данные пользователя
-                                        user_data = {
-                                            'id': user.id,
-                                            'last_name': user.last_name,
-                                            'first_name': user.first_name,
-                                            'middle_name': user.middle_name or '',
-                                            'position': user.position or '',
-                                            'phone_number': user.phone_number,
-                                            'email': user.email or ''
-                                        }
-
-                                        # Получаем роль из EmployeeData
-                                        role_stmt = select(EmployeeData.role).where(
-                                            EmployeeData.employee_id == employee_id
-                                        )
-                                        role = tasks_session.scalar(role_stmt)
-                                        user_data['rights'] = role.value if role else 'user'
-
-                                        self.set_authenticated_user(user_data)
-
-                                        # Отправляем сигнал об успешном входе
-                                        self.login_success.emit(user_data)
-
-                                        # Небольшая задержка для обработки сигнала
-                                        QTimer.singleShot(100, self.accept)
-                                        return True
-                                    else:
-                                        print(f"❌ Сотрудник с ID {employee_id} не найден в БД employees")
-                                        session_path.unlink()
-                                emp_session.close()
-                            else:
-                                print(f"❌ Токен сессии недействителен, требуется повторный вход")
-                                session_path.unlink()
-
-                        except Exception as db_err:
-                            print(f"❌ Ошибка проверки токена в БД: {db_err}")
-                            import traceback
-                            traceback.print_exc()
-                        finally:
-                            tasks_session.close()
-
-        except Exception as e:
-            print(f"❌ Ошибка загрузки сессии: {e}")
-            import traceback
-            traceback.print_exc()
-
-        return False
-
-    def save_credentials(self, phone, password):
-        """Сохраняет учетные данные (если включено запоминание)"""
-        try:
-            config_dir = Path.home() / ".taskplanner"
-            config_dir.mkdir(exist_ok=True)
-            config_file = config_dir / "auth_config.json"
-            data = {"phone": phone, "password": password, "remember": True}
-            with open(config_file, 'w', encoding='utf-8') as f:
-                json.dump(data, f)
-            print("✅ Учетные данные сохранены")
-        except Exception as e:
-            print(f"❌ Ошибка сохранения учетных данных: {e}")
-
-    def logout(self):
-        """Выход из системы - очищает сессию и показывает окно входа"""
-        try:
-            # Очищаем сессию (локально и в БД)
-            self.clear_session()
-
-            # Очищаем данные аутентифицированного пользователя
-            self._authenticated_user = None
-
-            # Очищаем поля ввода
-            self.phoneInput.clear()
-            self.passwordInput.clear()
-            self.rememberCheckbox.setChecked(False)
-
-            # Показываем уведомление
-            QMessageBox.information(self, "Выход", "Вы успешно вышли из системы")
-
-            # Показываем окно входа
-            self.show()
-
-        except Exception as e:
-            print(f"❌ Ошибка при выходе: {e}")
-
-    def clear_saved_credentials(self):
-        """Удаляет сохраненные учетные данные"""
-        try:
-            config_dir = Path.home() / ".taskplanner"
-            config_file = config_dir / "auth_config.json"
-            if config_file.exists():
-                config_file.unlink()
-                print("✅ Учетные данные очищены")
-        except Exception as e:
-            print(f"❌ Ошибка удаления учетных данных: {e}")
-
-    def on_login_clicked(self):
-        # Защита от двойного клика
+    def _on_login_clicked(self):
+        """Обработчик нажатия кнопки входа"""
         if self._login_in_progress:
             return
 
         self._login_in_progress = True
 
-        # Получаем текст из поля с маской
-        phone_with_mask = self.phoneInput.text()
+        phone = self.phoneInput.text()
         password = self.passwordInput.text().strip()
 
-        # Проверяем, что поле не пустое (маска заполнена)
-        if not phone_with_mask or phone_with_mask == "+375 (  )   -  -" or phone_with_mask.count("_") > 0:
+        # Валидация
+        if not phone or phone == "+375 (  )   -  -" or phone.count("_") > 0:
             QMessageBox.warning(self, "Ошибка", "Введите номер телефона")
             self._login_in_progress = False
             return
@@ -493,128 +183,56 @@ class LoginWindow(QDialog):
             self._login_in_progress = False
             return
 
-        # Извлекаем только цифры из маски
-        clean_phone = ''.join(filter(str.isdigit, phone_with_mask))
-
-        # Проверяем, что получилось 12 цифр и начинается с 375
-        if len(clean_phone) != 12 or not clean_phone.startswith('375'):
+        if not self.auth_service.validate_phone(phone):
             QMessageBox.warning(self, "Ошибка",
                                 "Неверный формат номера телефона.\nНомер должен содержать 12 цифр и начинаться с 375.")
             self._login_in_progress = False
             return
 
-        try:
-            from database import get_employees_session, get_tasks_session
-            from models.employees import Employee, EmployeeData
-            from sqlalchemy import select
+        # Аутентификация
+        user_data = self.auth_service.authenticate(phone, password)
 
-            # 1. Получаем сотрудника из БД employees
-            emp_session = get_employees_session()
-            if emp_session is None:
-                QMessageBox.critical(self, "Ошибка", "Нет подключения к базе данных сотрудников")
-                self._login_in_progress = False
-                return
+        if user_data:
+            self.auth_service.set_current_user(user_data)
 
-            stmt = select(Employee).where(Employee.phone_number == clean_phone)
-            user = emp_session.scalar(stmt)
-
-            if not user:
-                # Пробуем другие форматы
-                if clean_phone.startswith('375'):
-                    alt_phone = '8' + clean_phone[3:]
-                    stmt = select(Employee).where(Employee.phone_number == alt_phone)
-                    user = emp_session.scalar(stmt)
-
-                if not user:
-                    plus_phone = '+' + clean_phone
-                    stmt = select(Employee).where(Employee.phone_number == plus_phone)
-                    user = emp_session.scalar(stmt)
-
-            if user:
-                user_id = user.id
-
-                # 2. Получаем данные из EmployeeData (пароль, роль) из БД taskplanner
-                tasks_session = get_tasks_session()
-                if tasks_session:
-                    try:
-                        employee_data = tasks_session.query(EmployeeData).filter(
-                            EmployeeData.employee_id == user_id
-                        ).first()
-
-                        # Проверяем пароль
-                        if employee_data and employee_data.password_hash:
-                            if not verify_password(password, employee_data.password_hash):
-                                QMessageBox.warning(self, "Ошибка", "Неверный пароль")
-                                emp_session.close()
-                                tasks_session.close()
-                                self._login_in_progress = False
-                                return
-                        else:
-                            # Нет пароля - предупреждение
-                            reply = QMessageBox.question(
-                                self,
-                                "Внимание",
-                                "У вашей учетной записи нет пароля. Рекомендуем установить пароль в настройках профиля.\n\n"
-                                "Продолжить вход без пароля?",
-                                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
-                            )
-                            if reply != QMessageBox.StandardButton.Yes:
-                                emp_session.close()
-                                tasks_session.close()
-                                self._login_in_progress = False
-                                return
-
-                        # Получаем роль
-                        role = employee_data.role.value if employee_data and employee_data.role else 'user'
-
-                    except Exception as e:
-                        print(f"⚠️ Ошибка получения EmployeeData: {e}")
-                        role = 'user'
-                    finally:
-                        tasks_session.close()
-
-                else:
-                    role = 'user'
-
-                user_data = {
-                    'id': user_id,
-                    'last_name': user.last_name,
-                    'first_name': user.first_name,
-                    'middle_name': user.middle_name,
-                    'rights': role,
-                    'position': user.position,
-                    'phone_number': user.phone_number,
-                    'email': user.email
-                }
-
-                emp_session.close()
-
-                # Логика "Запомнить меня"
-                if self.rememberCheckbox.isChecked():
-                    self.save_session(user_data)
-                else:
-                    self.clear_session()
-
-                self.set_authenticated_user(user_data)
-
-                # Отправляем сигнал об успешном входе
-                if hasattr(self, 'login_success') and self.login_success:
-                    self.login_success.emit(user_data)
-
-                self.accept()
+            if self.rememberCheckbox.isChecked():
+                self.auth_service.save_session(user_data)
             else:
-                emp_session.close()
-                QMessageBox.warning(self, "Ошибка",
-                                    f"Пользователь с номером {self.format_phone_for_display(clean_phone)} не найден")
-                self._login_in_progress = False
+                self.auth_service.clear_session(user_data.get('id'))
 
-        except Exception as e:
-            QMessageBox.critical(self, "Ошибка", f"Ошибка при подключении к базе данных: {e}")
-            import traceback
-            traceback.print_exc()
+            self.login_success.emit(user_data)
+            self.accept()
+        else:
+            QMessageBox.warning(self, "Ошибка", "Неверный номер телефона или пароль")
             self._login_in_progress = False
 
-    def on_request_clicked(self):
+    def _on_forgot_clicked(self):
+        """Обработчик кнопки 'Забыли пароль'"""
+        bot_link = "https://t.me/TaskPlanner2035Vikusik_bot"
+
+        msg_box = QMessageBox(self)
+        msg_box.setWindowTitle("Восстановление пароля")
+        msg_box.setIcon(QMessageBox.Icon.Information)
+        msg_box.setText(
+            f"🔐 Восстановление пароля\n\n"
+            f"Для сброса пароля:\n\n"
+            f"1. Перейдите в Telegram бота:\n"
+            f"   {bot_link}\n"
+            f"2. Отправьте команду /reset_password\n"
+            f"3. Следуйте инструкциям бота\n\n"
+            f"Важно: Новый пароль будет отправлен в Telegram.\n\n"
+            f"Если у вас нет Telegram, обратитесь к администратору."
+        )
+
+        from PyQt6.QtGui import QDesktopServices
+        from PyQt6.QtCore import QUrl
+
+        open_bot_btn = msg_box.addButton("Перейти в Telegram бота", QMessageBox.ButtonRole.ActionRole)
+        open_bot_btn.clicked.connect(lambda: QDesktopServices.openUrl(QUrl(bot_link)))
+        msg_box.addButton(QMessageBox.StandardButton.Ok)
+        msg_box.exec()
+
+    def _on_request_clicked(self):
         """Открытие формы регистрации нового сотрудника"""
         try:
             from database import get_tasks_session
@@ -628,45 +246,33 @@ class LoginWindow(QDialog):
                 session=session,
                 is_registration_mode=True
             )
-
-            def on_employee_saved(employee_data):
-                try:
-                    # Преобразуем дату в строку
-                    employee_data_for_send = {}
-                    for key, value in employee_data.items():
-                        if isinstance(value, date):
-                            employee_data_for_send[key] = value.isoformat()
-                        else:
-                            employee_data_for_send[key] = value
-
-                    # Отправляем через сокет
-                    self.send_registration_request(employee_data_for_send)
-                except Exception as e:
-                    QMessageBox.critical(self, "Ошибка", f"Ошибка при отправке данных: {e}")
-
-            dialog.employee_saved.connect(on_employee_saved)
+            dialog.employee_saved.connect(self._send_registration_request)
             dialog.exec()
 
         except Exception as e:
             QMessageBox.critical(self, "Ошибка", f"Не удалось открыть форму регистрации: {e}")
 
-    def send_registration_request(self, employee_data):
-        """Отправляет запрос на регистрацию через сокет и показывает окно со ссылкой"""
+    def _send_registration_request(self, employee_data):
+        """Отправляет запрос на регистрацию"""
         try:
             from utils.socket_manager import get_socket_client
 
             socket_client = get_socket_client()
 
             if not socket_client.is_connected():
-                QMessageBox.warning(
-                    self,
-                    "Нет подключения",
-                    "Нет подключения к серверу. Попробуйте позже."
-                )
+                QMessageBox.warning(self, "Нет подключения", "Нет подключения к серверу. Попробуйте позже.")
                 return
 
-            # Отправляем запрос на сервер
-            socket_client.request_registration(employee_data)
+            # Преобразуем дату в строку
+            from datetime import date
+            employee_data_for_send = {}
+            for key, value in employee_data.items():
+                if isinstance(value, date):
+                    employee_data_for_send[key] = value.isoformat()
+                else:
+                    employee_data_for_send[key] = value
+
+            socket_client.request_registration(employee_data_for_send)
 
             # Показываем окно с ссылкой на бота
             bot_link = "https://t.me/TaskPlanner2035Vikusik_bot"
@@ -678,42 +284,56 @@ class LoginWindow(QDialog):
                 f"✅ Ваша заявка на регистрацию отправлена!\n\n"
                 f"📋 ФИО: {employee_data.get('last_name')} {employee_data.get('first_name')} {employee_data.get('middle_name') or ''}\n"
                 f"📞 Телефон: {employee_data.get('phone_number')}\n\n"
-                f"📱 *Для получения пароля:*\n"
+                f"Для получения пароля:\n"
                 f"1. Перейдите в Telegram бота:\n"
                 f"   {bot_link}\n"
                 f"2. Нажмите /start\n"
                 f"3. Отправьте ваш номер телефона\n"
                 f"4. После одобрения вы получите пароль\n\n"
-                f"⏰ Обычно это занимает несколько минут."
+                f"Обычно это занимает несколько минут."
             )
 
-            # Добавляем кнопку для открытия ссылки
             from PyQt6.QtGui import QDesktopServices
             from PyQt6.QtCore import QUrl
 
             open_bot_btn = msg_box.addButton("Перейти в Telegram бота", QMessageBox.ButtonRole.ActionRole)
             open_bot_btn.clicked.connect(lambda: QDesktopServices.openUrl(QUrl(bot_link)))
-
             msg_box.addButton(QMessageBox.StandardButton.Ok)
             msg_box.exec()
 
         except Exception as e:
             QMessageBox.critical(self, "Ошибка", f"Не удалось отправить заявку: {e}")
 
-    def _prepare_data_for_json(self, data: dict) -> dict:
-        """Преобразует date объекты в строки для JSON сериализации"""
-        result = {}
-        for key, value in data.items():
-            if isinstance(value, date):
-                result[key] = value.isoformat()
-            else:
-                result[key] = value
-        return result
+    # ==========================================================
+    # Публичные методы
+    # ==========================================================
+
+    def logout(self):
+        """Выход из системы"""
+        user_id = self.auth_service.get_current_user().get('id') if self.auth_service.get_current_user() else None
+        self.auth_service.clear_session(user_id)
+        self.auth_service.clear_current_user()
+        self.phoneInput.clear()
+        self.passwordInput.clear()
+        self.rememberCheckbox.setChecked(False)
+        QMessageBox.information(self, "Выход", "Вы успешно вышли из системы")
+        self.show()
+
+    def get_authenticated_user(self):
+        """Возвращает данные авторизованного пользователя"""
+        return self.auth_service.get_current_user()
+
+    # ==========================================================
+    # Обработчики событий
+    # ==========================================================
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
 
     def keyPressEvent(self, event):
         if event.key() == Qt.Key.Key_Escape:
             self.reject()
         elif event.key() in (Qt.Key.Key_Enter, Qt.Key.Key_Return):
-            self.on_login_clicked()
+            self._on_login_clicked()
         else:
             super().keyPressEvent(event)

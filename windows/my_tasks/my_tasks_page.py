@@ -9,7 +9,7 @@ from PyQt6.QtCore import Qt, pyqtSignal, QPoint
 from PyQt6.QtGui import QDragEnterEvent, QDropEvent, QDragMoveEvent
 
 from windows.my_tasks.task_card import TaskCard
-from windows.shared.kanban_column import KanbanColumn
+from windows.widgets.kanban_column import KanbanColumn
 from services.tasks_service import TasksService
 
 
