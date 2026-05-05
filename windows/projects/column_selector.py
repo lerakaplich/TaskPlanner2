@@ -13,17 +13,17 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(
 class ColumnSelectorDialog(QDialog):
     """
     Диалог выбора колонок для проекта с поиском и группировкой
-    Аналогичен EmployeeSelectorDialog
+    Вся бизнес-логика в сервисе
     """
 
     columns_selected = pyqtSignal(list)
 
-    def __init__(self, parent=None, template_columns: List[Dict] = None, preselected_keys: List[str] = None):
+    def __init__(self, parent=None, service=None, preselected_keys: List[str] = None):
         super().__init__(parent)
 
-        # Данные
-        self.all_columns = template_columns or []
-        self.filtered_columns = self.all_columns.copy()  # 👈 ИНИЦИАЛИЗИРУЕМ!
+        self.service = service
+        self.all_columns = []
+        self.filtered_columns = []
         self.selected_columns_keys = set(preselected_keys or [])
         self.column_checkboxes = {}
         self.search_timer = QTimer()
@@ -47,28 +47,41 @@ class ColumnSelectorDialog(QDialog):
             self.columns_layout.setSpacing(5)
             self.columns_layout.setContentsMargins(10, 10, 10, 10)
 
-        # Отображаем колонки
+        # Загружаем данные через сервис
+        self.load_columns_data()
+
+    def load_columns_data(self):
+        """Загружает колонки через сервис"""
+        if self.service:
+            self.all_columns = self.service.get_template_columns_for_selector()
+        else:
+            self.all_columns = []
+
+        self.filtered_columns = self.all_columns.copy()
         self.display_columns()
 
         print(f"📊 ColumnSelectorDialog: загружено {len(self.all_columns)} колонок")
-        for col in self.all_columns:
-            print(f"   - {col.get('name')}")
 
     def on_search_text_changed(self, text):
         self.search_timer.start(300)
 
     def apply_filters(self):
-        search_text = self.searchInput.text().lower().strip()
-
-        if not search_text:
-            self.filtered_columns = self.all_columns.copy()
+        """Применяет фильтрацию через сервис"""
+        search_text = self.searchInput.text()
+        if self.service:
+            self.filtered_columns = self.service.filter_columns_by_search(self.all_columns, search_text)
         else:
-            self.filtered_columns = []
-            for col in self.all_columns:
-                col_name = col.get('name', '').lower()
-                col_key = col.get('col_key', '').lower()
-                if search_text in col_name or search_text in col_key:
-                    self.filtered_columns.append(col)
+            # Fallback если нет сервиса
+            if not search_text:
+                self.filtered_columns = self.all_columns.copy()
+            else:
+                search_lower = search_text.lower().strip()
+                self.filtered_columns = []
+                for col in self.all_columns:
+                    col_name = col.get('name', '').lower()
+                    col_key = col.get('col_key', '').lower()
+                    if search_lower in col_name or search_lower in col_key:
+                        self.filtered_columns.append(col)
 
         self.display_columns()
 
@@ -81,8 +94,7 @@ class ColumnSelectorDialog(QDialog):
                 child.widget().deleteLater()
 
     def display_columns(self):
-        print(f"🔍 display_columns: filtered_columns count = {len(self.filtered_columns)}")
-
+        """Отображает колонки в UI"""
         self.clear_layout(self.columns_layout)
         self.column_checkboxes.clear()
         self.selectAllCheckBox.setChecked(False)
@@ -96,20 +108,15 @@ class ColumnSelectorDialog(QDialog):
             self.update_selected_count()
             return
 
-        print(f"📊 Отображение {len(self.filtered_columns)} колонок:")
-
         for col in self.filtered_columns:
             col_name = col.get('name', 'Без названия')
             col_key = col.get('col_key', col_name.lower().replace(' ', '_'))
             col_description = col.get('description', '')
-            col_id = col.get('id')
-
-            print(f"   - Создаем чекбокс: {col_name} (id={col_id})")
 
             checkbox = QCheckBox(col_name)
             checkbox.setProperty('col_key', col_key)
             checkbox.setProperty('col_data', col)
-            checkbox.setProperty('col_id', col_id)
+            checkbox.setProperty('col_id', col.get('id'))
 
             if col_description:
                 checkbox.setToolTip(col_description)
@@ -151,10 +158,8 @@ class ColumnSelectorDialog(QDialog):
     def _on_checkbox_changed(self, col_key: str, state):
         if state == Qt.CheckState.Checked.value:
             self.selected_columns_keys.add(col_key)
-            print(f"✅ Добавлена колонка: {col_key}")
         elif state == Qt.CheckState.Unchecked.value:
             self.selected_columns_keys.discard(col_key)
-            print(f"❌ Удалена колонка: {col_key}")
 
         self.update_selected_count()
         self._update_select_all_state()
@@ -181,15 +186,17 @@ class ColumnSelectorDialog(QDialog):
     def update_selected_count(self):
         count = len(self.selected_columns_keys)
         self.selectedCountLabel.setText(f"Выбрано: {count}")
-        print(f"📊 Выбрано колонок: {count}, keys: {sorted(self.selected_columns_keys)}")
 
     def get_selected_columns_data(self) -> List[Dict]:
-        """Возвращает данные выбранных колонок с полной информацией (включая col_key)"""
+        """Возвращает данные выбранных колонок через сервис"""
+        if self.service:
+            return self.service.get_selected_columns_by_keys(self.all_columns, list(self.selected_columns_keys))
+
+        # Fallback если нет сервиса
         selected = []
         for col in self.all_columns:
             col_key = col.get('col_key', col.get('name', '').lower().replace(' ', '_'))
             if col_key in self.selected_columns_keys:
-                # Убеждаемся, что в данных есть col_key
                 col_copy = col.copy()
                 if 'col_key' not in col_copy:
                     col_copy['col_key'] = col_key

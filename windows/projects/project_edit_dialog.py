@@ -11,10 +11,13 @@ from windows.projects.base_project_dialog import BaseProjectDialog
 
 
 class ProjectEditDialog(BaseProjectDialog):
-    """Диалог редактирования существующего проекта"""
+    """Диалог редактирования существующего проекта - только UI, логика в сервисе"""
 
-    def __init__(self, project_data, parent=None):
-        super().__init__(parent, title="Редактирование проекта", project_data=project_data)
+    def __init__(self, project_data, parent=None, service=None):
+        self.original_data = project_data
+        self.service = service
+
+        super().__init__(parent, title="Редактирование проекта", project_data=project_data, service=service)
 
         # Настройка UI для редактирования
         self.setup_edit_ui()
@@ -38,7 +41,7 @@ class ProjectEditDialog(BaseProjectDialog):
             self.dateLabel.setText(f"Изменен: {current_date}")
 
     def load_project_data(self):
-        """Загрузка данных для редактирования"""
+        """Загрузка данных для редактирования (вызывается из родителя)"""
         super().load_project_data()
 
         # Загружаем сохраненные колонки
@@ -47,10 +50,17 @@ class ProjectEditDialog(BaseProjectDialog):
             self.selected_columns_keys = [col.get('col_key', '') for col in self.selected_columns_data]
             self.update_columns_button_text()
 
-        self._ensure_admins_in_participants()
+        # Убеждаемся, что администраторы также являются участниками
+        if self.service:
+            self.participants = self.service.ensure_admins_in_participants(self.participants, self.admins)
+        else:
+            self._ensure_admins_in_participants()
+
+        self.update_participants_button_text()
+        self.update_admins_button_text()
 
     def _ensure_admins_in_participants(self):
-        """Убеждаемся, что администраторы также являются участниками"""
+        """Fallback: убеждаемся, что администраторы также являются участниками"""
         admin_ids = set()
         for admin in self.admins:
             if isinstance(admin, dict):
@@ -65,99 +75,83 @@ class ProjectEditDialog(BaseProjectDialog):
             else:
                 participant_ids.add(participant)
 
-        # Добавляем администраторов в участники, если их там нет
         for admin_id in admin_ids:
             if admin_id not in participant_ids:
                 admin_stub = self._create_employee_stub(admin_id)
                 self.participants.append(admin_stub)
 
-        self.update_participants_button_text()
-        self.update_admins_button_text()
-
     def validate_and_accept(self):
-        """Проверка данных и закрытие диалога"""
-        if self.validate_input():
-            if self.has_changes():
-                self.accept()
-            else:
-                reply = QMessageBox.question(
-                    self,
-                    "Нет изменений",
-                    "Вы не внесли изменений. Выйти без сохранения?",
-                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
-                )
-                if reply == QMessageBox.StandardButton.Yes:
-                    self.reject()
+        """Проверка данных через сервис и закрытие диалога"""
+        if not self.service:
+            QMessageBox.warning(self, "Ошибка", "Сервис не инициализирован")
+            return
 
-    def has_changes(self):
-        """Проверка, были ли внесены изменения"""
-        original = self.project_data
-        current = self.get_common_data()
+        # Получаем данные из UI
+        current_data = self.get_raw_ui_data()
 
-        # Сравниваем основные поля
-        if original.get('name') != current['name']:
-            return True
-        if original.get('description') != current['description']:
-            return True
-        if original.get('is_active') != current['is_active']:
-            return True
+        # Валидация через сервис
+        error = self.service.validate_project_data(current_data)
+        if error:
+            QMessageBox.warning(self, "Ошибка", error)
+            return
 
-        # 👇 ДОБАВЛЯЕМ СРАВНЕНИЕ КУРАТОРА
-        if original.get('manager_id') != current.get('manager_id'):
-            print(f"🔍 Изменен куратор: {original.get('manager_id')} -> {current.get('manager_id')}")
-            return True
+        # Проверяем, были ли изменения
+        if self.service.compare_project_changes(self.original_data, current_data):
+            self.accept()
+        else:
+            reply = QMessageBox.question(
+                self,
+                "Нет изменений",
+                "Вы не внесли изменений. Выйти без сохранения?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+            )
+            if reply == QMessageBox.StandardButton.Yes:
+                self.reject()
 
-        # Сравниваем выбранные колонки
-        original_columns = original.get('selected_columns_data', [])
-        current_columns = self.selected_columns_data
-        if len(original_columns) != len(current_columns):
-            return True
+    def get_raw_ui_data(self) -> dict:
+        """
+        Получает сырые данные из UI
+        """
+        participants_ids = []
+        for p in self.participants:
+            emp_id = p.get('id') if isinstance(p, dict) else p
+            if emp_id:
+                participants_ids.append(str(emp_id))
 
-        # Сравниваем ID колонок
-        original_col_ids = set([col.get('id') for col in original_columns if col.get('id')])
-        current_col_ids = set([col.get('id') for col in current_columns if col.get('id')])
-        if original_col_ids != current_col_ids:
-            return True
+        admins_ids = []
+        for a in self.admins:
+            emp_id = a.get('id') if isinstance(a, dict) else a
+            if emp_id:
+                admins_ids.append(str(emp_id))
 
-        # Сравниваем участников
-        original_participants = self._extract_ids(original.get('participants', []))
-        current_participants = self._extract_ids(self.participants)
-        if set(original_participants) != set(current_participants):
-            return True
-
-        # Сравниваем администраторов
-        original_admins = self._extract_ids(original.get('admins', []))
-        current_admins = self._extract_ids(self.admins)
-        if set(original_admins) != set(current_admins):
-            return True
-
-        return False
-
-    def _extract_ids(self, data):
-        """Извлечение ID из данных участников/администраторов"""
-        if isinstance(data, str):
-            return [int(id.strip()) for id in data.split(',') if id.strip()]
-        elif isinstance(data, list):
-            ids = []
-            for item in data:
-                if isinstance(item, dict):
-                    ids.append(item.get('id'))
-                elif isinstance(item, int):
-                    ids.append(item)
-            return ids
-        return []
+        return {
+            'name': self.nameInput.text(),
+            'description': self.descInput.toPlainText(),
+            'is_active': self.activeCheckbox.isChecked(),
+            'participants_ids': ','.join(participants_ids),
+            'admins_ids': ','.join(admins_ids),
+            'participants': self.participants,
+            'admins': self.admins,
+            'selected_columns_data': self.selected_columns_data,
+            'selected_columns_keys': self.selected_columns_keys,
+            'manager_id': self.get_manager_id(),
+            'manager_name': self.get_manager_name(),
+        }
 
     def get_project_data(self):
-        """Получить обновленные данные проекта"""
-        data = self.get_common_data()
+        """
+        Возвращает подготовленные данные для обновления проекта
+        (используется в MainWindow)
+        """
+        raw_data = self.get_raw_ui_data()
 
-        # Сохраняем оригинальный ID и дату создания
-        data['id'] = self.project_data.get('id')
-        data['created_date'] = self.project_data.get('created_date',
-                                                     QDate.currentDate().toString("dd.MM.yyyy"))
+        # Добавляем ID проекта и дату создания
+        raw_data['id'] = self.project_data.get('id')
+        raw_data['created_date'] = self.project_data.get('created_date', QDate.currentDate().toString("dd.MM.yyyy"))
 
-        # 👇 ДОБАВЛЯЕМ ВЫБРАННЫЕ КОЛОНКИ
-        data['selected_columns_data'] = self.selected_columns_data
-        data['selected_columns'] = self.selected_columns_keys
+        # Добавляем колонки
+        raw_data['selected_columns'] = self.selected_columns_keys
+        raw_data['selected_columns_data'] = self.selected_columns_data
+        raw_data['columns_display_names'] = {col['col_key']: col['name'] for col in self.selected_columns_data}
 
-        return data
+        return raw_data

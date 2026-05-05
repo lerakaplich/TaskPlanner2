@@ -42,11 +42,33 @@ class TaskRepo:
         stmt = select(Task).where(Task.column_id == column_id)
         return list(self.session.scalars(stmt))
 
-    def get_by_project(self, project_id: int, load_column: bool = True) -> List[Task]:
+    def get_by_project(self, project_id: int, load_column: bool = True, include_archived: bool = False) -> List[Task]:
+        """Получить задачи проекта
+
+        Args:
+            project_id: ID проекта
+            load_column: Загружать ли колонку задачи
+            include_archived: Включать ли архивированные задачи
+        """
         query = select(Task).where(Task.project_id == project_id)
+
+        # Фильтрация по архивированным
+        if not include_archived:
+            query = query.where(Task.is_archived == False)
+
         if load_column:
             query = query.options(joinedload(Task.column))
+
         return list(self.session.scalars(query))
+
+    def hard_delete(self, task_id: int) -> bool:
+        """Полное удаление задачи из БД"""
+        task = self.get_by_id(task_id)
+        if task:
+            self.session.delete(task)
+            self.session.flush()
+            return True
+        return False
 
     def get_tasks_for_kanban(self, project_id: int) -> List[Task]:
         stmt = (

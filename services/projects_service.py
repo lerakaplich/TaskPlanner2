@@ -2,8 +2,9 @@
 import asyncio
 from datetime import datetime
 from typing import List, Optional, Dict, Any
-from sqlalchemy import text
+from sqlalchemy import text, select
 from database import get_tasks_session, get_employees_session
+from models.projects import BoardColumn
 from models.schemas.projects_dto import ProjectWithMembersDTO, ProjectCardDTO, ProjectBoardDTO, BoardColumnWithTasksDTO
 from models.schemas.tasks_dto import TaskCardDTO, TaskPriority
 from repositories.employee_repo import EmployeeRepo  # ← ИСПРАВЛЕНО (было external_employee_repo)
@@ -222,6 +223,96 @@ class ProjectsService:
             import traceback
             traceback.print_exc()
             return []
+
+    def load_employee_selector_data(self) -> Dict:
+        """
+        Загружает все данные для диалога выбора сотрудников:
+        - список сотрудников
+        - подразделения
+        - отделы
+        """
+        from models.employees import Employee, Division, Department
+        from sqlalchemy import select
+
+        result = {
+            'employees': [],
+            'divisions': [],
+            'departments': [],
+            'roles': {},  # останется пустым, так как данные в другой БД
+            'usage_count': {}  # останется пустым
+        }
+
+        # 1. Загружаем подразделения
+        try:
+            stmt = select(Division.name).where(Division.name.isnot(None)).order_by(Division.name)
+            divisions = self.employees_session.scalars(stmt).all()
+            result['divisions'] = list(divisions)
+            print(f"✅ Загружено подразделений: {len(result['divisions'])}")
+        except Exception as e:
+            print(f"⚠️ Ошибка загрузки подразделений: {e}")
+
+        # 2. Загружаем отделы
+        try:
+            stmt = select(Department.name).where(Department.name.isnot(None)).order_by(Department.name)
+            departments = self.employees_session.scalars(stmt).all()
+            result['departments'] = list(departments)
+            print(f"✅ Загружено отделов: {len(result['departments'])}")
+        except Exception as e:
+            print(f"⚠️ Ошибка загрузки отделов: {e}")
+
+        # 3. Загружаем сотрудников (просто всех, без фильтрации)
+        try:
+            stmt = select(Employee).order_by(Employee.last_name)
+            employees = self.employees_session.scalars(stmt).all()
+
+            for emp in employees:
+                full_name = self._get_employee_full_name(emp)
+                if full_name:
+                    result['employees'].append({
+                        'id': emp.id,
+                        'full_name': full_name,
+                        'last_name': emp.last_name or '',
+                        'first_name': emp.first_name or '',
+                        'middle_name': emp.middle_name or '',
+                        'position': emp.position or '',
+                        'phone': emp.phone_number or '',
+                        'email': emp.email or '',
+                        'is_admin': False,  # не можем определить
+                        'usage_count': 0,
+                        'department_id': emp.department_id,
+                        'division_id': emp.division_id,
+                        'role': 'user'  # по умолчанию
+                    })
+            print(f"✅ Загружено сотрудников: {len(result['employees'])}")
+        except Exception as e:
+            print(f"❌ Ошибка загрузки сотрудников: {e}")
+
+        return result
+
+    def filter_employees_by_search(self, employees: List[Dict], search_text: str) -> List[Dict]:
+        """Фильтрует сотрудников по поисковому запросу"""
+        if not search_text:
+            return employees.copy()
+
+        search_lower = search_text.lower().strip()
+        filtered = []
+        for emp in employees:
+            if search_lower in emp['full_name'].lower():
+                filtered.append(emp)
+        return filtered
+
+    def sort_employees_for_selector(self, employees: List[Dict], selected_ids: set) -> List[Dict]:
+        """
+        Сортирует сотрудников для селектора:
+        1. Выбранные сотрудники (всегда вверху)
+        2. Остальные сортируются по частоте использования
+        """
+
+        def get_sort_key(emp):
+            is_selected = emp['id'] in selected_ids
+            return (0 if is_selected else 1, -emp.get('usage_count', 0))
+
+        return sorted(employees, key=get_sort_key)
 
     def archive_project(self, project_id: int) -> bool:
         try:
@@ -528,6 +619,713 @@ class ProjectsService:
             project=project_dto,
             columns=board_columns_dto
         )
+
+    def get_template_columns_for_selector(self) -> List[Dict]:
+        """Возвращает шаблонные колонки для диалога выбора с дополнительными полями"""
+        try:
+            stmt = select(BoardColumn).where(
+                BoardColumn.is_template == True
+            ).order_by(BoardColumn.template_order)
+            columns = self.session.scalars(stmt).all()
+
+            result = []
+            for col in columns:
+                result.append({
+                    'id': col.id,
+                    'name': col.name,
+                    'col_key': col.name.lower().replace(' ', '_'),
+                    'color': col.color,
+                    'position': col.template_order or col.position,
+                    'is_done_column': col.is_done_column,
+                    'is_template': True,
+                    'description': getattr(col, 'description', '')
+                })
+            return result
+        except Exception as e:
+            print(f"❌ Ошибка при загрузке колонок для селектора: {e}")
+            return []
+
+    def filter_columns_by_search(self, columns: List[Dict], search_text: str) -> List[Dict]:
+        """Фильтрует колонки по поисковому запросу"""
+        if not search_text:
+            return columns.copy()
+
+        search_lower = search_text.lower().strip()
+        filtered = []
+        for col in columns:
+            col_name = col.get('name', '').lower()
+            col_key = col.get('col_key', '').lower()
+            if search_lower in col_name or search_lower in col_key:
+                filtered.append(col)
+        return filtered
+
+    def get_selected_columns_by_keys(self, all_columns: List[Dict], selected_keys: List[str]) -> List[Dict]:
+        """Возвращает данные выбранных колонок по ключам"""
+        selected = []
+        for col in all_columns:
+            col_key = col.get('col_key', col.get('name', '').lower().replace(' ', '_'))
+            if col_key in selected_keys:
+                col_copy = col.copy()
+                if 'col_key' not in col_copy:
+                    col_copy['col_key'] = col_key
+                selected.append(col_copy)
+        return selected
+
+    def load_template_columns(self) -> List[Dict]:
+        """Загружает шаблонные колонки из БД"""
+        try:
+            stmt = select(BoardColumn).where(
+                BoardColumn.is_template == True
+            ).order_by(BoardColumn.template_order)
+            columns = self.session.scalars(stmt).all()
+
+            return [{
+                'id': col.id,
+                'name': col.name,
+                'col_key': col.name.lower().replace(' ', '_'),
+                'color': col.color,
+                'position': col.template_order or col.position,
+                'is_done_column': col.is_done_column,
+                'is_template': True
+            } for col in columns]
+        except Exception as e:
+            print(f"❌ Ошибка при загрузке колонок: {e}")
+            return []
+
+    def get_default_project_data(self, creator_id: int) -> Dict:
+        """
+        Возвращает данные для нового проекта по умолчанию
+        """
+        return {
+            'id': None,
+            'name': '',
+            'description': '',
+            'is_active': True,
+            'creator_id': creator_id,
+            'owner_id': creator_id,
+            'created_date': datetime.now().strftime("%d.%m.%Y"),
+            'selected_columns_data': [],
+            'selected_columns_keys': [],
+            'participants_ids': str(creator_id),
+            'admins_ids': str(creator_id),
+            'member_ids': [creator_id],
+            'admin_ids': [creator_id],
+            'manager_id': None
+        }
+
+    def validate_project_data(self, data: Dict) -> Optional[str]:
+        """
+        Валидация данных проекта
+        Возвращает строку с ошибкой или None если всё ок
+        """
+        if not data.get('name', '').strip():
+            return "Введите название проекта"
+
+        selected_columns = data.get('selected_columns_data', [])
+        if not selected_columns:
+            return "Выберите хотя бы одну колонку для отображения в проекте"
+
+        return None
+
+    def get_project_columns(self, project_id: int) -> List[Dict]:
+        """
+        Возвращает колонки проекта по сохраненным ID
+        """
+        from sqlalchemy import select
+        from models.projects import BoardColumn
+
+        column_ids = self.project_repo.get_selected_column_ids(project_id)
+        result = []
+
+        if column_ids:
+            stmt = select(BoardColumn).where(BoardColumn.id.in_(column_ids))
+            columns = self.session.scalars(stmt).all()
+
+            for col in columns:
+                result.append({
+                    'id': col.id,
+                    'name': col.name,
+                    'color': col.color,
+                    'position': col.template_order if col.template_order is not None else col.position,
+                    'is_done': col.is_done_column
+                })
+            print(f"📋 Загружено колонок проекта: {len(result)}")
+        else:
+            # Если нет сохраненных, берем все шаблонные
+            stmt = select(BoardColumn).where(BoardColumn.is_template == True)
+            columns = self.session.scalars(stmt).all()
+            for col in columns:
+                result.append({
+                    'id': col.id,
+                    'name': col.name,
+                    'color': col.color,
+                    'position': col.template_order if col.template_order is not None else col.position,
+                    'is_done': col.is_done_column
+                })
+
+        return result
+
+    def get_project_tasks_for_view(self, project_id: int, include_archived: bool = False) -> List[Dict]:
+        """
+        Возвращает задачи проекта в виде словарей с полной информацией для отображения
+        """
+        from repositories.task_repo import TaskRepo
+        from database import get_employees_session
+        from repositories.employee_repo import EmployeeRepo
+        from models.schemas.tasks_dto import TaskPriority
+        from datetime import datetime
+
+        task_repo = TaskRepo(self.session)
+        tasks = task_repo.get_by_project(project_id, load_column=True, include_archived=include_archived)
+
+        result = []
+        for task in tasks:
+            # Получаем имя исполнителя
+            assignee_name = None
+            if task.assigned_to:
+                emp_session = get_employees_session()
+                if emp_session:
+                    emp_repo = EmployeeRepo(emp_session)
+                    assignee_name = emp_repo.get_full_name(task.assigned_to)
+                    emp_session.close()
+
+            # Получаем имя автора
+            author_name = None
+            if task.created_by:
+                emp_session = get_employees_session()
+                if emp_session:
+                    emp_repo = EmployeeRepo(emp_session)
+                    author_name = emp_repo.get_full_name(task.created_by)
+                    emp_session.close()
+
+            priority_map = {
+                TaskPriority.low: ("Низкий", "#4CAF50"),
+                TaskPriority.medium: ("Средний", "#FFA726"),
+                TaskPriority.high: ("Высокий", "#D22730"),
+                TaskPriority.critical: ("Критический", "#D22730")
+            }
+
+            priority_text, priority_color = priority_map.get(
+                task.priority,
+                ("Средний", "#FFA726")
+            )
+
+            deadline_text = ""
+            deadline_color = "#666"
+            deadline_obj = None
+            if task.deadline:
+                deadline_text = task.deadline.strftime("%d.%m.%Y")
+                deadline_obj = task.deadline
+                if task.deadline.date() < datetime.now().date():
+                    deadline_color = "#D22730"
+
+            created_text = task.created_at.strftime("%d.%m.%Y") if task.created_at else ""
+            updated_text = task.updated_at.strftime("%d.%m.%Y") if task.updated_at else ""
+
+            tags = []
+            if hasattr(task, 'tags') and task.tags:
+                for tag_obj in task.tags:
+                    if hasattr(tag_obj, 'name'):
+                        tags.append(tag_obj.name)
+                    elif isinstance(tag_obj, str):
+                        tags.append(tag_obj)
+                    else:
+                        tags.append(str(tag_obj))
+
+            archived_at = ""
+            if task.is_archived and task.archived_at:
+                archived_at = task.archived_at.strftime("%d.%m.%Y")
+
+            result.append({
+                "id": task.id,
+                "title": task.title,
+                "description": task.description or "",
+                "status": task.column.name if task.column else None,
+                "column_id": task.column_id,
+                "priority": task.priority.value,
+                "priority_text": priority_text,
+                "priority_color": priority_color,
+                "deadline": deadline_text,
+                "deadline_obj": deadline_obj,
+                "deadline_color": deadline_color,
+                "assignee_name": assignee_name or "Не назначен",
+                "assigned_to": task.assigned_to,
+                "created_by": task.created_by,
+                "author_text": author_name or "Неизвестен",
+                "created_text": created_text,
+                "updated_text": updated_text,
+                "executor_text": assignee_name or "Не назначен",
+                "completed": task.is_archived if hasattr(task, 'is_archived') else False,
+                "difficulty": task.difficulty if hasattr(task, 'difficulty') else 0,
+                "tags": tags,
+                "project_id": task.project_id,
+                "project_name": self.get_project_name(project_id),
+                "is_archived": task.is_archived if hasattr(task, 'is_archived') else False,
+                "archived_at": archived_at
+            })
+
+        return result
+
+    def get_project_name(self, project_id: int) -> str:
+        """Возвращает название проекта по ID"""
+        project = self.project_repo.get_by_id(project_id)
+        return project.name if project else f"Проект #{project_id}"
+
+    def restore_task(self, task_id: int) -> bool:
+        """Восстанавливает задачу из архива"""
+        from repositories.task_repo import TaskRepo
+
+        task_repo = TaskRepo(self.session)
+        task = task_repo.get_by_id(task_id)
+        if task:
+            task.is_archived = False
+            task.archived_at = None
+            self.session.commit()
+            return True
+        return False
+
+    def delete_task_permanently(self, task_id: int) -> bool:
+        """Полное удаление задачи"""
+        from repositories.task_repo import TaskRepo
+
+        task_repo = TaskRepo(self.session)
+        result = task_repo.hard_delete(task_id)
+        self.session.commit()
+        return result
+
+    def prepare_project_data_for_creation(self, raw_data: Dict, creator_id: int) -> Dict:
+        """
+        Подготавливает данные проекта для создания
+        """
+        prepared = {
+            'name': raw_data.get('name', '').strip(),
+            'description': raw_data.get('description', ''),
+            'is_active': raw_data.get('is_active', True),
+            'manager_id': raw_data.get('manager_id'),
+            'selected_columns_data': raw_data.get('selected_columns_data', []),
+            'selected_columns_keys': raw_data.get('selected_columns', []),
+        }
+
+        # Обработка участников и администраторов
+        participants_ids = raw_data.get('participants_ids', '')
+        admins_ids = raw_data.get('admins_ids', '')
+
+        if isinstance(participants_ids, list):
+            participants_ids = ','.join(str(id) for id in participants_ids)
+        if isinstance(admins_ids, list):
+            admins_ids = ','.join(str(id) for id in admins_ids)
+
+        prepared['participants_ids'] = participants_ids
+        prepared['admins_ids'] = admins_ids
+
+        # Добавляем создателя как участника
+        participant_list = [str(creator_id)]
+        if participants_ids:
+            participant_list.extend([p for p in participants_ids.split(',') if p and p != str(creator_id)])
+        prepared['participants_ids'] = ','.join(participant_list)
+
+        # Добавляем создателя как администратора
+        admin_list = [str(creator_id)]
+        if admins_ids:
+            admin_list.extend([a for a in admins_ids.split(',') if a and a != str(creator_id)])
+        prepared['admins_ids'] = ','.join(admin_list)
+
+        return prepared
+
+    def prepare_edit_dialog_data(self, project_dto: ProjectWithMembersDTO) -> Dict:
+        """
+        Подготавливает данные для диалога редактирования проекта
+        """
+        from database import get_employees_session
+        from models.employees import Employee
+        from sqlalchemy import select
+
+        result = {
+            'id': project_dto.id,
+            'name': project_dto.name,
+            'description': project_dto.description,
+            'is_active': not project_dto.is_archived,
+            'created_date': project_dto.created_at.strftime('%d.%m.%Y') if project_dto.created_at else '',
+            'member_ids': project_dto.member_ids or [],
+            'admin_ids': project_dto.admin_ids or [],
+            'selected_columns_data': project_dto.selected_columns_data or [],
+            'selected_columns_keys': [col.get('col_key', '') for col in (project_dto.selected_columns_data or [])],
+            'manager_id': project_dto.manager_id,
+            'manager_name': project_dto.manager_name,
+            'participants': [],
+            'admins': []
+        }
+
+        # Загружаем полные данные участников
+        if result['member_ids']:
+            emp_session = get_employees_session()
+            if emp_session:
+                stmt = select(Employee).where(Employee.id.in_(result['member_ids']))
+                employees = emp_session.scalars(stmt).all()
+                for emp in employees:
+                    result['participants'].append({
+                        'id': emp.id,
+                        'last_name': emp.last_name,
+                        'first_name': emp.first_name,
+                        'middle_name': emp.middle_name or '',
+                        'position': emp.position or 'Сотрудник',
+                        'phone': emp.phone_number or '',
+                        'email': emp.email or ''
+                    })
+                emp_session.close()
+
+        # Загружаем полные данные администраторов
+        if result['admin_ids']:
+            emp_session = get_employees_session()
+            if emp_session:
+                stmt = select(Employee).where(Employee.id.in_(result['admin_ids']))
+                employees = emp_session.scalars(stmt).all()
+                for emp in employees:
+                    result['admins'].append({
+                        'id': emp.id,
+                        'last_name': emp.last_name,
+                        'first_name': emp.first_name,
+                        'middle_name': emp.middle_name or '',
+                        'position': emp.position or 'Сотрудник',
+                        'phone': emp.phone_number or '',
+                        'email': emp.email or ''
+                    })
+                emp_session.close()
+
+        return result
+
+    def compare_project_changes(self, original_data: Dict, current_data: Dict) -> bool:
+        """
+        Сравнивает исходные и текущие данные проекта
+        Возвращает True если есть изменения
+        """
+        # Сравниваем основные поля
+        if original_data.get('name') != current_data.get('name'):
+            return True
+        if original_data.get('description') != current_data.get('description'):
+            return True
+        if original_data.get('is_active') != current_data.get('is_active'):
+            return True
+        if original_data.get('manager_id') != current_data.get('manager_id'):
+            return True
+
+        # Сравниваем выбранные колонки
+        original_columns = original_data.get('selected_columns_data', [])
+        current_columns = current_data.get('selected_columns_data', [])
+
+        if len(original_columns) != len(current_columns):
+            return True
+
+        original_col_ids = set([col.get('id') for col in original_columns if col.get('id')])
+        current_col_ids = set([col.get('id') for col in current_columns if col.get('id')])
+        if original_col_ids != current_col_ids:
+            return True
+
+        # Сравниваем участников
+        original_participants = self._extract_employee_ids(original_data.get('participants', []))
+        current_participants = self._extract_employee_ids(current_data.get('participants', []))
+        if set(original_participants) != set(current_participants):
+            return True
+
+        # Сравниваем администраторов
+        original_admins = self._extract_employee_ids(original_data.get('admins', []))
+        current_admins = self._extract_employee_ids(current_data.get('admins', []))
+        if set(original_admins) != set(current_admins):
+            return True
+
+        return False
+
+    def _extract_employee_ids(self, data) -> List[int]:
+        """Извлекает ID сотрудников из данных"""
+        if isinstance(data, str):
+            return [int(id.strip()) for id in data.split(',') if id.strip()]
+        elif isinstance(data, list):
+            ids = []
+            for item in data:
+                if isinstance(item, dict):
+                    ids.append(item.get('id'))
+                elif isinstance(item, int):
+                    ids.append(item)
+            return [id for id in ids if id]
+        return []
+
+    def get_user_chats(self, user_id: int) -> List:
+        """Получает чаты пользователя"""
+        from services.chat_service import ChatService
+        from database import get_tasks_session
+
+        chat_session = get_tasks_session()
+        if chat_session is None:
+            print("⚠️ Нет подключения к БД чатов")
+            return []
+
+        try:
+            chat_service = ChatService(chat_session)
+            return chat_service.get_user_chats(user_id)
+        finally:
+            chat_session.close()
+
+    def ensure_admins_in_participants(self, participants: List[Dict], admins: List[Dict]) -> List[Dict]:
+        """
+        Убеждается, что администраторы также являются участниками
+        Возвращает обновленный список участников
+        """
+        admin_ids = set()
+        for admin in admins:
+            if isinstance(admin, dict):
+                admin_ids.add(admin.get('id'))
+            else:
+                admin_ids.add(admin)
+
+        participant_ids = set()
+        for participant in participants:
+            if isinstance(participant, dict):
+                participant_ids.add(participant.get('id'))
+            else:
+                participant_ids.add(participant)
+
+        # Добавляем администраторов в участники, если их там нет
+        result = list(participants)
+        for admin_id in admin_ids:
+            if admin_id not in participant_ids:
+                result.append({
+                    'id': admin_id,
+                    'last_name': f"User{admin_id}",
+                    'first_name': f"User{admin_id}",
+                    'position': 'Сотрудник'
+                })
+
+        return result
+
+    def update_project_from_dialog(self, project_id: int, dialog_data: Dict) -> ProjectWithMembersDTO:
+        """
+        Обновляет DTO проекта данными из диалога
+        """
+        # Получаем существующий DTO
+        project_dto = self.get_project_for_edit(project_id)
+        if not project_dto:
+            return None
+
+        # Обновляем поля
+        project_dto.name = dialog_data.get('name', '')
+        project_dto.description = dialog_data.get('description', '')
+        project_dto.is_archived = not dialog_data.get('is_active', True)
+        project_dto.selected_columns_data = dialog_data.get('selected_columns_data', [])
+        project_dto.manager_id = dialog_data.get('manager_id')
+
+        # Обновляем участников
+        def extract_ids(data):
+            if isinstance(data, str):
+                return [int(i.strip()) for i in data.split(',') if i.strip().isdigit()]
+            elif isinstance(data, list):
+                ids = []
+                for item in data:
+                    if isinstance(item, dict):
+                        ids.append(item.get('id'))
+                    elif isinstance(item, int):
+                        ids.append(item)
+                return [id for id in ids if id]
+            return []
+
+        project_dto.member_ids = extract_ids(dialog_data.get('participants_ids', []))
+        project_dto.admin_ids = extract_ids(dialog_data.get('admins_ids', []))
+
+        return project_dto
+
+    def load_employees_for_selector(self) -> List[Dict]:
+        """Загружает список сотрудников для выбора"""
+        from models.employees import Employee
+        from sqlalchemy import select
+
+        # Просто загружаем всех сотрудников
+        stmt = select(Employee).order_by(Employee.last_name)
+        employees = self.employees_session.scalars(stmt).all()
+
+        result = []
+        for emp in employees:
+            result.append({
+                'id': emp.id,
+                'last_name': emp.last_name,
+                'first_name': emp.first_name,
+                'middle_name': emp.middle_name or '',
+                'position': emp.position or 'Сотрудник',
+                'phone': emp.phone_number or '',
+                'department_id': emp.department_id,
+                'division_id': emp.division_id
+            })
+        return result
+
+    def load_employees_for_manager_combo(self) -> List[Dict]:
+        """Загружает сотрудников для комбобокса куратора"""
+        from models.employees import Employee
+        from sqlalchemy import select
+
+        # Просто загружаем всех сотрудников из employees БД
+        # Без JOIN с employees_data, так как она в другой базе
+        stmt = select(Employee).order_by(Employee.last_name)
+        employees = self.employees_session.scalars(stmt).all()
+
+        result = []
+        for emp in employees:
+            full_name = f"{emp.last_name} {emp.first_name}"
+            if emp.middle_name:
+                full_name += f" {emp.middle_name}"
+            result.append({
+                'id': emp.id,
+                'display_name': full_name
+            })
+        return result
+
+    def get_user_by_id(self, user_id: int) -> Dict:
+        """Получает данные пользователя по ID"""
+        from models.employees import Employee, EmployeeData
+        from sqlalchemy import select
+        from database import get_employees_session, get_tasks_session
+
+        emp_session = get_employees_session()
+        if emp_session is None:
+            return {
+                'id': user_id,
+                'last_name': 'Неизвестен',
+                'first_name': '',
+                'middle_name': '',
+                'rights': 'user'
+            }
+
+        try:
+            stmt = select(Employee).where(Employee.id == user_id)
+            user = emp_session.scalar(stmt)
+
+            if not user:
+                return {
+                    'id': user_id,
+                    'last_name': 'Неизвестен',
+                    'first_name': '',
+                    'middle_name': '',
+                    'rights': 'user'
+                }
+
+            # Получаем роль из EmployeeData
+            role = 'user'
+            tasks_session = get_tasks_session()
+            if tasks_session:
+                try:
+                    from models.employees import EmployeeData
+                    from sqlalchemy import select
+                    stmt = select(EmployeeData.role).where(EmployeeData.employee_id == user_id)
+                    emp_data_role = tasks_session.scalar(stmt)
+                    if emp_data_role:
+                        role = emp_data_role.value if hasattr(emp_data_role, 'value') else str(emp_data_role)
+                except Exception as e:
+                    print(f"⚠️ Ошибка получения роли: {e}")
+                finally:
+                    tasks_session.close()
+
+            return {
+                'id': user.id,
+                'last_name': user.last_name,
+                'first_name': user.first_name,
+                'middle_name': user.middle_name or '',
+                'rights': role,
+                'position': user.position or '',
+                'phone_number': user.phone_number or '',
+                'email': user.email or ''
+            }
+        finally:
+            emp_session.close()
+
+    def load_employees_by_ids(self, employee_ids: List[int]) -> List[Dict]:
+        """Загружает сотрудников по списку ID"""
+        if not employee_ids:
+            return []
+
+        from models.employees import Employee
+        from sqlalchemy import select
+
+        stmt = select(Employee).where(Employee.id.in_(employee_ids))
+        employees = self.employees_session.scalars(stmt).all()
+
+        result = []
+        for emp in employees:
+            result.append({
+                'id': emp.id,
+                'last_name': emp.last_name,
+                'first_name': emp.first_name,
+                'middle_name': emp.middle_name or '',
+                'position': emp.position or 'Сотрудник',
+                'phone': emp.phone_number or ''
+            })
+        return result
+
+    def get_project_card_data(self, project_card_dto) -> Dict:
+        """
+        Преобразует ProjectCardDTO в данные для отображения в карточке
+        Возвращает словарь с готовыми строками для UI
+        """
+        # Прогресс
+        if project_card_dto.tasks_total > 0:
+            progress = int((project_card_dto.tasks_done / project_card_dto.tasks_total) * 100)
+        else:
+            progress = 0
+
+        # Информационная строка (владелец и куратор)
+        owner_name = getattr(project_card_dto, 'owner_name', 'Не назначен')
+        manager_name = getattr(project_card_dto, 'manager_name', None)
+
+        if manager_name:
+            info_text = f"Владелец: {owner_name} | Куратор: {manager_name}"
+        else:
+            info_text = f"Владелец: {owner_name}"
+
+        # Дата создания
+        created_at = getattr(project_card_dto, 'created_at', None)
+        start_date_text = f"Создан: {created_at}" if created_at else ""
+
+        # Участники
+        member_count = getattr(project_card_dto, 'member_count', 0)
+        participants_text = f"Участники: {member_count} чел."
+
+        # Администраторы
+        admin_count = getattr(project_card_dto, 'admin_count', 0)
+        admins_text = f"Админы: {admin_count} чел."
+
+        # Задачи
+        tasks_total = getattr(project_card_dto, 'tasks_total', 0)
+        tasks_done = getattr(project_card_dto, 'tasks_done', 0)
+
+        if tasks_total > 0:
+            tasks_text = f"Задачи: {tasks_done} / {tasks_total} выполнено"
+        else:
+            tasks_text = "Задачи: 0"
+
+        # Цвет для задач (зеленый если все выполнены)
+        tasks_style = "color: #4CAF50;" if (tasks_total > 0 and tasks_done == tasks_total) else "color: #1B232A;"
+
+        # Колонки
+        columns_count = getattr(project_card_dto, 'columns_count', 0)
+        columns_text = f"Колонок: {columns_count}"
+
+        return {
+            'name': project_card_dto.name if project_card_dto.name else '',
+            'progress': progress,
+            'info_text': info_text,
+            'start_date_text': start_date_text,
+            'participants_text': participants_text,
+            'admins_text': admins_text,
+            'tasks_text': tasks_text,
+            'tasks_style': tasks_style,
+            'columns_text': columns_text
+        }
+
+    def get_employee_display_name(self, employee_id: int) -> str:
+        """Возвращает короткое ФИО для отображения"""
+        employee = self.employee_repo.get_by_id(employee_id)
+        if not employee:
+            return f"ID: {employee_id}"
+
+        first_initial = f"{employee.first_name[0]}." if employee.first_name else ""
+        middle_initial = f"{employee.middle_name[0]}." if employee.middle_name else ""
+        return f"{employee.last_name} {first_initial}{middle_initial}".strip()
 
     def add_column_to_project(self, project_id: int, template_column_id: int = None, custom_data: Dict = None) -> \
     Optional[Dict[str, Any]]:
