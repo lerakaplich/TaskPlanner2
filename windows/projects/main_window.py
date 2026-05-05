@@ -8,7 +8,7 @@ from services.analytics_service import AnalyticsService
 from services.archive_service import ArchiveService
 from services.chat_service import ChatService
 from services.overtime_service import OvertimeService
-from services.projects_service import ProjectsService
+from services.projects_service.projects_service import ProjectsService
 
 from windows.projects.main_window_handlers import (
     ProjectViewHandler, NavigationHandler, UIHandler, SocketHandler
