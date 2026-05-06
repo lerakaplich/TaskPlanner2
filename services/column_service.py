@@ -14,8 +14,6 @@ class ColumnService:
 
     # ==================== ШАБЛОНЫ КОЛОНОК ====================
 
-        # services/column_service.py
-
     def get_template_columns(self) -> List[Dict[str, Any]]:
         """Получить все шаблонные колонки"""
         print("🔍 ColumnService.get_template_columns() вызван")
@@ -92,8 +90,6 @@ class ColumnService:
             print(f"❌ Ошибка при обновлении шаблонной колонки: {e}")
             return False
 
-    # services/column_service.py
-
     def delete_template_column(self, column_id: int) -> bool:
         """Удалить шаблонную колонку"""
         try:
@@ -126,8 +122,6 @@ class ColumnService:
         except Exception as e:
             self.session.rollback()
             print(f"❌ Ошибка при сортировке колонок: {e}")
-
-    # services/column_service.py
 
     def get_project_columns(self, project_id: int) -> List[Dict[str, Any]]:
         """Получить колонки для конкретного проекта"""

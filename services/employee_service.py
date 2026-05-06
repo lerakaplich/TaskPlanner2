@@ -74,9 +74,508 @@ class EmployeeService:
             traceback.print_exc()
             return []
 
+    # Добавьте эти методы в конец класса EmployeeService
+
     # =========================
-    # Отделы (из БД employees)
+    # Новые методы для UI
     # =========================
+
+    def get_employee_card_data(self, employee_id: int = None) -> Dict[str, Any]:
+        """
+        Возвращает данные сотрудника для карточки
+        Если employee_id не указан или None, возвращает всех сотрудников
+        """
+        try:
+            self._ensure_session_valid()
+
+            if employee_id is None:
+                # Возвращаем всех сотрудников
+                employees = self.session.query(Employee).all()
+                return [self._employee_to_card_dict(emp) for emp in employees]
+            else:
+                # Возвращаем одного сотрудника
+                employee = self.repo.get_by_id(employee_id)
+                return self._employee_to_card_dict(employee) if employee else None
+        except Exception as e:
+            print(f"❌ Ошибка в get_employee_card_data: {e}")
+            traceback.print_exc()
+            return [] if employee_id is None else None
+
+    def _employee_to_card_dict(self, employee: Employee) -> Dict[str, Any]:
+        """Преобразует модель сотрудника в словарь для карточки"""
+        if employee is None:
+            return {}
+
+        # Получаем роль
+        role = 'user'
+        if self.tasks_session:
+            try:
+                emp_data = self.tasks_session.query(EmployeeData).filter(
+                    EmployeeData.employee_id == employee.id
+                ).first()
+                if emp_data:
+                    role = emp_data.role.value if hasattr(emp_data.role, 'value') else str(emp_data.role)
+            except Exception:
+                pass
+
+        # Получаем отдел
+        department_name = '—'
+        if employee.department_id:
+            try:
+                result = self.session.execute(
+                    text("SELECT name FROM departments WHERE id = :dept_id"),
+                    {'dept_id': employee.department_id}
+                ).fetchone()
+                if result:
+                    department_name = result[0]
+            except Exception:
+                pass
+
+        # Получаем подразделение
+        division_name = '—'
+        if employee.division_id:
+            try:
+                result = self.session.execute(
+                    text("SELECT name FROM divisions WHERE id = :div_id"),
+                    {'div_id': employee.division_id}
+                ).fetchone()
+                if result:
+                    division_name = result[0]
+            except Exception:
+                pass
+
+        return {
+            'id': employee.id,
+            'last_name': employee.last_name or '',
+            'first_name': employee.first_name or '',
+            'middle_name': employee.middle_name or '',
+            'full_name': self._get_full_name(employee),
+            'position': employee.position or '—',
+            'phone_number': employee.phone_number or '',
+            'work_number': employee.work_number or '',
+            'email': employee.email or '',
+            'chat_id': employee.chat_id,
+            'birth_date': employee.birth_date,
+            'department_id': employee.department_id,
+            'department_name': department_name,
+            'division_id': employee.division_id,
+            'division_name': division_name,
+            'role': role,
+            'rights': role,  # Для обратной совместимости
+            'is_active': True,
+        }
+
+    def save_employee_from_dialog(self, employee_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """
+        Сохраняет сотрудника из данных диалога
+        Если есть id - обновляет, если нет - создает нового
+        """
+        try:
+            employee_id = employee_data.get('id')
+
+            if employee_id:
+                # Обновляем существующего
+                success = self.update_employee(employee_id, employee_data)
+                if success:
+                    return self.get_employee_card_data(employee_id)
+                return None
+            else:
+                # Создаем нового
+                # Убираем поля, которые не нужны при создании
+                clean_data = {k: v for k, v in employee_data.items()
+                              if k not in ['id', 'rights', 'role', 'generated_password']}
+                employee = self.repo.create(clean_data)
+                self.session.commit()
+
+                # Устанавливаем роль если передана
+                role = employee_data.get('rights') or employee_data.get('role', 'user')
+                if role:
+                    role_value = RoleEnum(role) if isinstance(role, str) else role
+                    self.repo.update_role(employee.id, role_value)
+                    if self.tasks_session:
+                        self.tasks_session.commit()
+
+                return self.get_employee_card_data(employee.id)
+        except Exception as e:
+            self.session.rollback()
+            if self.tasks_session:
+                self.tasks_session.rollback()
+            print(f"❌ Ошибка в save_employee_from_dialog: {e}")
+            traceback.print_exc()
+            return None
+
+    def delete_employee_by_id(self, employee_id: int) -> bool:
+        """Удаляет сотрудника по ID"""
+        return self.delete_employee(employee_id)
+
+    def get_filter_data(self) -> Dict[str, List[Dict[str, Any]]]:
+        """Возвращает данные для фильтров (отделы и подразделения)"""
+        return {
+            'departments': self.get_all_departments(),
+            'divisions': self.get_all_divisions()
+        }
+
+    def get_role_display_name(self, role: str) -> str:
+        """Возвращает отображаемое имя роли"""
+        role_map = {
+            'superadmin': 'Суперадминистратор',
+            'admin': 'Администратор',
+            'user': 'Пользователь'
+        }
+        return role_map.get(role, 'Пользователь')
+
+    def get_role_color(self, role: str) -> str:
+        """Возвращает цвет для роли"""
+        role_colors = {
+            'superadmin': '#D22730',  # красный
+            'admin': '#ccab6e',  # золотой
+            'user': '#1B232A'  # тёмно-серый
+        }
+        return role_colors.get(role, '#1B232A')
+
+    def format_phone_display(self, phone: str) -> str:
+        """Форматирует номер телефона для отображения"""
+        if not phone:
+            return '—'
+        if phone.startswith('375'):
+            return '+' + phone
+        return phone
+
+    def get_employee_full_name(self, employee_id: int) -> str:
+        """Возвращает полное ФИО сотрудника по ID"""
+        employee = self.repo.get_by_id(employee_id)
+        if employee:
+            return self._get_full_name(employee)
+        return 'Неизвестный'
+
+    def get_roles_list(self) -> List[str]:
+        """Возвращает список доступных ролей для отображения в комбобоксе"""
+        return ['Пользователь', 'Администратор', 'Суперадминистратор']
+
+    def validate_employee_form(self, form_data: Dict[str, Any]) -> tuple[bool, str]:
+        """Валидирует данные формы сотрудника"""
+        if not form_data.get('last_name', '').strip():
+            return False, "Пожалуйста, заполните поле 'Фамилия'"
+
+        if not form_data.get('first_name', '').strip():
+            return False, "Пожалуйста, заполните поле 'Имя'"
+
+        if not form_data.get('division_id'):
+            return False, "Пожалуйста, выберите подразделение"
+
+        if not form_data.get('department_id'):
+            return False, "Пожалуйста, выберите отдел"
+
+        if not form_data.get('position', '').strip():
+            return False, "Пожалуйста, заполните поле 'Должность'"
+
+        phone = form_data.get('phone_number', '')
+        if not phone:
+            return False, "Пожалуйста, заполните поле 'Моб. телефон'"
+
+        # Очищаем от нецифровых символов
+        phone_digits = ''.join(c for c in phone if c.isdigit())
+        if len(phone_digits) not in [9, 12]:  # 9 цифр без кода или 375XXXXXXXXX
+            return False, "Введите 9 цифр номера телефона (без +375)"
+
+        email = form_data.get('email', '')
+        if email and '@' not in email:
+            return False, "Пожалуйста, введите корректный email"
+
+        return True, ""
+
+    def generate_registration_password(self) -> str:
+        """Генерирует пароль для регистрации"""
+        import secrets
+        import string
+        return ''.join(secrets.choice(string.ascii_letters + string.digits) for _ in range(8))
+
+    def prepare_employee_for_display(self, employee_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Подготавливает данные сотрудника для отображения в UI"""
+        result = employee_data.copy()
+
+        # Форматируем телефон для отображения
+        if result.get('phone_number'):
+            result['display_phone'] = self.format_phone_display(result['phone_number'])
+        else:
+            result['display_phone'] = '—'
+
+        # Устанавливаем отображаемое имя роли и цвет
+        role = result.get('rights') or result.get('role', 'user')
+        result['role_display'] = self.get_role_display_name(role)
+        result['role_color'] = self.get_role_color(role)
+
+        return result
+
+    def get_employee_full_info(self, employee_id: int) -> Optional[Dict[str, Any]]:
+        """Возвращает полную информацию о сотруднике для диалога редактирования"""
+        try:
+            employee = self.repo.get_by_id(employee_id)
+            if not employee:
+                return None
+
+            # Получаем роль
+            role = 'user'
+            if self.tasks_session:
+                try:
+                    emp_data = self.tasks_session.query(EmployeeData).filter(
+                        EmployeeData.employee_id == employee.id
+                    ).first()
+                    if emp_data:
+                        role = emp_data.role.value if hasattr(emp_data.role, 'value') else str(emp_data.role)
+                except Exception:
+                    pass
+
+            return {
+                'id': employee.id,
+                'last_name': employee.last_name,
+                'first_name': employee.first_name,
+                'middle_name': employee.middle_name,
+                'birth_date': employee.birth_date,
+                'division_id': employee.division_id,
+                'department_id': employee.department_id,
+                'position': employee.position,
+                'rights': role,
+                'phone_number': employee.phone_number,
+                'work_number': employee.work_number,
+                'email': employee.email,
+            }
+        except Exception as e:
+            print(f"❌ Ошибка в get_employee_full_info: {e}")
+            return None
+
+    # =========================
+    # Отделы
+    # =========================
+    def get_department_card_data(self, department_id: int = None) -> Dict[str, Any]:
+        """
+        Возвращает данные отдела для карточки
+        Если department_id не указан или None, возвращает все отделы
+        """
+        try:
+            self._ensure_session_valid()
+
+            if department_id is None:
+                departments = self.session.query(Department).all()
+                return [self._department_to_card_dict(dept) for dept in departments]
+            else:
+                department = self.session.get(Department, department_id)
+                return self._department_to_card_dict(department) if department else None
+        except Exception as e:
+            print(f"❌ Ошибка в get_department_card_data: {e}")
+            traceback.print_exc()
+            return [] if department_id is None else None
+
+    def _department_to_card_dict(self, department: Department) -> Dict[str, Any]:
+        """Преобразует модель отдела в словарь для карточки"""
+        if department is None:
+            return {}
+
+        # Получаем название подразделения
+        division_name = '—'
+        if department.division_id:
+            try:
+                division = self.session.get(Division, department.division_id)
+                if division:
+                    division_name = division.name
+            except Exception:
+                pass
+
+        # Получаем список руководителей
+        boss_ids = self._parse_boss_ids(department.boss)
+        boss_names = []
+        for emp_id in boss_ids:
+            emp_name = self.get_employee_short_name(emp_id)
+            if emp_name:  # ← Добавляем только если имя не пустое
+                boss_names.append(emp_name)
+
+        return {
+            'id': department.id,
+            'number': department.number,
+            'name': department.name,
+            'boss': department.boss,
+            'boss_ids': boss_ids,
+            'boss_names': boss_names,
+            'phone_number': department.phone_number,
+            'division_id': department.division_id,
+            'division_name': division_name,
+            'organization_id': department.organization_id,
+        }
+
+    def _parse_boss_ids(self, boss_field) -> List[int]:
+        """Парсит поле boss и возвращает список ID сотрудников"""
+        if not boss_field:
+            return []
+
+        if isinstance(boss_field, str):
+            if all(c.isdigit() or c == ',' or c.isspace() for c in boss_field):
+                ids = []
+                for part in boss_field.split(','):
+                    part = part.strip()
+                    if part and part.isdigit():
+                        ids.append(int(part))
+                return ids
+            return []
+        elif isinstance(boss_field, (int, float)):
+            return [int(boss_field)]
+        elif isinstance(boss_field, list):
+            return boss_field
+        return []
+
+    def get_employee_short_name(self, employee_id: int) -> str:
+        """Возвращает краткое ФИО сотрудника: Фамилия И.О."""
+        employee = self.repo.get_by_id(employee_id)
+        if not employee:
+            return ""  # ← Возвращаем пустую строку вместо ID
+
+        last_name = employee.last_name or ''
+        first_name = employee.first_name or ''
+        middle_name = employee.middle_name or ''
+
+        initials = ""
+        if first_name:
+            initials += first_name[0] + "."
+        if middle_name:
+            initials += middle_name[0] + "."
+
+        result = f"{last_name} {initials}".strip() if initials else last_name
+        return result if result.strip() else ""  # ← Если пусто, возвращаем пустую строку
+
+    def get_all_employees_for_selector(self) -> List[Dict[str, Any]]:
+        """Возвращает список всех сотрудников для выбора в диалогах"""
+        try:
+            employees = self.session.query(Employee).all()
+            result = []
+            for emp in employees:
+                full_name = self._get_full_name(emp)
+                result.append({
+                    'id': emp.id,
+                    'full_name': full_name,
+                    'position': emp.position or 'Сотрудник'
+                })
+            return result
+        except Exception as e:
+            print(f"❌ Ошибка в get_all_employees_for_selector: {e}")
+            return []
+
+    def get_divisions_for_selector(self) -> List[Dict[str, Any]]:
+        """Возвращает список подразделений для выбора в диалогах"""
+        try:
+            divisions = self.session.query(Division).all()
+            result = []
+            for div in divisions:
+                result.append({
+                    'id': div.id,
+                    'name': div.name,
+                    'number': div.number,
+                    'display_name': f"{div.name}" + (f" (№{div.number})" if div.number else "")
+                })
+            return result
+        except Exception as e:
+            print(f"❌ Ошибка в get_divisions_for_selector: {e}")
+            return []
+
+    def save_department_from_dialog(self, department_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """
+        Сохраняет отдел из данных диалога
+        Если есть id - обновляет, если нет - создает новый
+        """
+        try:
+            department_id = department_data.get('id')
+
+            if department_id:
+                success = self.update_department(department_id, department_data)
+                if success:
+                    return self.get_department_card_data(department_id)
+                return None
+            else:
+                return self.create_department(department_data)
+        except Exception as e:
+            print(f"❌ Ошибка в save_department_from_dialog: {e}")
+            return None
+
+    def delete_department_by_id(self, department_id: int, delete_employees: bool = False,
+                                target_department_id: int = None) -> bool:
+        """
+        Удаляет отдел
+        Если delete_employees=True и есть сотрудники:
+            - если target_department_id указан -> переназначает сотрудников
+            - если target_department_id не указан -> удаляет всех сотрудников
+        """
+        try:
+            has_employees = self.has_employees_in_department(department_id)
+
+            if has_employees and target_department_id:
+                # Переназначаем сотрудников в другой отдел
+                success = self.reassign_department_employees(department_id, target_department_id)
+                if not success:
+                    return False
+
+            # Удаляем отдел
+            if has_employees and not target_department_id and delete_employees:
+                # Каскадное удаление
+                return self.delete_department_cascade(department_id)
+            else:
+                return self.delete_department(department_id)
+        except Exception as e:
+            print(f"❌ Ошибка в delete_department_by_id: {e}")
+            return False
+
+    def get_other_departments(self, exclude_department_id: int) -> List[Dict[str, Any]]:
+        """Возвращает список всех отделов, кроме указанного"""
+        try:
+            departments = self.session.query(Department).filter(
+                Department.id != exclude_department_id
+            ).all()
+            return [self._department_to_card_dict(dept) for dept in departments]
+        except Exception as e:
+            print(f"❌ Ошибка в get_other_departments: {e}")
+            return []
+
+    def validate_department_form(self, form_data: Dict[str, Any]) -> tuple[bool, str]:
+        """Валидирует данные формы отдела"""
+        if not form_data.get('name', '').strip():
+            return False, "Название отдела обязательно!"
+
+        number = form_data.get('number')
+        if not number:
+            return False, "Номер отдела обязателен!"
+
+        try:
+            int(number)
+        except (ValueError, TypeError):
+            return False, "Номер отдела должен быть числом!"
+
+        if not form_data.get('phone_number', '').strip():
+            return False, "Укажите номер телефона!"
+
+        if not form_data.get('division_id'):
+            return False, "Выберите подразделение!"
+
+        return True, ""
+
+    def filter_departments(self, departments: List[Dict], search_text: str = None,
+                           division_id: int = None) -> List[Dict]:
+        """Фильтрует отделы по поисковому запросу и подразделению"""
+        filtered = departments.copy()
+
+        if search_text:
+            search_lower = search_text.lower().strip()
+            filtered = [d for d in filtered
+                        if search_lower in d.get('name', '').lower()]
+
+        if division_id:
+            filtered = [d for d in filtered
+                        if d.get('division_id') == division_id]
+
+        return filtered
+
+    def get_filtered_departments_data(self, search_text: str = None,
+                                      division_id: int = None) -> List[Dict]:
+        """Возвращает отфильтрованные отделы с данными для карточек"""
+        all_departments = self.get_department_card_data()
+        return self.filter_departments(all_departments, search_text, division_id)
+
     def get_all_departments(self) -> List[Dict[str, Any]]:
         """Получить все отделы (из БД employees)"""
         if self.session is None:
@@ -248,8 +747,6 @@ class EmployeeService:
             print(f"❌ Ошибка при удалении сотрудника: {e}")
             return False
 
-    # services/employee_service.py - проверьте эту часть
-
     def _employee_to_dict(self, employee: Employee) -> Dict[str, Any]:
         """Преобразует модель сотрудника в словарь"""
         if employee is None:
@@ -317,9 +814,6 @@ class EmployeeService:
             parts.append(employee.middle_name)
         return ' '.join(parts)
 
-    # =========================
-    # Отделы (из БД employees)
-    # =========================
     def get_department_by_id(self, department_id: int) -> Optional[Dict[str, Any]]:
         """Получить отдел по ID"""
         try:
@@ -507,8 +1001,165 @@ class EmployeeService:
         return result
 
     # =========================
-    # Подразделения (из БД employees)
+    # Подразделения
     # =========================
+    def get_division_card_data(self, division_id: int = None) -> Dict[str, Any]:
+        """
+        Возвращает данные подразделения для карточки
+        Если division_id не указан или None, возвращает все подразделения
+        """
+        try:
+            self._ensure_session_valid()
+
+            if division_id is None:
+                divisions = self.session.query(Division).all()
+                return [self._division_to_card_dict(div) for div in divisions]
+            else:
+                division = self.session.get(Division, division_id)
+                return self._division_to_card_dict(division) if division else None
+        except Exception as e:
+            print(f"❌ Ошибка в get_division_card_data: {e}")
+            traceback.print_exc()
+            return [] if division_id is None else None
+
+    def _division_to_card_dict(self, division: Division) -> Dict[str, Any]:
+        """Преобразует модель подразделения в словарь для карточки"""
+        if division is None:
+            return {}
+
+        # Получаем список руководителей
+        boss_ids = self._parse_boss_ids(division.boss)
+        boss_names = []
+        for emp_id in boss_ids:
+            emp_name = self.get_employee_short_name(emp_id)
+            if emp_name:
+                boss_names.append(emp_name)
+
+        return {
+            'id': division.id,
+            'number': division.number,
+            'name': division.name,
+            'boss': division.boss,
+            'boss_ids': boss_ids,
+            'boss_names': boss_names,
+            'phone_number': division.phone_number,
+            'workshop_code': division.workshop_code or '',
+            'organization_id': division.organization_id,
+        }
+
+    def save_division_from_dialog(self, division_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """
+        Сохраняет подразделение из данных диалога
+        Если есть id - обновляет, если нет - создает новый
+        """
+        try:
+            division_id = division_data.get('id')
+
+            if division_id:
+                success = self.update_division(division_id, division_data)
+                if success:
+                    return self.get_division_card_data(division_id)
+                return None
+            else:
+                return self.create_division(division_data)
+        except Exception as e:
+            print(f"❌ Ошибка в save_division_from_dialog: {e}")
+            return None
+
+    def delete_division_by_id(self, division_id: int, delete_departments: bool = False,
+                              target_division_id: int = None) -> bool:
+        """
+        Удаляет подразделение
+        Если delete_departments=True и есть зависимые объекты:
+            - если target_division_id указан -> переназначает отделы и сотрудников
+            - если target_division_id не указан -> удаляет всё каскадно
+        """
+        try:
+            has_departments = self.has_departments_in_division(division_id)
+            has_employees = self.has_employees_in_division(division_id)
+
+            if (has_departments or has_employees) and target_division_id:
+                # Переназначаем на другое подразделение
+                success = self.reassign_division_dependencies(division_id, target_division_id)
+                if not success:
+                    return False
+
+            # Удаляем подразделение
+            if (has_departments or has_employees) and not target_division_id and delete_departments:
+                return self.delete_division_cascade(division_id)
+            else:
+                return self.delete_division(division_id)
+        except Exception as e:
+            print(f"❌ Ошибка в delete_division_by_id: {e}")
+            return False
+
+    def get_other_divisions(self, exclude_division_id: int) -> List[Dict[str, Any]]:
+        """Возвращает список всех подразделений, кроме указанного"""
+        try:
+            divisions = self.session.query(Division).filter(
+                Division.id != exclude_division_id
+            ).all()
+            return [self._division_to_card_dict(div) for div in divisions]
+        except Exception as e:
+            print(f"❌ Ошибка в get_other_divisions: {e}")
+            return []
+
+    def validate_division_form(self, form_data: Dict[str, Any]) -> tuple[bool, str]:
+        """Валидирует данные формы подразделения"""
+        if not form_data.get('name', '').strip():
+            return False, "Название подразделения обязательно!"
+
+        number = form_data.get('number')
+        if not number:
+            return False, "Номер подразделения обязателен!"
+
+        try:
+            int(number)
+        except (ValueError, TypeError):
+            return False, "Номер подразделения должен быть числом!"
+
+        if not form_data.get('phone_number', '').strip():
+            return False, "Укажите номер телефона!"
+
+        return True, ""
+
+    def get_employees_for_selector(self) -> List[Dict[str, Any]]:
+        """Возвращает список сотрудников для выбора в диалогах"""
+        try:
+            employees = self.session.query(Employee).all()
+            result = []
+            for emp in employees:
+                full_name = self._get_full_name(emp)
+                result.append({
+                    'id': emp.id,
+                    'full_name': full_name,
+                    'position': emp.position or 'Сотрудник'
+                })
+            return result
+        except Exception as e:
+            print(f"❌ Ошибка в get_employees_for_selector: {e}")
+            return []
+
+    def prepare_division_for_dialog(self, division_id: int) -> Optional[Dict[str, Any]]:
+        """Подготавливает данные подразделения для диалога редактирования"""
+        try:
+            division = self.session.get(Division, division_id)
+            if not division:
+                return None
+
+            return {
+                'id': division.id,
+                'name': division.name,
+                'number': division.number,
+                'phone_number': division.phone_number,
+                'workshop_code': division.workshop_code or '',
+                'boss_ids': self._parse_boss_ids(division.boss),
+                'boss': division.boss,
+            }
+        except Exception as e:
+            print(f"❌ Ошибка в prepare_division_for_dialog: {e}")
+            return None
+
     def get_division_by_id(self, division_id: int) -> Optional[Dict[str, Any]]:
         """Получить подразделение по ID"""
         try:

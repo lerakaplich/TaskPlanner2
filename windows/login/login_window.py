@@ -237,17 +237,22 @@ class LoginWindow(QDialog):
         try:
             from database import get_tasks_session
             from windows.settings.employees.employee_dialog import EmployeeDialog
+            from services.employee_service import EmployeeService  # Добавить импорт
 
-            session = get_tasks_session()
+            # Создаем сервис сотрудников вместо передачи сессии напрямую
+            employee_service = EmployeeService()
 
             dialog = EmployeeDialog(
                 parent=self,
                 employee_data=None,
-                session=session,
+                employee_service=employee_service,  # ← Используем employee_service вместо session
                 is_registration_mode=True
             )
             dialog.employee_saved.connect(self._send_registration_request)
             dialog.exec()
+
+            # Закрываем сервис после использования
+            employee_service.close()
 
         except Exception as e:
             QMessageBox.critical(self, "Ошибка", f"Не удалось открыть форму регистрации: {e}")

@@ -1,15 +1,3 @@
-from PyQt6 import uic
-from PyQt6.QtWidgets import QWidget, QMessageBox, QTabWidget
-from PyQt6.QtCore import pyqtSignal
-import os
-
-# Импорт вкладок (все наследуются от BaseTab)
-from windows.settings.columns.columns_tab import ColumnsTab
-from windows.settings.tags.tags_tab import TagsTab
-from windows.settings.employees.employees_tab import EmployeesTab
-from windows.settings.departments.departments_tab import DepartmentsTab
-from windows.settings.divisions.divisions_tab import DivisionsTab
-
 # windows/settings/settings_page.py
 
 from PyQt6 import uic
@@ -17,6 +5,7 @@ from PyQt6.QtWidgets import QWidget, QMessageBox, QTabWidget
 from PyQt6.QtCore import pyqtSignal
 import os
 
+# Импорт вкладок (все наследуются от BaseTab)
 from windows.settings.columns.columns_tab import ColumnsTab
 from windows.settings.tags.tags_tab import TagsTab
 from windows.settings.employees.employees_tab import EmployeesTab
@@ -33,11 +22,11 @@ class SettingsPage(QWidget):
     item_edited = pyqtSignal(str, dict)
     item_deleted = pyqtSignal(str, int)
 
-    def __init__(self, parent=None, session=None):  # ← ДОБАВЬТЕ session
+    def __init__(self, parent=None, session=None):
         super().__init__(parent)
 
-        self.employees_db_session = get_employees_session()  # ← ДОБАВИТЬ
-        self.session = session  # оставляем для других нужд (может не понадобиться)
+        self.employees_db_session = get_employees_session()
+        self.session = session
 
         self.all_employees = []
         self.all_departments = []
@@ -58,7 +47,6 @@ class SettingsPage(QWidget):
         uic.loadUi(ui_path, self)
 
         self.setup_tabs()
-
         self.load_data_from_db()
 
     def setup_tabs(self):
@@ -69,24 +57,24 @@ class SettingsPage(QWidget):
         self.divisions_tab = DivisionsTab()
         self.columns_tab = ColumnsTab()
 
-        # ===== ИСПРАВЛЕНИЕ: используем employees_db_session, а не session! =====
+        # ===== ИСПРАВЛЕНИЕ: используем employee_service для вкладок =====
         if hasattr(self, 'employees_db_session') and self.employees_db_session:
-            employee_service = EmployeeService(self.employees_db_session)  # ← ПРАВИЛЬНО
-            self.employees_tab.set_employee_service(employee_service)
-            self.employees_tab.set_session(self.employees_db_session)  # ← тоже employees
+            employee_service = EmployeeService(self.employees_db_session)
 
-            # Передаём employees_db_session во вкладки (не session)
-            self.departments_tab.set_session(self.employees_db_session)
-            self.divisions_tab.set_session(self.employees_db_session)
-            self.columns_tab.set_session(self.session)  # ← колонки в taskplanner, тут правильно
-            self.tags_tab.set_session(self.session)  # ← теги в taskplanner
+            # Передаём сервис во вкладки
+            self.employees_tab.set_employee_service(employee_service)
+            self.departments_tab.set_employee_service(employee_service)
+            self.divisions_tab.set_employee_service(employee_service)  # ← ИЗМЕНЕНО: вместо set_session
+
+            # Передаём сессии для других вкладок
+            self.columns_tab.set_session(self.session)
+            self.tags_tab.set_session(self.session)
         else:
-            # Fallback если нет employees_db_session
             print("⚠️ Нет employees_db_session для EmployeeService")
 
         # Подключаем сигналы
-        self.tags_tab.item_deleted.connect(self.on_tag_deleted)  # ← ДОБАВЛЯЕМ отдельный обработчик
-        self.tags_tab.item_deleted.connect(self.on_item_deleted)  # ← можно и общий, но лучше отдельный
+        self.tags_tab.item_deleted.connect(self.on_tag_deleted)
+        self.tags_tab.item_deleted.connect(self.on_item_deleted)
         self.employees_tab.item_deleted.connect(self.on_item_deleted)
         self.departments_tab.item_deleted.connect(self.on_item_deleted)
         self.divisions_tab.item_deleted.connect(self.on_item_deleted)
@@ -126,7 +114,6 @@ class SettingsPage(QWidget):
         tag_service = TagService(self.session)
 
         if tag_service.delete_tag(tag_id):
-            # Обновляем локальный список
             self.all_tags = [t for t in self.all_tags if t.get('id') != tag_id]
             self.tags_tab.load_data(self.all_tags)
             QMessageBox.information(self, "Успех", "Тема удалена")
@@ -149,27 +136,25 @@ class SettingsPage(QWidget):
         from services.column_service import ColumnService
         from services.tag_service import TagService
 
-        employee_service = EmployeeService(self.employees_db_session)  # ← employees
-        column_service = ColumnService(self.session)  # ← taskplanner (колонки)
-        tag_service = TagService(self.session)  # ← taskplanner (теги)
+        employee_service = EmployeeService(self.employees_db_session)
+        column_service = ColumnService(self.session)
+        tag_service = TagService(self.session)
 
-        # Загружаем сотрудников
+        # Загружаем сотрудников через сервис
         self.all_employees = employee_service.get_all_employees()
         self.employees_tab.load_data(self.all_employees)
 
         # Загружаем отделы
         self.all_departments = employee_service.get_all_departments()
         self.departments_tab.load_data(self.all_departments)
-        self.departments_tab.set_employees(self.all_employees)
 
         # Загружаем подразделения
         self.all_divisions = employee_service.get_all_divisions()
         self.departments_tab.all_divisions = self.all_divisions
         self.departments_tab.load_division_filters()
         self.divisions_tab.load_data(self.all_divisions)
-        self.divisions_tab.set_employees(self.all_employees)
 
-        # Загружаем колонки (шаблоны)  ← ДОБАВИТЬ ЭТУ СЕКЦИЮ
+        # Загружаем колонки (шаблоны)
         self.all_columns = column_service.get_template_columns()
         print(f"📊 Загружено шаблонов колонок из БД: {len(self.all_columns)}")
         self.columns_tab.load_data(self.all_columns)
@@ -177,7 +162,8 @@ class SettingsPage(QWidget):
         # Загружаем темы
         self.all_tags = tag_service.get_all_tags()
         print(f"📊 Загружено тем из БД: {len(self.all_tags)}")
-        self.tags_tab.set_session(self.session)  # ← Передаём сессию
+        self.tags_tab.set_session(self.session)
+        self.tags_tab.load_data(self.all_tags)
 
         # Настраиваем фильтры
         self.employees_tab.load_filter_data(self.all_departments, self.all_divisions)
@@ -186,11 +172,9 @@ class SettingsPage(QWidget):
         """Обработка удаления подразделения"""
         if item_type == "division":
             from services.employee_service import EmployeeService
-            employee_service = EmployeeService(self.employees_db_session)  # ← ИСПРАВЛЕНО
+            employee_service = EmployeeService(self.employees_db_session)
 
-            # Используйте существующий метод delete_division (не delete_division_in_db)
-            if employee_service.delete_division(division_id):  # ← ИСПРАВЛЕНО
-                # Обновляем локальный список
+            if employee_service.delete_division(division_id):
                 self.all_divisions = [d for d in self.all_divisions if d.get('id') != division_id]
                 self.divisions_tab.load_data(self.all_divisions)
                 QMessageBox.information(self, "Успех", "Подразделение удалено")
@@ -207,7 +191,6 @@ class SettingsPage(QWidget):
 
     def connect_add_buttons(self):
         """Подключение кнопок "Добавить" из вкладок"""
-        # Кнопки теперь находятся внутри каждой вкладки (self.btnAddXXX)
         if hasattr(self.tags_tab, 'btnAddTag'):
             self.tags_tab.btnAddTag.clicked.connect(lambda: self.add_item("tag"))
 
@@ -235,9 +218,6 @@ class SettingsPage(QWidget):
         name = type_names.get(item_type, "элемент")
         QMessageBox.information(self, "Добавление",
                                 f"Здесь будет открыта форма добавления нового {name}")
-
-        # В будущем здесь можно эмитировать сигнал:
-        # self.item_added.emit(item_type, {})
 
     def on_item_deleted(self, item_type: str, item_id: int):
         """Обработчик удаления из любой вкладки"""

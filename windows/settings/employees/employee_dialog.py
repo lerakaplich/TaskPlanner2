@@ -1,24 +1,16 @@
 # windows/settings/employees/employee_dialog.py
-"""
-Диалог добавления/редактирования сотрудника
-"""
 
 import os
-import sys
 from datetime import date
-from PyQt6.QtWidgets import (
-    QApplication, QDialog, QMessageBox, QInputDialog
-)
+from PyQt6.QtWidgets import QDialog, QMessageBox
 from PyQt6 import uic, QtCore
 from PyQt6.QtCore import QDate, pyqtSignal
 from PyQt6.QtGui import QValidator
 
-from windows.settings.departments.department_dialog import DepartmentDialog
-from windows.settings.divisions.division_dialog import DivisionDialog
-
 
 class PhoneValidator(QValidator):
     """Валидатор для номера телефона (только цифры, максимум 9)"""
+
     def validate(self, input_str, pos):
         filtered = ''.join([c for c in input_str if c.isdigit()])
         if len(filtered) > 9:
@@ -37,15 +29,12 @@ class EmployeeDialog(QDialog):
     """Диалоговое окно для добавления/редактирования сотрудника"""
     employee_saved = pyqtSignal(dict)
 
-    def __init__(self, parent=None, employee_data=None, session=None, is_registration_mode=False):
+    def __init__(self, parent=None, employee_data=None, employee_service=None, is_registration_mode=False):
         super().__init__(parent)
 
-        self.session = session
+        self.employee_service = employee_service
         self.employee_data = employee_data
         self.is_registration_mode = is_registration_mode
-        self.all_divisions = []
-        self.all_departments = []
-        self.departments_by_division = {}
 
         # Определяем путь к UI файлу
         ui_path = os.path.join(
@@ -57,18 +46,17 @@ class EmployeeDialog(QDialog):
         # Загружаем UI
         uic.loadUi(ui_path, self)
 
-        # Загружаем реальные данные из БД
-        self.load_divisions_from_db()
-        self.load_departments_from_db()
+        # Загружаем данные через сервис
+        self.load_data_from_service()
 
-        # === ОПРЕДЕЛЯЕМ РЕЖИМ ===
-        self.is_edit_mode = employee_data is not None and employee_data.get('id') is not None
-
-        # Настраиваем поле телефона с префиксом +375
+        # Настраиваем поле телефона
         self.setup_phone_field()
 
-        # Загружаем данные в комбобоксы
-        self.load_divisions_combo()
+        # Определяем режим
+        self.is_edit_mode = employee_data is not None and employee_data.get('id') is not None
+
+        # Настраиваем UI в зависимости от режима
+        self.setup_ui_mode()
 
         # Настраиваем клавиатуру
         self.setup_keyboard_navigation()
@@ -79,12 +67,62 @@ class EmployeeDialog(QDialog):
         self.btnAddDepartment.clicked.connect(self.add_department)
         self.comboBoxDivision.currentIndexChanged.connect(self.on_division_changed)
 
-        # === УСТАНАВЛИВАЕМ ЗАГОЛОВКИ В ЗАВИСИМОСТИ ОТ РЕЖИМА ===
+        self.dateEditBirthDate.setMaximumDate(QDate.currentDate())
+
+    def load_data_from_service(self):
+        """Загружает данные через сервис"""
+        if self.employee_service:
+            filter_data = self.employee_service.get_filter_data()
+            self.all_divisions = filter_data.get('divisions', [])
+            self.all_departments = filter_data.get('departments', [])
+
+            # Группируем отделы по подразделениям
+            self.departments_by_division = {}
+            for dept in self.all_departments:
+                div_id = dept.get('division_id')
+                if div_id not in self.departments_by_division:
+                    self.departments_by_division[div_id] = []
+                self.departments_by_division[div_id].append(dept)
+
+            # Загружаем роли если нужно
+            if hasattr(self, 'comboBoxRole'):
+                self.comboBoxRole.clear()
+                for role in self.employee_service.get_roles_list():
+                    self.comboBoxRole.addItem(role)
+        else:
+            self.all_divisions = []
+            self.all_departments = []
+            self.departments_by_division = {}
+
+    def setup_phone_field(self):
+        """Настройка поля телефона"""
+        validator = PhoneValidator()
+        self.lineEditMobilePhone.setValidator(validator)
+        self.lineEditMobilePhone.setText("")
+
+        def on_phone_edit(text):
+            digits = ''.join([c for c in text if c.isdigit()])
+            if len(digits) > 9:
+                digits = digits[:9]
+
+            if digits != text:
+                self.lineEditMobilePhone.blockSignals(True)
+                self.lineEditMobilePhone.setText(digits)
+                self.lineEditMobilePhone.blockSignals(False)
+
+        self.lineEditMobilePhone.textChanged.connect(on_phone_edit)
+        self.lineEditMobilePhone.setPlaceholderText("Введите 9 цифр (29XXXXXXX)")
+
+    def setup_ui_mode(self):
+        """Настройка UI в зависимости от режима"""
+        # Загружаем подразделения в комбобокс
+        self.load_divisions_combo()
+
         if self.is_edit_mode:
             self.setWindowTitle("Редактирование сотрудника")
             if hasattr(self, 'titleLabel'):
                 self.titleLabel.setText("Редактирование сотрудника")
-            self.load_employee_data(employee_data)
+            self.load_employee_data_for_edit()
             if hasattr(self, 'comboBoxRole'):
                 self.comboBoxRole.setEnabled(True)
             self.btnAddDivision.setVisible(True)
@@ -95,9 +133,7 @@ class EmployeeDialog(QDialog):
             if hasattr(self, 'titleLabel'):
                 self.titleLabel.setText("Регистрация нового сотрудника")
             if hasattr(self, 'comboBoxRole'):
-                user_index = self.comboBoxRole.findText("Пользователь")
-                if user_index >= 0:
-                    self.comboBoxRole.setCurrentIndex(user_index)
+                self.comboBoxRole.setCurrentText("Пользователь")
                 self.comboBoxRole.setEnabled(False)
             self.btnAddDivision.setVisible(False)
             self.btnAddDepartment.setVisible(False)
@@ -112,74 +148,6 @@ class EmployeeDialog(QDialog):
             self.btnAddDivision.setVisible(True)
             self.btnAddDepartment.setVisible(True)
 
-        self.dateEditBirthDate.setMaximumDate(QDate.currentDate())
-
-    def setup_phone_field(self):
-        """Настройка поля телефона с префиксом +375"""
-        validator = PhoneValidator()
-        self.lineEditMobilePhone.setValidator(validator)
-        self.lineEditMobilePhone.setText("")
-
-        def on_phone_edit(text):
-            digits = ''.join([c for c in text if c.isdigit()])
-            if len(digits) > 9:
-                digits = digits[:9]
-
-            if digits:
-                self.lineEditMobilePhone.blockSignals(True)
-                self.lineEditMobilePhone.setText(digits)
-                self.lineEditMobilePhone.blockSignals(False)
-
-        self.lineEditMobilePhone.textChanged.connect(on_phone_edit)
-        self.lineEditMobilePhone.setPlaceholderText("Введите 9 цифр (29XXXXXXX)")
-
-    def get_full_phone_number(self):
-        """Получает полный номер телефона в формате 375XXXXXXXXX"""
-        digits = self.lineEditMobilePhone.text().strip()
-        digits = ''.join([c for c in digits if c.isdigit()])
-        if digits:
-            return f"375{digits}"
-        return ""
-
-    def load_divisions_from_db(self):
-        """Загрузка подразделений из БД"""
-        try:
-            from services.employee_service import EmployeeService
-            from database import get_employees_session
-
-            # СОЗДАЕМ НОВУЮ СЕССИЮ ДЛЯ EMPLOYEES
-            emp_session = get_employees_session()
-            employee_service = EmployeeService(emp_session)  # ← БЕЗ self.session!
-            self.all_divisions = employee_service.get_all_divisions()
-            emp_session.close()  # ← ЗАКРЫВАЕМ СЕССИЮ
-
-            print(f"✅ Загружено {len(self.all_divisions)} подразделений")
-        except Exception as e:
-            print(f"❌ Ошибка загрузки подразделений: {e}")
-            self.all_divisions = []
-
-    def load_departments_from_db(self):
-        """Загрузка отделов из БД"""
-        try:
-            from services.employee_service import EmployeeService
-            from database import get_employees_session
-
-            emp_session = get_employees_session()
-            employee_service = EmployeeService(emp_session)  # ← БЕЗ self.session!
-            self.all_departments = employee_service.get_all_departments()
-            emp_session.close()
-
-            self.departments_by_division = {}
-            for dept in self.all_departments:
-                div_id = dept.get('division_id')
-                if div_id not in self.departments_by_division:
-                    self.departments_by_division[div_id] = []
-                self.departments_by_division[div_id].append(dept)
-            print(f"✅ Загружено {len(self.all_departments)} отделов")
-        except Exception as e:
-            print(f"❌ Ошибка загрузки отделов: {e}")
-            self.all_departments = []
-
     def load_divisions_combo(self):
         """Загрузка подразделений в комбобокс"""
         self.comboBoxDivision.clear()
@@ -189,7 +157,7 @@ class EmployeeDialog(QDialog):
             self.comboBoxDivision.addItem(division.get("name", "Без названия"), division.get("id"))
 
     def on_division_changed(self, index):
-        """Обработчик изменения выбранного подразделения - загружает соответствующие отделы"""
+        """Обработчик изменения выбранного подразделения"""
         self.comboBoxDepartment.clear()
         self.comboBoxDepartment.addItem("Выберите отдел", None)
 
@@ -197,25 +165,83 @@ class EmployeeDialog(QDialog):
             return
 
         division_id = self.comboBoxDivision.currentData()
-        print(f"Выбрано подразделение ID: {division_id}")
-
         if division_id in self.departments_by_division:
             for department in self.departments_by_division[division_id]:
                 self.comboBoxDepartment.addItem(department.get("name", "Без названия"), department.get("id"))
-            print(f"Загружено {len(self.departments_by_division[division_id])} отделов для подразделения {division_id}")
+
+    def load_employee_data_for_edit(self):
+        """Загружает данные сотрудника для редактирования"""
+        if not self.employee_data:
+            return
+
+        self.lineEditLastName.setText(self.employee_data.get("last_name", ""))
+        self.lineEditFirstName.setText(self.employee_data.get("first_name", ""))
+        self.lineEditMiddleName.setText(self.employee_data.get("middle_name", ""))
+
+        birth_date = self.employee_data.get("birth_date")
+        if birth_date:
+            if isinstance(birth_date, date):
+                self.dateEditBirthDate.setDate(QDate(birth_date.year, birth_date.month, birth_date.day))
+            elif isinstance(birth_date, str):
+                try:
+                    birth_parts = birth_date.split('-')
+                    if len(birth_parts) == 3:
+                        self.dateEditBirthDate.setDate(
+                            QDate(int(birth_parts[0]), int(birth_parts[1]), int(birth_parts[2])))
+                except:
+                    pass
+
+        division_id = self.employee_data.get("division_id")
+        if division_id:
+            for i in range(self.comboBoxDivision.count()):
+                if self.comboBoxDivision.itemData(i) == division_id:
+                    self.comboBoxDivision.setCurrentIndex(i)
+                    break
+
+        department_id = self.employee_data.get("department_id")
+        if department_id:
+            from PyQt6.QtCore import QTimer
+            QTimer.singleShot(50, lambda: self.select_department(department_id))
+
+        self.lineEditPosition.setText(self.employee_data.get("position", ""))
+
+        if not self.is_registration_mode and hasattr(self, 'comboBoxRole'):
+            rights = self.employee_data.get("rights", "user")
+            role_map = {
+                "user": "Пользователь",
+                "admin": "Администратор",
+                "superadmin": "Суперадминистратор"
+            }
+            role_text = role_map.get(rights, "Пользователь")
+            self.comboBoxRole.setCurrentText(role_text)
+
+        phone = self.employee_data.get("phone_number", "")
+        if phone.startswith("375"):
+            phone = phone[3:]
+        self.lineEditMobilePhone.setText(phone)
+
+        self.lineEditWorkPhone.setText(self.employee_data.get("work_number", ""))
+        self.lineEditEmail.setText(self.employee_data.get("email", ""))
+
+    def select_department(self, department_id):
+        """Выбор отдела в комбобоксе после загрузки"""
+        for i in range(self.comboBoxDepartment.count()):
+            if self.comboBoxDepartment.itemData(i) == department_id:
+                self.comboBoxDepartment.setCurrentIndex(i)
+                break
 
     def add_division(self):
-        """Открытие диалога добавления нового подразделения"""
-        if not self.session:
-            QMessageBox.warning(self, "Ошибка", "Нет подключения к БД")
-            return
-        dialog = DivisionDialog(parent=self, division_data=None, session=self.session)
-        dialog.division_saved.connect(self.on_division_saved)
+        """Открытие диалога добавления подразделения"""
+        from windows.settings.divisions.division_dialog import DivisionDialog
+
+        dialog = DivisionDialog(parent=self, division_data=None)
+        if hasattr(dialog, 'division_saved'):
+            dialog.division_saved.connect(self.on_division_saved)
         dialog.exec()
 
     def on_division_saved(self, division_data):
-        """Обработка сохранения нового подразделения"""
-        self.load_divisions_from_db()
+        """Обработка сохранения подразделения"""
+        self.load_data_from_service()
         self.load_divisions_combo()
 
         new_id = division_data.get('id')
@@ -224,27 +250,25 @@ class EmployeeDialog(QDialog):
                 self.comboBoxDivision.setCurrentIndex(i)
                 break
 
-        QMessageBox.information(self, "Успешно", f"Подразделение «{division_data.get('name')}» добавлено")
+        QMessageBox.information(self, "Успешно", f"Подразделение добавлено")
 
     def add_department(self):
-        """Открытие диалога добавления нового отдела"""
-        division_id = self.comboBoxDivision.currentData()
+        """Открытие диалога добавления отдела"""
+        from windows.settings.departments.department_dialog import DepartmentDialog
 
+        division_id = self.comboBoxDivision.currentData()
         if not division_id:
             QMessageBox.warning(self, "Внимание", "Сначала выберите подразделение!")
             return
 
-        if not self.session:
-            QMessageBox.warning(self, "Ошибка", "Нет подключения к БД")
-            return
-
-        dialog = DepartmentDialog(parent=self, department_data=None, session=self.session)
-        dialog.department_saved.connect(self.on_department_saved)
+        dialog = DepartmentDialog(parent=self, department_data=None)
+        if hasattr(dialog, 'department_saved'):
+            dialog.department_saved.connect(self.on_department_saved)
         dialog.exec()
 
     def on_department_saved(self, department_data):
-        """Обработка сохранения нового отдела"""
-        self.load_departments_from_db()
+        """Обработка сохранения отдела"""
+        self.load_data_from_service()
         division_id = self.comboBoxDivision.currentData()
         self.on_division_changed(self.comboBoxDivision.currentIndex())
 
@@ -254,41 +278,10 @@ class EmployeeDialog(QDialog):
                 self.comboBoxDepartment.setCurrentIndex(i)
                 break
 
-        QMessageBox.information(self, "Успешно", f"Отдел «{department_data.get('name')}» добавлен")
-
-    def validate_data(self):
-        """Проверка заполнения обязательных полей"""
-        if not self.lineEditLastName.text().strip():
-            return False, "Пожалуйста, заполните поле 'Фамилия'"
-
-        if not self.lineEditFirstName.text().strip():
-            return False, "Пожалуйста, заполните поле 'Имя'"
-
-        if self.comboBoxDivision.currentData() is None:
-            return False, "Пожалуйста, выберите подразделение"
-
-        if self.comboBoxDepartment.currentData() is None:
-            return False, "Пожалуйста, выберите отдел"
-
-        if not self.lineEditPosition.text().strip():
-            return False, "Пожалуйста, заполните поле 'Должность'"
-
-        # Проверка телефона
-        phone_digits = ''.join([c for c in self.lineEditMobilePhone.text().strip() if c.isdigit()])
-        if not phone_digits:
-            return False, "Пожалуйста, заполните поле 'Моб. телефон'"
-
-        if len(phone_digits) != 9:
-            return False, "Введите 9 цифр номера телефона (без +375)"
-
-        email = self.lineEditEmail.text().strip()
-        if email and "@" not in email:
-            return False, "Пожалуйста, введите корректный email"
-
-        return True, ""
+        QMessageBox.information(self, "Успешно", f"Отдел добавлен")
 
     def get_employee_data(self):
-        """Получение данных из формы"""
+        """Получение данных из формы через сервис"""
         rights_map = {
             "Пользователь": "user",
             "Администратор": "admin",
@@ -297,27 +290,20 @@ class EmployeeDialog(QDialog):
 
         if self.is_registration_mode:
             rights = "user"
+            generated_password = self.employee_service.generate_registration_password() if self.employee_service else "temp123"
         else:
-            role_text = self.comboBoxRole.currentText()
+            role_text = self.comboBoxRole.currentText() if hasattr(self, 'comboBoxRole') else "Пользователь"
             rights = rights_map.get(role_text, "user")
+            generated_password = None
 
         division_id = self.comboBoxDivision.currentData()
         department_id = self.comboBoxDepartment.currentData()
 
-        # Получаем дату рождения как строку
         birth_date = self.dateEditBirthDate.date().toPyDate()
         birth_date_str = birth_date.isoformat() if birth_date else None
 
-        # Получаем полный номер телефона (375 + 9 цифр)
         phone_digits = ''.join([c for c in self.lineEditMobilePhone.text().strip() if c.isdigit()])
         full_phone = f"375{phone_digits}" if phone_digits else ""
-
-        # Генерируем пароль только для режима регистрации
-        generated_password = None
-        if self.is_registration_mode:
-            import secrets
-            import string
-            generated_password = ''.join(secrets.choice(string.ascii_letters + string.digits) for _ in range(8))
 
         result = {
             "id": self.employee_data.get('id') if self.employee_data else None,
@@ -339,82 +325,32 @@ class EmployeeDialog(QDialog):
 
         return result
 
-    def load_employee_data(self, data):
-        """Заполнение формы данными сотрудника"""
-        self.lineEditLastName.setText(data.get("last_name", ""))
-        self.lineEditFirstName.setText(data.get("first_name", ""))
-        self.lineEditMiddleName.setText(data.get("middle_name", ""))
-
-        if data.get("birth_date"):
-            birth_date = data["birth_date"]
-            if isinstance(birth_date, date):
-                self.dateEditBirthDate.setDate(QDate(birth_date.year, birth_date.month, birth_date.day))
-
-        division_id = data.get("division_id")
-        if division_id:
-            for i in range(self.comboBoxDivision.count()):
-                if self.comboBoxDivision.itemData(i) == division_id:
-                    self.comboBoxDivision.setCurrentIndex(i)
-                    break
-
-        department_id = data.get("department_id")
-        if department_id:
-            from PyQt6.QtCore import QTimer
-            QTimer.singleShot(50, lambda: self.select_department(department_id))
-
-        self.lineEditPosition.setText(data.get("position", ""))
-
-        if not self.is_registration_mode:
-            rights = data.get("rights", "user")
-            role_map = {
-                "user": "Пользователь",
-                "admin": "Администратор",
-                "superadmin": "Суперадминистратор"
-            }
-            role_text = role_map.get(rights, "Пользователь")
-            role_index = self.comboBoxRole.findText(role_text)
-            if role_index >= 0:
-                self.comboBoxRole.setCurrentIndex(role_index)
-
-        phone = data.get("phone_number", "")
-        if phone.startswith("375"):
-            phone = phone[3:]
-        self.lineEditMobilePhone.setText(phone)
-
-        self.lineEditWorkPhone.setText(data.get("work_number", ""))
-        self.lineEditEmail.setText(data.get("email", ""))
-
-    def select_department(self, department_id):
-        """Выбор отдела в комбобоксе после загрузки"""
-        for i in range(self.comboBoxDepartment.count()):
-            if self.comboBoxDepartment.itemData(i) == department_id:
-                self.comboBoxDepartment.setCurrentIndex(i)
-                break
-
     def save_employee(self):
         """Сохранение сотрудника"""
-        is_valid, error_msg = self.validate_data()
+        if not self.employee_service:
+            QMessageBox.warning(self, "Ошибка", "Сервис не инициализирован")
+            return
+
+        employee_data = self.get_employee_data()
+
+        # Валидация через сервис
+        is_valid, error_msg = self.employee_service.validate_employee_form(employee_data)
 
         if not is_valid:
             QMessageBox.warning(self, "Внимание", error_msg)
             return
 
-        employee_data = self.get_employee_data()
+        # Сохраняем через сервис
+        result = self.employee_service.save_employee_from_dialog(employee_data)
 
-        print("=" * 50)
-        print("Данные сотрудника:")
-        for key, value in employee_data.items():
-            print(f"{key}: {value}")
-        print("=" * 50)
-
-        self.employee_saved.emit(employee_data)
-        self.accept()
-
-    def closeEvent(self, event):
-        event.accept()
+        if result:
+            self.employee_saved.emit(result)
+            self.accept()
+        else:
+            QMessageBox.warning(self, "Ошибка", "Не удалось сохранить сотрудника")
 
     def setup_keyboard_navigation(self):
-        """Настройка перехода между полями по стрелкам Вверх/Вниз"""
+        """Настройка перехода между полями"""
         self.fields = [
             self.lineEditLastName,
             self.lineEditFirstName,
@@ -423,11 +359,16 @@ class EmployeeDialog(QDialog):
             self.comboBoxDivision,
             self.comboBoxDepartment,
             self.lineEditPosition,
-            self.comboBoxRole,
+        ]
+
+        if hasattr(self, 'comboBoxRole'):
+            self.fields.append(self.comboBoxRole)
+
+        self.fields.extend([
             self.lineEditMobilePhone,
             self.lineEditWorkPhone,
             self.lineEditEmail,
-        ]
+        ])
 
         for widget in self.fields:
             widget.installEventFilter(self)
@@ -450,3 +391,6 @@ class EmployeeDialog(QDialog):
                 return True
 
         return super().eventFilter(obj, event)
+
+    def closeEvent(self, event):
+        event.accept()

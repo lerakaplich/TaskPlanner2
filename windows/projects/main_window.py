@@ -180,9 +180,24 @@ class MainWindow(QMainWindow):
         )
 
         if reply == QMessageBox.StandardButton.Yes:
-            from windows.login.login_window import LoginWindow
-            login_window = LoginWindow()
-            login_window.clear_session()
+            from services.auth_service import AuthService
+
+            # Очищаем сессию через AuthService
+            auth_service = AuthService()
+            user_id = self.current_user.get('id') if self.current_user else None
+            auth_service.clear_session(user_id)
+            auth_service.clear_current_user()
+
+            # Закрываем текущее окно
             self.close()
+
+            # Создаем и показываем окно входа
+            from windows.login.login_window import LoginWindow
             self.login_window = LoginWindow()
             self.login_window.show()
+
+            # Важно: сохраняем ссылку на окно, чтобы оно не было удалено сборщиком мусора
+            # и показываем его после закрытия главного окна
+            if hasattr(self, 'parent()'):
+                # Если есть родительское окно, показываем относительно него
+                pass
