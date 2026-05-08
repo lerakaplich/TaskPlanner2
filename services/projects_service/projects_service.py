@@ -3,13 +3,14 @@
 from typing import List, Optional, Dict, Any
 from database import get_tasks_session, get_employees_session
 
-from services.column_service import ColumnService
 from .projects_crud_service import ProjectsCrudService
 from .projects_members_service import ProjectsMembersService
 from .projects_columns_service import ProjectsColumnsService
 from .projects_tasks_service import ProjectsTasksService
 from .projects_statistics_service import ProjectsStatisticsService
 from .projects_notification_service import ProjectsNotificationService
+from ..employee_service.column_service import ColumnService
+
 
 class ProjectsService:
     """Главный сервис для работы с проектами (фасад)"""

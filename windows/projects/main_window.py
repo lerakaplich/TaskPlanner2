@@ -4,7 +4,7 @@ import os
 from PyQt6 import uic
 from PyQt6.QtWidgets import QMainWindow, QMessageBox
 
-from services.analytics_service import AnalyticsService
+from services.analytics_service.analytics_service import AnalyticsService
 from services.archive_service import ArchiveService
 from services.chat_service import ChatService
 from services.overtime_service import OvertimeService

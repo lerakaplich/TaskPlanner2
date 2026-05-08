@@ -5,12 +5,12 @@ from sqlalchemy.orm import Session
 from database import get_employees_session, get_tasks_session
 
 from models.employees import Division, Employee
+from .column_service import ColumnService
 from .employee_base_service import EmployeeBaseService
 from .employee_crud_service import EmployeeCrudService
 from .department_service import DepartmentService
 from .division_service import DivisionService
-from services.tag_service import TagService
-from services.column_service import ColumnService
+from .tag_service import TagService
 
 
 class EmployeeService:

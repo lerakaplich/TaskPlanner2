@@ -1,12 +1,11 @@
 # windows/settings/columns/columns_tab.py
-
+from services.employee_service.column_service import ColumnService
 from windows.settings.base_tab import BaseTab
 from windows.settings.columns.column_card import ColumnCard
 from PyQt6.QtWidgets import QMessageBox
 from PyQt6.QtCore import pyqtSignal
 
 from windows.settings.columns.column_dialog import ColumnDialog
-from services.column_service import ColumnService
 
 
 class ColumnsTab(BaseTab):
@@ -36,7 +35,6 @@ class ColumnsTab(BaseTab):
         """Установка сессии и создание сервиса колонок"""
         self.session = session
         if session:
-            from services.column_service import ColumnService
             self.column_service = ColumnService(session)
             self.load_columns()
 

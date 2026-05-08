@@ -1,12 +1,11 @@
 # windows/settings/tags/tags_tab.py
-
+from services.employee_service.tag_service import TagService
 from windows.settings.base_tab import BaseTab
 from windows.settings.tags.tag_card import TagCard
 from PyQt6.QtWidgets import QMessageBox
 from PyQt6.QtCore import pyqtSignal
 
 from windows.settings.tags.tag_dialog import TagDialog
-from services.tag_service import TagService
 
 
 class TagsTab(BaseTab):

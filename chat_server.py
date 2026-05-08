@@ -8,7 +8,7 @@ import socketio
 import asyncio
 from database import get_tasks_session, get_employees_session  # Исправлено
 from services.chat_service import ChatService
-from services.employee_service import EmployeeService  # Добавлен новый сервис
+from services.employee_service.employee_service import EmployeeService
 
 # Удаляем импорт sync_service
 # from sync_service import sync_service

@@ -9,12 +9,10 @@ from PyQt6.QtWidgets import (
     QVBoxLayout, QLabel, QFrame, QSizePolicy, QMessageBox
 )
 
+from services.analytics_service.analytics_service import AnalyticsService
 from windows.analytics.employees.employee_card import EmployeeCard
 from windows.analytics.theme.theme_card import ThemeCard
 from windows.analytics.projects.project_card_analytics import ProjectCard
-from windows.analytics.task_card_analytics import TaskCard
-from services.analytics_service import AnalyticsService
-
 
 class AnalyticsPage(QWidget):
     """Страница аналитики - только отображение, логика в сервисе"""
