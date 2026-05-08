@@ -6,11 +6,9 @@ from PyQt6.QtWidgets import QWidget, QMessageBox, QVBoxLayout
 from PyQt6.QtCore import pyqtSignal, QTimer, Qt, QRect
 from PyQt6.QtGui import QPainter, QColor, QBrush, QPen, QFont
 
-from services.profile_service import ProfileService
-
 
 class BarChartWidget(QWidget):
-    """Виджет для отрисовки столбчатой диаграммы"""
+    """Виджет для отрисовки столбчатой диаграммы (только UI)"""
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -29,8 +27,8 @@ class BarChartWidget(QWidget):
         self.margin_top = 40
         self.margin_bottom = 70
 
-    def set_data(self, topics, kpd_values):
-        """Установка данных для графика"""
+    def set_data(self, topics: list, kpd_values: list):
+        """Устанавливает данные для графика"""
         self.topics = topics
         self.kpd_values = kpd_values
         self.update()
@@ -61,8 +59,8 @@ class BarChartWidget(QWidget):
         total_width = n_bars * self.bar_width + (n_bars - 1) * self.bar_spacing
         start_x = self.margin_left + (chart_width - total_width) / 2
 
+        # Сетка
         painter.setPen(QPen(QColor('#E0E0E0'), 1, Qt.PenStyle.SolidLine))
-
         for i in range(0, 11):
             y = self.margin_top + chart_height - (i * chart_height / 10)
             if y > self.margin_top and y < height - self.margin_bottom:
@@ -72,39 +70,39 @@ class BarChartWidget(QWidget):
                 painter.drawText(5, int(y + 3), f"{i / 10:.1f}")
                 painter.setPen(QPen(QColor('#E0E0E0'), 1))
 
+        # Оси
         painter.setPen(QPen(QColor('#999'), 1))
         painter.drawLine(self.margin_left, self.margin_top,
                          self.margin_left, height - self.margin_bottom)
         painter.drawLine(self.margin_left, height - self.margin_bottom,
                          width - self.margin_right, height - self.margin_bottom)
 
+        # Столбцы
         for i, (topic, kpd) in enumerate(zip(self.topics, self.kpd_values)):
             x = int(start_x + i * (self.bar_width + self.bar_spacing))
             bar_height = int(min(kpd * chart_height, chart_height))
             y = int(height - self.margin_bottom - bar_height)
 
             color = QColor(self.colors[i % len(self.colors)])
-
             painter.fillRect(x, y, self.bar_width, bar_height, QBrush(color))
             painter.setPen(QPen(QColor('#CCCCCC'), 1))
             painter.drawRect(x, y, self.bar_width, bar_height)
 
+            # Подписи
             painter.setPen(QPen(QColor('#1B232A'), 1))
             painter.setFont(QFont('Segoe UI', 10))
-
             painter.save()
             center_x = x + self.bar_width // 2
             text_y = height - self.margin_bottom + 15
             painter.translate(center_x, text_y)
             painter.rotate(-25)
             painter.drawText(QRect(-150, -15, 300, 40),
-                             Qt.AlignmentFlag.AlignCenter,
-                             topic)
+                             Qt.AlignmentFlag.AlignCenter, topic)
             painter.restore()
 
 
 class ChartWidget(QWidget):
-    """Виджет с кнопками управления и графиком"""
+    """Виджет с кнопками управления и графиком (только UI)"""
 
     refresh_clicked = pyqtSignal()
     export_clicked = pyqtSignal()
@@ -115,93 +113,64 @@ class ChartWidget(QWidget):
         self.profile_service = None
         self.employee_id = None
 
-        ui_path = os.path.join(
-            os.path.dirname(__file__),
-            "..", "..",
-            "ui", "profile"
-        )
-
+        ui_path = os.path.join(os.path.dirname(__file__), "..", "..", "ui", "profile")
         uic.loadUi(os.path.join(ui_path, "chart_widget.ui"), self)
 
-        self.init_chart()
-        self.connect_signals()
+        self._init_chart()
+        self._connect_signals()
 
     def set_profile_service(self, service):
-        """Устанавливает сервис профиля"""
         self.profile_service = service
 
     def set_employee_id(self, employee_id):
-        """Устанавливает ID сотрудника"""
         self.employee_id = employee_id
 
     def load_data(self, employee_id=None):
-        """Загружает данные для графика"""
+        """Загружает данные через сервис"""
         if employee_id:
             self.employee_id = employee_id
-
         if self.profile_service and self.employee_id:
             topics, kpd = self.profile_service.get_kpd_chart_data(self.employee_id)
             self.update_chart(topics, kpd)
-
-    # ---------- UI ----------
-
-    def init_chart(self):
-        """Инициализирует график"""
-        if hasattr(self, "chartContainer"):
-            self.bar_chart = BarChartWidget()
-            layout = self.chartContainer.layout()
-
-            if layout is None:
-                from PyQt6.QtWidgets import QVBoxLayout
-                layout = QVBoxLayout()
-                self.chartContainer.setLayout(layout)
-
-            while layout.count():
-                item = layout.takeAt(0)
-                if item.widget():
-                    item.widget().deleteLater()
-
-            layout.addWidget(self.bar_chart)
-
-    def connect_signals(self):
-        """Подключает сигналы"""
-        if hasattr(self, "btnRefresh"):
-            self.btnRefresh.clicked.connect(self.on_refresh_clicked)
-
-        if hasattr(self, "btnExport"):
-            self.btnExport.clicked.connect(self.on_export_clicked)
-
-    # ---------- CHART ----------
 
     def update_chart(self, topics, kpd_values):
         """Обновляет данные графика"""
         if hasattr(self, "bar_chart"):
             self.bar_chart.set_data(topics, kpd_values)
 
-    # ---------- ACTIONS ----------
+    def _init_chart(self):
+        """Инициализирует график"""
+        if hasattr(self, "chartContainer"):
+            self.bar_chart = BarChartWidget()
+            layout = self.chartContainer.layout()
+            if layout is None:
+                layout = QVBoxLayout()
+                self.chartContainer.setLayout(layout)
+            while layout.count():
+                item = layout.takeAt(0)
+                if item.widget():
+                    item.widget().deleteLater()
+            layout.addWidget(self.bar_chart)
 
-    def on_refresh_clicked(self):
-        """Обработчик нажатия на кнопку обновления"""
+    def _connect_signals(self):
+        if hasattr(self, "btnRefresh"):
+            self.btnRefresh.clicked.connect(self._on_refresh_clicked)
+        if hasattr(self, "btnExport"):
+            self.btnExport.clicked.connect(self._on_export_clicked)
+
+    def _on_refresh_clicked(self):
         if self.profile_service:
             topics, values = self.profile_service.generate_random_kpd_data()
             self.update_chart(topics, values)
-
             if hasattr(self, "titleLabel"):
                 self.titleLabel.setText(self.profile_service.get_chart_updated_title())
-                QTimer.singleShot(2000, self.restore_title)
-
+                QTimer.singleShot(2000, self._restore_title)
             self.refresh_clicked.emit()
 
-    def restore_title(self):
-        """Восстанавливает заголовок графика"""
+    def _restore_title(self):
         if hasattr(self, "titleLabel") and self.profile_service:
             self.titleLabel.setText(self.profile_service.get_chart_title())
 
-    def on_export_clicked(self):
-        """Обработчик нажатия на кнопку экспорта"""
-        QMessageBox.information(
-            self,
-            "Экспорт графика",
-            "Функция экспорта будет доступна в следующей версии."
-        )
+    def _on_export_clicked(self):
+        QMessageBox.information(self, "Экспорт графика", "Функция экспорта будет доступна в следующей версии.")
         self.export_clicked.emit()

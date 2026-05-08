@@ -1,26 +1,20 @@
 # windows/profile/profile_page.py
 
 import os
-import sys
-
 from PyQt6 import uic
-from PyQt6.QtWidgets import (
-    QApplication, QWidget, QVBoxLayout, QTableWidgetItem,
-    QSizePolicy, QMessageBox, QFrame, QLabel,
-    QProgressBar, QHBoxLayout
-)
+from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QTableWidgetItem,
+                             QMessageBox, QFrame, QLabel, QProgressBar, QHBoxLayout)
 from PyQt6.QtCore import Qt, pyqtSignal, QDate
-from PyQt6.QtGui import QColor
 
+from services.analytics_service.analytics_service import AnalyticsService
 from services.profile_service import ProfileService
-
 from windows.profile.chart_widget import ChartWidget
 from windows.profile.edit_profile import EditProfileDialog
 from windows.profile.projects_page import ProjectsPage
 
 
 class ProfilePage(QWidget):
-    """Страница профиля сотрудника"""
+    """Страница профиля сотрудника (только UI)"""
 
     edit_profile_requested = pyqtSignal()
 
@@ -30,90 +24,74 @@ class ProfilePage(QWidget):
         self.employee_id = employee_id
         self.main_window = parent
         self.current_user = current_user
+        self.projects_page = None
 
-        # Если employee_id не передан, пытаемся взять из current_user
         if not self.employee_id and current_user:
             self.employee_id = current_user.get('id')
 
-        # Создаем сервис профиля (с правильной сессией)
         from database import get_tasks_session
         session = get_tasks_session()
-        self.profile_service = ProfileService(session=session)
+        self.profile_service = service or ProfileService(session=session)
 
-        # Если передан current_user, устанавливаем его в сервис
         if current_user:
             self.profile_service.set_current_user_id(current_user.get('id'))
 
         self.employee_data = {}
-        self.projects_page = None
 
-        ui_path = os.path.join(
-            os.path.dirname(__file__),
-            "..", "..",
-            "ui", "profile", "profile_page.ui"
-        )
+        ui_path = os.path.join(os.path.dirname(__file__), "..", "..", "ui", "profile")
+        uic.loadUi(os.path.join(ui_path, "profile_page.ui"), self)
 
-        uic.loadUi(ui_path, self)
-
-        self.init_chart_widget()
-        self.connect_signals()
+        self._init_chart_widget()
+        self._connect_signals()
 
         if self.employee_id:
             self.load_employee()
-        else:
-            print("⚠️ Не указан ID сотрудника")
 
     def load_employee(self):
-        """Загружает данные сотрудника через сервис"""
+        """Загружает данные через сервис и обновляет UI"""
         if not self.profile_service:
             return
 
-        profile = self.profile_service.get_employee_profile(self.employee_id)
-        self.employee_data = profile
+        # Загружаем основные данные
+        self.employee_data = self.profile_service.get_employee_profile(self.employee_id)
 
-        # Обновляем UI через update_ui_from_data
-        self.update_ui_from_data()
+        # Загружаем статистику и проекты
+        stats = self.profile_service.get_employee_statistics(self.employee_id)
+        projects = self.profile_service.get_employee_projects(self.employee_id)
 
-    # ---------- UI ----------
+        # Обогащаем данные
+        self.employee_data.update(stats)
+        self.employee_data["active_projects"] = projects
 
-    def connect_signals(self):
-        if hasattr(self, 'btnEditProfile'):
-            self.btnEditProfile.clicked.connect(self.open_edit_profile)
+        analytics = AnalyticsService(self.profile_service.session)
+        emp_analytics = analytics.get_employee_card_data(self.employee_id)
+        self.employee_data["tag_analytics"] = emp_analytics.get("tag_analytics", [])
 
-        if hasattr(self, 'btnCompletedProjects'):
-            self.btnCompletedProjects.clicked.connect(self.show_completed_projects)
+        # Обновляем UI
+        self._update_ui()
 
-        if hasattr(self, 'btnRefresh'):
-            self.btnRefresh.clicked.connect(self.refresh_data)
-
-    def update_ui_from_data(self):
-        """Обновляет UI данными из employee_data"""
+    def _update_ui(self):
+        """Обновляет UI из self.employee_data"""
         data = self.employee_data
 
         # ФИО
         if hasattr(self, 'labelFullName'):
-            middle = data.get('middle_name', '')
-            if middle:
-                middle = f" {middle}"
-            self.labelFullName.setText(
-                f"{data.get('last_name', '')} {data.get('first_name', '')}{middle}"
-            )
+            middle = f" {data.get('middle_name', '')}" if data.get('middle_name') else ""
+            self.labelFullName.setText(f"{data.get('last_name', '')} {data.get('first_name', '')}{middle}")
 
         # Должность и отдел
         if hasattr(self, 'labelPosition'):
             self.labelPosition.setText(data.get('position', ''))
-
         if hasattr(self, 'labelDepartment'):
             self.labelDepartment.setText(data.get('department_name', '—'))
 
-        # Контактная информация
+        # Контакты
         if hasattr(self, 'labelPhone'):
             self.labelPhone.setText(data.get('phone_number', ''))
-
         if hasattr(self, 'labelEmail'):
             self.labelEmail.setText(data.get('email', ''))
 
-        # Дата рождения (если есть поле)
+        # Дата рождения
         if hasattr(self, 'labelBirthDate'):
             birth = data.get('birth_date')
             if birth:
@@ -122,44 +100,33 @@ class ProfilePage(QWidget):
                     if date.isValid():
                         self.labelBirthDate.setText(date.toString("dd.MM.yyyy"))
                 except:
-                    self.labelBirthDate.setText("")
+                    pass
 
         # Статистика
         if hasattr(self, 'labelCompletedTasks'):
-            stats = self.profile_service.get_employee_statistics(self.employee_id)
-            self.labelCompletedTasks.setText(str(stats.get('completed_tasks', 0)))
-            self.labelActiveProjects.setText(str(stats.get('projects_count', 0)))
+            self.labelCompletedTasks.setText(str(data.get('completed_tasks', 0)))
+        if hasattr(self, 'labelActiveProjects'):
+            self.labelActiveProjects.setText(str(data.get('projects_count', 0)))
 
-        # Рейтинг и навыки
-        rating = self._calculate_rating(data)
-        self.update_rating_ui(rating)
-        self.setup_skills_table()
+        # Рейтинг
+        rating = self.profile_service.calculate_rating(self.employee_data)
+        if hasattr(self, 'labelKPD'):
+            self.labelKPD.setText(f"КПД: {rating:.1f}%")
+        self._update_rating_stars(rating)
+
+        # Таблица навыков
+        self._setup_skills_table()
 
         # Проекты
-        self.create_projects_widgets()
+        self._create_projects_widgets()
 
-        # Обновляем график
+        # График
         if hasattr(self, 'chart_widget'):
             self.chart_widget.load_data(self.employee_id)
 
-    def _calculate_rating(self, data):
-        """Вычисляет рейтинг на основе данных"""
-        # Здесь можно реализовать логику расчета рейтинга
-        # Например, на основе выполненных задач или КПД по темам
-        skills = data.get('skills', [])
-        if skills:
-            avg_kpd = sum(s.get('kpd', 0) for s in skills) / len(skills)
-            return avg_kpd * 100
-        return 0
-
-    # ---------- RATING ----------
-
-    def update_rating_ui(self, rating):
-        if hasattr(self, 'labelKPD'):
-            self.labelKPD.setText(f"КПД: {rating:.1f}%")
-
+    def _update_rating_stars(self, rating: float):
+        """Обновляет звёзды рейтинга"""
         stars = self.profile_service.calculate_rating_stars(rating)
-
         for i in range(1, 6):
             star_attr = f"star{i}"
             if hasattr(self, star_attr):
@@ -169,13 +136,10 @@ class ProfilePage(QWidget):
                 else:
                     star.setStyleSheet("font-size: 24px; color: #E0E0E0;")
 
-    # ---------- TABLE ----------
-
-    def setup_skills_table(self):
+    def _setup_skills_table(self):
         """Заполняет таблицу навыков"""
         skills = self.employee_data.get('tag_analytics', [])
-        table = self.tableSkills
-
+        table = getattr(self, 'tableSkills', None)
         if not table:
             return
 
@@ -185,25 +149,23 @@ class ProfilePage(QWidget):
 
         for row, skill in enumerate(skills):
             table.setItem(row, 0, QTableWidgetItem(skill.get("tag", "")))
-            kpd = skill.get("kpd", 0)
-            table.setItem(row, 1, QTableWidgetItem(f"{kpd:.2f}"))
+            table.setItem(row, 1, QTableWidgetItem(f"{skill.get('kpd', 0):.2f}"))
             table.setItem(row, 2, QTableWidgetItem(str(skill.get("count", 0))))
 
-        # Растягиваем колонки
         table.horizontalHeader().setStretchLastSection(True)
 
-    # ---------- PROJECTS ----------
-
-    def create_projects_widgets(self):
-        """Создает виджеты проектов"""
+    def _create_projects_widgets(self):
+        """Создаёт виджеты проектов"""
         projects = self.employee_data.get("active_projects", [])
-        container = self.projectsContainer
-        layout = container.layout() if container else None
-
-        if not layout:
+        container = getattr(self, 'projectsContainer', None)
+        if not container:
             return
 
-        # Очищаем контейнер
+        layout = container.layout()
+        if layout is None:
+            layout = QVBoxLayout(container)
+            container.setLayout(layout)
+
         while layout.count():
             item = layout.takeAt(0)
             if item.widget():
@@ -216,31 +178,19 @@ class ProfilePage(QWidget):
             layout.addWidget(label)
             return
 
-        # Добавляем проекты
         for project in projects:
             frame = QFrame()
-            frame.setProperty("class", "projectCard")
             frame.setStyleSheet("""
-                QFrame {
-                    background-color: white;
-                    border-radius: 8px;
-                    border: 1px solid #E0E0E0;
-                    padding: 10px;
-                    margin: 5px;
-                }
+                QFrame { background-color: white; border-radius: 8px; border: 1px solid #E0E0E0;
+                         padding: 10px; margin: 5px; }
             """)
-
             v = QVBoxLayout(frame)
             v.setSpacing(8)
 
-            # Заголовок проекта и процент
             name = QLabel(project.get("name", "Без названия"))
             name.setStyleSheet("font-weight: bold; font-size: 14px;")
 
-            total_tasks = project.get("tasks_total", 0)
-            done_tasks = project.get("tasks_done", 0)
-            progress = int((done_tasks / total_tasks * 100)) if total_tasks > 0 else 0
-
+            progress = project.get("progress", 0)
             percent = QLabel(f"{progress}%")
             percent.setStyleSheet("color: #ccab6e; font-weight: bold;")
 
@@ -250,24 +200,15 @@ class ProfilePage(QWidget):
             h.addWidget(percent)
             v.addLayout(h)
 
-            # Прогресс-бар
             bar = QProgressBar()
             bar.setValue(progress)
             bar.setStyleSheet("""
-                QProgressBar {
-                    border: 1px solid #E0E0E0;
-                    border-radius: 4px;
-                    height: 10px;
-                }
-                QProgressBar::chunk {
-                    background-color: #D22730;
-                    border-radius: 4px;
-                }
+                QProgressBar { border: 1px solid #E0E0E0; border-radius: 4px; height: 10px; }
+                QProgressBar::chunk { background-color: #D22730; border-radius: 4px; }
             """)
             v.addWidget(bar)
 
-            # Задачи
-            tasks_label = QLabel(f"Задачи {done_tasks}/{total_tasks}")
+            tasks_label = QLabel(f"Задачи {project.get('completed_tasks', 0)}/{project.get('total_tasks', 0)}")
             tasks_label.setStyleSheet("color: #666; font-size: 12px;")
             v.addWidget(tasks_label)
 
@@ -275,11 +216,30 @@ class ProfilePage(QWidget):
 
         layout.addStretch()
 
-    # ---------- ACTIONS ----------
+    def _init_chart_widget(self):
+        """Инициализирует виджет графика"""
+        if not hasattr(self, "frameChart"):
+            return
 
-    def open_edit_profile(self):
+        layout = self.frameChart.layout()
+        if layout is None:
+            layout = QVBoxLayout(self.frameChart)
+            layout.setContentsMargins(0, 0, 0, 0)
+
+        self.chart_widget = ChartWidget()
+        self.chart_widget.set_profile_service(self.profile_service)
+        layout.addWidget(self.chart_widget)
+
+    def _connect_signals(self):
+        if hasattr(self, 'btnEditProfile'):
+            self.btnEditProfile.clicked.connect(self._open_edit_profile)
+        if hasattr(self, 'btnCompletedProjects'):
+            self.btnCompletedProjects.clicked.connect(self._show_completed_projects)
+        if hasattr(self, 'btnRefresh'):
+            self.btnRefresh.clicked.connect(self.refresh_data)
+
+    def _open_edit_profile(self):
         """Открывает диалог редактирования профиля"""
-        # Собираем данные для редактирования
         edit_data = {
             'id': self.employee_id,
             'last_name': self.employee_data.get('last_name', ''),
@@ -295,81 +255,37 @@ class ProfilePage(QWidget):
             'role': self.employee_data.get('role', 'user')
         }
 
-        dialog = EditProfileDialog(
-            self,
-            employee_data=edit_data,
-            profile_service=self.profile_service
-        )
-
+        dialog = EditProfileDialog(self, employee_data=edit_data, profile_service=self.profile_service)
         if dialog.exec():
-            # Обновляем данные в UI
             self.load_employee()
-            QMessageBox.information(
-                self,
-                "Профиль обновлен",
-                "Данные профиля успешно обновлены"
-            )
+            QMessageBox.information(self, "Профиль обновлен", "Данные профиля успешно обновлены")
 
-    def show_completed_projects(self):
+    def _show_completed_projects(self):
         """Показать окно выполненных проектов"""
         try:
-            # Получаем все проекты с задачами
-            all_projects = self.profile_service.get_all_employee_projects_with_tasks(
-                self.employee_id
-            )
+            projects = self.profile_service.get_employee_projects(self.employee_id)
 
             if self.projects_page is None:
                 self.projects_page = ProjectsPage(
                     employee_id=self.employee_id,
                     mode="all",
-                    projects_data=all_projects
+                    projects_data=projects,
+                    profile_service=self.profile_service
                 )
-                self.projects_page.back_requested.connect(self.hide_completed_projects)
+                self.projects_page.back_requested.connect(self._hide_completed_projects)
             else:
-                self.projects_page.set_employee_id(self.employee_id)
-                self.projects_page.projects_data = all_projects
-                self.projects_page.refresh_data()
+                self.projects_page.update_data(projects_data=projects, employee_id=self.employee_id)
 
             self.projects_page.show()
             self.projects_page.raise_()
             self.projects_page.activateWindow()
-
         except Exception as e:
-            print(f"Ошибка при открытии окна выполненных проектов: {e}")
-            import traceback
-            traceback.print_exc()
+            print(f"Ошибка при открытии окна проектов: {e}")
 
-    def hide_completed_projects(self):
-        """Скрывает окно проектов"""
+    def _hide_completed_projects(self):
         if self.projects_page:
             self.projects_page.hide()
-
-    # ---------- CHART ----------
-
-    def init_chart_widget(self):
-        """Инициализирует виджет графика"""
-        if not hasattr(self, "frameChart"):
-            return
-
-        # Очищаем frameChart
-        layout = self.frameChart.layout()
-        if layout:
-            while layout.count():
-                item = layout.takeAt(0)
-                if item.widget():
-                    item.widget().deleteLater()
-        else:
-            layout = QVBoxLayout(self.frameChart)
-            layout.setContentsMargins(0, 0, 0, 0)
-
-        self.chart_widget = ChartWidget()
-        self.chart_widget.set_profile_service(self.profile_service)
-        layout.addWidget(self.chart_widget)
-
-    # ---------- REFRESH ----------
 
     def refresh_data(self):
         """Обновляет данные профиля"""
         self.load_employee()
-        if hasattr(self, 'chart_widget'):
-            self.chart_widget.load_data(self.employee_id)

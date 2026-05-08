@@ -145,6 +145,7 @@ class ChatRepo:
         )
         self.session.add(msg)
         return msg
+
     def get_history(self, chat_id: int, limit: int = 50) -> List[ChatMessage]:
         stmt = (
             select(ChatMessage)
