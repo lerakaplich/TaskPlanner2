@@ -47,7 +47,8 @@ class DivisionsTab(BaseTab):
     def load_divisions(self):
         """Загрузка подразделений через сервис"""
         if self.employee_service:
-            self.divisions = self.employee_service.get_division_display_data()
+            # ИСПРАВЛЕНО: используем get_division_card_data вместо get_division_display_data
+            self.divisions = self.employee_service.get_division_card_data()
             self.refresh_cards()
 
     def refresh_cards(self):
@@ -83,11 +84,15 @@ class DivisionsTab(BaseTab):
         if not self.employee_service:
             return
 
-        division = self.employee_service.get_division_edit_data(division_id)
+        # ИСПРАВЛЕНО: используем get_division_card_data вместо get_division_edit_data
+        division = self.employee_service.get_division_card_data(division_id)
         if division:
-            dialog = DivisionDialog(parent=self, division_data=division, employee_service=self.employee_service)
-            dialog.division_saved.connect(lambda data: self.on_division_updated(division_id, data))
-            dialog.exec()
+            # ИСПРАВЛЕНО: используем prepare_division_for_dialog для получения данных для диалога
+            dialog_data = self.employee_service.prepare_division_for_dialog(division_id)
+            if dialog_data:
+                dialog = DivisionDialog(parent=self, division_data=dialog_data, employee_service=self.employee_service)
+                dialog.division_saved.connect(lambda data: self.on_division_updated(division_id, data))
+                dialog.exec()
 
     def on_division_updated(self, division_id: int, division_data: dict):
         """Обработка редактирования подразделения"""
@@ -120,6 +125,9 @@ class DivisionsTab(BaseTab):
 
     def show_delete_with_dependencies_dialog(self, division_id: int, has_departments: bool, has_employees: bool):
         """Диалог удаления подразделения с зависимостями"""
+        if not self.employee_service:
+            return
+
         dialog = QDialog(self)
         dialog.setWindowTitle("Удаление подразделения")
         dialog.setFixedSize(500, 350)

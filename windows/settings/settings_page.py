@@ -5,12 +5,12 @@ from PyQt6.QtWidgets import QWidget, QMessageBox, QTabWidget
 from PyQt6.QtCore import pyqtSignal
 import os
 
+from services.employee_service.employee_service import EmployeeService
 from windows.settings.columns.columns_tab import ColumnsTab
 from windows.settings.tags.tags_tab import TagsTab
 from windows.settings.employees.employees_tab import EmployeesTab
 from windows.settings.departments.departments_tab import DepartmentsTab
 from windows.settings.divisions.divisions_tab import DivisionsTab
-from services.employee_service import EmployeeService
 from database import get_employees_session
 
 
