@@ -1,12 +1,13 @@
-# services/tasks_service.py
-from typing import Dict, Optional
+# services/tasks_service/tasks_service.py
 
+from typing import Dict, Optional
 from services.tasks_service.tasks_crud_service import TasksCrudService
 from services.tasks_service.tasks_move_service import TasksMoveService
 from services.tasks_service.tasks_filter_service import TasksFilterService
 from services.tasks_service.tasks_tag_service import TasksTagService
 from services.tasks_service.tasks_statistics_service import TasksStatisticsService
 from services.tasks_service.tasks_bulk_service import TasksBulkService
+from services.tasks_service.tasks_kanban_service import TasksKanbanService
 
 
 class TasksService:
@@ -23,37 +24,22 @@ class TasksService:
         self.tag = TasksTagService(db_session, self.crud.repo, current_user, mode)
         self.stats = TasksStatisticsService(db_session, self.crud.repo, current_user, mode)
         self.bulk = TasksBulkService(db_session, self.crud.repo, current_user, mode)
+        self.kanban = TasksKanbanService(db_session, self.crud.repo, current_user, mode)
 
-        # Устанавливаем конвертер
+        # Устанавливаем конвертеры
         self.move.set_task_converter(self.crud._task_to_dict)
         self.stats.set_task_converter(self.crud._task_to_dict)
+        self.kanban.set_task_converter(self.crud._task_to_dict)
 
         # Сохраняем ссылку на метод конвертации
         self._task_to_dict = self.crud._task_to_dict
 
-    # Проксируем основные методы
+    # ==========================================================
+    # Прокси для CRUD операций
+    # ==========================================================
     @property
     def repo(self):
         return self.crud.repo
-
-    def is_deadline_overdue(self, deadline_str, completed):
-        return self.crud.is_deadline_overdue(deadline_str, completed)
-
-    def prepare_dialog_data(self, mode: str, task_data: Optional[Dict] = None) -> Dict:
-        """Подготавливает данные для диалога"""
-        return self.crud.prepare_dialog_data(mode, task_data)
-
-    def validate_form_data(self, form_data: Dict) -> Optional[str]:
-        """Валидация данных формы"""
-        return self.crud.validate_form_data(form_data)
-
-    def process_form_data(self, form_data: Dict, current_user: Dict) -> Dict:
-        """Обработка данных формы"""
-        return self.crud.process_form_data(form_data, current_user)
-
-    def delete_task(self, task_id: int) -> bool:
-        """Удалить задачу (прокси)"""
-        return self.crud.delete_task(task_id)
 
     def get_task_by_id(self, task_id):
         return self.crud.get_task_by_id(task_id)
@@ -67,7 +53,7 @@ class TasksService:
     def update_task(self, task_id, updated_data):
         return self.crud.update_task(task_id, updated_data)
 
-    def delete_task_by_id(self, task_id):
+    def delete_task(self, task_id):
         return self.crud.delete_task(task_id)
 
     def archive_task_by_id(self, task_id):
@@ -76,31 +62,30 @@ class TasksService:
     def duplicate_task(self, task_id):
         return self.crud.duplicate_task(task_id)
 
+    def load_tasks(self):
+        return self.crud.load_tasks()
+
     def get_tasks_for_board(self):
         return self.crud.get_tasks_for_board()
 
-    def load_tasks(self):
-        return self.crud.load_tasks()
+    def prepare_dialog_data(self, mode: str, task_data: Optional[Dict] = None) -> Dict:
+        return self.crud.prepare_dialog_data(mode, task_data)
+
+    def validate_form_data(self, form_data: Dict) -> Optional[str]:
+        return self.crud.validate_form_data(form_data)
+
+    def process_form_data(self, form_data: Dict, current_user: Dict) -> Dict:
+        return self.crud.process_form_data(form_data, current_user)
 
     def format_assignee_name(self, assignee_id):
         return self.crud.format_assignee_name(assignee_id)
 
-    def get_columns_for_board(self):
-        return self.crud.get_columns_for_board()
+    def is_deadline_overdue(self, deadline_str, completed):
+        return self.crud.is_deadline_overdue(deadline_str, completed)
 
-    def get_column_data(self):
-        return self.crud.get_column_data()
-
-    def get_all_columns(self):
-        return self.crud.get_all_columns()
-
-    def serialize_task_for_drag(self, task_data):
-        return self.crud.serialize_task_for_drag(task_data)
-
-    def deserialize_task_from_drag(self, raw):
-        return self.crud.deserialize_task_from_drag(raw)
-
-    # Методы из move сервиса
+    # ==========================================================
+    # Прокси для перемещения (бывший KanbanService)
+    # ==========================================================
     def move_task(self, task_id, new_column_name):
         return self.move.move_task(task_id, new_column_name)
 
@@ -114,9 +99,44 @@ class TasksService:
         return self.move.reorder_tasks_in_column(column_id, task_order)
 
     def validate_task_before_move(self, task_id, target_column_id):
-        return self.move.validate_task_before_move(task_id, target_column_id)
+        return self.move.validate_move(task_id, target_column_id)
 
-    # Методы из filter сервиса
+    def can_move_task(self, task_id, target_column_id):
+        return self.move.can_move_task(task_id, target_column_id)
+
+    def move_all_tasks_to_column(self, from_column_id, to_column_id):
+        return self.move.move_all_tasks_to_column(from_column_id, to_column_id)
+
+    # ==========================================================
+    # Прокси для канбан-доски
+    # ==========================================================
+    def get_column_by_id(self, column_id):
+        return self.kanban.get_column_by_id(column_id)
+
+    def get_columns_by_project(self, project_id):
+        return self.kanban.get_columns_by_project(project_id)
+
+    def get_template_columns(self):
+        return self.kanban.get_template_columns()
+
+    def get_tasks_by_column(self, column_id, include_archived=False):
+        return self.kanban.get_tasks_by_column(column_id, include_archived)
+
+    def get_tasks_grouped_by_column(self, project_id=None):
+        return self.kanban.get_tasks_grouped_by_column(project_id)
+
+    def get_column_statistics(self, column_id):
+        return self.kanban.get_column_statistics(column_id)
+
+    def reorder_column_tasks(self, column_id, task_order):
+        return self.kanban.reorder_column_tasks(column_id, task_order)
+
+    def get_task_position(self, task_id):
+        return self.kanban.get_task_position(task_id)
+
+    # ==========================================================
+    # Прокси для фильтрации
+    # ==========================================================
     def filter_tasks_by_priority(self, tasks, priority):
         return self.filter.filter_tasks_by_priority(tasks, priority)
 
@@ -132,7 +152,9 @@ class TasksService:
     def search_tasks(self, tasks, query):
         return self.filter.search_tasks(tasks, query)
 
-    # Методы из tag сервиса
+    # ==========================================================
+    # Прокси для тегов
+    # ==========================================================
     def get_all_tags(self, include_archived=False):
         return self.tag.get_all_tags(include_archived)
 
@@ -157,7 +179,9 @@ class TasksService:
     def add_tags_to_task(self, task_id, tag_names):
         return self.tag.add_tags_to_task(task_id, tag_names)
 
-    # Методы из stats сервиса
+    # ==========================================================
+    # Прокси для статистики
+    # ==========================================================
     def get_statistics(self):
         return self.stats.get_statistics()
 
@@ -173,7 +197,9 @@ class TasksService:
     def get_user_projects_with_stats(self, user_id):
         return self.stats.get_user_projects_with_stats(user_id)
 
-    # Методы из bulk сервиса
+    # ==========================================================
+    # Прокси для массовых операций
+    # ==========================================================
     def archive_all_tasks_in_column(self, column_id):
         return self.bulk.archive_all_tasks_in_column(column_id)
 

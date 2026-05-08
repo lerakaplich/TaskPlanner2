@@ -1,29 +1,32 @@
-# services/employee_service.py (обновленный фасад)
+# services/employee_service.py (исправленный фасад)
 
 from typing import List, Optional, Dict, Any
 from sqlalchemy.orm import Session
 from database import get_employees_session, get_tasks_session
-
-from models.employees import Division, Employee
-from .column_service import ColumnService
-from .employee_base_service import EmployeeBaseService
-from .employee_crud_service import EmployeeCrudService
-from .department_service import DepartmentService
-from .division_service import DivisionService
-from .tag_service import TagService
-
+from models.employees import Employee, Division
+from repositories.employee_repo import EmployeeRepo
+from repositories.employee_data_repo import EmployeeDataRepo
+from services.employee_service.column_service import ColumnService
+from services.employee_service.department_service import DepartmentService
+from services.employee_service.division_service import DivisionService
+from services.employee_service.employee_base_service import EmployeeBaseService
+from services.employee_service.tag_service import TagService
+from sqlalchemy import text
 
 class EmployeeService:
-    """Главный сервис для работы с сотрудниками, отделами, подразделениями, тегами и колонками (фасад)"""
+    """Главный сервис для работы с сотрудниками, отделами, подразделениями (фасад)"""
 
     def __init__(self, session: Session = None):
         self.session = session or get_employees_session()
         self.tasks_session = get_tasks_session()
         self._own_session = session is None
 
+        # Инициализация репозиториев
+        self.employee_repo = EmployeeRepo(self.session)
+        self.employee_data_repo = EmployeeDataRepo(self.tasks_session)
+
         # Инициализация подсервисов
         self.base = EmployeeBaseService(self.session)
-        self.employees = EmployeeCrudService(self.session)
         self.departments = DepartmentService(self.session)
         self.divisions = DivisionService(self.session)
         self.tags = TagService(self.tasks_session)
@@ -36,43 +39,284 @@ class EmployeeService:
             self.tasks_session.close()
 
     # =====================================================
-    # Прокси для сотрудников
+    # Вспомогательные методы преобразования
     # =====================================================
-    def get_all_employees(self, active_only: bool = True) -> List[Dict[str, Any]]:
-        return self.employees.get_all_employees(active_only)
+    def _employee_to_dict(self, employee: Employee) -> Dict[str, Any]:
+        """Преобразует модель Employee в словарь"""
+        if employee is None:
+            return {}
+
+        # Получаем данные из EmployeeData
+        emp_data = self.employee_data_repo.get_by_id(employee.id)
+
+        # Получаем названия отдела и подразделения
+        department_name = '—'
+        if employee.department_id:
+            try:
+                result = self.session.execute(
+                    text("SELECT name FROM departments WHERE id = :dept_id"),
+                    {'dept_id': employee.department_id}
+                ).fetchone()
+                if result:
+                    department_name = result[0]
+            except Exception:
+                pass
+
+        division_name = '—'
+        if employee.division_id:
+            try:
+                result = self.session.execute(
+                    text("SELECT name FROM divisions WHERE id = :div_id"),
+                    {'div_id': employee.division_id}
+                ).fetchone()
+                if result:
+                    division_name = result[0]
+            except Exception:
+                pass
+
+        return {
+            'id': employee.id,
+            'number': employee.number,
+            'last_name': employee.last_name,
+            'first_name': employee.first_name,
+            'middle_name': employee.middle_name,
+            'full_name': self.base._get_full_name(employee),
+            'position': employee.position,
+            'phone_number': employee.phone_number,
+            'work_number': employee.work_number,
+            'email': employee.email,
+            'chat_id': employee.chat_id,
+            'birth_date': employee.birth_date,
+            'department_id': employee.department_id,
+            'department_name': department_name,
+            'division_id': employee.division_id,
+            'division_name': division_name,
+            'is_active': emp_data.is_active if emp_data else True,
+            'role': emp_data.role.value if emp_data and emp_data.role else 'user',
+            'last_login': emp_data.last_login.isoformat() if emp_data and emp_data.last_login else None,
+        }
+
+    def _employee_to_card_dict(self, employee: Employee) -> Dict[str, Any]:
+        """Преобразует модель Employee в словарь для карточки"""
+        if employee is None:
+            return {}
+
+        # Получаем данные из EmployeeData
+        emp_data = self.employee_data_repo.get_by_id(employee.id)
+        role = emp_data.role.value if emp_data and emp_data.role else 'user'
+
+        # Получаем названия
+        department_name = '—'
+        if employee.department_id:
+            try:
+                result = self.session.execute(
+                    text("SELECT name FROM departments WHERE id = :dept_id"),
+                    {'dept_id': employee.department_id}
+                ).fetchone()
+                if result:
+                    department_name = result[0]
+            except Exception:
+                pass
+
+        division_name = '—'
+        if employee.division_id:
+            try:
+                result = self.session.execute(
+                    text("SELECT name FROM divisions WHERE id = :div_id"),
+                    {'div_id': employee.division_id}
+                ).fetchone()
+                if result:
+                    division_name = result[0]
+            except Exception:
+                pass
+
+        return {
+            'id': employee.id,
+            'last_name': employee.last_name or '',
+            'first_name': employee.first_name or '',
+            'middle_name': employee.middle_name or '',
+            'full_name': self.base._get_full_name(employee),
+            'position': employee.position or '—',
+            'phone_number': employee.phone_number or '',
+            'work_number': employee.work_number or '',
+            'email': employee.email or '',
+            'chat_id': employee.chat_id,
+            'birth_date': employee.birth_date,
+            'department_id': employee.department_id,
+            'department_name': department_name,
+            'division_id': employee.division_id,
+            'division_name': division_name,
+            'role': role,
+            'rights': role,
+            'is_active': emp_data.is_active if emp_data else True,
+        }
+
+    # =====================================================
+    # Прокси для сотрудников (синхронизация двух БД)
+    # =====================================================
+    def get_all_employees(self) -> List[Dict[str, Any]]:
+        """Получить всех сотрудников из БД employees с данными из EmployeeData"""
+        employees = self.employee_repo.get_all()
+        return [self._employee_to_dict(emp) for emp in employees]
 
     def get_employee_card_data(self, employee_id: int = None) -> Dict[str, Any]:
-        return self.employees.get_employee_card_data(employee_id)
+        """Возвращает данные сотрудника для карточки"""
+        try:
+            if employee_id is None:
+                employees = self.employee_repo.get_all()
+                return [self._employee_to_card_dict(emp) for emp in employees]
+            else:
+                employee = self.employee_repo.get_by_id(employee_id)
+                return self._employee_to_card_dict(employee) if employee else None
+        except Exception as e:
+            print(f"❌ Ошибка в get_employee_card_data: {e}")
+            return [] if employee_id is None else None
 
     def get_employee_full_info(self, employee_id: int) -> Optional[Dict[str, Any]]:
-        return self.employees.get_employee_full_info(employee_id)
+        """Возвращает полную информацию о сотруднике для диалога редактирования"""
+        try:
+            employee = self.employee_repo.get_by_id(employee_id)
+            if not employee:
+                return None
+
+            emp_data = self.employee_data_repo.get_by_id(employee_id)
+            role = emp_data.role.value if emp_data and emp_data.role else 'user'
+
+            return {
+                'id': employee.id,
+                'last_name': employee.last_name,
+                'first_name': employee.first_name,
+                'middle_name': employee.middle_name,
+                'birth_date': employee.birth_date,
+                'division_id': employee.division_id,
+                'department_id': employee.department_id,
+                'position': employee.position,
+                'rights': role,
+                'phone_number': employee.phone_number,
+                'work_number': employee.work_number,
+                'email': employee.email,
+            }
+        except Exception as e:
+            print(f"❌ Ошибка в get_employee_full_info: {e}")
+            return None
 
     def get_employee_by_id(self, employee_id: int) -> Optional[Dict[str, Any]]:
-        return self.employees.get_employee_by_id(employee_id)
+        employee = self.employee_repo.get_by_id(employee_id)
+        return self._employee_to_dict(employee) if employee else None
 
     def get_employee_by_chat_id(self, chat_id: int) -> Optional[Dict[str, Any]]:
-        return self.employees.get_employee_by_chat_id(chat_id)
+        employee = self.employee_repo.get_by_chat_id(chat_id)
+        return self._employee_to_dict(employee) if employee else None
 
     def search_employees(self, query: str) -> List[Dict[str, Any]]:
-        return self.employees.search_employees(query)
+        employees = self.employee_repo.search(query)
+        return [self._employee_to_dict(emp) for emp in employees]
 
     def create_employee(self, data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-        return self.employees.create_employee(data)
+        """Создаёт сотрудника в обеих БД"""
+        try:
+            # 1. Создаём запись в employees
+            clean_data = {k: v for k, v in data.items()
+                          if k not in ['rights', 'is_active', 'role']}
+            employee = self.employee_repo.create(clean_data)
+
+            # 2. Создаём запись в EmployeeData (taskplanner)
+            role = data.get('rights') or data.get('role', 'user')
+            from models.employees import RoleEnum
+            role_value = RoleEnum(role) if isinstance(role, str) else role
+            self.employee_data_repo.create(employee.id, role_value)
+
+            # 3. Коммитим обе транзакции
+            self.session.commit()
+            self.tasks_session.commit()
+
+            return self._employee_to_dict(employee)
+        except Exception as e:
+            self.session.rollback()
+            self.tasks_session.rollback()
+            print(f"❌ Ошибка при создании сотрудника: {e}")
+            return None
 
     def update_employee(self, employee_id: int, data: Dict[str, Any]) -> bool:
-        return self.employees.update_employee(employee_id, data)
+        """Обновляет сотрудника в обеих БД"""
+        try:
+            # 1. Обновляем в employees
+            employee = self.employee_repo.update(employee_id, data)
+            if not employee:
+                return False
+            self.session.commit()
+
+            # 2. Обновляем в EmployeeData (taskplanner)
+            if 'role' in data and data['role']:
+                from models.employees import RoleEnum
+                role_value = data['role']
+                if isinstance(role_value, str):
+                    role_value = RoleEnum(role_value)
+                self.employee_data_repo.update_role(employee_id, role_value)
+
+            if 'is_active' in data and data['is_active'] is not None:
+                self.employee_data_repo.set_active(employee_id, data['is_active'])
+
+            self.tasks_session.commit()
+            return True
+        except Exception as e:
+            self.session.rollback()
+            self.tasks_session.rollback()
+            print(f"❌ Ошибка при обновлении сотрудника: {e}")
+            return False
 
     def delete_employee(self, employee_id: int) -> bool:
-        return self.employees.delete_employee(employee_id)
+        """Мягкое удаление сотрудника (только в EmployeeData)"""
+        try:
+            result = self.employee_data_repo.set_active(employee_id, False)
+            if result:
+                self.tasks_session.commit()
+            return result
+        except Exception as e:
+            self.tasks_session.rollback()
+            print(f"❌ Ошибка при удалении сотрудника: {e}")
+            return False
 
-    def delete_employee_by_id(self, employee_id: int) -> bool:
-        return self.employees.delete_employee(employee_id)
+    def hard_delete_employee(self, employee_id: int) -> bool:
+        """Полное удаление сотрудника из обеих БД"""
+        try:
+            # 1. Удаляем из EmployeeData (taskplanner)
+            # Сначала проверяем, есть ли записи
+            emp_data = self.employee_data_repo.get_by_id(employee_id)
+            if emp_data:
+                self.tasks_session.delete(emp_data)
+
+            # 2. Удаляем из employees
+            result = self.employee_repo.hard_delete(employee_id)
+
+            # 3. Коммитим
+            self.session.commit()
+            self.tasks_session.commit()
+            return result
+        except Exception as e:
+            self.session.rollback()
+            self.tasks_session.rollback()
+            print(f"❌ Ошибка при полном удалении сотрудника: {e}")
+            return False
 
     def save_employee_from_dialog(self, employee_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-        return self.employees.save_employee_from_dialog(employee_data)
+        """Сохраняет сотрудника из диалога (создание или обновление)"""
+        employee_id = employee_data.get('id')
+
+        if employee_id:
+            success = self.update_employee(employee_id, employee_data)
+            if success:
+                return self.get_employee_card_data(employee_id)
+            return None
+        else:
+            return self.create_employee(employee_data)
+
+    def delete_employee_by_id(self, employee_id: int) -> bool:
+        """Удаляет сотрудника по ID (мягкое удаление)"""
+        return self.delete_employee(employee_id)
 
     # =====================================================
-    # Прокси для отделов
+    # Прокси для отделов (только employees)
     # =====================================================
     def get_all_departments(self) -> List[Dict[str, Any]]:
         return self.departments.get_all_departments()
@@ -110,7 +354,7 @@ class EmployeeService:
         return self.departments.validate_department_form(form_data)
 
     # =====================================================
-    # Прокси для подразделений
+    # Прокси для подразделений (только employees)
     # =====================================================
     def get_all_divisions(self) -> List[Dict[str, Any]]:
         return self.divisions.get_all_divisions()
@@ -143,7 +387,7 @@ class EmployeeService:
         return self.divisions.validate_division_form(form_data)
 
     # =====================================================
-    # Прокси для тегов
+    # Прокси для тегов (только taskplanner)
     # =====================================================
     def get_all_tags(self, include_archived: bool = False) -> List[Dict[str, Any]]:
         return self.tags.get_all_tags(include_archived)
@@ -170,7 +414,7 @@ class EmployeeService:
         return self.tags.add_tag_usage_count(tags)
 
     # =====================================================
-    # Прокси для колонок
+    # Прокси для колонок (только taskplanner)
     # =====================================================
     def get_all_template_columns(self) -> List[Dict[str, Any]]:
         return self.columns.get_template_columns()
@@ -200,7 +444,7 @@ class EmployeeService:
         }
 
     def get_all_employees_for_selector(self) -> List[Dict[str, Any]]:
-        employees = self.session.query(Employee).all()
+        employees = self.employee_repo.get_all()
         result = []
         for emp in employees:
             full_name = self.base._get_full_name(emp)
@@ -277,7 +521,7 @@ class EmployeeService:
         return ''.join(secrets.choice(string.ascii_letters + string.digits) for _ in range(8))
 
     def get_employee_full_name(self, employee_id: int) -> str:
-        employee = self.employees.repo.get_by_id(employee_id)
+        employee = self.employee_repo.get_by_id(employee_id)
         if employee:
             return self.base._get_full_name(employee)
         return 'Неизвестный'
@@ -306,7 +550,7 @@ class EmployeeService:
             return {'success': False, 'message': str(e)}
 
     # =====================================================
-    # Методы каскадного удаления (оставляем в фасаде)
+    # Методы каскадного удаления
     # =====================================================
     def has_employees_in_department(self, department_id: int) -> bool:
         return self.departments.has_employees_in_department(department_id)

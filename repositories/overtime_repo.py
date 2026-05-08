@@ -46,6 +46,37 @@ class OvertimeRepo:
         ).order_by(EmployeeNote.overtime_date.desc())
         return list(self.session.scalars(stmt))
 
+    def get_by_id(self, overtime_id: int) -> Optional[EmployeeNote]:
+        """Получить переработку по ID"""
+        stmt = select(EmployeeNote).where(EmployeeNote.id == overtime_id)
+        return self.session.scalar(stmt)
+
+    def update(self, overtime_id: int, employee_id: int, overtime_date: date,
+               note_text: Optional[str] = None,
+               overtime_start: Optional[time] = None,
+               overtime_end: Optional[time] = None) -> Optional[EmployeeNote]:
+        """Обновить переработку"""
+        note = self.get_by_id(overtime_id)
+        if not note:
+            return None
+
+        note.employee_id = employee_id
+        note.overtime_date = overtime_date
+        note.note_text = note_text
+        note.overtime_start = overtime_start
+        note.overtime_end = overtime_end
+
+        self.session.flush()
+        return note
+
+    def delete(self, overtime_id: int) -> bool:
+        """Удалить переработку"""
+        note = self.get_by_id(overtime_id)
+        if note:
+            self.session.delete(note)
+            return True
+        return False
+
     def create(self, employee_id: int, overtime_date: date, note_text: Optional[str] = None,
                overtime_start: Optional[time] = None, overtime_end: Optional[time] = None) -> EmployeeNote:
         """Создать новую запись о переработке"""

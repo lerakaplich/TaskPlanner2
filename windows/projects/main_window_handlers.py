@@ -2,6 +2,8 @@
 
 from PyQt6.QtWidgets import QMessageBox, QDialog, QSizePolicy, QSpacerItem
 from PyQt6.QtCore import QObject, pyqtSignal
+
+from services.employee_service.employee_service import EmployeeService
 from windows.projects.project_card import ProjectCard
 from windows.projects.project_edit_dialog import ProjectEditDialog
 from windows.projects.project_creation_dialog import ProjectCreationDialog
@@ -269,9 +271,15 @@ class NavigationHandler:
 
     def get_overtime_page(self):
         from windows.overtime.overtime_page import OvertimePage
+
+        employee_service = EmployeeService()
+
         return self._get_or_create_page(
             'overtime',
-            lambda: OvertimePage(service=self.main.overtime_service),
+            lambda: OvertimePage(
+                service=self.main.overtime_service,
+                employee_service=employee_service
+            ),
             self.PAGE_OVERTIME
         )
 

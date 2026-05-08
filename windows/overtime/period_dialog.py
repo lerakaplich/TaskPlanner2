@@ -10,8 +10,10 @@ from PyQt6 import uic
 class PeriodDialog(QDialog):
     """Диалог выбора периода экспорта с фильтрами"""
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, employee_service=None):
         super().__init__(parent)
+
+        self.employee_service = employee_service
 
         ui_path = os.path.join(
             os.path.dirname(__file__),
@@ -22,83 +24,81 @@ class PeriodDialog(QDialog):
 
         self.setWindowTitle("Выбор периода экспорта")
 
-        # Даты по умолчанию
         today = QDate.currentDate()
         self.dateStart.setDate(today.addMonths(-1))
         self.dateEnd.setDate(today)
 
-        # Инициализация фильтров
         self.init_filters()
 
-        # Сигналы
         self.btnOk.clicked.connect(self.accept)
         self.comboDivision.currentIndexChanged.connect(self.on_division_changed)
 
     def init_filters(self):
-        """Инициализация фильтров"""
-        # Фильтр по подразделениям (выбираем сначала)
+        self.divisions_data = []
+        if self.employee_service:
+            self.divisions_data = self.employee_service.get_all_divisions()
+
         self.comboDivision.clear()
         self.comboDivision.addItem("Все подразделения", None)
-        self.comboDivision.addItem("Разработка", "Разработка")
-        self.comboDivision.addItem("Тестирование", "Тестирование")
-        self.comboDivision.addItem("Инфраструктура", "Инфраструктура")
-        self.comboDivision.addItem("Аналитика", "Аналитика")
-        self.comboDivision.addItem("Управление", "Управление")
-        self.comboDivision.addItem("Дизайн", "Дизайн")
-        self.comboDivision.addItem("Бухгалтерия", "Бухгалтерия")
-        self.comboDivision.addItem("Администрирование", "Администрирование")
-        self.comboDivision.setCurrentIndex(0)
-        self.comboDivision.setEnabled(True)
 
-        # Фильтр по отделам (зависит от выбранного подразделения)
+        for div in self.divisions_data:
+            self.comboDivision.addItem(div.get('name', 'Без названия'), div.get('id'))
+
+        self.comboDivision.setCurrentIndex(0)
+
         self.comboDepartment.clear()
-        self.comboDepartment.addItem("Сначала выберите подразделение", None)
+        self.comboDepartment.addItem("Все отделы", None)
         self.comboDepartment.setEnabled(False)
 
     def on_division_changed(self, index):
-        """Обработчик изменения выбранного подразделения"""
-        division = self.comboDivision.currentData()
-
-        if division is None:
+        division_id = self.comboDivision.currentData()
+        if division_id is None:
             self.comboDepartment.setEnabled(False)
             self.comboDepartment.clear()
-            self.comboDepartment.addItem("Сначала выберите подразделение", None)
+            self.comboDepartment.addItem("Все отделы", None)
             return
 
-        # Загружаем отделы для выбранного подразделения
-        self.load_departments(division)
+        self._load_departments(division_id)
 
-    def load_departments(self, division: str):
-        """Загружает отделы для выбранного подразделения"""
+    def _load_departments(self, division_id: int):
         self.comboDepartment.clear()
         self.comboDepartment.addItem("Все отделы", None)
 
-        # Соответствие подразделений отделам
-        departments_map = {
-            "Разработка": ["IT", "Управление проектами"],
-            "Тестирование": ["IT", "Управление проектами"],
-            "Инфраструктура": ["IT", "Администрация"],
-            "Аналитика": ["Управление проектами", "Финансы"],
-            "Управление": ["Руководство", "Управление проектами"],
-            "Дизайн": ["Маркетинг"],
-            "Бухгалтерия": ["Финансы"],
-            "Администрирование": ["Администрация"]
-        }
-
-        departments = departments_map.get(division, [])
-        for dept in departments:
-            self.comboDepartment.addItem(dept, dept)
+        if self.employee_service:
+            all_departments = self.employee_service.get_all_departments()
+            filtered = [d for d in all_departments if d.get('division_id') == division_id]
+            for dept in filtered:
+                self.comboDepartment.addItem(dept.get('name', 'Без названия'), dept.get('id'))
 
         self.comboDepartment.setEnabled(True)
         self.comboDepartment.setCurrentIndex(0)
 
     def get_period(self) -> Tuple[QDate, QDate]:
-        """Возвращает выбранные даты: (start_date, end_date)"""
         return self.dateStart.date(), self.dateEnd.date()
 
     def get_filters(self) -> dict:
-        """Возвращает выбранные фильтры"""
+        division_id = self.comboDivision.currentData()
+        department_id = self.comboDepartment.currentData() if self.comboDepartment.isEnabled() else None
+
+        division_name = None
+        department_name = None
+
+        if division_id:
+            for div in self.divisions_data:
+                if div.get('id') == division_id:
+                    division_name = div.get('name')
+                    break
+
+        if department_id and self.employee_service:
+            departments = self.employee_service.get_all_departments()
+            for dept in departments:
+                if dept.get('id') == department_id:
+                    department_name = dept.get('name')
+                    break
+
         return {
-            'division': self.comboDivision.currentData(),
-            'department': self.comboDepartment.currentData() if self.comboDepartment.isEnabled() else None
+            'division_id': division_id,
+            'division': division_name,
+            'department_id': department_id,
+            'department': department_name
         }

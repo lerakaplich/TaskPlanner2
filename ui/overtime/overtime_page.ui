@@ -6,7 +6,7 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>1487</width>
+    <width>1578</width>
     <height>800</height>
    </rect>
   </property>
@@ -77,6 +77,20 @@ QPushButton#btnAddOvertime:pressed {
     background-color: #7a6a50;
 }
 
+
+QPushButton#btnImport {
+    background-color: #ccab6e;
+    color: white;
+    font-size: 16px;
+}
+QPushButton#btnImport:hover {
+    background-color: #998664;
+}
+QPushButton#btnImport:pressed {
+    background-color: #7a6a50;
+}
+
+
 QPushButton#btnExport {
     background-color: #1B232A;
     color: white;
@@ -128,13 +142,14 @@ QPushButton#btnSelectPeriod:hover {
 QPushButton#btnSelectPeriod:pressed {
     background-color: #B8B8B5;
 }
+
 QComboBox {
     border: 2px solid #E0E0E0;
     border-radius: 8px;
-    padding: 6px 12px 6px 12px;  /* уменьшили сверху/снизу с 8px → 6px */
+    padding: 6px 12px 6px 12px;
     font-size: 14px;
     background-color: white;
-    height: 41px;               /* явно фиксируем */
+    height: 41px;
 }
 QComboBox:focus {
     border: 2px solid #ccab6e;
@@ -143,6 +158,7 @@ QComboBox::drop-down {
     border: none;
     padding-right: 10px;
 }
+
 /* Поля ввода */
 QDateEdit {
     border: 2px solid #E0E0E0;
@@ -153,12 +169,8 @@ QDateEdit {
     min-height: 41px;
     max-height: 41px;
 }
-QComboBox:focus, QDateEdit:focus {
+QDateEdit:focus {
     border: 2px solid #ccab6e;
-}
-QComboBox::drop-down {
-    border: none;
-    padding-right: 10px;
 }
 
 /* Чекбокс */
@@ -180,6 +192,30 @@ QCheckBox::indicator:checked {
     border: 2px solid #ccab6e;
     border-radius: 4px;
     background-color: #ccab6e;
+}
+
+/* Итоговая панель - скромный стиль */
+QFrame#totalFrame {
+    background-color: transparent;
+    border-top: 1px solid #E0E0E0;
+    margin-top: 5px;
+}
+
+QLabel#totalLabel {
+    font-size: 13px;
+    font-weight: normal;
+    color: #888;
+}
+
+QLabel#totalHoursValue {
+    font-size: 14px;
+    font-weight: normal;
+    color: #666;
+}
+
+QLabel#totalHoursUnit {
+    font-size: 13px;
+    color: #888;
 }
 
 /* Фрейм фильтров */
@@ -219,22 +255,24 @@ QScrollBar::handle:vertical {
     border-radius: 4px;
     min-height: 20px;
 }
-            QScrollBar:horizontal {
-                border: none;
-                background: #F5F5F5;
-                height: 8px;
-                margin: 0px;
-                border-radius: 4px;
-            }
-            QScrollBar::handle:horizontal {
-                background: #c1c1c1;
-                border-radius: 4px;
-                min-width: 20px;
-            }
+QScrollBar:horizontal {
+    border: none;
+    background: #F5F5F5;
+    height: 8px;
+    margin: 0px;
+    border-radius: 4px;
+}
+QScrollBar::handle:horizontal {
+    background: #c1c1c1;
+    border-radius: 4px;
+    min-width: 20px;
+}
 QScrollBar::add-line, QScrollBar::sub-line {
     border: none;
     background: none;
-}</string>
+}
+
+</string>
   </property>
   <layout class="QVBoxLayout" name="verticalLayout">
    <item>
@@ -398,14 +436,21 @@ QScrollBar::add-line, QScrollBar::sub-line {
       <item>
        <widget class="QPushButton" name="btnAddOvertime">
         <property name="text">
-         <string>+ Добавить переработку</string>
+         <string>Добавить переработку</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QPushButton" name="btnImport">
+        <property name="text">
+         <string>Загрузить данные о переработках</string>
         </property>
        </widget>
       </item>
       <item>
        <widget class="QPushButton" name="btnExport">
         <property name="text">
-         <string>Экспорт в Excel</string>
+         <string>Экспорт</string>
         </property>
        </widget>
       </item>
@@ -423,6 +468,79 @@ QScrollBar::add-line, QScrollBar::sub-line {
       </attribute>
       <layout class="QVBoxLayout" name="verticalLayout_3">
        <item>
+        <widget class="QFrame" name="totalFrame">
+         <layout class="QHBoxLayout" name="horizontalLayoutTotal">
+          <property name="leftMargin">
+           <number>15</number>
+          </property>
+          <property name="topMargin">
+           <number>10</number>
+          </property>
+          <property name="rightMargin">
+           <number>15</number>
+          </property>
+          <property name="bottomMargin">
+           <number>10</number>
+          </property>
+          <item>
+           <widget class="QLabel" name="totalLabel">
+            <property name="text">
+             <string>Итого часов переработок:</string>
+            </property>
+            <property name="alignment">
+             <set>Qt::AlignmentFlag::AlignRight|Qt::AlignmentFlag::AlignTrailing|Qt::AlignmentFlag::AlignVCenter</set>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QLabel" name="totalHoursValue">
+            <property name="minimumSize">
+             <size>
+              <width>50</width>
+              <height>0</height>
+             </size>
+            </property>
+            <property name="maximumSize">
+             <size>
+              <width>50</width>
+              <height>16777215</height>
+             </size>
+            </property>
+            <property name="text">
+             <string>0.0</string>
+            </property>
+            <property name="alignment">
+             <set>Qt::AlignmentFlag::AlignCenter</set>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QLabel" name="totalHoursUnit">
+            <property name="text">
+             <string>ч.</string>
+            </property>
+            <property name="alignment">
+             <set>Qt::AlignmentFlag::AlignLeading|Qt::AlignmentFlag::AlignLeft|Qt::AlignmentFlag::AlignVCenter</set>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <spacer name="totalRightSpacer">
+            <property name="orientation">
+             <enum>Qt::Orientation::Horizontal</enum>
+            </property>
+            <property name="sizeHint" stdset="0">
+             <size>
+              <width>40</width>
+              <height>20</height>
+             </size>
+            </property>
+           </spacer>
+          </item>
+         </layout>
+        </widget>
+       </item>
+       <item>
         <widget class="QScrollArea" name="scrollAreaMy">
          <property name="widgetResizable">
           <bool>true</bool>
@@ -432,8 +550,8 @@ QScrollBar::add-line, QScrollBar::sub-line {
            <rect>
             <x>0</x>
             <y>0</y>
-            <width>1449</width>
-            <height>546</height>
+            <width>1540</width>
+            <height>480</height>
            </rect>
           </property>
           <layout class="QGridLayout" name="gridLayoutMy">
@@ -473,7 +591,7 @@ QScrollBar::add-line, QScrollBar::sub-line {
            <rect>
             <x>0</x>
             <y>0</y>
-            <width>1449</width>
+            <width>1540</width>
             <height>546</height>
            </rect>
           </property>
