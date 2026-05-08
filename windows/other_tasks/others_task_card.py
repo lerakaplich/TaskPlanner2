@@ -208,7 +208,11 @@ class OthersTaskCard(TaskCard):
         else:
             task_json = json.dumps(self.task_data, ensure_ascii=False, default=str)
 
-        mime_data.setText(task_json)
+        # Исправлено: преобразуем bytes в строку, если нужно
+        if isinstance(task_json, bytes):
+            task_json = task_json.decode("utf-8")
+
+        mime_data.setText(task_json)  # Теперь передаём строку
         mime_data.setData("application/x-task", task_json.encode("utf-8"))
         drag.setMimeData(mime_data)
 

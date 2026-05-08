@@ -21,6 +21,29 @@ class TasksCrudService:
         self.current_user = current_user
         self.mode = mode
 
+    def get_all_columns(self) -> List[Dict]:
+        """Получить все уникальные колонки"""
+        from models.projects import BoardColumn
+        from sqlalchemy import select
+
+        stmt = select(BoardColumn).order_by(BoardColumn.position)
+        all_columns = list(self.db_session.scalars(stmt))
+
+        columns_by_name = {}
+        for col in all_columns:
+            if col.name not in columns_by_name:
+                columns_by_name[col.name] = {
+                    "id": col.id,
+                    "name": col.name,
+                    "color": col.color if col.color else "#2196F3",
+                    "position": col.position,
+                    "is_done": col.is_done_column,
+                    "project_ids": []
+                }
+            columns_by_name[col.name]["project_ids"].append(col.project_id)
+
+        return sorted(columns_by_name.values(), key=lambda x: x["position"])
+
     def get_task_by_id(self, task_id: int) -> Optional[Dict]:
         """Получить задачу по ID"""
         task_orm = self.repo.get_by_id(task_id)

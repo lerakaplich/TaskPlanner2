@@ -55,14 +55,18 @@ class TasksMoveService:
         """Переместить задачу в колонку по ID"""
         task = self.repo.get_by_id(task_id)
         if not task:
+            print(f"❌ move_task_to_column: Задача {task_id} не найдена")
             return None
 
+        print(f"🔧 move_task_to_column: задача={task_id}, target_col={target_column_id}, current_col={task.column_id}")
+
         if task.column_id == target_column_id:
+            print("ℹ️ Задача уже в целевой колонке")
             return None
 
         can_move, error = self.validate_move(task_id, target_column_id)
         if not can_move:
-            print(f"❌ Невозможно переместить задачу: {error}")
+            print(f"❌ Валидация не прошла: {error}")
             return None
 
         task.column_id = target_column_id

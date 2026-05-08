@@ -96,6 +96,9 @@ class MyTasksPage(QWidget):
             self.column_widgets.append(column_widget)
             columns_layout.addWidget(column_widget)
 
+            # === ПОДКЛЮЧЕНИЕ СИГНАЛА ===
+            column_widget.task_dropped.connect(self._on_task_dropped)
+
         columns_layout.addStretch()
         scroll_area.setWidget(columns_container)
 
@@ -182,22 +185,44 @@ class MyTasksPage(QWidget):
     # ==========================================================
 
     def update_task_card(self, updated_task: Dict):
-        """Обновляет карточку задачи в UI"""
+        """Обновляет карточку задачи в UI после перемещения"""
+        task_id = updated_task.get("id")
+        new_status = updated_task.get("status")
+
+        print(f"🔄 Обновление UI для задачи {task_id} → '{new_status}'")
+
+        # Ищем карточку во всех колонках
+        found = False
         for column in self.column_widgets:
-            for card in column.get_tasks():
-                if hasattr(card, 'task_id') and card.task_id == updated_task["id"]:
+            for card in column.get_tasks()[:]:  # копия списка
+                if getattr(card, 'task_id', None) == task_id:
+                    found = True
                     old_status = card.task_data.get("status")
-                    new_status = updated_task.get("status")
 
                     if old_status != new_status:
+                        print(f"   Перемещаем виджет из '{old_status}' в '{new_status}'")
                         column.remove_task(card)
+
+                        # Добавляем в новую колонку
                         new_column = self.columns.get(new_status)
                         if new_column:
                             new_column.add_task(card)
-                            print(f"✅ Задача '{card.task_data.get('title')}' перемещена в колонку '{new_status}'")
+                            print(f"   ✅ Карточка добавлена в колонку '{new_status}'")
+                        else:
+                            print(f"   ⚠️ Колонка '{new_status}' не найдена в self.columns")
 
+                    # Обновляем данные
                     card.update_task_data(updated_task)
-                    return
+                    break  # выходим из внутреннего цикла
+
+            if found:
+                break
+
+        if not found:
+            print(f"⚠️ Карточка задачи {task_id} не найдена в UI — перезагружаем все задачи")
+            self.load_tasks()  # fallback
+
+        self.update_statistics()
 
     def update_statistics(self):
         """Обновляет статистику"""
@@ -281,8 +306,50 @@ class MyTasksPage(QWidget):
                     card.hide()
 
     # ==========================================================
-    # Drag & Drop
+    # Drag & Drop — ИСПРАВЛЕННАЯ ВЕРСИЯ
     # ==========================================================
+
+    def _on_task_dropped(self, task_id: int, target_column_id: int):
+        """Обработчик drop из KanbanColumn"""
+        print(f"🔄 Получен drop: задача {task_id} → колонка ID={target_column_id}")
+
+        target_column = None
+        for col in self.column_widgets:
+            if col.column_id == target_column_id:
+                target_column = col
+                break
+
+        if not target_column:
+            print("❌ Колонка не найдена по ID")
+            return
+
+        new_status = target_column.column_name
+        print(f"🎯 Целевая колонка: '{new_status}' (ID={target_column_id})")
+
+        task = self.service.get_task_by_id(task_id)
+        if not task:
+            print("❌ Задача не найдена в БД")
+            return
+
+        old_status = task.get("status")
+        if old_status == new_status:
+            print("ℹ️ Уже в этой колонке")
+            return
+
+        result = self.service.move_task_to_column(task_id, target_column_id)
+
+        if result:
+            self.update_task_card(result)
+            self.update_statistics()
+            self.task_moved.emit()
+
+            # === КРИТИЧНАЯ СТРАХОВКА ===
+            from PyQt6.QtCore import QTimer
+            QTimer.singleShot(150, self.load_tasks)  # перезагружаем UI через 150мс
+
+            print("✅ Задача успешно перемещена")
+        else:
+            print("❌ Не удалось переместить задачу")
 
     def dragEnterEvent(self, event: QDragEnterEvent):
         if event.mimeData().hasFormat("application/x-task"):
@@ -293,21 +360,55 @@ class MyTasksPage(QWidget):
             event.acceptProposedAction()
 
     def dropEvent(self, event: QDropEvent):
+        mime_data = event.mimeData()
+        if not mime_data.hasFormat("application/x-task"):
+            event.ignore()
+            return
+
         data = self.service.deserialize_task_from_drag(
-            event.mimeData().data("application/x-task")
+            mime_data.data("application/x-task")
         )
         if not data:
             event.ignore()
             return
 
-        target_column = self.get_target_column(event.position().toPoint())
-        if not target_column:
+        task_id = data.get("id")
+        if not task_id:
             event.ignore()
             return
 
-        task_id = data.get("id")
-        old_status = data.get("status")
+        # === КЛЮЧЕВОЕ ИСПРАВЛЕНИЕ: используем global позицию ===
+        global_pos = self.mapToGlobal(event.position().toPoint())
+
+        target_column = None
+        for column in self.column_widgets:
+            # Преобразуем глобальную позицию в координаты колонки
+            column_pos = column.mapFromGlobal(global_pos)
+            if column.rect().contains(column_pos):
+                target_column = column
+                break
+
+        if not target_column:
+            # Попробуем найти через viewport scroll area (дополнительная страховка)
+            for column in self.column_widgets:
+                if column.isVisible():
+                    # Проверяем через parent hierarchy
+                    try:
+                        if column.geometry().contains(
+                                column.mapFromGlobal(global_pos)
+                        ):
+                            target_column = column
+                            break
+                    except:
+                        continue
+
+        if not target_column:
+            print("⚠️ Не удалось определить целевую колонку")
+            event.ignore()
+            return
+
         new_status = target_column.column_name
+        old_status = data.get("status")
 
         if old_status == new_status:
             event.ignore()
@@ -315,20 +416,13 @@ class MyTasksPage(QWidget):
 
         print(f"🔄 Перемещение задачи {task_id}: {old_status} -> {new_status}")
 
-        # Используем метод из TasksMoveService
         result = self.service.move_task(task_id, new_status)
         if result:
-            old_column_name, task = result
-            self.update_task_card(task)
+            old_column_name, updated_task = result
+            self.update_task_card(updated_task)
             self.update_statistics()
             self.task_moved.emit()
             event.acceptProposedAction()
         else:
+            print("❌ Сервис не смог переместить задачу")
             event.ignore()
-
-    def get_target_column(self, pos: QPoint):
-        """Определяет колонку, на которую произошёл сброс"""
-        for column in self.column_widgets:
-            if column.geometry().contains(pos):
-                return column
-        return None

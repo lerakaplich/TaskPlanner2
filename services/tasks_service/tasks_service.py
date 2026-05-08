@@ -1,6 +1,6 @@
 # services/tasks_service/tasks_service.py
 
-from typing import Dict, Optional
+from typing import Dict, Optional, List
 from services.tasks_service.tasks_crud_service import TasksCrudService
 from services.tasks_service.tasks_move_service import TasksMoveService
 from services.tasks_service.tasks_filter_service import TasksFilterService
@@ -217,3 +217,35 @@ class TasksService:
 
     def bulk_assign_to(self, task_ids, assignee_id):
         return self.bulk.bulk_assign_to(task_ids, assignee_id)
+
+    def get_columns_for_board(self) -> List[Dict]:
+        """Получить колонки для доски (адаптер для совместимости)"""
+        return self.get_all_columns()
+
+    def get_all_columns(self) -> List[Dict]:
+        """Получить все уникальные колонки"""
+        return self.crud.get_all_columns()
+
+    def get_column_data(self) -> List[Dict]:
+        """Получить данные колонок для UI"""
+        return self.crud.get_column_data()
+
+    def serialize_task_for_drag(self, task_data: Dict) -> bytes:
+        """Сериализовать задачу для Drag & Drop"""
+        import json
+        return json.dumps(task_data, ensure_ascii=False, default=str).encode("utf-8")
+
+    def deserialize_task_from_drag(self, data: bytes) -> Optional[Dict]:
+        """Десериализовать задачу из Drag & Drop"""
+        import json
+        if not data:
+            return None
+        try:
+            return json.loads(data.decode("utf-8"))
+        except Exception as e:
+            print(f"❌ Ошибка десериализации: {e}")
+            return None
+
+    def delete_task_by_id(self, task_id: int) -> bool:
+        """Удалить задачу по ID (алиас для delete_task)"""
+        return self.delete_task(task_id)

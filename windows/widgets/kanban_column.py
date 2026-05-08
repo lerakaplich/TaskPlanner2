@@ -165,7 +165,10 @@ class KanbanColumn(QFrame):
         """Удаляет карточку задачи из колонки"""
         if task_card in self.task_cards:
             self.task_cards.remove(task_card)
+
         self.tasks_layout.removeWidget(task_card)
+        task_card.setParent(None)  # ← важно
+        task_card.hide()  # ← важно
 
     def clear_tasks(self):
         """Очищает все карточки из колонки"""
@@ -232,16 +235,20 @@ class KanbanColumn(QFrame):
 
         try:
             import json
-            task_data = json.loads(event.mimeData().data("application/x-task").data().decode())
+            task_data = json.loads(
+                event.mimeData().data("application/x-task").data().decode('utf-8')
+            )
             task_id = task_data.get("id")
 
             if task_id:
+                # Главный сигнал для страницы
                 self.task_dropped.emit(task_id, self.column_id)
                 event.acceptProposedAction()
+                print(f"📥 Drop принят в колонку '{self.column_name}' (task_id={task_id})")
             else:
                 event.ignore()
         except Exception as e:
-            print(f"❌ Ошибка обработки drop: {e}")
+            print(f"❌ Ошибка обработки drop в KanbanColumn: {e}")
             event.ignore()
 
     def sizeHint(self):
