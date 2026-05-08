@@ -1,6 +1,6 @@
 # windows/widgets/kanban_column.py
 
-from PyQt6.QtWidgets import QFrame, QVBoxLayout, QHBoxLayout, QLabel, QScrollArea, QWidget
+from PyQt6.QtWidgets import QFrame, QVBoxLayout, QHBoxLayout, QLabel, QScrollArea, QWidget, QSizePolicy
 from PyQt6.QtCore import Qt, QSize, pyqtSignal, QMimeData
 from PyQt6.QtGui import QDragEnterEvent, QDropEvent, QDragMoveEvent
 
@@ -37,8 +37,11 @@ class KanbanColumn(QFrame):
             }
         """)
 
+        # Убираем фиксированную минимальную ширину - колонка будет
+        # подстраиваться под содержимое
         self.setMinimumWidth(280)
-        self.setMinimumHeight(400)
+        # Разрешаем расширение по ширине
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
 
         main_layout = QVBoxLayout()
         main_layout.setSpacing(8)
@@ -76,6 +79,8 @@ class KanbanColumn(QFrame):
                 padding: 5px;
             }
         """)
+        # Разрешаем заголовку расширяться
+        self.title_label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
         header_layout.addWidget(self.title_label)
 
         self.count_label = QLabel("0")
@@ -92,7 +97,6 @@ class KanbanColumn(QFrame):
         """)
         self.count_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         header_layout.addWidget(self.count_label)
-        header_layout.addStretch()
 
         header_widget.setLayout(header_layout)
         parent_layout.addWidget(header_widget)
@@ -120,10 +124,14 @@ class KanbanColumn(QFrame):
 
         self.tasks_container = QWidget()
         self.tasks_container.setStyleSheet("background-color: transparent;")
+        # Разрешаем контейнеру расширяться по ширине
+        self.tasks_container.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
 
         self.tasks_layout = QVBoxLayout(self.tasks_container)
         self.tasks_layout.setSpacing(8)
         self.tasks_layout.setContentsMargins(2, 2, 2, 2)
+        # Убираем фиксированную ширину - layout будет расширяться под карточки
+        self.tasks_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
 
         # Сохраняем ссылку на растяжение
         self._stretch = self.tasks_layout.addStretch()
@@ -139,6 +147,9 @@ class KanbanColumn(QFrame):
         """Добавляет карточку задачи в колонку"""
         if task_card is None:
             return
+
+        # Устанавливаем политику размера для карточки
+        task_card.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
 
         # Получаем индекс растяжения
         stretch_index = -1
@@ -160,6 +171,13 @@ class KanbanColumn(QFrame):
         task_card.show()
         task_card.updateGeometry()
         self.tasks_container.updateGeometry()
+
+        # Обновляем размер колонки
+        self.updateGeometry()
+
+        # Сообщаем родителю, что размер изменился
+        if self.parent():
+            self.parent().updateGeometry()
 
     def remove_task(self, task_card):
         """Удаляет карточку задачи из колонки"""
@@ -211,6 +229,30 @@ class KanbanColumn(QFrame):
 
         self.task_cards = task_widgets_order
 
+    def sizeHint(self):
+        """Возвращает предпочтительный размер колонки на основе максимальной ширины карточек"""
+        max_card_width = 0
+
+        # Находим максимальную ширину среди карточек
+        for card in self.task_cards:
+            if card:
+                card_width = card.sizeHint().width()
+                if card_width > max_card_width:
+                    max_card_width = card_width
+
+        # Если есть карточки, добавляем отступы
+        if max_card_width > 0:
+            # Ширина = максимальная ширина карточки + отступы (20px слева/справа)
+            width = max_card_width + 20
+        else:
+            width = 280  # минимальная ширина для пустой колонки
+
+        return QSize(width, 500)
+
+    def minimumSizeHint(self):
+        """Возвращает минимальный размер колонки"""
+        return QSize(280, 300)
+
     # ==========================================================
     # Drag & Drop
     # ==========================================================
@@ -250,6 +292,3 @@ class KanbanColumn(QFrame):
         except Exception as e:
             print(f"❌ Ошибка обработки drop в KanbanColumn: {e}")
             event.ignore()
-
-    def sizeHint(self):
-        return QSize(300, 500)
