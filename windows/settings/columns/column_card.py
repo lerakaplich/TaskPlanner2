@@ -1,9 +1,9 @@
+# windows/settings/columns/column_card.py
+
 from PyQt6 import uic
 from PyQt6.QtWidgets import QFrame, QSizePolicy
 from PyQt6.QtCore import pyqtSignal, Qt, QEvent
 import os
-
-from windows.widgets.color_picker_dialog import ColorPickerDialog
 
 
 class ColumnCard(QFrame):
@@ -27,7 +27,7 @@ class ColumnCard(QFrame):
         )
         uic.loadUi(ui_path, self)
 
-        # === Делаем цветной индикатор как в TagCard ===
+        # Делаем цветной индикатор
         if hasattr(self, 'colorIndicator'):
             self.colorIndicator.setFixedSize(20, 20)
             self.colorIndicator.setMinimumSize(20, 20)
@@ -59,22 +59,12 @@ class ColumnCard(QFrame):
     def eventFilter(self, obj, event: QEvent) -> bool:
         if obj == self.colorIndicator and event.type() == QEvent.Type.MouseButtonPress:
             if event.button() == Qt.MouseButton.LeftButton:
-                self.on_color_indicator_clicked()
+                self.color_changed.emit(self.column_id, self.column_data.get('color', '#ccab6e'))
                 return True
         return super().eventFilter(obj, event)
 
-    def on_color_indicator_clicked(self):
-        current_color = self.column_data.get('color', '#ccab6e')
-        dialog = ColorPickerDialog(current_color, self)
-
-        if dialog.exec():
-            new_color = dialog.get_selected_color()
-            if new_color and new_color != current_color:
-                self.update_color(new_color)
-                self.color_changed.emit(self.column_id, new_color)
-
     def update_color(self, new_color: str):
-        """Обновляем цвет + красим название колонки (как в тегах)"""
+        """Обновляем цвет + красим название колонки"""
         self.column_data['color'] = new_color
 
         if hasattr(self, 'colorIndicator'):
@@ -84,7 +74,6 @@ class ColumnCard(QFrame):
                 border: 1px solid #E0E0E0;
             """)
 
-        # ←←← Название тоже окрашивается (как в TagCard)
         if hasattr(self, 'nameLabel'):
             self.nameLabel.setStyleSheet(f"""
                 color: {new_color};
@@ -92,13 +81,20 @@ class ColumnCard(QFrame):
                 font-weight: bold;
             """)
 
+    def update_done_status(self, is_done: bool):
+        """Обновляет статус Done"""
+        self.column_data['is_done_column'] = is_done
+        if hasattr(self, 'doneCheckBox'):
+            self.doneCheckBox.blockSignals(True)
+            self.doneCheckBox.setChecked(is_done)
+            self.doneCheckBox.blockSignals(False)
+
     def fill_data(self):
-        """Заполняем данные + применяем цвет к названию"""
+        """Заполняем данные"""
         # Название
         if hasattr(self, 'nameLabel'):
             name = self.column_data.get('name', 'Колонка')
             self.nameLabel.setText(name)
-            # сразу красим
             color = self.column_data.get('color', '#ccab6e')
             self.nameLabel.setStyleSheet(f"""
                 color: {color};
@@ -123,6 +119,3 @@ class ColumnCard(QFrame):
                 background-color: {color};
                 border: 1px solid #E0E0E0;
             """)
-
-    def get_color(self):
-        return self.column_data.get('color', '#ccab6e')

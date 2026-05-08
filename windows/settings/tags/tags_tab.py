@@ -10,20 +10,19 @@ from services.tag_service import TagService
 
 
 class TagsTab(BaseTab):
-    """Вкладка для управления глобальными тегами (темами)"""
+    """Вкладка для управления темами (тегами)"""
 
     item_deleted = pyqtSignal(str, int)
     item_edited = pyqtSignal(str, dict)
     item_color_changed = pyqtSignal(int, str)
-    tag_added = pyqtSignal(dict)
+    item_added = pyqtSignal(str, dict)
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self.tags = []
-        self.session = None
         self.tag_service = None
+        self.session = None
 
-        # Скрываем фильтры (теги глобальные)
         self.hide_filters()
 
         if self.btnAdd:
@@ -31,91 +30,89 @@ class TagsTab(BaseTab):
             self.btnAdd.setObjectName("btnAddTag")
             self.btnAdd.clicked.connect(self.on_add_clicked)
 
+        self.item_deleted.connect(self.delete_item)
+
     def set_session(self, session):
+        """Установка сессии и создание сервиса тегов"""
         self.session = session
-        self.tag_service = TagService(session)
-        self.load_tags_from_db()
+        if session:
+            self.tag_service = TagService(session)
+            self.load_tags()
 
-    def load_tags_from_db(self):
-        if not self.tag_service:
-            print("⚠️ TagService не инициализирован")
-            return
+    def set_tag_service(self, service):
+        """Установка сервиса для работы с БД (альтернативный метод)"""
+        self.tag_service = service
+        if service:
+            self.load_tags()
 
-        tags = self.tag_service.get_all_tags()
-        self.load_data(tags)
+    def load_tags(self):
+        """Загрузка тегов через сервис"""
+        if self.tag_service:
+            self.tags = self.tag_service.get_all_tags()
+            self.refresh_cards()
+
+    def load_data(self, tags: list):
+        """Загрузка данных (для совместимости)"""
+        self.tags = tags
+        self.refresh_cards()
 
     def on_add_clicked(self):
-        if not self.tag_service:
-            QMessageBox.warning(self, "Ошибка", "Сервис тем не инициализирован")
-            return
-
-        dialog = TagDialog(parent=self)
-        dialog.tag_saved.connect(self.on_tag_saved)
+        """Открытие окна добавления тега"""
+        dialog = TagDialog(tag_data=None, parent=self)
+        dialog.tag_saved.connect(self.on_tag_added)
         dialog.exec()
-
-    def on_tag_saved(self, tag_data: dict):
-        if not self.tag_service:
-            return
-
-        result = self.tag_service.create_tag({
-            'name': tag_data.get('name'),
-            'color': tag_data.get('color', '#ccab6e')
-        })
-
-        if result:
-            self.tags.append(result)
-            self.refresh_cards()
-            self.tag_added.emit(result)
-            QMessageBox.information(self, "Успех", f"Тема «{result.get('name')}» создана")
-        else:
-            QMessageBox.warning(self, "Ошибка", "Не удалось создать тему")
 
     def on_edit_clicked(self, tag_id: int):
-        if not self.tag_service:
-            return
-
+        """Открытие окна редактирования тега"""
         tag = next((t for t in self.tags if t.get('id') == tag_id), None)
-        if not tag:
-            QMessageBox.warning(self, "Ошибка", "Тема не найдена")
-            return
+        if tag:
+            dialog = TagDialog(tag_data=tag, parent=self)
+            dialog.tag_saved.connect(lambda data: self.on_tag_updated(tag_id, data))
+            dialog.exec()
 
-        dialog = TagDialog(tag_data=tag, parent=self)
-        dialog.tag_saved.connect(lambda updated_data: self.on_tag_updated(tag_id, updated_data))
-        dialog.exec()
-
-    def on_tag_updated(self, old_tag_id: int, updated_data: dict):
-        if not self.tag_service:
-            return
-
-        success = self.tag_service.update_tag(old_tag_id, {
-            'name': updated_data.get('name'),
-            'color': updated_data.get('color')
-        })
-
-        if success:
-            for i, tag in enumerate(self.tags):
-                if tag.get('id') == old_tag_id:
-                    updated_data['id'] = old_tag_id
-                    updated_data['usage_count'] = tag.get('usage_count', 0)
-                    self.tags[i] = updated_data
-                    break
-
-            self.refresh_cards()
-            self.item_edited.emit("tag", updated_data)
-            QMessageBox.information(self, "Успех", f"Тема «{updated_data.get('name')}» обновлена")
+    def on_tag_added(self, tag_data: dict):
+        """Новый тег успешно сохранён"""
+        if self.tag_service:
+            new_tag = self.tag_service.create_tag(tag_data)
+            if new_tag:
+                self.load_tags()
+                self.item_added.emit("tag", new_tag)
+                QMessageBox.information(self, "Успех", f"Тема «{tag_data.get('name')}» добавлена")
+            else:
+                QMessageBox.warning(self, "Ошибка", "Не удалось сохранить тему")
         else:
-            QMessageBox.warning(self, "Ошибка", "Не удалось обновить тему")
+            tag_data['id'] = len(self.tags) + 1
+            self.tags.append(tag_data)
+            self.refresh_cards()
+            self.item_added.emit("tag", tag_data)
+
+    def on_tag_updated(self, tag_id: int, tag_data: dict):
+        """Обработка редактирования тега"""
+        if self.tag_service:
+            success = self.tag_service.update_tag(tag_id, tag_data)
+            if success:
+                self.load_tags()
+                self.item_edited.emit("tag", tag_data)
+                QMessageBox.information(self, "Успех", "Тема обновлена")
+            else:
+                QMessageBox.warning(self, "Ошибка", "Не удалось обновить тему")
+        else:
+            for i, tag in enumerate(self.tags):
+                if tag.get('id') == tag_id:
+                    tag_data['id'] = tag_id
+                    self.tags[i] = tag_data
+                    break
+            self.refresh_cards()
+            self.item_edited.emit("tag", tag_data)
 
     def on_delete_clicked(self, tag_id: int):
-        if not self.tag_service:
-            return
-
+        """Удаление тега - вызывается из карточки"""
         tag = next((t for t in self.tags if t.get('id') == tag_id), None)
         usage_count = tag.get('usage_count', 0) if tag else 0
 
         message = "Вы уверены, что хотите удалить эту тему?\nЭто действие нельзя отменить."
         if usage_count > 0:
-            message = f"Эта тема используется в {usage_count} задачах.\n\nУдаление темы удалит её из всех задач.\n\nВы уверены?"
+            message = f"Эта тема используется в {usage_count} задачах.\n\nУдаление повлияет на существующие задачи.\n\nВы уверены?"
 
         self.confirm_delete(
             title="Удаление темы",
@@ -124,35 +121,35 @@ class TagsTab(BaseTab):
             item_id=tag_id
         )
 
+    def delete_item(self, item_type: str, item_id: int):
+        """Обработка подтверждённого удаления"""
+        if item_type == "tag" and self.tag_service:
+            success = self.tag_service.delete_tag(item_id)
+            if success:
+                self.load_tags()
+                QMessageBox.information(self, "Успех", "Тема удалена")
+            else:
+                QMessageBox.warning(self, "Ошибка", "Не удалось удалить тему")
+
     def on_color_changed(self, tag_id: int, new_color: str):
-        if not self.tag_service:
-            return
-
-        success = self.tag_service.update_tag(tag_id, {'color': new_color})
-
-        if success:
-            for tag in self.tags:
-                if tag.get('id') == tag_id:
-                    tag['color'] = new_color
-                    break
-            self.item_color_changed.emit(tag_id, new_color)
-        else:
-            QMessageBox.warning(self, "Ошибка", "Не удалось изменить цвет темы")
-
-    def load_data(self, tags: list):
-        self.tags = tags
-        self.refresh_cards()
+        """Изменение цвета тега"""
+        if self.tag_service:
+            success = self.tag_service.update_tag(tag_id, {'color': new_color})
+            if success:
+                for tag in self.tags:
+                    if tag.get('id') == tag_id:
+                        tag['color'] = new_color
+                        break
+                self.refresh_cards()
+                self.item_color_changed.emit(tag_id, new_color)
 
     def refresh_cards(self):
+        """Обновление карточек"""
         self.clear_cards()
-
         for i, tag in enumerate(self.tags):
-            card = TagCard(tag)
-            card.tag_id = tag.get('id')
+            card = TagCard(tag, parent=self)
             card.edit_clicked.connect(self.on_edit_clicked)
             card.delete_clicked.connect(self.on_delete_clicked)
             card.color_changed.connect(self.on_color_changed)
-
             self.add_card_to_grid(card, i)
-
         self.set_last_row_stretch()

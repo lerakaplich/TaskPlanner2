@@ -1,3 +1,5 @@
+# windows/settings/divisions/divisions_tab.py
+
 from windows.settings.base_tab import BaseTab
 from windows.settings.divisions.division_card import DivisionCard
 from windows.settings.divisions.division_dialog import DivisionDialog
@@ -11,14 +13,11 @@ class DivisionsTab(BaseTab):
     """Вкладка для управления подразделениями"""
 
     item_deleted = pyqtSignal(str, int)
-    item_edited = pyqtSignal(str, dict)
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self.divisions = []
         self.employee_service = None
-        self.filter_division_id = None
-        self.filter_search_text = ""
 
         # Скрываем фильтры
         QTimer.singleShot(0, self.hide_filters_forced)
@@ -36,13 +35,6 @@ class DivisionsTab(BaseTab):
         if service:
             self.load_divisions()
 
-    def set_session(self, session):
-        """Установка сессии БД (для совместимости)"""
-        if session and not self.employee_service:
-            from services.employee_service import EmployeeService
-            self.employee_service = EmployeeService(session)
-            self.load_divisions()
-
     def hide_filters_forced(self):
         """Принудительное скрытие фильтров"""
         self.hide_filters()
@@ -55,20 +47,15 @@ class DivisionsTab(BaseTab):
     def load_divisions(self):
         """Загрузка подразделений через сервис"""
         if self.employee_service:
-            self.divisions = self.employee_service.get_division_card_data()
+            self.divisions = self.employee_service.get_division_display_data()
             self.refresh_cards()
-
-    def load_data(self, divisions: list):
-        """Загрузка данных (для совместимости)"""
-        self.divisions = divisions
-        self.refresh_cards()
 
     def refresh_cards(self):
         """Обновление карточек"""
         self.clear_cards()
 
         for i, division in enumerate(self.divisions):
-            card = DivisionCard(division, self.employee_service, parent=self)
+            card = DivisionCard(division, parent=self)
             card.edit_clicked.connect(self.on_edit_clicked)
             card.delete_clicked.connect(self.on_delete_clicked)
             self.add_card_to_grid(card, i)
@@ -87,8 +74,6 @@ class DivisionsTab(BaseTab):
 
     def on_division_saved(self, division_data: dict):
         """Обработка сохранения подразделения"""
-        print("Сохранено подразделение:", division_data)
-
         if self.employee_service:
             self.load_divisions()
             QMessageBox.information(self, "Успех", f"Подразделение сохранено")
@@ -98,8 +83,7 @@ class DivisionsTab(BaseTab):
         if not self.employee_service:
             return
 
-        # Получаем свежие данные через сервис
-        division = self.employee_service.prepare_division_for_dialog(division_id)
+        division = self.employee_service.get_division_edit_data(division_id)
         if division:
             dialog = DivisionDialog(parent=self, division_data=division, employee_service=self.employee_service)
             dialog.division_saved.connect(lambda data: self.on_division_updated(division_id, data))
@@ -120,8 +104,9 @@ class DivisionsTab(BaseTab):
         if not self.employee_service:
             return
 
-        has_departments = self.employee_service.has_departments_in_division(division_id)
-        has_employees = self.employee_service.has_employees_in_division(division_id)
+        dependencies = self.employee_service.check_division_dependencies(division_id)
+        has_departments = dependencies['has_departments']
+        has_employees = dependencies['has_employees']
 
         if has_departments or has_employees:
             self.show_delete_with_dependencies_dialog(division_id, has_departments, has_employees)
@@ -184,7 +169,7 @@ class DivisionsTab(BaseTab):
         self.reassign_combo.setVisible(False)
 
         # Загружаем другие подразделения через сервис
-        other_divisions = self.employee_service.get_other_divisions(division_id)
+        other_divisions = self.employee_service.get_other_divisions_for_reassignment(division_id)
         self.reassign_combo.addItem("— Выберите подразделение —", None)
         for div in other_divisions:
             self.reassign_combo.addItem(f"{div.get('name', 'Без названия')} (№{div.get('number', '?')})", div.get('id'))
@@ -234,7 +219,7 @@ class DivisionsTab(BaseTab):
 
         def do_delete():
             if radio_delete_all.isChecked():
-                success = self.employee_service.delete_division_by_id(division_id, delete_departments=True)
+                success = self.employee_service.delete_division_with_options(division_id, delete_all=True)
                 if success:
                     self.load_divisions()
                     QMessageBox.information(self, "Успех", "Подразделение и все связанные данные удалены")
@@ -247,9 +232,9 @@ class DivisionsTab(BaseTab):
                     QMessageBox.warning(dialog, "Ошибка", "Выберите подразделение для переназначения")
                     return
 
-                success = self.employee_service.delete_division_by_id(
+                success = self.employee_service.delete_division_with_options(
                     division_id,
-                    delete_departments=True,
+                    delete_all=True,
                     target_division_id=target_division_id
                 )
                 if success:
@@ -321,10 +306,15 @@ class DivisionsTab(BaseTab):
             }
         """
 
+    def load_data(self, divisions: list):
+        """Загрузка данных (для совместимости со старым кодом)"""
+        self.divisions = divisions
+        self.refresh_cards()
+
     def delete_item(self, item_type: str, item_id: int):
         """Обработка подтверждённого удаления"""
         if item_type == "division" and self.employee_service:
-            success = self.employee_service.delete_division_by_id(item_id)
+            success = self.employee_service.delete_division_with_options(item_id)
             if success:
                 self.load_divisions()
                 QMessageBox.information(self, "Успех", "Подразделение удалено")

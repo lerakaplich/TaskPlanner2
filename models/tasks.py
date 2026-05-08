@@ -1,17 +1,16 @@
 # models/tasks.py
 
+import enum
 from datetime import datetime
 from typing import Optional, List
-import enum
 
 from sqlalchemy import (
     String,
-    Integer,
     ForeignKey,
     DateTime,
     Enum,
     Boolean,
-    Float,  # ← добавляем Float для сложности
+    Float,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -25,6 +24,9 @@ class TaskPriorityEnum(str, enum.Enum):
     critical = "critical"
 
 
+# =========================
+# Задачи
+# =========================
 class Task(Base):
     __tablename__ = "tasks"
 
@@ -43,10 +45,9 @@ class Task(Base):
     updated_at: Mapped[datetime]
     is_archived: Mapped[bool] = mapped_column(Boolean, default=False)
     archived_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
-
-    # 👇 НОВОЕ ПОЛЕ: сложность задачи (0-5)
     difficulty: Mapped[float] = mapped_column(Float, default=0.0)
 
+    # Relationships
     column: Mapped[Optional["BoardColumn"]] = relationship(back_populates="tasks")
     tags: Mapped[List["TaskTag"]] = relationship(back_populates="task", cascade="all, delete-orphan")
 
@@ -64,7 +65,7 @@ class Task(Base):
 
 
 # =========================
-# tags (глобальные, без привязки к проекту)
+# Теги
 # =========================
 class Tag(Base):
     __tablename__ = "tags"

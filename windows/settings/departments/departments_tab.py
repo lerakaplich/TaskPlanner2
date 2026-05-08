@@ -1,9 +1,12 @@
+# windows/settings/departments/departments_tab.py
+
+from PyQt6.QtCore import pyqtSignal, Qt, QTimer
+from PyQt6.QtWidgets import QMessageBox, QDialog, QVBoxLayout, QLabel, QButtonGroup, QRadioButton, QComboBox, \
+    QHBoxLayout, QPushButton, QLineEdit
+
 from windows.settings.base_tab import BaseTab
 from windows.settings.departments.department_card import DepartmentCard
 from windows.settings.departments.department_dialog import DepartmentDialog
-from PyQt6.QtWidgets import QMessageBox, QDialog, QVBoxLayout, QLabel, QComboBox, QPushButton, QHBoxLayout, \
-    QRadioButton, QButtonGroup
-from PyQt6.QtCore import pyqtSignal, Qt
 
 
 class DepartmentsTab(BaseTab):
@@ -15,7 +18,7 @@ class DepartmentsTab(BaseTab):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.departments = []
-        self.session = None
+        self.all_divisions = []
         self.employee_service = None
         self.filter_division_id = None
         self.filter_search_text = ""
@@ -24,13 +27,23 @@ class DepartmentsTab(BaseTab):
         self.show_filters()
 
         # Настраиваем фильтры
+        # filterDepartment - это QLineEdit для поиска (текстовое поле)
+        # filterSubDepartment - это QComboBox для выбора подразделения
         if hasattr(self, 'filterDepartment'):
-            self.filterDepartment.setVisible(True)
-            self.filterDepartment.currentTextChanged.connect(self.on_filter_text_changed)
+            # Проверяем тип виджета
+            if isinstance(self.filterDepartment, QLineEdit):
+                self.filterDepartment.setPlaceholderText("Поиск по названию...")
+                self.filterDepartment.textChanged.connect(self.on_filter_text_changed)
+            else:
+                # Если это QComboBox, используем другой подход
+                self.filterDepartment.setEditable(True)
+                self.filterDepartment.setPlaceholderText("Поиск по названию...")
+                self.filterDepartment.lineEdit().textChanged.connect(self.on_filter_text_changed)
 
         if hasattr(self, 'filterSubDepartment'):
-            self.filterSubDepartment.setVisible(True)
-            self.filterSubDepartment.currentTextChanged.connect(self.on_filter_division_changed)
+            self.filterSubDepartment.clear()
+            self.filterSubDepartment.addItem("Все подразделения", None)
+            self.filterSubDepartment.currentIndexChanged.connect(self.on_filter_division_changed)
 
         if self.btnAdd:
             self.btnAdd.setText("Добавить отдел")
@@ -43,7 +56,10 @@ class DepartmentsTab(BaseTab):
         """Установка сервиса для работы с БД"""
         self.employee_service = service
         if service:
+            # Загружаем данные для фильтров
             self.load_filter_data()
+            # Загружаем отделы
+            QTimer.singleShot(100, self.load_departments)
 
     def set_session(self, session):
         """Установка сессии БД (для совместимости)"""
@@ -52,22 +68,24 @@ class DepartmentsTab(BaseTab):
     def load_filter_data(self):
         """Загрузка данных для фильтров через сервис"""
         if self.employee_service:
-            filter_data = self.employee_service.get_filter_data()
-            divisions = filter_data.get('divisions', [])
-            self.all_divisions = divisions
+            divisions = self.employee_service.get_all_divisions()
+            self.all_divisions = divisions if divisions else []
+            print(f"📊 Загружено подразделений для фильтра: {len(self.all_divisions)}")
 
             if hasattr(self, 'filterSubDepartment') and self.filterSubDepartment:
+                self.filterSubDepartment.blockSignals(True)
                 self.filterSubDepartment.clear()
                 self.filterSubDepartment.addItem("Все подразделения", None)
-                for div in divisions:
-                    self.filterSubDepartment.addItem(div.get('name', ''), div.get('id'))
+                for div in self.all_divisions:
+                    self.filterSubDepartment.addItem(div.get('name', 'Без названия'), div.get('id'))
+                self.filterSubDepartment.blockSignals(False)
 
     def on_filter_text_changed(self, text):
         """Обработчик изменения текста поиска"""
-        self.filter_search_text = text if text != "Все отделы" else ""
+        self.filter_search_text = text if text else ""
         self.refresh_cards()
 
-    def on_filter_division_changed(self):
+    def on_filter_division_changed(self, index):
         """Обработчик изменения выбранного подразделения"""
         if hasattr(self, 'filterSubDepartment') and self.filterSubDepartment:
             self.filter_division_id = self.filterSubDepartment.currentData()
@@ -85,16 +103,23 @@ class DepartmentsTab(BaseTab):
 
     def on_department_saved(self, department_data: dict):
         """Обработка сохранения отдела"""
-        print("Сохранён отдел:", department_data)
-
         if self.employee_service:
-            # Перезагружаем список отделов
             self.load_departments()
-            self.refresh_cards()
             QMessageBox.information(self, "Успех", f"Отдел сохранён")
-        else:
-            self.departments.append(department_data)
+
+    def load_departments(self):
+        """Загрузка отделов через сервис"""
+        if self.employee_service:
+            departments = self.employee_service.get_department_card_data()
+            self.departments = departments if departments else []
+            print(f"📊 Загружено отделов: {len(self.departments)}")
             self.refresh_cards()
+
+    def load_data(self, departments: list):
+        """Загрузка данных (для совместимости)"""
+        self.departments = departments
+        print(f"📊 load_data: отделов = {len(departments)}")
+        self.refresh_cards()
 
     def load_division_filters(self):
         """Загрузка подразделений в фильтр (для совместимости)"""
@@ -104,32 +129,12 @@ class DepartmentsTab(BaseTab):
             for div in self.all_divisions:
                 self.filterSubDepartment.addItem(div.get('name', ''), div.get('id'))
 
-    def load_departments(self):
-        """Загрузка отделов через сервис"""
-        if self.employee_service:
-            departments = self.employee_service.get_department_card_data()
-            if departments:
-                self.departments = departments
-            else:
-                self.departments = []
-
-    def load_data(self, departments: list):
-        """Загрузка данных (для совместимости)"""
-        self.departments = departments
-        self.refresh_cards()
-
     def refresh_cards(self):
         """Обновление карточек с применением фильтров"""
         self.clear_cards()
 
-        if not self.employee_service:
-            return
-
-        # Получаем отфильтрованные отделы через сервис
-        filtered_departments = self.employee_service.get_filtered_departments_data(
-            search_text=self.filter_search_text,
-            division_id=self.filter_division_id
-        )
+        filtered_departments = self.get_filtered_departments()
+        print(f"🔄 Обновление карточек отделов: отображается {len(filtered_departments)} из {len(self.departments)}")
 
         for i, department in enumerate(filtered_departments):
             card = DepartmentCard(department, self.employee_service, parent=self)
@@ -139,12 +144,26 @@ class DepartmentsTab(BaseTab):
 
         self.set_last_row_stretch()
 
+    def get_filtered_departments(self) -> list:
+        """Возвращает отфильтрованный список отделов"""
+        filtered = self.departments.copy()
+
+        # Фильтр по подразделению
+        if self.filter_division_id:
+            filtered = [d for d in filtered if d.get('division_id') == self.filter_division_id]
+
+        # Поиск по названию
+        if self.filter_search_text:
+            search_lower = self.filter_search_text.lower()
+            filtered = [d for d in filtered if search_lower in d.get('name', '').lower()]
+
+        return filtered
+
     def on_edit_clicked(self, department_id: int):
         """Открытие окна редактирования отдела"""
         if not self.employee_service:
             return
 
-        # Получаем свежие данные через сервис
         department = self.employee_service.get_department_card_data(department_id)
         if department:
             dialog = DepartmentDialog(parent=self, department_data=department, employee_service=self.employee_service)
@@ -154,11 +173,9 @@ class DepartmentsTab(BaseTab):
     def on_department_updated(self, department_id: int, department_data: dict):
         """Обработка редактирования отдела"""
         if self.employee_service:
-            # Обновляем через сервис
             success = self.employee_service.update_department(department_id, department_data)
             if success:
                 self.load_departments()
-                self.refresh_cards()
                 QMessageBox.information(self, "Успех", "Отдел обновлён")
             else:
                 QMessageBox.warning(self, "Ошибка", "Не удалось обновить отдел")
@@ -168,7 +185,6 @@ class DepartmentsTab(BaseTab):
         if not self.employee_service:
             return
 
-        # Проверяем, есть ли связанные сотрудники
         has_employees = self.employee_service.has_employees_in_department(department_id)
 
         if has_employees:
@@ -376,7 +392,6 @@ class DepartmentsTab(BaseTab):
             success = self.employee_service.delete_department_by_id(item_id)
             if success:
                 self.load_departments()
-                self.refresh_cards()
                 QMessageBox.information(self, "Успех", "Отдел удалён")
             else:
                 QMessageBox.warning(self, "Ошибка", "Не удалось удалить отдел")

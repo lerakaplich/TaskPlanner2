@@ -6,7 +6,7 @@ from typing import Dict, List, Optional, Any
 from sqlalchemy import select, func
 from sqlalchemy.orm import Session
 
-from models.projects import BoardColumn, Project
+from models.projects import Project, BoardColumn
 from models.schemas.tasks_dto import TaskPriority
 from models.tasks import Task
 from repositories.task_repo import TaskRepo
@@ -156,7 +156,6 @@ class TasksCrudService:
 
     def prepare_dialog_data(self, mode: str, task_data: Optional[Dict] = None) -> Dict:
         """Подготавливает данные для диалога создания/редактирования задачи"""
-        from models.projects import BoardColumn, Project
         from models.tasks import Tag
         from database import get_employees_session
         from models.employees import Employee  # из models/employees.py

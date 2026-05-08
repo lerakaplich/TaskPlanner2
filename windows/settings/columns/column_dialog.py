@@ -1,33 +1,27 @@
 # windows/settings/columns/column_dialog.py
 
 import os
-import sys
+import re
 
 from PyQt6 import uic
-from PyQt6.QtWidgets import QDialog, QMessageBox, QSizePolicy, QApplication
+from PyQt6.QtWidgets import QDialog, QMessageBox, QSizePolicy
 from PyQt6.QtCore import pyqtSignal, Qt, QEvent
-from PyQt6.QtGui import QColor
+
 from windows.widgets.color_picker_dialog import ColorPickerDialog
 
 
 class ColumnDialog(QDialog):
     """Диалог добавления/редактирования колонки доски задач"""
-    column_saved = pyqtSignal(dict)  # Сигнал при сохранении колонки
+    column_saved = pyqtSignal(dict)
 
-    def __init__(self, column_data=None, project_id=None, is_template_mode=True, parent=None):
-        """
-        Args:
-            column_data: данные колонки (для редактирования)
-            project_id: ID проекта (только для режима проекта)
-            is_template_mode: True - работа с шаблонами, False - работа с колонками проекта
-        """
+    def __init__(self, column_data=None, is_template_mode=True, parent=None):
         super().__init__(parent)
         self.column_data = column_data or {}
-        self.project_id = project_id or self.column_data.get('project_id')
         self.is_template_mode = is_template_mode
         self.is_edit_mode = bool(column_data and column_data.get('id'))
         self.current_color = self.column_data.get('color', '#ccab6e')
         self.is_done_column = self.column_data.get('is_done_column', False)
+        self.fields = []
 
         # Загрузка UI
         ui_path = os.path.join(
@@ -44,7 +38,6 @@ class ColumnDialog(QDialog):
 
     def setup_ui(self):
         """Настройка UI элементов"""
-        # Устанавливаем заголовок в зависимости от режима
         if self.is_edit_mode:
             if self.is_template_mode:
                 self.setWindowTitle("Редактирование шаблона колонки")
@@ -64,24 +57,9 @@ class ColumnDialog(QDialog):
                 if hasattr(self, 'titleLabel'):
                     self.titleLabel.setText("Добавление колонки в проект")
 
-        # Скрываем/показываем элементы в зависимости от режима
-        if self.is_template_mode:
-            # В режиме шаблона не показываем привязку к проекту
-            if hasattr(self, 'projectFrame'):
-                self.projectFrame.hide()
-        else:
-            # В режиме проекта показываем информацию о проекте
-            if hasattr(self, 'projectFrame'):
-                self.projectFrame.show()
-            if hasattr(self, 'projectLabel') and self.project_id:
-                # Здесь можно подставить название проекта
-                self.projectLabel.setText(f"Проект ID: {self.project_id}")
-
-        # Настройка валидации для поля ввода
         if hasattr(self, 'lineEditName'):
             self.lineEditName.setMaxLength(100)
 
-        # Настройка цветного кружочка
         if hasattr(self, 'colorIndicator'):
             self.colorIndicator.setFixedSize(32, 32)
             self.colorIndicator.setMinimumSize(32, 32)
@@ -111,12 +89,10 @@ class ColumnDialog(QDialog):
 
     def fill_data(self):
         """Заполнение полей данными при редактировании"""
-        # Название колонки
         if hasattr(self, 'lineEditName'):
             name = self.column_data.get('name', '')
             self.lineEditName.setText(name)
 
-        # Выбор цвета
         if hasattr(self, 'comboBoxColor'):
             color_index = -1
             for i in range(self.comboBoxColor.count()):
@@ -131,34 +107,20 @@ class ColumnDialog(QDialog):
                 self.comboBoxColor.addItem(f"{color_name} ({self.current_color})")
                 self.comboBoxColor.setCurrentIndex(self.comboBoxColor.count() - 1)
 
-        # Чекбокс "Готовая колонка"
         if hasattr(self, 'checkBoxIsDone'):
             self.checkBoxIsDone.setChecked(self.is_done_column)
 
-        # Обновляем предпросмотр
         self.update_preview()
         self.update_color_indicator(self.current_color)
         self.update_done_badge(self.is_done_column)
 
     def on_save_clicked(self):
         """Обработка сохранения колонки"""
-        # Валидация
         if not self.validate():
             return
 
-        # Сбор данных
         column_name = self.lineEditName.text().strip()
 
-        # В режиме проекта проверяем, что проект выбран
-        if not self.is_template_mode and not self.project_id:
-            QMessageBox.warning(
-                self,
-                "Ошибка",
-                "Не выбран проект для колонки."
-            )
-            return
-
-        # Формируем данные для сохранения
         column_data = {
             'id': self.column_data.get('id', None),
             'name': column_name,
@@ -167,11 +129,6 @@ class ColumnDialog(QDialog):
             'position': self.column_data.get('position', 0)
         }
 
-        # Добавляем project_id только если это не режим шаблона
-        if not self.is_template_mode:
-            column_data['project_id'] = self.project_id
-
-        # Отправляем сигнал
         self.column_saved.emit(column_data)
         self.accept()
 
@@ -182,35 +139,19 @@ class ColumnDialog(QDialog):
 
         name = self.lineEditName.text().strip()
         if not name:
-            QMessageBox.warning(
-                self,
-                "Ошибка валидации",
-                "Пожалуйста, введите название колонки."
-            )
+            QMessageBox.warning(self, "Ошибка", "Пожалуйста, введите название колонки.")
             return False
 
         if len(name) < 1:
-            QMessageBox.warning(
-                self,
-                "Ошибка валидации",
-                "Название колонки должно содержать хотя бы 1 символ."
-            )
+            QMessageBox.warning(self, "Ошибка", "Название колонки должно содержать хотя бы 1 символ.")
             return False
 
         if len(name) > 100:
-            QMessageBox.warning(
-                self,
-                "Ошибка валидации",
-                "Название колонки не должно превышать 100 символов."
-            )
+            QMessageBox.warning(self, "Ошибка", "Название колонки не должно превышать 100 символов.")
             return False
 
         if not self.current_color:
-            QMessageBox.warning(
-                self,
-                "Ошибка валидации",
-                "Пожалуйста, выберите цвет для колонки."
-            )
+            QMessageBox.warning(self, "Ошибка", "Пожалуйста, выберите цвет для колонки.")
             return False
 
         return True
@@ -222,14 +163,14 @@ class ColumnDialog(QDialog):
             new_color = dialog.get_selected_color()
             if new_color and new_color != self.current_color:
                 self.update_color(new_color)
+
     def on_color_changed(self, color_text):
         """Обработка изменения цвета из комбобокса"""
-        # Извлекаем цвет из текста (формат: "Название (#цвет)")
-        import re
         match = re.search(r'\(#([A-Fa-f0-9]{6})\)', color_text)
         if match:
             color_code = f"#{match.group(1)}"
             self.update_color(color_code)
+
     def on_custom_color_clicked(self):
         """Открытие диалога выбора пользовательского цвета"""
         dialog = ColorPickerDialog(self.current_color, self)
@@ -237,7 +178,7 @@ class ColumnDialog(QDialog):
             new_color = dialog.get_selected_color()
             if new_color and new_color != self.current_color:
                 self.update_color(new_color)
-                # Добавляем цвет в комбобокс, если его там нет
+
                 if hasattr(self, 'comboBoxColor'):
                     color_exists = False
                     for i in range(self.comboBoxColor.count()):
@@ -249,15 +190,18 @@ class ColumnDialog(QDialog):
                         color_name = self.get_color_name(new_color)
                         self.comboBoxColor.addItem(f"{color_name} ({new_color})")
                         self.comboBoxColor.setCurrentIndex(self.comboBoxColor.count() - 1)
+
     def on_done_checkbox_changed(self, state):
         """Обработка изменения состояния чекбокса 'Готовая колонка'"""
         self.is_done_column = bool(state == Qt.CheckState.Checked.value)
         self.update_done_badge(self.is_done_column)
+
     def update_color(self, new_color: str):
         """Обновление цвета во всех элементах"""
         self.current_color = new_color
         self.update_color_indicator(new_color)
         self.update_preview()
+
     def get_color_name(self, color_code):
         """Получение названия цвета по его коду"""
         color_names = {
@@ -269,6 +213,7 @@ class ColumnDialog(QDialog):
             '#e67e22': 'Оранжевый'
         }
         return color_names.get(color_code.lower(), 'Пользовательский')
+
     def update_color_indicator(self, color_code):
         """Обновление цветного кружочка"""
         if hasattr(self, 'colorIndicator'):
@@ -277,11 +222,11 @@ class ColumnDialog(QDialog):
                 background-color: {color_code};
                 border: 2px solid #E0E0E0;
             """)
+
     def update_done_badge(self, is_done):
         """Обновление отображения бейджа 'Готовая'"""
         if hasattr(self, 'previewBadgeLabel'):
             self.previewBadgeLabel.setVisible(is_done)
-        # Если колонка готовая, добавляем дополнительный стиль в предпросмотр
         if hasattr(self, 'previewFrame') and is_done:
             self.previewFrame.setStyleSheet("""
                 QFrame {
@@ -300,6 +245,7 @@ class ColumnDialog(QDialog):
                     padding: 15px;
                 }
             """)
+
     def update_preview(self):
         """Обновление предпросмотра колонки"""
         if hasattr(self, 'previewTitleLabel') and hasattr(self, 'lineEditName'):
@@ -312,7 +258,7 @@ class ColumnDialog(QDialog):
                 font-weight: bold;
                 color: {self.current_color};
             """)
-        # Обновляем цвет маленького индикатора в предпросмотре
+
         if hasattr(self, 'previewColorIndicator'):
             self.previewColorIndicator.setStyleSheet(f"""
                 border-radius: 10px;
@@ -327,68 +273,50 @@ class ColumnDialog(QDialog):
         name = self.lineEditName.text().strip()
         return {
             'id': self.column_data.get('id', None),
-            'project_id': self.project_id,
             'name': name,
             'color': self.current_color,
             'is_done_column': self.is_done_column,
             'position': self.column_data.get('position', 0)
         }
 
-    @staticmethod
-    def get_test_projects():
-        return ColumnDialog.TEST_PROJECTS
-
     def setup_keyboard_navigation(self):
-        """Настройка перехода между полями по стрелкам Вверх / Вниз"""
-
-        # Список всех интерактивных полей в логическом порядке
+        """Настройка перехода между полями по стрелкам"""
         self.fields = [
-            self.lineEditName,  # Название колонки
-            self.comboBoxColor,  # Выбор цвета (комбобокс)
-            self.checkBoxIsDone,  # Чекбокс "Готовая колонка"
-            # Добавляй сюда новые поля по мере появления
+            self.lineEditName,
+            self.comboBoxColor,
+            self.checkBoxIsDone,
         ]
 
-        # Устанавливаем обработчик событий клавиатуры для каждого поля
         for widget in self.fields:
             if widget is not None:
                 widget.installEventFilter(self)
 
     def eventFilter(self, obj, event):
-        """Обработка нажатия стрелок Вверх/Вниз + клик по цветному индикатору"""
-
-        # === Обработка клика по цветному индикатору (старый код) ===
+        """Обработка нажатия стрелок + клик по цветному индикатору"""
         if hasattr(self, 'colorIndicator') and obj == self.colorIndicator:
             if event.type() == QEvent.Type.MouseButtonPress:
                 if event.button() == Qt.MouseButton.LeftButton:
                     self.on_color_indicator_clicked()
                     return True
 
-        # === НОВАЯ ЛОГИКА: переход по стрелкам ↑ ↓ ===
         if event.type() == QEvent.Type.KeyPress:
             key = event.key()
 
-            # Проверяем, есть ли obj в нашем списке полей
             try:
                 current_index = self.fields.index(obj)
             except (ValueError, AttributeError):
                 return super().eventFilter(obj, event)
 
-            if key == Qt.Key.Key_Down:  # ← ИСПРАВЛЕНО
-                # Переход к следующему полю
+            if key == Qt.Key.Key_Down:
                 next_index = (current_index + 1) % len(self.fields)
-                next_widget = self.fields[next_index]
-                if next_widget:
-                    next_widget.setFocus()
+                if self.fields[next_index]:
+                    self.fields[next_index].setFocus()
                 return True
 
-            elif key == Qt.Key.Key_Up:  # ← ИСПРАВЛЕНО
-                # Переход к предыдущему полю
+            elif key == Qt.Key.Key_Up:
                 prev_index = (current_index - 1) % len(self.fields)
-                prev_widget = self.fields[prev_index]
-                if prev_widget:
-                    prev_widget.setFocus()
+                if self.fields[prev_index]:
+                    self.fields[prev_index].setFocus()
                 return True
 
-        # Если клавиша не обработана — передаём дальше
         return super().eventFilter(obj, event)

@@ -1,3 +1,5 @@
+# windows/settings/divisions/division_dialog.py
+
 from pathlib import Path
 
 from PyQt6 import QtWidgets, QtCore, uic
@@ -17,6 +19,10 @@ class DivisionDialog(QDialog):
         self.division_data = division_data
         self.selected_manager_ids = set()
         self.employees = []
+        self.all_checkboxes = []
+        self.checkboxes_by_id = {}
+        self.popup = None
+        self.fields = []
 
         script_dir = Path(__file__).resolve().parent
         ui_path = script_dir.parent.parent.parent / "ui" / "settings" / "divisions" / "division_dialog.ui"
@@ -27,7 +33,7 @@ class DivisionDialog(QDialog):
         uic.loadUi(str(ui_path), self)
 
         self.init_ui()
-        self.load_data_from_service()
+        self.load_employees()
         self.setup_heads_combo()
 
         if self.division_data:
@@ -36,11 +42,10 @@ class DivisionDialog(QDialog):
         self.btnSave.clicked.connect(self.save_division)
         self.setup_keyboard_navigation()
 
-    def load_data_from_service(self):
-        """Загружает данные через сервис"""
+    def load_employees(self):
+        """Загружает сотрудников через сервис"""
         if self.employee_service:
-            self.employees = self.employee_service.get_employees_for_selector()
-            print(f"✅ Загружено {len(self.employees)} сотрудников")
+            self.employees = self.employee_service.get_employees_for_division_selector()
         else:
             self.employees = []
 
@@ -313,14 +318,14 @@ class DivisionDialog(QDialog):
         division_data = self.get_division_data()
 
         # Валидация через сервис
-        is_valid, error_msg = self.employee_service.validate_division_form(division_data)
+        is_valid, error_msg = self.employee_service.validate_division_form_data(division_data)
 
         if not is_valid:
             QMessageBox.warning(self, "Ошибка", error_msg)
             return
 
         # Сохраняем через сервис
-        result = self.employee_service.save_division_from_dialog(division_data)
+        result = self.employee_service.save_division_from_dialog_data(division_data)
 
         if result:
             self.division_saved.emit(result)

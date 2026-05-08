@@ -6,8 +6,8 @@ from sqlalchemy import select, func, and_, update, delete
 from datetime import datetime
 
 from database import get_employees_session
-from models.tasks import Task, Tag, TaskTag
 from models.projects import BoardColumn
+from models.tasks import Task, Tag, TaskTag
 from models.employees import Employee
 
 

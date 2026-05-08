@@ -8,6 +8,8 @@ from datetime import datetime  # ← ДОБАВИТЬ
 
 from database import get_employees_session, get_tasks_session
 from models.employees import Employee, Department, Division, EmployeeData, RoleEnum
+from models.projects import BoardColumn
+from models.tasks import Tag, TaskTag
 from repositories.employee_repo import EmployeeRepo
 
 
@@ -73,12 +75,6 @@ class EmployeeService:
             print(f"❌ Ошибка в get_all_employees: {e}")
             traceback.print_exc()
             return []
-
-    # Добавьте эти методы в конец класса EmployeeService
-
-    # =========================
-    # Новые методы для UI
-    # =========================
 
     def get_employee_card_data(self, employee_id: int = None) -> Dict[str, Any]:
         """
@@ -1003,6 +999,53 @@ class EmployeeService:
     # =========================
     # Подразделения
     # =========================
+    def get_division_display_data(self, division_id: int = None) -> Any:
+        """
+        Возвращает данные подразделения для отображения в карточке
+        Если division_id не указан, возвращает список всех подразделений
+        """
+        return self.get_division_card_data(division_id)
+
+    def get_division_edit_data(self, division_id: int) -> Optional[Dict[str, Any]]:
+        """Возвращает данные подразделения для редактирования в диалоге"""
+        return self.prepare_division_for_dialog(division_id)
+
+    def get_employees_for_division_selector(self) -> List[Dict[str, Any]]:
+        """Возвращает список сотрудников для выбора руководителей"""
+        return self.get_employees_for_selector()
+
+    def get_other_divisions_for_reassignment(self, exclude_division_id: int) -> List[Dict[str, Any]]:
+        """Возвращает список подразделений для переназначения"""
+        return self.get_other_divisions(exclude_division_id)
+
+    def check_division_dependencies(self, division_id: int) -> Dict[str, bool]:
+        """Проверяет зависимости подразделения"""
+        return {
+            'has_departments': self.has_departments_in_division(division_id),
+            'has_employees': self.has_employees_in_division(division_id)
+        }
+
+    def delete_division_with_options(self, division_id: int, delete_all: bool = False,
+                                     target_division_id: int = None) -> bool:
+        """
+        Удаляет подразделение с опциями:
+        - delete_all=True: каскадное удаление всего
+        - target_division_id указан: переназначение на другое подразделение
+        """
+        return self.delete_division_by_id(
+            division_id,
+            delete_departments=delete_all,
+            target_division_id=target_division_id
+        )
+
+    def save_division_from_dialog_data(self, division_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """Сохраняет подразделение из данных диалога"""
+        return self.save_division_from_dialog(division_data)
+
+    def validate_division_form_data(self, form_data: Dict[str, Any]) -> tuple[bool, str]:
+        """Валидирует данные формы подразделения"""
+        return self.validate_division_form(form_data)
+
     def get_division_card_data(self, division_id: int = None) -> Dict[str, Any]:
         """
         Возвращает данные подразделения для карточки
@@ -1235,6 +1278,401 @@ class EmployeeService:
             'phone_number': division.phone_number,
             'workshop_code': division.workshop_code,
         }
+
+    # =========================
+    # Методы для работы с тегами
+    # =========================
+
+    def get_all_tags(self) -> List[Dict[str, Any]]:
+        """Возвращает все теги"""
+        from models.tasks import Tag
+        try:
+            tags = self.session.query(Tag).filter(Tag.is_archived == False).order_by(Tag.name).all()
+            return [self._tag_to_dict(tag) for tag in tags]
+        except Exception as e:
+            print(f"❌ Ошибка загрузки тегов: {e}")
+            return []
+
+    def get_tag_by_id(self, tag_id: int) -> Optional[Dict[str, Any]]:
+        """Возвращает тег по ID"""
+        from models.tasks import Tag
+        try:
+            tag = self.session.get(Tag, tag_id)
+            return self._tag_to_dict(tag) if tag and not tag.is_archived else None
+        except Exception as e:
+            print(f"❌ Ошибка загрузки тега {tag_id}: {e}")
+            return None
+
+    def create_tag(self, tag_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """Создает новый тег"""
+        from models.tasks import Tag
+        try:
+            # Проверяем, не существует ли тег с таким именем
+            existing = self.session.query(Tag).filter(Tag.name == tag_data.get('name')).first()
+            if existing:
+                print(f"⚠️ Тег с именем '{tag_data.get('name')}' уже существует")
+                return None
+
+            tag = Tag(
+                name=tag_data.get('name'),
+                color=tag_data.get('color', '#ccab6e')
+            )
+            self.session.add(tag)
+            self.session.commit()
+            self.session.refresh(tag)
+
+            return self._tag_to_dict(tag)
+        except Exception as e:
+            self.session.rollback()
+            print(f"❌ Ошибка при создании тега: {e}")
+            return None
+
+    def update_tag(self, tag_id: int, tag_data: Dict[str, Any]) -> bool:
+        """Обновляет тег"""
+        from models.tasks import Tag
+        try:
+            tag = self.session.get(Tag, tag_id)
+            if not tag or tag.is_archived:
+                return False
+
+            # Проверяем уникальность имени
+            new_name = tag_data.get('name')
+            if new_name and new_name != tag.name:
+                existing = self.session.query(Tag).filter(Tag.name == new_name).first()
+                if existing:
+                    print(f"⚠️ Тег с именем '{new_name}' уже существует")
+                    return False
+                tag.name = new_name
+
+            if 'color' in tag_data and tag_data['color']:
+                tag.color = tag_data['color']
+
+            tag.updated_at = datetime.now()
+            self.session.commit()
+            return True
+        except Exception as e:
+            self.session.rollback()
+            print(f"❌ Ошибка при обновлении тега: {e}")
+            return False
+
+    def delete_tag(self, tag_id: int) -> bool:
+        """Удаляет тег (мягкое удаление - архивирует)"""
+        from models.tasks import Tag
+        try:
+            tag = self.session.get(Tag, tag_id)
+            if tag:
+                tag.is_archived = True
+                tag.archived_at = datetime.now()
+                self.session.commit()
+                return True
+            return False
+        except Exception as e:
+            self.session.rollback()
+            print(f"❌ Ошибка при удалении тега: {e}")
+            return False
+
+    def hard_delete_tag(self, tag_id: int) -> bool:
+        """Полное удаление тега из БД"""
+        from models.tasks import Tag
+        try:
+            tag = self.session.get(Tag, tag_id)
+            if tag:
+                self.session.delete(tag)
+                self.session.commit()
+                return True
+            return False
+        except Exception as e:
+            self.session.rollback()
+            print(f"❌ Ошибка при полном удалении тега: {e}")
+            return False
+
+    def get_tag_usage_count(self, tag_id: int) -> int:
+        """Возвращает количество использований тега"""
+        from models.tasks import TaskTag
+        try:
+            count = self.session.query(TaskTag).filter(TaskTag.tag_id == tag_id).count()
+            return count
+        except Exception as e:
+            print(f"❌ Ошибка подсчета использований тега: {e}")
+            return 0
+
+    def add_tag_usage_count(self, tags: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """Добавляет количество использований к списку тегов"""
+        result = []
+        for tag in tags:
+            tag_copy = tag.copy()
+            tag_copy['usage_count'] = self.get_tag_usage_count(tag.get('id'))
+            result.append(tag_copy)
+        return result
+
+    def _tag_to_dict(self, tag) -> Dict[str, Any]:
+        """Преобразует модель тега в словарь"""
+        if tag is None:
+            return {}
+        return {
+            'id': tag.id,
+            'name': tag.name,
+            'color': tag.color,
+            'is_archived': tag.is_archived,
+            'created_at': tag.created_at.isoformat() if tag.created_at else None,
+            'updated_at': tag.updated_at.isoformat() if tag.updated_at else None,
+            'usage_count': 0  # Будет заполнено отдельно
+        }
+
+    # =========================
+    # Методы для работы с колонками (board_columns)
+    # =========================
+
+    def get_all_template_columns(self) -> List[Dict[str, Any]]:
+        """Возвращает все шаблонные колонки (без привязки к проекту)"""
+        try:
+            columns = self.session.query(BoardColumn).filter(
+                BoardColumn.project_id == None,
+                BoardColumn.is_template == True  # используем is_template вместо is_archived
+            ).order_by(BoardColumn.template_order).all()  # используем template_order вместо position
+            return [self._column_to_dict(col) for col in columns]
+        except Exception as e:
+            print(f"❌ Ошибка загрузки шаблонных колонок: {e}")
+            return []
+
+    def get_column_by_id(self, column_id: int) -> Optional[Dict[str, Any]]:
+        """Возвращает колонку по ID"""
+        try:
+            column = self.session.get(BoardColumn, column_id)
+            return self._column_to_dict(column) if column else None  # убрали проверку is_archived
+        except Exception as e:
+            print(f"❌ Ошибка загрузки колонки {column_id}: {e}")
+            return None
+
+    def create_template_column(self, column_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """Создает шаблонную колонку"""
+        try:
+            # Находим максимальный template_order
+            max_order = self.session.query(BoardColumn).filter(
+                BoardColumn.project_id == None
+            ).order_by(BoardColumn.template_order.desc()).first()
+            next_order = (max_order.template_order + 1) if max_order and max_order.template_order else 0
+
+            column = BoardColumn(
+                name=column_data.get('name'),
+                color=column_data.get('color', '#ffffff'),
+                is_done_column=column_data.get('is_done_column', False),
+                template_order=next_order,
+                is_template=True,
+                project_id=None
+            )
+            self.session.add(column)
+            self.session.commit()
+            self.session.refresh(column)
+
+            return self._column_to_dict(column)
+        except Exception as e:
+            self.session.rollback()
+            print(f"❌ Ошибка при создании шаблонной колонки: {e}")
+            return None
+
+    def update_template_column(self, column_id: int, column_data: Dict[str, Any]) -> bool:
+        """Обновляет шаблонную колонку"""
+        try:
+            column = self.session.get(BoardColumn, column_id)
+            if not column or column.project_id is not None:
+                return False
+
+            if 'name' in column_data and column_data['name']:
+                column.name = column_data['name']
+            if 'color' in column_data and column_data['color']:
+                column.color = column_data['color']
+            if 'is_done_column' in column_data:
+                column.is_done_column = column_data['is_done_column']
+
+            # Убрали updated_at, его нет в таблице
+            self.session.commit()
+            return True
+        except Exception as e:
+            self.session.rollback()
+            print(f"❌ Ошибка при обновлении шаблонной колонки: {e}")
+            return False
+
+    def delete_template_column(self, column_id: int) -> bool:
+        """Удаляет шаблонную колонку (просто удаляем из БД, нет мягкого удаления)"""
+        try:
+            column = self.session.get(BoardColumn, column_id)
+            if column and column.project_id is None:
+                self.session.delete(column)  # прямое удаление
+                self.session.commit()
+                return True
+            return False
+        except Exception as e:
+            self.session.rollback()
+            print(f"❌ Ошибка при удалении шаблонной колонки: {e}")
+            return False
+
+    def hard_delete_template_column(self, column_id: int) -> bool:
+        """Полное удаление шаблонной колонки"""
+        return self.delete_template_column(column_id)  # просто вызываем тот же метод
+
+    def _column_to_dict(self, column) -> Dict[str, Any]:
+        """Преобразует модель колонки в словарь"""
+        if column is None:
+            return {}
+        return {
+            'id': column.id,
+            'name': column.name,
+            'color': column.color,
+            'position': column.template_order if column.template_order else column.position,
+            'is_done_column': column.is_done_column,
+            'project_id': column.project_id,
+            'is_template': column.is_template,
+            'template_order': column.template_order,
+            'created_at': column.created_at.isoformat() if column.created_at else None,
+        }
+
+    # services/employee_service.py - добавить в конец класса EmployeeService
+
+    # =========================
+    # Новые методы для работы с данными (вынесенные из UI)
+    # =========================
+
+    def load_all_data_for_settings(self) -> Dict[str, Any]:
+        """
+        Загружает все данные для страницы настроек
+        Возвращает словарь со всеми данными
+        """
+        from services.column_service import ColumnService
+        from services.tag_service import TagService
+
+        column_service = ColumnService(self.tasks_session)
+        tag_service = TagService(self.tasks_session)
+
+        return {
+            'employees': self.get_all_employees(),
+            'departments': self.get_all_departments(),
+            'divisions': self.get_all_divisions(),
+            'columns': column_service.get_template_columns(),
+            'tags': tag_service.get_all_tags()
+        }
+
+    def delete_employee_by_id_with_check(self, employee_id: int) -> Dict[str, Any]:
+        """
+        Удаляет сотрудника с проверками
+        Возвращает {'success': bool, 'message': str}
+        """
+        try:
+            # Проверяем, есть ли у сотрудника задачи
+            from models.tasks import Task
+            tasks_count = self.tasks_session.query(Task).filter(
+                Task.assigned_to == employee_id,
+                Task.is_archived == False
+            ).count()
+
+            if tasks_count > 0:
+                return {
+                    'success': False,
+                    'message': f'Нельзя удалить сотрудника, у которого есть {tasks_count} активных задач. Сначала переназначьте задачи.'
+                }
+
+            result = self.delete_employee(employee_id)
+            if result:
+                return {'success': True, 'message': 'Сотрудник успешно удалён'}
+            else:
+                return {'success': False, 'message': 'Ошибка при удалении сотрудника'}
+        except Exception as e:
+            return {'success': False, 'message': str(e)}
+
+    def delete_department_by_id_with_options(self, department_id: int,
+                                             delete_employees: bool = False,
+                                             target_department_id: int = None) -> Dict[str, Any]:
+        """
+        Удаляет отдел с опциями
+        Возвращает {'success': bool, 'message': str}
+        """
+        try:
+            has_employees = self.has_employees_in_department(department_id)
+
+            if has_employees and not delete_employees and not target_department_id:
+                return {
+                    'success': False,
+                    'message': 'В отделе есть сотрудники. Выберите: переназначить их в другой отдел или удалить всех сотрудников.'
+                }
+
+            success = self.delete_department_by_id(department_id, delete_employees, target_department_id)
+
+            if success:
+                return {'success': True, 'message': 'Отдел успешно удалён'}
+            else:
+                return {'success': False, 'message': 'Ошибка при удалении отдела'}
+        except Exception as e:
+            return {'success': False, 'message': str(e)}
+
+    def delete_division_by_id_with_options(self, division_id: int,
+                                           delete_departments: bool = False,
+                                           target_division_id: int = None) -> Dict[str, Any]:
+        """
+        Удаляет подразделение с опциями
+        Возвращает {'success': bool, 'message': str}
+        """
+        try:
+            has_departments = self.has_departments_in_division(division_id)
+            has_employees = self.has_employees_in_division(division_id)
+
+            if (has_departments or has_employees) and not delete_departments and not target_division_id:
+                return {
+                    'success': False,
+                    'message': 'В подразделении есть отделы или сотрудники. Выберите: переназначить их в другое подразделение или удалить всё каскадно.'
+                }
+
+            success = self.delete_division_by_id(division_id, delete_departments, target_division_id)
+
+            if success:
+                return {'success': True, 'message': 'Подразделение успешно удалено'}
+            else:
+                return {'success': False, 'message': 'Ошибка при удалении подразделения'}
+        except Exception as e:
+            return {'success': False, 'message': str(e)}
+
+    def get_departments_with_division_names(self) -> List[Dict[str, Any]]:
+        """Возвращает список отделов с названиями подразделений для фильтров"""
+        return self.get_all_departments()
+
+    def get_divisions_for_filter(self) -> List[Dict[str, Any]]:
+        """Возвращает список подразделений для фильтров"""
+        return self.get_all_divisions()
+
+    def update_item_color(self, item_type: str, item_id: int, new_color: str) -> bool:
+        """Обновляет цвет элемента (тега или колонки)"""
+        from services.column_service import ColumnService
+        from services.tag_service import TagService
+
+        try:
+            if item_type == 'tag':
+                tag_service = TagService(self.tasks_session)
+                return tag_service.update_tag(item_id, {'color': new_color})
+            elif item_type == 'column':
+                column_service = ColumnService(self.tasks_session)
+                return column_service.update_template_column(item_id, {'color': new_color})
+            else:
+                return False
+        except Exception as e:
+            print(f"❌ Ошибка обновления цвета {item_type}: {e}")
+            return False
+
+    def filter_employees_by_department(self, employees: List[Dict], department_id: int) -> List[Dict]:
+        """Фильтрует сотрудников по отделу"""
+        if not department_id:
+            return employees
+        return [e for e in employees if e.get('department_id') == department_id]
+
+    def filter_employees_by_division(self, employees: List[Dict], division_id: int) -> List[Dict]:
+        """Фильтрует сотрудников по подразделению"""
+        if not division_id:
+            return employees
+        return [e for e in employees if e.get('division_id') == division_id]
+
+    def filter_departments_by_division(self, departments: List[Dict], division_id: int) -> List[Dict]:
+        """Фильтрует отделы по подразделению"""
+        if not division_id:
+            return departments
+        return [d for d in departments if d.get('division_id') == division_id]
 
     # =========================
     # Проверки зависимостей

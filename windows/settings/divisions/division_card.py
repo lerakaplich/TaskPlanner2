@@ -1,3 +1,5 @@
+# windows/settings/divisions/division_card.py
+
 from PyQt6 import uic
 from PyQt6.QtWidgets import QFrame
 from PyQt6.QtCore import pyqtSignal
@@ -10,10 +12,9 @@ class DivisionCard(QFrame):
     edit_clicked = pyqtSignal(int)
     delete_clicked = pyqtSignal(int)
 
-    def __init__(self, division_data, employee_service, parent=None):
+    def __init__(self, division_data, parent=None):
         super().__init__(parent)
         self.division_data = division_data
-        self.employee_service = employee_service
         self.division_id = division_data.get('id', 0)
 
         # Загрузка UI
@@ -33,7 +34,7 @@ class DivisionCard(QFrame):
         self.deleteButton.clicked.connect(lambda: self.delete_clicked.emit(self.division_id))
 
     def fill_data(self):
-        """Заполнение данными через сервис"""
+        """Заполнение данными"""
         # Название
         name = self.division_data.get('name', '—')
         if hasattr(self, 'nameLabel'):

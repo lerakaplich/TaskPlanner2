@@ -1,3 +1,5 @@
+# windows/settings/base_tab.py
+
 import os
 from PyQt6 import uic
 from PyQt6.QtWidgets import (
@@ -9,15 +11,15 @@ from PyQt6.QtCore import pyqtSignal, Qt
 
 
 class BaseTab(QWidget):
-    """Базовый класс для всех вкладок настроек"""
+    """Базовый класс для всех вкладок настроек - ТОЛЬКО UI логика"""
 
     item_deleted = pyqtSignal(str, int)
     item_edited = pyqtSignal(str, dict)
-    item_color_changed = pyqtSignal(int, str)
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self.cards = []
+        self.employee_service = None  # Сервис будет установлен извне
 
         # Загрузка UI
         current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -35,31 +37,28 @@ class BaseTab(QWidget):
         self.filterSubDepartment = self.findChild(QComboBox, "filterSubDepartment")
 
         if self.tools_frame:
-            self.tools_frame.setFixedHeight(56)
+            self.tools_frame.setFixedHeight(72)
 
-        # === ИСПРАВЛЕНИЕ ВЫСОТ И ВЫРАВНИВАНИЯ (актуально на апрель 2026) ===
-        if self.tools_frame:
-            self.tools_frame.setFixedHeight(72)  # ← как в .ui
+        FIXED_HEIGHT = 35
 
-        FIXED_HEIGHT = 35  # ← одинаковая высота для всех
-
-        # Кнопка "Добавить"
         if self.btnAdd:
             self.btnAdd.setFixedHeight(FIXED_HEIGHT)
             self.btnAdd.setMinimumHeight(FIXED_HEIGHT)
             self.btnAdd.setMaximumHeight(FIXED_HEIGHT)
 
-        # Комбобоксы (фильтры)
         for combo in (self.filterDepartment, self.filterSubDepartment):
             if combo:
                 combo.setFixedHeight(FIXED_HEIGHT)
                 combo.setMinimumHeight(FIXED_HEIGHT)
                 combo.setMaximumHeight(FIXED_HEIGHT)
 
-        # Уменьшаем вертикальные отступы, чтобы всё идеально влезло
         if hasattr(self, 'toolsLayout'):
-            self.toolsLayout.setContentsMargins(24, 18, 24, 18)  # 18+35+18 = 71 px
+            self.toolsLayout.setContentsMargins(24, 18, 24, 18)
             self.toolsLayout.setAlignment(Qt.AlignmentFlag.AlignVCenter)
+
+    def set_employee_service(self, service):
+        """Установка сервиса для работы с данными"""
+        self.employee_service = service
 
     def hide_filters(self):
         if self.filterDepartment:
@@ -75,13 +74,8 @@ class BaseTab(QWidget):
         if self.tools_frame:
             self.tools_frame.updateGeometry()
 
-    # ====================== ЕДИНЫЙ МЕТОД УДАЛЕНИЯ ======================
-    # windows/settings/base_tab.py
-
     def confirm_delete(self, title: str, message: str, item_type: str, item_id: int):
-        """
-        Показывает красивое диалоговое окно удаления с золотой и красной кнопками
-        """
+        """Показывает диалоговое окно удаления"""
         dialog = QDialog(self)
         dialog.setWindowTitle(title)
         dialog.setFixedSize(420, 180)
@@ -123,9 +117,6 @@ class BaseTab(QWidget):
             QPushButton:hover {
                 background-color: #862633;
             }
-            QPushButton:pressed {
-                background-color: #6a1e29;
-            }
         """)
 
         btn_yes = QPushButton("Да")
@@ -142,9 +133,6 @@ class BaseTab(QWidget):
             QPushButton:hover {
                 background-color: #998664;
             }
-            QPushButton:pressed {
-                background-color: #7a6a50;
-            }
         """)
 
         btn_layout.addWidget(btn_no)
@@ -155,10 +143,8 @@ class BaseTab(QWidget):
         btn_yes.clicked.connect(dialog.accept)
 
         if dialog.exec() == QDialog.DialogCode.Accepted:
-            print(f"✅ Подтверждено удаление {item_type} с ID {item_id}")
-            self.item_deleted.emit(item_type, item_id)  # ← Эмитим сигнал
+            self.item_deleted.emit(item_type, item_id)
 
-    # ====================== ОСТАЛЬНЫЕ МЕТОДЫ ======================
     def clear_cards(self):
         for card in self.cards:
             self.cardsGridLayout.removeWidget(card)

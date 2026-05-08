@@ -4,8 +4,8 @@ from typing import Dict, List, Optional, Tuple
 from datetime import datetime
 from sqlalchemy import select, func, update
 
-from models.tasks import Task
 from models.projects import BoardColumn
+from models.tasks import Task
 
 
 class TasksMoveService:
@@ -146,7 +146,6 @@ class TasksMoveService:
     def _get_column_by_name(self, column_name: str, project_id: int = None):
         """Получить колонку по имени"""
         from sqlalchemy import select
-        from models.projects import BoardColumn
 
         stmt = select(BoardColumn).where(BoardColumn.name == column_name)
         if project_id:

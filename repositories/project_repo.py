@@ -6,7 +6,7 @@ from typing import Optional, List, Dict, Any
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import select, update, delete
 
-from models.projects import Project, BoardColumn, EmployeeProject
+from models.projects import Project, EmployeeProject, BoardColumn
 
 
 class ProjectRepo:
