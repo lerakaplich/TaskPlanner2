@@ -267,10 +267,15 @@ class OvertimeCrudService:
         """Вычисляет общее количество часов из списка переработок"""
         total = 0.0
         for ot in overtimes:
-            duration_str = ot.get('duration', '0,0')
+            duration_value = ot.get('duration', 0.0)
             try:
-                total += float(duration_str.replace(',', '.'))
-            except ValueError:
+                if isinstance(duration_value, (int, float)):
+                    total += float(duration_value)
+                elif isinstance(duration_value, str):
+                    total += float(duration_value.replace(',', '.'))
+                else:
+                    total += 0.0
+            except (ValueError, AttributeError):
                 pass
         return round(total, 1)
 
