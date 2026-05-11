@@ -42,7 +42,9 @@ class EmployeesAnalytics(AnalyticsBaseService):
             "completed_tasks": stats["completed_tasks"],
             "overdue_tasks": stats["overdue_tasks"],
             "total_tasks": stats["total_tasks"],
-            "tag_analytics": stats["tag_analytics"]
+            "tag_analytics": stats["tag_analytics"],
+            "kpd": stats["kpd"],
+            "overtime_hours": stats["overtime_hours"]
         }
 
     def get_all_employees_for_cards(self, active_only: bool = True) -> List[Dict[str, Any]]:
@@ -60,7 +62,8 @@ class EmployeesAnalytics(AnalyticsBaseService):
                 if emp_data and not emp_data.is_active:
                     continue
             card_data = self.get_employee_card_data(emp.id)
-            result.append(card_data)
+            if card_data:
+                result.append(card_data)
 
         return result
 
@@ -85,6 +88,16 @@ class EmployeesAnalytics(AnalyticsBaseService):
                 result.append(card_data)
 
         return result
+
+    def get_employees_rating(self) -> List[Dict[str, Any]]:
+        """Получить список сотрудников, отсортированный по КПД (убывание)"""
+        employees = self.get_all_employees_with_stats()
+        # Сортируем по КПД (completed_tasks / total_tasks) в убывающем порядке
+        employees.sort(
+            key=lambda x: x.get('completed_tasks', 0) / x.get('total_tasks', 1) if x.get('total_tasks', 0) > 0 else 0,
+            reverse=True
+        )
+        return employees
 
     def filter_employees_by_name(self, employees_data: List[Dict], search_text: str) -> List[Dict]:
         """Фильтрует сотрудников по имени"""
@@ -157,8 +170,15 @@ class EmployeesAnalytics(AnalyticsBaseService):
                 if task.deadline.date() < datetime.now().date():
                     overdue_tasks += 1
 
-        # 3. Аналитика по тегам
+        # 3. КПД
+        total_tasks = len(all_tasks)
+        kpd = (completed_tasks / total_tasks) if total_tasks > 0 else 0
+
+        # 4. Аналитика по тегам
         tag_analytics = self._get_employee_tag_analytics(employee_id, all_tasks)
+
+        # 5. Часы переработок
+        overtime_hours = self._get_employee_overtime_hours(employee_id)
 
         return {
             "active_projects": active_projects,
@@ -166,8 +186,10 @@ class EmployeesAnalytics(AnalyticsBaseService):
             "active_tasks": active_tasks,
             "completed_tasks": completed_tasks,
             "overdue_tasks": overdue_tasks,
-            "total_tasks": len(all_tasks),
-            "tag_analytics": tag_analytics
+            "total_tasks": total_tasks,
+            "tag_analytics": tag_analytics,
+            "kpd": kpd,
+            "overtime_hours": overtime_hours
         }
 
     def _get_employee_tag_analytics(self, employee_id: int, tasks: List[Task]) -> List[Dict]:
@@ -200,3 +222,34 @@ class EmployeesAnalytics(AnalyticsBaseService):
                 stats["kpd"] = round(stats["completed"] / stats["count"], 2)
 
         return sorted(tag_stats.values(), key=lambda x: x["count"], reverse=True)
+
+    def _get_employee_overtime_hours(self, employee_id: int) -> float:
+        """Получить общее количество часов переработок сотрудника"""
+        try:
+            from database import get_tasks_session
+            from models.employees import EmployeeNote  # Исправлено: используем EmployeeNote вместо OvertimeNote
+
+            overtime_session = get_tasks_session()
+            if overtime_session is None:
+                return 0.0
+
+            from datetime import datetime
+            overtimes = overtime_session.query(EmployeeNote).filter(
+                EmployeeNote.employee_id == employee_id
+            ).all()
+
+            total_hours = 0.0
+            for ot in overtimes:
+                if ot.overtime_start and ot.overtime_end:
+                    start = datetime.combine(datetime.today(), ot.overtime_start)
+                    end = datetime.combine(datetime.today(), ot.overtime_end)
+                    if end < start:
+                        end = end.replace(day=end.day + 1)
+                    hours = (end - start).total_seconds() / 3600
+                    total_hours += hours
+
+            overtime_session.close()
+            return round(total_hours, 1)
+        except Exception as e:
+            print(f"❌ Ошибка при получении переработок для сотрудника {employee_id}: {e}")
+            return 0.0

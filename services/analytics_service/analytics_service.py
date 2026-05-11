@@ -49,6 +49,10 @@ class AnalyticsService:
     def get_all_employees_with_stats(self) -> List[Dict[str, Any]]:
         return self.employees.get_all_employees_with_stats()
 
+    def get_employees_rating(self) -> List[Dict[str, Any]]:
+        """Получить рейтинг сотрудников по КПД (от лучшего к худшему)"""
+        return self.employees.get_employees_rating()
+
     def filter_employees_by_name(self, employees_data: List[Dict], search_text: str) -> List[Dict]:
         return self.employees.filter_employees_by_name(employees_data, search_text)
 

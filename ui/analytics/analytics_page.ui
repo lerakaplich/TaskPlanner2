@@ -125,6 +125,53 @@ QTabWidget::pane {
        </item>
       </layout>
      </widget>
+     <widget class="QWidget" name="ratingTab">
+      <attribute name="title">
+       <string>Рейтинг сотрудников</string>
+      </attribute>
+      <layout class="QVBoxLayout" name="verticalLayout_rating">
+       <property name="leftMargin">
+        <number>15</number>
+       </property>
+       <property name="topMargin">
+        <number>15</number>
+       </property>
+       <property name="rightMargin">
+        <number>15</number>
+       </property>
+       <property name="bottomMargin">
+        <number>15</number>
+       </property>
+       <item>
+        <widget class="QScrollArea" name="ratingScroll">
+         <property name="styleSheet">
+          <string notr="true">border: none; background-color: transparent;</string>
+         </property>
+         <property name="widgetResizable">
+          <bool>true</bool>
+         </property>
+         <widget class="QWidget" name="ratingContainer">
+          <property name="geometry">
+           <rect>
+            <x>0</x>
+            <y>0</y>
+            <width>724</width>
+            <height>486</height>
+           </rect>
+          </property>
+          <property name="styleSheet">
+           <string notr="true">background-color: transparent;</string>
+          </property>
+          <layout class="QVBoxLayout" name="ratingLayout">
+           <property name="spacing">
+            <number>10</number>
+           </property>
+          </layout>
+         </widget>
+        </widget>
+       </item>
+      </layout>
+     </widget>
      <widget class="QWidget" name="themesTab">
       <attribute name="title">
        <string>Темы</string>

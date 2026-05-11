@@ -13,6 +13,8 @@ from services.analytics_service.analytics_service import AnalyticsService
 from windows.analytics.employees.employee_card import EmployeeCard
 from windows.analytics.theme.theme_card import ThemeCard
 from windows.analytics.projects.project_card_analytics import ProjectCard
+from windows.analytics.rating.rating_employee_card import RatingEmployeeCard
+
 
 class AnalyticsPage(QWidget):
     """Страница аналитики - только отображение, логика в сервисе"""
@@ -51,6 +53,48 @@ class AnalyticsPage(QWidget):
     def _setup_ui_from_file(self):
         """Настраивает UI из загруженного файла"""
 
+        # Переупорядочиваем вкладки - делаем Рейтинг первой
+        if hasattr(self, 'tabWidget'):
+            # Получаем текущий порядок вкладок
+            # Сначала Рейтинг, потом остальные
+            rating_widget = None
+            employees_widget = None
+            themes_widget = None
+            projects_widget = None
+
+            # Сохраняем существующие вкладки
+            for i in range(self.tabWidget.count()):
+                tab_text = self.tabWidget.tabText(i)
+                # Исправлено: ищем "Рейтинг сотрудников"
+                if tab_text == "Рейтинг сотрудников":
+                    rating_widget = self.tabWidget.widget(i)
+                elif tab_text == "Сотрудники":
+                    employees_widget = self.tabWidget.widget(i)
+                elif tab_text == "Темы":
+                    themes_widget = self.tabWidget.widget(i)
+                elif tab_text == "Проекты":
+                    projects_widget = self.tabWidget.widget(i)
+
+            # Очищаем все вкладки
+            self.tabWidget.clear()
+
+            # Добавляем в нужном порядке: Рейтинг, Сотрудники, Темы, Проекты
+            if rating_widget:
+                self.tabWidget.addTab(rating_widget, "Рейтинг сотрудников")
+            if employees_widget:
+                self.tabWidget.addTab(employees_widget, "Сотрудники")
+            if themes_widget:
+                self.tabWidget.addTab(themes_widget, "Темы")
+            if projects_widget:
+                self.tabWidget.addTab(projects_widget, "Проекты")
+
+            # Делаем Рейтинг активной вкладкой
+            self.tabWidget.setCurrentIndex(0)
+            print("✅ Вкладки переупорядочены: Рейтинг сотрудников теперь первая")
+
+        # Для вкладки Рейтинг - настраиваем контейнер
+        self._setup_rating_tab()
+
         # Для вкладки Сотрудники - используем существующие контейнеры из UI
         if hasattr(self, 'employeesContainer'):
             # Получаем существующий grid layout
@@ -73,6 +117,24 @@ class AnalyticsPage(QWidget):
 
         # Для вкладки Проекты - создаем контейнер принудительно
         self._setup_tab_container_force('projectsTab', 'projectsContainer', 'projectsGrid')
+
+    def _setup_rating_tab(self):
+        """Настраивает вкладку рейтинга сотрудников"""
+        if not hasattr(self, 'ratingTab'):
+            print("❌ ratingTab не найден в UI")
+            return
+
+        # Получаем контейнер для рейтинга
+        if hasattr(self, 'ratingContainer'):
+            self.rating_layout = self.ratingContainer.layout()
+            if self.rating_layout is None:
+                self.rating_layout = QVBoxLayout(self.ratingContainer)
+                self.rating_layout.setSpacing(10)
+                self.rating_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
+                self.ratingContainer.setLayout(self.rating_layout)
+            print("✅ Настроен rating_layout")
+        else:
+            print("❌ ratingContainer не найден")
 
     def _setup_tab_container_force(self, tab_name, container_name, grid_name):
         """Принудительно создает контейнер для вкладки"""
@@ -219,12 +281,16 @@ class AnalyticsPage(QWidget):
                 border-radius: 0px 8px 8px 8px; margin-top: -1px; }
         """)
 
-        # Вкладки
+        # Вкладки - Рейтинг ПЕРВЫЙ!
+        self._add_tab("Рейтинг", "ratingTab", "ratingScroll", "ratingContainer", "ratingGrid")
         self._add_tab("Сотрудники", "employeesTab", "employeesScroll", "employeesContainer", "employeesGrid")
         self._add_tab("Темы", "themesTab", "themesScroll", "themesContainer", "themesGrid")
         self._add_tab("Проекты", "projectsTab", "projectsScroll", "projectsContainer", "projectsGrid")
 
         layout.addWidget(self.tabWidget)
+
+        # Делаем Рейтинг активной вкладкой
+        self.tabWidget.setCurrentIndex(0)
 
     def _add_tab(self, title, tab_name, scroll_name, container_name, grid_name):
         """Добавляет вкладку программно"""
@@ -238,10 +304,16 @@ class AnalyticsPage(QWidget):
 
         container = QWidget()
         container.setStyleSheet("background-color: transparent;")
-        grid = QGridLayout(container)
-        grid.setHorizontalSpacing(15)
-        grid.setVerticalSpacing(15)
-        grid.setAlignment(Qt.AlignmentFlag.AlignTop)
+
+        if grid_name == "ratingGrid":
+            grid = QVBoxLayout(container)
+            grid.setSpacing(10)
+            grid.setAlignment(Qt.AlignmentFlag.AlignTop)
+        else:
+            grid = QGridLayout(container)
+            grid.setHorizontalSpacing(15)
+            grid.setVerticalSpacing(15)
+            grid.setAlignment(Qt.AlignmentFlag.AlignTop)
 
         scroll.setWidget(container)
         tab_layout.addWidget(scroll)
@@ -258,6 +330,15 @@ class AnalyticsPage(QWidget):
             return
         while grid.count():
             item = grid.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+
+    def _clear_layout(self, layout):
+        """Очищает вертикальный layout"""
+        if not layout:
+            return
+        while layout.count():
+            item = layout.takeAt(0)
             if item.widget():
                 item.widget().deleteLater()
 
@@ -287,7 +368,12 @@ class AnalyticsPage(QWidget):
             self._projects_data = self.service.get_projects_stats()
             print(f"📊 Загружено проектов: {len(self._projects_data)}")
 
+            # Убеждаемся, что рейтинговая вкладка настроена перед заполнением
+            if not hasattr(self, 'rating_layout'):
+                self._setup_rating_tab()
+
             self.populate_employees_tab()
+            self.populate_rating_tab()
             self.populate_themes_tab()
             self.populate_projects_tab()
 
@@ -337,6 +423,45 @@ class AnalyticsPage(QWidget):
             self.employeesContainer.repaint()
 
         print(f"✅ Отображено {len(self._employees_data)} сотрудников")
+
+    def populate_rating_tab(self):
+        """Заполняет вкладку рейтинга сотрудников (сортировка по КПД)"""
+        if not hasattr(self, 'rating_layout'):
+            print("❌ rating_layout не найден")
+            return
+
+        self._clear_layout(self.rating_layout)
+
+        if not self._employees_data:
+            self._show_empty_layout_message(self.rating_layout, "Нет данных о сотрудниках")
+            return
+
+        # Получаем отсортированный список сотрудников по КПД
+        rating_employees = self.service.get_employees_rating()
+        print(f"📊 Загружено сотрудников для рейтинга: {len(rating_employees)}")
+
+        for position, emp_data in enumerate(rating_employees):
+            try:
+                card = RatingEmployeeCard(emp_data, position=position, parent=self)
+                card.setMinimumHeight(80)
+                card.clicked.connect(self._on_employee_clicked)
+                self.rating_layout.addWidget(card)
+                print(f"   ✅ Добавлена карточка рейтинга #{position + 1}: {emp_data.get('name')} "
+                      f"(КПД: {emp_data.get('completed_tasks', 0)}/{emp_data.get('total_tasks', 0)})")
+            except Exception as e:
+                print(f"   ❌ Ошибка при создании карточки рейтинга для {emp_data.get('name')}: {e}")
+
+        # Добавляем растяжение в конце
+        self.rating_layout.addStretch()
+        print(f"✅ Отображено {len(rating_employees)} сотрудников в рейтинге")
+
+    def _on_employee_clicked(self, employee_id: int):
+        """Обработчик клика по карточке сотрудника в рейтинге"""
+        # Переключаемся на вкладку сотрудников (индекс 1, так как рейтинг на 0)
+        if hasattr(self, 'tabWidget') and self.tabWidget.count() > 1:
+            self.tabWidget.setCurrentIndex(1)  # Сотрудники на второй позиции
+
+        QMessageBox.information(self, "Сотрудник", f"Выбран сотрудник ID: {employee_id}")
 
     def populate_themes_tab(self):
         """Заполняет вкладку тем"""
@@ -392,12 +517,20 @@ class AnalyticsPage(QWidget):
         print(f"✅ Отображено проектов: {row * max_cols + col}")
 
     def _show_empty_message(self, grid, message):
-        """Показывает сообщение об отсутствии данных"""
+        """Показывает сообщение об отсутствии данных в grid"""
         self._clear_grid(grid)
         label = QLabel(message)
         label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         label.setStyleSheet("font-size: 18px; color: #666; padding: 50px;")
         grid.addWidget(label, 0, 0)
+
+    def _show_empty_layout_message(self, layout, message):
+        """Показывает сообщение об отсутствии данных в layout"""
+        self._clear_layout(layout)
+        label = QLabel(message)
+        label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        label.setStyleSheet("font-size: 18px; color: #666; padding: 50px;")
+        layout.addWidget(label)
 
     def refresh(self):
         """Обновляет все данные"""

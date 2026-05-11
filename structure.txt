@@ -1,4 +1,5 @@
-﻿+-- chat_server.py
+﻿+-- __pycache__
++-- chat_server.py
 +-- database.py
 +-- images
 |  +-- checkbox.png
@@ -10,16 +11,19 @@
 |  +-- qr.jpg
 +-- main.py
 +-- models
+|  +-- __pycache__
 |  +-- chat.py
 |  +-- employees.py
 |  +-- projects.py
 |  +-- schemas
+|  |  +-- __pycache__
 |  |  +-- chat_dto.py
 |  |  +-- employees_dto.py
 |  |  +-- projects_dto.py
 |  |  +-- tasks_dto.py
 |  +-- tasks.py
 +-- repositories
+|  +-- __pycache__
 |  +-- chat_repo.py
 |  +-- column_repo.py
 |  +-- employee_data_repo.py
@@ -29,8 +33,10 @@
 |  +-- tag_repo.py
 |  +-- task_repo.py
 +-- services
+|  +-- __pycache__
 |  +-- access_service.py
 |  +-- analytics_service
+|  |  +-- __pycache__
 |  |  +-- analytics_base_service.py
 |  |  +-- analytics_service.py
 |  |  +-- employees_analytics.py
@@ -40,6 +46,7 @@
 |  +-- auth_service.py
 |  +-- chat_service.py
 |  +-- employee_service
+|  |  +-- __pycache__
 |  |  +-- column_service.py
 |  |  +-- department_service.py
 |  |  +-- division_service.py
@@ -49,6 +56,7 @@
 |  |  +-- tag_service.py
 |  +-- gantt_service.py
 |  +-- overtime_service
+|  |  +-- __pycache__
 |  |  +-- overtime_base_service.py
 |  |  +-- overtime_crud_service.py
 |  |  +-- overtime_export_service.py
@@ -56,6 +64,7 @@
 |  |  +-- overtime_service.py
 |  +-- profile_service.py
 |  +-- projects_service
+|  |  +-- __pycache__
 |  |  +-- projects_columns_service.py
 |  |  +-- projects_crud_service.py
 |  |  +-- projects_members_service.py
@@ -64,6 +73,7 @@
 |  |  +-- projects_statistics_service.py
 |  |  +-- projects_tasks_service.py
 |  +-- tasks_service
+|  |  +-- __pycache__
 |  |  +-- tasks_bulk_service.py
 |  |  +-- tasks_crud_service.py
 |  |  +-- tasks_filter_service.py
@@ -137,26 +147,33 @@
 |  |  |  +-- tag_card.ui
 |  |  |  +-- tag_dialog.ui
 +-- utils
+|  +-- __pycache__
 |  +-- error_handler.py
 |  +-- socket_manager.py
 +-- windows
 |  +-- analytics
+|  |  +-- __pycache__
 |  |  +-- analytics_page.py
 |  |  +-- employees
+|  |  |  +-- __pycache__
 |  |  |  +-- employee_card.py
 |  |  +-- projects
+|  |  |  +-- __pycache__
 |  |  |  +-- employee_project_card.py
 |  |  |  +-- project_card_analytics.py
 |  |  +-- task_card_analytics.py
 |  |  +-- theme
+|  |  |  +-- __pycache__
 |  |  |  +-- employees_stats_view.py
 |  |  |  +-- theme_card.py
 |  |  |  +-- theme_projects_view.py
 |  +-- archive
+|  |  +-- __pycache__
 |  |  +-- archive_page.py
 |  |  +-- archived_project_card.py
 |  |  +-- archived_task_card.py
 |  +-- chat
+|  |  +-- __pycache__
 |  |  +-- chat_create_dialog.py
 |  |  +-- chat_create_view.py
 |  |  +-- chat_forward_dialog.py
@@ -168,29 +185,36 @@
 |  |  +-- chat_view.py
 |  |  +-- employee_selection_dialog.py
 |  +-- gantt
+|  |  +-- __pycache__
 |  |  +-- gantt_chart.py
 |  |  +-- gantt_task_item.py
 |  +-- login
+|  |  +-- __pycache__
 |  |  +-- login_window.py
 |  +-- my_tasks
+|  |  +-- __pycache__
 |  |  +-- my_tasks_page.py
 |  |  +-- task_card.py
 |  +-- other_tasks
+|  |  +-- __pycache__
 |  |  +-- others_task_card.py
 |  |  +-- others_tasks_page.py
 |  |  +-- task_dialog.py
 |  +-- overtime
+|  |  +-- __pycache__
 |  |  +-- add_overtime_dialog.py
 |  |  +-- edit_overtime_dialog.py
 |  |  +-- overtime_card.py
 |  |  +-- overtime_page.py
 |  |  +-- period_dialog.py
 |  +-- profile
+|  |  +-- __pycache__
 |  |  +-- chart_widget.py
 |  |  +-- edit_profile.py
 |  |  +-- profile_page.py
 |  |  +-- projects_page.py
 |  +-- projects
+|  |  +-- __pycache__
 |  |  +-- base_project_dialog.py
 |  |  +-- column_selector.py
 |  |  +-- employee_selector.py
@@ -201,28 +225,35 @@
 |  |  +-- project_edit_dialog.py
 |  |  +-- project_view_page.py
 |  +-- settings
+|  |  +-- __pycache__
 |  |  +-- base_tab.py
 |  |  +-- columns
+|  |  |  +-- __pycache__
 |  |  |  +-- column_card.py
 |  |  |  +-- column_dialog.py
 |  |  |  +-- columns_tab.py
 |  |  +-- departments
+|  |  |  +-- __pycache__
 |  |  |  +-- department_card.py
 |  |  |  +-- department_dialog.py
 |  |  |  +-- departments_tab.py
 |  |  +-- divisions
+|  |  |  +-- __pycache__
 |  |  |  +-- division_card.py
 |  |  |  +-- division_dialog.py
 |  |  |  +-- divisions_tab.py
 |  |  +-- employees
+|  |  |  +-- __pycache__
 |  |  |  +-- employee_card.py
 |  |  |  +-- employee_dialog.py
 |  |  |  +-- employees_tab.py
 |  |  +-- settings_page.py
 |  |  +-- tags
+|  |  |  +-- __pycache__
 |  |  |  +-- tag_card.py
 |  |  |  +-- tag_dialog.py
 |  |  |  +-- tags_tab.py
 |  +-- widgets
+|  |  +-- __pycache__
 |  |  +-- color_picker_dialog.py
 |  |  +-- kanban_column.py
