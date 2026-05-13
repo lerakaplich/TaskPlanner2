@@ -8,6 +8,7 @@ from models.projects import Project, EmployeeProject
 from models.employees import Employee, EmployeeData
 from repositories.tag_repo import TagRepo
 from .analytics_base_service import AnalyticsBaseService
+from .kpd_calculator import KPDCalculator
 
 
 class EmployeesAnalytics(AnalyticsBaseService):
@@ -123,14 +124,15 @@ class EmployeesAnalytics(AnalyticsBaseService):
         }
 
     def _get_employee_stats(self, employee_id: int) -> Dict[str, Any]:
-        """Получить статистику сотрудника"""
+        """Получить статистику сотрудника с расчетом КПД по новой формуле"""
         from sqlalchemy import select, or_
+        from models.tasks import Task
+        from models.employees import EmployeeNote
 
         # 1. Проекты сотрудника
         projects_stmt = select(Project).join(
             EmployeeProject, Project.id == EmployeeProject.project_id
         ).where(EmployeeProject.employee_id == employee_id)
-
         all_projects = list(self.session.scalars(projects_stmt))
 
         active_projects = []
@@ -143,7 +145,7 @@ class EmployeesAnalytics(AnalyticsBaseService):
             else:
                 active_projects.append(proj_dict)
 
-        # 2. Задачи сотрудника
+        # 2. Задачи сотрудника с прогрессом
         tasks_stmt = select(Task).where(
             or_(
                 Task.assigned_to == employee_id,
@@ -152,6 +154,39 @@ class EmployeesAnalytics(AnalyticsBaseService):
         )
         all_tasks = list(self.session.scalars(tasks_stmt))
 
+        # Получаем прогресс для каждой задачи
+        from models.task_progress import TaskProgress
+        tasks_data = []
+        for task in all_tasks:
+            # Получаем прогресс
+            progress = self.session.query(TaskProgress).filter(
+                TaskProgress.task_id == task.id
+            ).first()
+            progress_percent = progress.progress_percent if progress else 0
+
+            is_completed = False
+            if task.column:
+                is_completed = task.column.is_done_column
+
+            task_data = {
+                "id": task.id,
+                "title": task.title,
+                "priority": task.priority.value if hasattr(task.priority, 'value') else str(task.priority),
+                "difficulty": task.difficulty or 0,
+                "progress_percent": progress_percent,
+                "is_completed": is_completed or task.is_archived,
+                "due_date_str": task.deadline.strftime("%d.%m.%Y") if task.deadline else "",
+                "completed_at_str": task.archived_at.strftime("%d.%m.%Y") if task.archived_at else ""
+            }
+            tasks_data.append(task_data)
+
+        # 3. Часы переработок
+        overtime_hours = self._get_employee_overtime_hours(employee_id)
+
+        # 4. Расчет КПД по новой формуле
+        kpd_result = KPDCalculator.calculate_employee_kpd(tasks_data, overtime_hours)
+
+        # Подсчет активных/выполненных задач
         active_tasks = 0
         completed_tasks = 0
         overdue_tasks = 0
@@ -170,15 +205,8 @@ class EmployeesAnalytics(AnalyticsBaseService):
                 if task.deadline.date() < datetime.now().date():
                     overdue_tasks += 1
 
-        # 3. КПД
-        total_tasks = len(all_tasks)
-        kpd = (completed_tasks / total_tasks) if total_tasks > 0 else 0
-
-        # 4. Аналитика по тегам
+        # 5. Аналитика по тегам
         tag_analytics = self._get_employee_tag_analytics(employee_id, all_tasks)
-
-        # 5. Часы переработок
-        overtime_hours = self._get_employee_overtime_hours(employee_id)
 
         return {
             "active_projects": active_projects,
@@ -186,10 +214,20 @@ class EmployeesAnalytics(AnalyticsBaseService):
             "active_tasks": active_tasks,
             "completed_tasks": completed_tasks,
             "overdue_tasks": overdue_tasks,
-            "total_tasks": total_tasks,
+            "total_tasks": len(all_tasks),
             "tag_analytics": tag_analytics,
-            "kpd": kpd,
-            "overtime_hours": overtime_hours
+            "kpd": kpd_result["total_kpd"] / 100,
+            "kpd_percent": kpd_result["total_kpd"],
+            "weighted_kpd": kpd_result["weighted_kpd"],
+            "overtime_hours": overtime_hours,
+            # Добавляем для тултипа дополнительную информацию
+            "kpd_details": {
+                "completed_count": completed_tasks,
+                "total_count": len(all_tasks),
+                "weighted_score": kpd_result["weighted_kpd"],
+                "overtime_penalty": 1.0 - (
+                    kpd_result["total_kpd"] / kpd_result["weighted_kpd"] if kpd_result["weighted_kpd"] > 0 else 0)
+            }
         }
 
     def _get_employee_tag_analytics(self, employee_id: int, tasks: List[Task]) -> List[Dict]:

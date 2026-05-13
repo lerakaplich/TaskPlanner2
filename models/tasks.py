@@ -15,6 +15,8 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .employees import Base
+from .projects import BoardColumn
+from .task_progress import TaskProgress
 
 
 class TaskPriorityEnum(str, enum.Enum):
@@ -50,6 +52,12 @@ class Task(Base):
     # Relationships
     column: Mapped[Optional["BoardColumn"]] = relationship(back_populates="tasks")
     tags: Mapped[List["TaskTag"]] = relationship(back_populates="task", cascade="all, delete-orphan")
+    progress: Mapped[Optional["TaskProgress"]] = relationship(
+        "TaskProgress",
+        backref="task",
+        cascade="all, delete-orphan",
+        uselist=False
+    )
 
     @property
     def status(self) -> Optional[str]:

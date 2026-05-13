@@ -21,6 +21,7 @@
 |  |  +-- employees_dto.py
 |  |  +-- projects_dto.py
 |  |  +-- tasks_dto.py
+|  +-- task_progress.py
 |  +-- tasks.py
 +-- repositories
 |  +-- __pycache__
@@ -40,6 +41,7 @@
 |  |  +-- analytics_base_service.py
 |  |  +-- analytics_service.py
 |  |  +-- employees_analytics.py
+|  |  +-- kpd_calculator.py
 |  |  +-- projects_analytics.py
 |  |  +-- themes_analytics.py
 |  +-- archive_service.py
@@ -161,6 +163,9 @@
 |  |  |  +-- __pycache__
 |  |  |  +-- employee_project_card.py
 |  |  |  +-- project_card_analytics.py
+|  |  +-- rating
+|  |  |  +-- __pycache__
+|  |  |  +-- rating_employee_card.py
 |  |  +-- task_card_analytics.py
 |  |  +-- theme
 |  |  |  +-- __pycache__
