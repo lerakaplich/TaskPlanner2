@@ -62,7 +62,8 @@ class TaskRepo:
         query = select(Task).where(
             and_(
                 Task.deadline < func.now(),
-                Task.is_archived == False
+                Task.is_archived == False,
+                Task.completed_at.is_(None)  # Не завершенные
             )
         )
         if project_id:
@@ -79,6 +80,74 @@ class TaskRepo:
         )
         return list(self.session.scalars(stmt))
 
+    # repositories/task_repo.py
+
+    def update_progress(self, task_id: int, progress_percent: float) -> Optional[Task]:
+        """Обновить прогресс выполнения задачи (0-100)"""
+        print(f"\n🔍 [DEBUG] task_repo.update_progress: начало")
+        print(f"   - task_id: {task_id}")
+        print(f"   - progress_percent: {progress_percent}")
+
+        if not 0 <= progress_percent <= 100:
+            raise ValueError("Progress percent must be between 0 and 100")
+
+        task = self.get_by_id(task_id)
+        if task:
+            old_progress = task.progress_percent
+            print(f"   - найдена задача: {task.title}")
+            print(f"   - старый прогресс: {old_progress}%")
+
+            task.progress_percent = progress_percent
+
+            # Если прогресс 100% и нет даты завершения, устанавливаем
+            if progress_percent >= 100 and not task.completed_at:
+                task.completed_at = datetime.now()
+                print(f"   - установлена дата завершения: {task.completed_at}")
+            # Если прогресс меньше 100% и есть дата завершения, убираем
+            elif progress_percent < 100 and task.completed_at:
+                task.completed_at = None
+                print(f"   - сброшена дата завершения")
+
+            self.session.flush()
+            print(f"   - изменения сохранены в БД")
+        else:
+            print(f"   - ❌ задача НЕ найдена!")
+
+        print(f"🔍 [DEBUG] task_repo.update_progress: конец, возвращаем {task}\n")
+        return task
+
+    def start_task(self, task_id: int) -> Optional[Task]:
+        """Начать выполнение задачи (установить started_at)"""
+        task = self.get_by_id(task_id)
+        if task and not task.started_at:
+            task.started_at = datetime.now()
+            self.session.flush()
+        return task
+
+    def complete_task(self, task_id: int, actual_hours: float = None) -> Optional[Task]:
+        """Завершить задачу"""
+        task = self.get_by_id(task_id)
+        if task and not task.completed_at:
+            task.completed_at = datetime.now()
+            task.progress_percent = 100.0
+
+            if actual_hours is not None:
+                task.actual_hours = actual_hours
+            elif task.started_at:
+                # Рассчитываем фактические часы если не указаны
+                task.actual_hours = (datetime.now() - task.started_at).total_seconds() / 3600
+
+            self.session.flush()
+        return task
+
+    def update_actual_hours(self, task_id: int, actual_hours: float) -> Optional[Task]:
+        """Обновить фактические затраченные часы"""
+        task = self.get_by_id(task_id)
+        if task:
+            task.actual_hours = actual_hours
+            self.session.flush()
+        return task
+
     def create(self, **kwargs) -> Task:
         """Создать новую задачу"""
         if 'position' not in kwargs:
@@ -89,6 +158,12 @@ class TaskRepo:
 
         if 'difficulty' not in kwargs:
             kwargs['difficulty'] = 0.0
+
+        if 'progress_percent' not in kwargs:
+            kwargs['progress_percent'] = 0.0
+
+        if 'actual_hours' not in kwargs:
+            kwargs['actual_hours'] = 0.0
 
         required_fields = ['project_id', 'title', 'position']
         for field in required_fields:
@@ -104,9 +179,29 @@ class TaskRepo:
         """Обновить задачу"""
         task = self.get_by_id(task_id)
         if task:
+            # Специальная обработка для прогресса
+            if 'progress_percent' in kwargs:
+                progress = kwargs.pop('progress_percent')
+                if 0 <= progress <= 100:
+                    task.progress_percent = progress
+
+                    # Автоматическое завершение при 100%
+                    if progress >= 100 and not task.completed_at:
+                        task.completed_at = datetime.now()
+                    elif progress < 100 and task.completed_at:
+                        task.completed_at = None
+
+            # Обновляем остальные поля
+            allowed_fields = [
+                'column_id', 'title', 'description', 'position', 'priority',
+                'deadline', 'assigned_to', 'difficulty', 'started_at',
+                'completed_at', 'actual_hours', 'is_archived', 'archived_at'
+            ]
+
             for key, value in kwargs.items():
-                if hasattr(task, key):
+                if key in allowed_fields and value is not None:
                     setattr(task, key, value)
+
             self.session.flush()
         return task
 
@@ -170,7 +265,7 @@ class TaskRepo:
             self.session.execute(stmt)
 
     # =====================================================
-    # Статистика
+    # Статистика и аналитика
     # =====================================================
 
     def get_task_count_by_column(self, project_id: int) -> Dict[str, int]:
@@ -205,7 +300,6 @@ class TaskRepo:
         """Количество выполненных задач в проекте"""
         from models.projects import BoardColumn
 
-        # Используем select из SQLAlchemy (уже импортирован в начале файла)
         done_columns = select(BoardColumn.id).where(
             BoardColumn.project_id == project_id,
             BoardColumn.is_done_column == True
@@ -222,7 +316,6 @@ class TaskRepo:
         """Количество просроченных задач в проекте"""
         from models.projects import BoardColumn
 
-        # Используем select из SQLAlchemy (уже импортирован в начале файла)
         done_columns = select(BoardColumn.id).where(
             BoardColumn.project_id == project_id,
             BoardColumn.is_done_column == True
@@ -233,6 +326,7 @@ class TaskRepo:
                 Task.project_id == project_id,
                 Task.deadline < func.now(),
                 Task.is_archived == False,
+                Task.completed_at.is_(None),  # Не завершены
                 Task.column_id.not_in(select(done_columns))
             )
         )
@@ -261,9 +355,61 @@ class TaskRepo:
         active = 0
         completed = 0
         for task in tasks:
-            if task.column_id in done_columns:
+            if task.completed_at or task.column_id in done_columns:
                 completed += 1
             else:
                 active += 1
 
         return {"active": active, "completed": completed}
+
+    # =====================================================
+    # НОВАЯ СТАТИСТИКА ПО КПД
+    # =====================================================
+
+    def get_tasks_with_kpd(self, employee_id: int = None) -> List[Dict[str, Any]]:
+        """Получить задачи с рассчитанным КПД"""
+        query = select(Task).where(Task.completed_at.isnot(None))
+        if employee_id:
+            query = query.where(Task.assigned_to == employee_id)
+
+        tasks = list(self.session.scalars(query))
+        return [
+            {
+                "id": t.id,
+                "title": t.title,
+                "kpd_score": t.kpd_score,
+                "difficulty": t.difficulty,
+                "priority": t.priority.value,
+                "efficiency_factor": t.efficiency_factor,
+                "completed_at": t.completed_at,
+                "deadline": t.deadline
+            }
+            for t in tasks
+        ]
+
+    def get_average_kpd_by_project(self, project_id: int) -> float:
+        """Средний КПД по проекту"""
+        completed_tasks = self.session.scalars(
+            select(Task).where(
+                Task.project_id == project_id,
+                Task.completed_at.isnot(None),
+                Task.is_archived == False
+            )
+        ).all()
+
+        if not completed_tasks:
+            return 0.0
+
+        kpds = [t.kpd_score for t in completed_tasks if t.kpd_score > 0]
+        return sum(kpds) / len(kpds) if kpds else 0.0
+
+    def get_tasks_by_kpd_range(self, min_kpd: float = 0, max_kpd: float = 100) -> List[Task]:
+        """Получить задачи с КПД в заданном диапазоне"""
+        tasks = self.session.scalars(
+            select(Task).where(
+                Task.completed_at.isnot(None),
+                Task.is_archived == False
+            )
+        ).all()
+
+        return [t for t in tasks if min_kpd <= t.kpd_score <= max_kpd]

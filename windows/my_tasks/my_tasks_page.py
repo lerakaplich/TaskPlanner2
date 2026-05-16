@@ -179,50 +179,96 @@ class MyTasksPage(QWidget):
         card.archive_requested.connect(self._on_archive_task)
         card.duplicate_requested.connect(self._on_duplicate_task)
         card.drag_started.connect(self._on_drag_started)
+        # Добавляем сигнал изменения прогресса
+        card.progress_changed.connect(self._on_progress_changed)
 
-    # ==========================================================
-    # Обновление UI
-    # ==========================================================
+    def _on_progress_changed(self, task_id: int, progress_percent: int):
+        """Обработчик изменения прогресса задачи"""
+        print(f"\n🔍 [DEBUG] _on_progress_changed: начало")
+        print(f"   - task_id: {task_id}")
+        print(f"   - progress_percent: {progress_percent}")
+
+        try:
+            # Обновляем прогресс через сервис
+            updated_task = self.service.update_task_progress(task_id, progress_percent)
+
+            if updated_task:
+                # НЕ обновляем карточку - просто обновляем данные в task_data карточки
+                # ищем карточку и обновляем её данные без перерисовки
+                for column in self.column_widgets:
+                    for card in column.get_tasks():
+                        if card.task_id == task_id:
+                            # Обновляем только прогресс в данных, без вызова fill_ui
+                            card.task_data["progress_percent"] = progress_percent
+                            # Обновляем отображение прогресс-бара
+                            card.overallProgress.blockSignals(True)
+                            card.overallProgress.setValue(progress_percent)
+                            card.overallProgress.setFormat(f"Общий прогресс: {progress_percent}%")
+                            card.overallProgress.blockSignals(False)
+                            print(f"✅ Прогресс задачи {task_id} обновлен до {progress_percent}% в UI")
+                            break
+                    else:
+                        continue
+                    break
+
+                self.update_statistics()
+                self.task_moved.emit()
+            else:
+                print(f"❌ Не удалось обновить прогресс задачи {task_id}")
+
+        except Exception as e:
+            print(f"❌ Ошибка при обновлении прогресса: {e}")
+            import traceback
+            traceback.print_exc()
+
+        print(f"🔍 [DEBUG] _on_progress_changed: конец\n")
 
     def update_task_card(self, updated_task: Dict):
         """Обновляет карточку задачи в UI после перемещения"""
         task_id = updated_task.get("id")
         new_status = updated_task.get("status")
 
-        print(f"🔄 Обновление UI для задачи {task_id} → '{new_status}'")
+        print(f"\n🔍 [DEBUG] update_task_card: начало")
+        print(f"   - task_id: {task_id}")
+        print(f"   - new_status: {new_status}")
 
         # Ищем карточку во всех колонках
         found = False
         for column in self.column_widgets:
+            print(f"   - проверяем колонку: {column.column_name}")
             for card in column.get_tasks()[:]:  # копия списка
-                if getattr(card, 'task_id', None) == task_id:
+                card_id = getattr(card, 'task_id', None)
+                print(f"     - карточка в колонке: task_id={card_id}, card={card}")
+                if card_id == task_id:
                     found = True
                     old_status = card.task_data.get("status")
+                    print(f"     - НАЙДЕНА! old_status={old_status}")
 
                     if old_status != new_status:
-                        print(f"   Перемещаем виджет из '{old_status}' в '{new_status}'")
+                        print(f"     - статус изменился, перемещаем")
                         column.remove_task(card)
-
-                        # Добавляем в новую колонку
                         new_column = self.columns.get(new_status)
                         if new_column:
                             new_column.add_task(card)
-                            print(f"   ✅ Карточка добавлена в колонку '{new_status}'")
+                            print(f"     - перемещена в колонку '{new_status}'")
                         else:
-                            print(f"   ⚠️ Колонка '{new_status}' не найдена в self.columns")
+                            print(f"     - ⚠️ колонка '{new_status}' не найдена")
 
-                    # Обновляем данные
+                    print(f"     - обновляем данные карточки")
                     card.update_task_data(updated_task)
-                    break  # выходим из внутреннего цикла
-
+                    print(f"     - карточка обновлена, isVisible={card.isVisible()}")
+                    break
             if found:
                 break
 
         if not found:
-            print(f"⚠️ Карточка задачи {task_id} не найдена в UI — перезагружаем все задачи")
-            self.load_tasks()  # fallback
+            print(f"   - ⚠️ карточка НЕ найдена в UI")
+            print(f"   - перезагружаем все задачи")
+            self.load_tasks()
+        else:
+            print(f"   - карточка найдена и обновлена")
 
-        self.update_statistics()
+        print(f"🔍 [DEBUG] update_task_card: конец\n")
 
     def update_statistics(self):
         """Обновляет статистику"""

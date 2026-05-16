@@ -1,6 +1,6 @@
 # repositories/employee_repo.py (исправленный)
 
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
 from datetime import datetime
 from sqlalchemy.orm import Session
 from sqlalchemy import select, update, delete, func
@@ -13,6 +13,49 @@ class EmployeeRepo:
 
     def __init__(self, session: Session):
         self.session = session
+
+    def get_with_kpd(self, employee_id: int) -> Optional[Dict[str, Any]]:
+        """Получить сотрудника вместе с данными КПД"""
+        employee = self.get_by_id(employee_id)
+        if not employee:
+            return None
+
+        employee_data = employee.employee_data
+
+        return {
+            "id": employee.id,
+            "number": employee.number,
+            "full_name": f"{employee.last_name} {employee.first_name} {employee.middle_name or ''}".strip(),
+            "position": employee.position,
+            "kpd_rating": employee_data.kpd_rating if employee_data else 0.0,
+            "kpd_level": employee_data.kpd_level if employee_data else "Нет данных",
+            "on_time_rate": employee_data.on_time_rate if employee_data else 0.0,
+            "tasks_completed_total": employee_data.tasks_completed_total if employee_data else 0,
+            "tasks_completed_on_time": employee_data.tasks_completed_on_time if employee_data else 0,
+            "avg_task_completion_days": employee_data.avg_task_completion_days if employee_data else 0.0,
+            "last_calculated": employee_data.kpd_last_calculated if employee_data else None
+        }
+
+    def get_all_with_kpd(self) -> List[Dict[str, Any]]:
+        """Получить всех сотрудников с данными КПД"""
+        employees = self.get_all()
+        result = []
+
+        for emp in employees:
+            emp_data = emp.employee_data
+            result.append({
+                "id": emp.id,
+                "number": emp.number,
+                "full_name": f"{emp.last_name} {emp.first_name} {emp.middle_name or ''}".strip(),
+                "position": emp.position,
+                "kpd_rating": emp_data.kpd_rating if emp_data else 0.0,
+                "kpd_level": emp_data.kpd_level if emp_data else "Нет данных",
+                "tasks_completed": emp_data.tasks_completed_total if emp_data else 0
+            })
+
+        # Сортируем по КПД
+        result.sort(key=lambda x: x["kpd_rating"], reverse=True)
+        return result
 
     # =========================
     # Получение

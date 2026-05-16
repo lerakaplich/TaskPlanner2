@@ -5,7 +5,7 @@ from PyQt6.QtCore import Qt, pyqtSignal
 
 
 class RatingEmployeeCard(QFrame):
-    """Карточка сотрудника для рейтинга с КПД"""
+    """Карточка сотрудника для рейтинга с КПД (использует новые поля)"""
 
     clicked = pyqtSignal(int)
 
@@ -14,7 +14,88 @@ class RatingEmployeeCard(QFrame):
         self.employee_data = employee_data
         self.employee_id = employee_data.get('id')
         self.position = position
+
+        # Логирование получения данных
+        self._log_employee_data()
+
         self._init_ui()
+
+    def _log_employee_data(self):
+        """Логирует полученные данные сотрудника для отладки"""
+        print(f"\n{'=' * 60}")
+        print(f"📊 РАСЧЕТ КПД ДЛЯ СОТРУДНИКА #{self.position + 1}")
+        print(f"{'=' * 60}")
+        print(f"👤 Сотрудник: {self.employee_data.get('name', 'Неизвестно')}")
+        print(f"📋 Должность: {self.employee_data.get('position', '—')}")
+        print(f"📁 Отдел: {self.employee_data.get('department', '—')}")
+        print(f"{'-' * 40}")
+
+        # Базовые метрики
+        completed_tasks = self.employee_data.get('completed_tasks', 0)
+        total_tasks = self.employee_data.get('total_tasks', 0)
+        overdue_tasks = self.employee_data.get('overdue_tasks', 0)
+
+        print(f"📊 Базовые метрики:")
+        print(f"   ✅ Выполнено задач: {completed_tasks}")
+        print(f"   📋 Всего задач: {total_tasks}")
+        print(f"   ⏰ Просрочено: {overdue_tasks}")
+
+        if total_tasks > 0:
+            completion_rate = (completed_tasks / total_tasks) * 100
+            print(f"   📈 Процент выполнения: {completion_rate:.1f}%")
+
+        # Данные из EmployeeData (рассчитанные в БД)
+        kpd_rating = self.employee_data.get('kpd_rating', 0)
+        on_time_rate = self.employee_data.get('on_time_rate', 0)
+        tasks_completed_total = self.employee_data.get('tasks_completed_total', 0)
+        tasks_completed_on_time = self.employee_data.get('tasks_completed_on_time', 0)
+        avg_completion_days = self.employee_data.get('avg_task_completion_days', 0)
+
+        print(f"\n📊 Данные из EmployeeData (рассчитанные в БД):")
+        print(f"   ⭐ КПД рейтинг: {kpd_rating:.1f}%")
+        print(f"   🎯 Процент в срок: {on_time_rate:.1f}%")
+        print(f"   ✅ Выполнено (БД): {tasks_completed_total}")
+        print(f"   🎯 В срок (БД): {tasks_completed_on_time}")
+        print(f"   📅 Среднее время выполнения: {avg_completion_days:.1f} дн.")
+
+        # Данные из analytics (рассчитанные в реальном времени)
+        kpd_percent = self.employee_data.get('kpd_percent', 0)
+        weighted_kpd = self.employee_data.get('weighted_kpd', 0)
+        overtime_hours = self.employee_data.get('overtime_hours', 0)
+
+        print(f"\n📊 Данные из Analytics (рассчитанные в real-time):")
+        print(f"   ⚡ КПД процент: {kpd_percent:.1f}%")
+        print(f"   🎯 Взвешенный КПД: {weighted_kpd:.1f}%")
+        print(f"   ⏱️ Часы переработок: {overtime_hours:.1f} ч.")
+
+        # Формула расчета
+        print(f"\n📐 ФОРМУЛА РАСЧЕТА КПД ЗАДАЧИ:")
+        print(f"   KPD = Сложность × Приоритет × Эффективность × Готовность")
+        print(f"   ")
+        print(f"   где:")
+        print(f"   • Сложность: 1★=0.6, 2★=0.8, 3★=1.0, 4★=1.2, 5★=1.5")
+        print(f"   • Приоритет: low=0.8, medium=1.0, high=1.2, critical=1.5")
+        print(f"   • Эффективность = Плановые_дни / Фактические_дни")
+        print(f"   • Готовность: 1.0 для выполненных задач")
+
+        # Итоговый КПД
+        final_kpd = kpd_percent if kpd_percent > 0 else kpd_rating
+        if final_kpd == 0 and total_tasks > 0:
+            final_kpd = (completed_tasks / total_tasks * 100)
+
+        print(f"\n🎯 ИТОГОВЫЙ КПД: {final_kpd:.1f}%")
+
+        # Оценка
+        if final_kpd >= 80:
+            print(f"🏆 ОЦЕНКА: Отлично! Высокая эффективность")
+        elif final_kpd >= 60:
+            print(f"👍 ОЦЕНКА: Хорошо! Есть куда расти")
+        elif final_kpd >= 40:
+            print(f"⚠️ ОЦЕНКА: Средне! Требуется улучшение")
+        else:
+            print(f"❌ ОЦЕНКА: Низкая эффективность! Требует внимания")
+
+        print(f"{'=' * 60}\n")
 
     def _init_ui(self):
         # Стили
@@ -31,7 +112,6 @@ class RatingEmployeeCard(QFrame):
             }
         """)
 
-        # Убираем фиксированную высоту
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
         self.setMinimumHeight(70)
 
@@ -88,26 +168,33 @@ class RatingEmployeeCard(QFrame):
         # Статистика (выполнено/всего задач)
         completed_tasks = self.employee_data.get('completed_tasks', 0)
         total_tasks = self.employee_data.get('total_tasks', 0)
-        stats_label = QLabel(f"📊 Выполнено задач: {completed_tasks} из {total_tasks}")
+
+        # Используем новые поля из EmployeeData если есть
+        kpd_rating = self.employee_data.get('kpd_rating', 0)
+        on_time_rate = self.employee_data.get('on_time_rate', 0)
+
+        stats_text = f"📊 Задач: {completed_tasks} из {total_tasks}"
+        if on_time_rate > 0:
+            stats_text += f" · В срок: {on_time_rate:.0f}%"
+        stats_label = QLabel(stats_text)
         stats_label.setStyleSheet("color: #888; font-size: 11px;")
         info_layout.addWidget(stats_label)
 
         main_layout.addLayout(info_layout, stretch=1)
 
-        # КПД с процентами (НОВЫЙ АЛГОРИТМ)
+        # КПД с процентами
         kpd_layout = QVBoxLayout()
         kpd_layout.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
 
-        # Получаем новый КПД из данных (рассчитанный по сложному алгоритму)
+        # Получаем КПД - приоритет новым полям
         kpd_percent = self.employee_data.get('kpd_percent', 0)
-        weighted_kpd = self.employee_data.get('weighted_kpd', 0)
-
-        # Данные для расчета (для тултипа)
-        overtime_hours = self.employee_data.get('overtime_hours', 0)
-
-        # Если нового КПД нет, используем старый простой расчет
+        if kpd_percent == 0:
+            kpd_percent = self.employee_data.get('kpd_rating', 0)
         if kpd_percent == 0 and total_tasks > 0:
             kpd_percent = (completed_tasks / total_tasks * 100) if total_tasks > 0 else 0
+
+        weighted_kpd = self.employee_data.get('weighted_kpd', 0)
+        overtime_hours = self.employee_data.get('overtime_hours', 0)
 
         # Основной процент КПД
         kpd_label = QLabel(f"{kpd_percent:.1f}%")
@@ -124,14 +211,14 @@ class RatingEmployeeCard(QFrame):
             kpd_label.setStyleSheet("font-size: 22px; font-weight: bold; color: #e74c3c;")
         kpd_layout.addWidget(kpd_label)
 
-        # Взвешенный КПД (более точный, учитывает сложность и приоритет)
+        # Взвешенный КПД
         if weighted_kpd > 0 and weighted_kpd != kpd_percent:
             weighted_label = QLabel(f"взв: {weighted_kpd:.1f}%")
             weighted_label.setAlignment(Qt.AlignmentFlag.AlignRight)
             weighted_label.setStyleSheet("color: #888; font-size: 10px;")
             kpd_layout.addWidget(weighted_label)
 
-        # Прогресс-бар (Цвет меняется в зависимости от процента)
+        # Прогресс-бар
         progress_bar = QProgressBar()
         progress_bar.setRange(0, 100)
         progress_bar.setValue(int(kpd_percent))
@@ -139,7 +226,7 @@ class RatingEmployeeCard(QFrame):
         progress_bar.setFixedHeight(8)
         progress_bar.setTextVisible(False)
 
-        # Выбираем цвет градиента в зависимости от КПД
+        # Выбираем цвет градиента
         if kpd_percent >= 80:
             gradient = "stop:0 #2ecc71, stop:1 #27ae60"
         elif kpd_percent >= 60:
@@ -162,7 +249,7 @@ class RatingEmployeeCard(QFrame):
         """)
         kpd_layout.addWidget(progress_bar)
 
-        # Количество часов переработок (если есть)
+        # Часы переработок
         if overtime_hours > 0:
             overtime_label = QLabel(f"⏱️ +{overtime_hours:.1f} ч")
             overtime_label.setAlignment(Qt.AlignmentFlag.AlignRight)
@@ -176,50 +263,32 @@ class RatingEmployeeCard(QFrame):
 
         main_layout.addLayout(kpd_layout)
 
-        # Создаем тултип с пояснением алгоритма расчета КПД
+        # Тултип
         tooltip_text = self._generate_kpd_tooltip(
             kpd_percent, weighted_kpd, overtime_hours,
-            total_tasks, completed_tasks
+            total_tasks, completed_tasks, on_time_rate
         )
         self.setToolTip(tooltip_text)
-
-        # Сделать карточку кликабельной
         self.setCursor(Qt.CursorShape.PointingHandCursor)
 
-    def _generate_kpd_tooltip(self, kpd_percent, weighted_kpd, overtime_hours, total_tasks, completed_tasks):
-        """Генерирует пояснение алгоритма расчета КПД"""
+    def _generate_kpd_tooltip(self, kpd_percent, weighted_kpd, overtime_hours,
+                              total_tasks, completed_tasks, on_time_rate):
+        """Генерирует пояснение расчета КПД"""
 
-        # Формула расчета
-        formula = """📐 ФОРМУЛА РАСЧЕТА КПД:
+        formula = """📐 ФОРМУЛА РАСЧЕТА КПД ЗАДАЧИ:
 
-KPD = (Дедлайн × Приоритет × Прогресс × Сложность) / 2 × 100%
+KPD = Сложность × Приоритет × Эффективность × Готовность
 
-Где:
-• Дедлайн = коэффициент соблюдения срока
-  - Выполнено раньше срока: 1.1-1.5
-  - Выполнено в срок: 1.0
-  - Небольшое опоздание: 0.5-0.9
-  - Просрочено: 0-0.4
-  - Нет дедлайна: 0.8
+Где коэффициенты:
+• Сложность (difficulty): 1★=0.6, 2★=0.8, 3★=1.0, 4★=1.2, 5★=1.5
+• Приоритет: low=0.8, medium=1.0, high=1.2, critical=1.5
+• Эффективность = Плановые_дни / Фактические_дни
+  - Раньше срока: >1.0
+  - В срок: 1.0
+  - Просрочка: <1.0
+• Готовность: 1.0 для выполненных задач
 
-• Приоритет = вес задачи
-  - Низкий: 0.5
-  - Средний: 1.0
-  - Высокий: 1.5
-  - Критический: 2.0
-
-• Прогресс = коэф. выполнения (0-1.2)
-  - 0%: 0.0
-  - 50%: ~0.42
-  - 100%: 1.2 (бонус)
-
-• Сложность = вес задачи (0-1.5)
-  - 0★: 0.5
-  - 1★: 0.6
-  - 2★: 0.8
-  - 3★: 1.0
-  - 4★: 1.2
-  - 5★: 1.5"""
+Итоговый КПД сотрудника = среднее арифметическое КПД всех задач"""
 
         # Статистика сотрудника
         stats = f"""
@@ -227,17 +296,12 @@ KPD = (Дедлайн × Приоритет × Прогресс × Сложно�
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ✅ Выполнено задач: {completed_tasks}
 📋 Всего задач: {total_tasks}
+🎯 Процент в срок: {on_time_rate:.0f}%
 ⚡ Итоговый КПД: {kpd_percent:.1f}%
 {'🎯 Взвешенный КПД: ' + str(weighted_kpd) + '%' if weighted_kpd > 0 else ''}
-{'⏱️ Часы переработок: ' + str(overtime_hours) + ' ч.' if overtime_hours > 0 else ''}
+{'⏱️ Часы переработок: ' + str(overtime_hours) + ' ч.' if overtime_hours > 0 else ''}"""
 
-💡 Штраф за переработки:
-   Более 20ч: -5%
-   Более 40ч: -10%
-   Более 60ч: -15%"""
-
-        # Интерпретация результата
-        interpretation = ""
+        # Интерпретация
         if kpd_percent >= 80:
             interpretation = """
 🏆 ИНТЕРПРЕТАЦИЯ: ОТЛИЧНО!

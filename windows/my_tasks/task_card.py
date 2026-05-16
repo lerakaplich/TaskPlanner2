@@ -19,6 +19,7 @@ class TaskCard(QFrame):
     duplicate_requested = pyqtSignal(int)  # task_id
     move_requested = pyqtSignal(int, str)  # task_id, new_status
     drag_started = pyqtSignal(dict)  # task_data
+    progress_changed = pyqtSignal(int, int)  # task_id, new_progress_percent
 
     def __init__(self, task_data, parent=None):
         super().__init__(parent)
@@ -26,6 +27,7 @@ class TaskCard(QFrame):
         self.task_data = task_data
         self.task_id = task_data.get("id")
         self.drag_start_position = None
+        self._updating_progress = False
 
         ui_path = os.path.join(
             os.path.dirname(__file__),
@@ -45,12 +47,59 @@ class TaskCard(QFrame):
         self.setMinimumHeight(0)
         self.setContentsMargins(0, 0, 0, 0)
 
+        # Делаем прогресс-бар кликабельным через установку обработчика
+        self.overallProgress.mousePressEvent = self._on_progress_click
+
         self.fill_ui()
         self.menuButton.clicked.connect(self._show_context_menu)
 
-    # ==========================================================
-    # Заполнение UI данными
-    # ==========================================================
+    # windows/my_tasks/task_card.py
+
+    def _on_progress_click(self, event):
+        """Обработчик клика по прогресс-бару для изменения значения"""
+        print(f"\n🔍 [DEBUG] _on_progress_click: начало")
+        print(f"   - task_id: {self.task_id}")
+        print(f"   - widget: {self}")
+        print(f"   - parent: {self.parent()}")
+        print(f"   - isVisible: {self.isVisible()}")
+
+        # Вычисляем процент по позиции клика
+        width = self.overallProgress.width()
+        pos_x = event.position().x()
+        percent = int((pos_x / width) * 100)
+        percent = max(0, min(100, percent))
+
+        print(f"   - ширина: {width}, позиция: {pos_x}, процент: {percent}")
+        print(f"   - старый прогресс: {self.task_data.get('progress_percent', 0)}%")
+
+        # Обновляем отображение
+        self._updating_progress = True
+        self.overallProgress.setValue(percent)
+        self.overallProgress.setFormat(f"Общий прогресс: {percent}%")
+        self._updating_progress = False
+
+        # Сохраняем в данные
+        self.task_data["progress_percent"] = percent
+
+        print(f"   - отправляем сигнал progress_changed")
+        # Отправляем сигнал для сохранения в БД
+        self.progress_changed.emit(self.task_id, percent)
+
+        print(f"🔍 [DEBUG] _on_progress_click: конец, карточка должна остаться")
+        print(f"   - self.isVisible(): {self.isVisible()}\n")
+
+    def hideEvent(self, event):
+        """Отслеживаем, когда карточка скрывается"""
+        print(f"\n⚠️ [DEBUG] hideEvent для задачи {self.task_id}")
+        print(f"   - widget: {self}")
+        print(f"   - parent: {self.parent()}")
+        print(f"   - reason: {event}")
+        super().hideEvent(event)
+
+    def deleteLater(self):
+        """Отслеживаем удаление карточки"""
+        print(f"\n⚠️ [DEBUG] deleteLater для задачи {self.task_id}")
+        super().deleteLater()
 
     def fill_ui(self):
         """Заполнение карточки данными из task_data"""
@@ -94,6 +143,32 @@ class TaskCard(QFrame):
         else:
             self.descriptionText.hide()
             self.descriptionText.setFixedHeight(0)
+
+        # ===== ПРОГРЕСС-БАР (обновляем значение) =====
+        progress = self.task_data.get("progress_percent", 0)
+        # Убираем блокировку по completed
+        # completed = self.task_data.get("completed", False)
+
+        self.overallProgress.setValue(int(progress))
+        self.overallProgress.setFormat(f"Общий прогресс: {int(progress)}%")
+
+        # Простой стиль для всех задач (без блокировки)
+        self.overallProgress.setStyleSheet("""
+                QProgressBar {
+                    border: 2px solid #E0E0E0;
+                    border-radius: 8px;
+                    text-align: center;
+                    background-color: white;
+                    font-size: 13px;
+                }
+                QProgressBar:hover {
+                    border: 2px solid #ccab6e;
+                }
+                QProgressBar::chunk {
+                    background-color: #D22730;
+                    border-radius: 8px;
+                }
+            """)
 
         # Дата создания
         created_text = self.task_data.get("created_text", "")

@@ -58,6 +58,13 @@ class EmployeeProfileDTO(EmployeeDTO):
     created_at: Optional[datetime] = None  # ← ДОБАВЛЕНО
     updated_at: Optional[datetime] = None  # ← ДОБАВЛЕНО
 
+    kpd_rating: Optional[float] = None
+    kpd_level: Optional[str] = None
+    on_time_rate: Optional[float] = None
+    tasks_completed_total: Optional[int] = None
+    tasks_completed_on_time: Optional[int] = None
+    avg_task_completion_days: Optional[float] = None
+
     # Для отображения
     department_name: Optional[str] = None
     division_name: Optional[str] = None
@@ -208,6 +215,12 @@ def employee_to_profile_dto(employee, employee_data=None, department_name=None,
         app_session_token=employee_data.app_session_token if employee_data else None,
         created_at=employee_data.created_at if employee_data else None,
         updated_at=employee_data.updated_at if employee_data else None,
+        kpd_rating=employee_data.kpd_rating if employee_data else None,
+        kpd_level=employee_data.kpd_level if employee_data else None,
+        on_time_rate=employee_data.on_time_rate if employee_data else None,
+        tasks_completed_total=employee_data.tasks_completed_total if employee_data else None,
+        tasks_completed_on_time=employee_data.tasks_completed_on_time if employee_data else None,
+        avg_task_completion_days=employee_data.avg_task_completion_days if employee_data else None,
         department_name=department_name,
         division_name=division_name
     )

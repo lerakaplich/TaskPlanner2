@@ -3,7 +3,7 @@
 from PyQt6 import uic
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import QFrame, QSizePolicy, QTableWidget, QTableWidgetItem, QHeaderView, QVBoxLayout, QLabel, \
-    QPushButton
+    QPushButton, QHBoxLayout
 import os
 
 
@@ -37,9 +37,16 @@ class EmployeeCard(QFrame):
                 f"{emp_data.get('subdivision', '—')}"
             )
 
-        # Получаем данные из emp_data (уже сформированы сервисом)
+        # Получаем данные - могут быть как списки, так и числа
         active_projects = emp_data.get("active_projects", [])
         completed_projects = emp_data.get("completed_projects", [])
+
+        # Если пришли числа, преобразуем в пустые списки
+        if isinstance(active_projects, int):
+            active_projects = []
+        if isinstance(completed_projects, int):
+            completed_projects = []
+
         tag_analytics = emp_data.get("tag_analytics", [])
 
         # Создаем панели и таблицы
@@ -64,7 +71,7 @@ class EmployeeCard(QFrame):
 
     def _setup_projects_section(self, title, projects, section_num):
         """Создает секцию с проектами"""
-        btn = QPushButton(f"▶ {title}", self)
+        btn = QPushButton(f"▶ {title} ({len(projects)})", self)
         btn.setCheckable(True)
         btn.setChecked(False)
         btn.setStyleSheet("""
@@ -103,12 +110,18 @@ class EmployeeCard(QFrame):
             table.setFixedHeight(min(len(projects) * 35 + 30, 250))
 
             for i, proj in enumerate(projects):
-                table.setItem(i, 0, QTableWidgetItem(proj.get("name", "Без названия")))
-                table.setItem(i, 1, QTableWidgetItem(str(proj.get("tasks_total", 0))))
-                table.setItem(i, 2, QTableWidgetItem(str(proj.get("tasks_done", 0))))
+                if isinstance(proj, dict):
+                    table.setItem(i, 0, QTableWidgetItem(proj.get("name", "Без названия")))
+                    table.setItem(i, 1, QTableWidgetItem(str(proj.get("tasks_total", 0))))
+                    table.setItem(i, 2, QTableWidgetItem(str(proj.get("tasks_done", 0))))
+                else:
+                    table.setItem(i, 0, QTableWidgetItem(str(proj)))
+                    table.setItem(i, 1, QTableWidgetItem("0"))
+                    table.setItem(i, 2, QTableWidgetItem("0"))
 
             panel_layout.addWidget(table)
 
+        # Добавляем в layout
         layout = self.layout()
         if layout:
             layout.addWidget(btn)
@@ -121,7 +134,7 @@ class EmployeeCard(QFrame):
 
     def _setup_analytics_section(self, analytics_data):
         """Создает секцию с аналитикой по темам"""
-        btn = QPushButton("▶ Аналитика по темам", self)
+        btn = QPushButton(f"▶ Аналитика по темам ({len(analytics_data)})", self)
         btn.setCheckable(True)
         btn.setChecked(False)
         btn.setStyleSheet("""

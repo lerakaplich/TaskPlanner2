@@ -104,6 +104,85 @@ class TasksCrudService:
             self.db_session.rollback()
             raise
 
+    # services/tasks_service/tasks_crud_service.py
+
+    def update_task_progress(self, task_id: int, progress_percent: float) -> Optional[Dict]:
+        """Обновить прогресс выполнения задачи"""
+        print(f"\n🔍 [DEBUG] update_task_progress: начало")
+        print(f"   - task_id: {task_id}")
+        print(f"   - progress_percent: {progress_percent}")
+
+        task = self.repo.update_progress(task_id, progress_percent)
+        if task:
+            self.db_session.commit()
+            print(f"   - транзакция закоммичена")
+            # Обновляем КПД сотрудника если задача завершена
+            if progress_percent >= 100 and task.assigned_to:
+                print(f"   - задача завершена, обновляем КПД сотрудника {task.assigned_to}")
+                self._update_employee_kpd(task.assigned_to)
+
+            result = self._task_to_dict(task)
+            print(f"   - результат преобразован в dict")
+            print(f"🔍 [DEBUG] update_task_progress: конец, возвращаем dict\n")
+            return result
+
+        print(f"🔍 [DEBUG] update_task_progress: конец, задача не найдена\n")
+        return None
+
+    def start_task(self, task_id: int) -> Optional[Dict]:
+        """Начать выполнение задачи"""
+        task = self.repo.start_task(task_id)
+        if task:
+            self.db_session.commit()
+            return self._task_to_dict(task)
+        return None
+
+    def complete_task(self, task_id: int, actual_hours: float = None) -> Optional[Dict]:
+        """Завершить задачу"""
+        task = self.repo.complete_task(task_id, actual_hours)
+        if task:
+            self.db_session.commit()
+            # Обновляем КПД сотрудника
+            if task.assigned_to:
+                self._update_employee_kpd(task.assigned_to)
+            return self._task_to_dict(task)
+        return None
+
+    def _update_employee_kpd(self, employee_id: int) -> None:
+        """Обновить КПД сотрудника"""
+        try:
+            from models.employees import EmployeeData
+            employee_data = self.db_session.query(EmployeeData).filter(
+                EmployeeData.employee_id == employee_id
+            ).first()
+            if employee_data:
+                employee_data.update_kpd(self.db_session)
+                self.db_session.commit()
+        except Exception as e:
+            print(f"⚠️ Ошибка обновления КПД сотрудника {employee_id}: {e}")
+
+    def get_task_kpd_info(self, task_id: int) -> Optional[Dict]:
+        """Получить информацию о КПД задачи"""
+        task = self.repo.get_by_id(task_id)
+        if not task:
+            return None
+
+        return {
+            "task_id": task.id,
+            "title": task.title,
+            "kpd_score": task.kpd_score,
+            "difficulty": task.difficulty,
+            "priority": task.priority.value,
+            "priority_factor": task.priority_factor,
+            "efficiency_factor": task.efficiency_factor,
+            "progress_percent": task.progress_percent,
+            "completed": task.completed,
+            "completed_at": task.completed_at.strftime("%d.%m.%Y %H:%M") if task.completed_at else None,
+            "deadline": task.deadline.strftime("%d.%m.%Y") if task.deadline else None,
+            "planned_hours": task.planned_hours,
+            "actual_hours": task.actual_hours
+        }
+
     def update_task(self, task_id: int, updated_data: Dict) -> Optional[Dict]:
         """Обновить задачу"""
         task = self.repo.get_by_id(task_id)
@@ -382,10 +461,11 @@ class TasksCrudService:
         """Получить данные колонок для UI"""
         return self.get_all_columns()
 
+    # services/tasks_service/tasks_crud_service.py
+
     def _task_to_dict(self, task: Task) -> Dict[str, Any]:
         """Преобразование задачи в словарь"""
         assignee_name = self._get_employee_name(task.assigned_to)
-
         creator_name = self._get_employee_name(task.created_by)
 
         project_name = "Неизвестно"
@@ -440,6 +520,10 @@ class TasksCrudService:
             "priority_text": priority_text,
             "priority_color": priority_color,
             "difficulty": float(task.difficulty) if task.difficulty else 0,
+            "progress_percent": float(task.progress_percent) if task.progress_percent else 0,  # 👈 ДОБАВЛЕНО
+            "completed_at": task.completed_at.strftime("%d.%m.%Y") if task.completed_at else None,  # 👈 ДОБАВЛЕНО
+            "started_at": task.started_at.strftime("%d.%m.%Y") if task.started_at else None,  # 👈 ДОБАВЛЕНО
+            "actual_hours": float(task.actual_hours) if task.actual_hours else 0,  # 👈 ДОБАВЛЕНО
             "deadline": task.deadline.strftime("%d.%m.%Y") if task.deadline else "",
             "deadline_text": deadline_text,
             "deadline_color": deadline_color,

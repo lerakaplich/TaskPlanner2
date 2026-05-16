@@ -3,7 +3,7 @@
 from datetime import datetime, date, time
 from typing import Optional, List
 from sqlalchemy import (
-    String, Integer, BigInteger, Boolean, Date, DateTime, ForeignKey, Text,
+    String, Integer, BigInteger, Boolean, Date, DateTime, ForeignKey, Text, Float,
     Enum as SQLAlchemyEnum
 )
 from sqlalchemy.sql.sqltypes import Time as SQLTime
@@ -80,7 +80,7 @@ class EmployeeData(Base):
     )
 
     # Пароль (хеш)
-    password_hash: Mapped[Optional[str]] = mapped_column(String(255))  # ← ДОБАВЛЕНО
+    password_hash: Mapped[Optional[str]] = mapped_column(String(255))
 
     # Токен сессий
     app_session_token: Mapped[Optional[str]] = mapped_column(String(255))
@@ -90,8 +90,91 @@ class EmployeeData(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now, onupdate=datetime.now)
     last_login: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
 
+    # ============================================
+    # Поля для КПД (ДОБАВЛЕНЫ)
+    # ============================================
+    kpd_rating: Mapped[float] = mapped_column(Float, default=0.0)
+    kpd_last_calculated: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    tasks_completed_total: Mapped[int] = mapped_column(Integer, default=0)
+    tasks_completed_on_time: Mapped[int] = mapped_column(Integer, default=0)
+
+    # Дополнительные метрики (опционально)
+    total_worked_hours: Mapped[float] = mapped_column(Float, default=0.0)
+    avg_task_completion_days: Mapped[float] = mapped_column(Float, default=0.0)
+
     # Relationship
     employee: Mapped["Employee"] = relationship(back_populates="employee_data")
+
+    # ============================================
+    # Свойства для удобного доступа к КПД
+    # ============================================
+    @property
+    def on_time_rate(self) -> float:
+        """Процент выполненных в срок задач (0-100)"""
+        if self.tasks_completed_total == 0:
+            return 0.0
+        return round((self.tasks_completed_on_time / self.tasks_completed_total) * 100, 2)
+
+    @property
+    def kpd_level(self) -> str:
+        """Текстовый уровень КПД"""
+        if self.kpd_rating >= 85:
+            return "Высокий 🏆"
+        elif self.kpd_rating >= 65:
+            return "Хороший ✅"
+        elif self.kpd_rating >= 40:
+            return "Средний 📊"
+        elif self.kpd_rating >= 20:
+            return "Низкий ⚠️"
+        else:
+            return "Критический ❌"
+
+    def update_kpd(self, session) -> None:
+        """
+        Пересчет общего КПД сотрудника на основе выполненных задач.
+        Вызывать при завершении задачи или периодически.
+        """
+        from .tasks import Task  # Локальный импорт для избежания циклических ссылок
+
+        # Получаем все завершенные задачи сотрудника
+        completed_tasks = session.query(Task).filter(
+            Task.assigned_to == self.employee_id,
+            Task.completed_at.isnot(None),
+            Task.is_archived == False
+        ).all()
+
+        if not completed_tasks:
+            self.kpd_rating = 0.0
+            self.tasks_completed_total = 0
+            self.tasks_completed_on_time = 0
+            self.avg_task_completion_days = 0.0
+            self.kpd_last_calculated = datetime.now()
+            return
+
+        # Обновляем статистику
+        self.tasks_completed_total = len(completed_tasks)
+
+        # Считаем количество выполненных в срок
+        on_time_count = sum(1 for t in completed_tasks
+                            if t.deadline and t.completed_at <= t.deadline)
+        self.tasks_completed_on_time = on_time_count
+
+        # Средний КПД по всем задачам
+        task_kpds = [t.kpd_score for t in completed_tasks if t.kpd_score > 0]
+        if task_kpds:
+            avg_kpd = sum(task_kpds) / len(task_kpds)
+            self.kpd_rating = round(avg_kpd, 2)
+
+        # Среднее время выполнения в днях
+        completion_days = []
+        for t in completed_tasks:
+            if t.created_at and t.completed_at:
+                days = (t.completed_at - t.created_at).total_seconds() / 86400
+                completion_days.append(days)
+        if completion_days:
+            self.avg_task_completion_days = round(sum(completion_days) / len(completion_days), 2)
+
+        self.kpd_last_calculated = datetime.now()
 
 
 class EmployeeNote(Base):

@@ -235,6 +235,21 @@ class TasksService:
         import json
         return json.dumps(task_data, ensure_ascii=False, default=str).encode("utf-8")
 
+    # ==========================================================
+    # Прокси для работы с прогрессом
+    # ==========================================================
+    def update_task_progress(self, task_id: int, progress_percent: float):
+        return self.crud.update_task_progress(task_id, progress_percent)
+
+    def start_task(self, task_id: int):
+        return self.crud.start_task(task_id)
+
+    def complete_task(self, task_id: int, actual_hours: float = None):
+        return self.crud.complete_task(task_id, actual_hours)
+
+    def get_task_kpd_info(self, task_id: int):
+        return self.crud.get_task_kpd_info(task_id)
+
     def deserialize_task_from_drag(self, data: bytes) -> Optional[Dict]:
         """Десериализовать задачу из Drag & Drop"""
         import json

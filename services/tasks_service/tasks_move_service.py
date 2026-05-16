@@ -58,10 +58,16 @@ class TasksMoveService:
             print(f"❌ move_task_to_column: Задача {task_id} не найдена")
             return None
 
-        print(f"🔧 move_task_to_column: задача={task_id}, target_col={target_column_id}, current_col={task.column_id}")
+        print(
+            f"🔧 move_task_to_column: задача={task_id}, target_col={target_column_id}, current_col={task.column_id}")
 
         if task.column_id == target_column_id:
             print("ℹ️ Задача уже в целевой колонке")
+            return None
+
+        target_column = self.db_session.get(BoardColumn, target_column_id)
+        if not target_column:
+            print(f"❌ Колонка {target_column_id} не найдена")
             return None
 
         can_move, error = self.validate_move(task_id, target_column_id)
@@ -69,11 +75,48 @@ class TasksMoveService:
             print(f"❌ Валидация не прошла: {error}")
             return None
 
+        # ===== ЛОГИКА ДЛЯ ПРОГРЕССА ПРИ ПЕРЕМЕЩЕНИИ =====
+        # Если перемещаем в Done колонку - устанавливаем прогресс 100%
+        if target_column.is_done_column:
+            print(f"✅ Перемещение в Done колонку '{target_column.name}' - устанавливаем прогресс 100%")
+            task.progress_percent = 100.0
+            task.completed_at = datetime.now()
+            print(f"   Прогресс: {task.progress_percent}%")
+            print(f"   Дата завершения: {task.completed_at}")
+        else:
+            # Если перемещаем ИЗ Done колонки - не трогаем прогресс, пользователь сам скорректирует
+            print(
+                f"📦 Перемещение из колонки '{task.column.name if task.column else 'None'}' в '{target_column.name}' - прогресс не меняется")
+
+        # Если перемещаем из Done колонки - убираем дату завершения
+        if task.column and task.column.is_done_column and not target_column.is_done_column:
+            print(f"⚠️ Перемещение из Done колонки - задача возвращена в работу, дата завершения сброшена")
+            task.completed_at = None
+
         task.column_id = target_column_id
         task.updated_at = datetime.now()
         self.db_session.commit()
 
+        # Обновляем КПД сотрудника при любом перемещении (на всякий случай)
+        if task.assigned_to:
+            self._update_employee_kpd(task.assigned_to)
+
         return self._task_to_dict(task) if self._task_to_dict else None
+
+    def _update_employee_kpd(self, employee_id: int) -> None:
+        """Обновить КПД сотрудника"""
+        try:
+            from models.employees import EmployeeData
+            employee_data = self.db_session.query(EmployeeData).filter(
+                EmployeeData.employee_id == employee_id
+            ).first()
+            if employee_data:
+                print(f"🔄 Пересчет КПД для сотрудника {employee_id}")
+                employee_data.update_kpd(self.db_session)
+                self.db_session.commit()
+                print(f"   Новый КПД: {employee_data.kpd_rating:.1f}%")
+        except Exception as e:
+            print(f"⚠️ Ошибка обновления КПД сотрудника {employee_id}: {e}")
 
     def move_task_to_position(self, task_id: int, target_column_id: int, new_position: int) -> Optional[Dict]:
         """Переместить задачу на указанную позицию"""
@@ -145,9 +188,7 @@ class TasksMoveService:
             print(f"❌ Ошибка переупорядочивания: {e}")
             return False
 
-    # ==========================================================
-    # Валидация перемещений
-    # ==========================================================
+    # services/tasks_service/tasks_move_service.py
 
     def validate_move(self, task_id: int, target_column_id: int) -> Tuple[bool, str]:
         """Проверить возможность перемещения задачи"""
@@ -162,9 +203,9 @@ class TasksMoveService:
         if task.column_id == target_column_id:
             return False, "Задача уже в этой колонке"
 
-        # Нельзя переместить выполненную задачу
-        if task.column and task.column.is_done_column:
-            return False, "Нельзя переместить выполненную задачу"
+        # КОММЕНТИРУЕМ - пользователь может перемещать любые задачи
+        # if task.column and task.column.is_done_column:
+        #     return False, "Нельзя переместить выполненную задачу"
 
         # Проверка для завершающей колонки
         if target_column.is_done_column:

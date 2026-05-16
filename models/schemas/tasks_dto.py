@@ -28,7 +28,12 @@ class TaskDTO(BaseModel):
     assigned_to: Optional[int] = None
     created_at: datetime
     updated_at: datetime
-    difficulty: float = 0.0  # 👈 добавляем сложность
+    difficulty: float = 0.0
+    progress_percent: float = 0.0  # 👈 добавлено
+    completed_at: Optional[datetime] = None  # 👈 добавлено
+    started_at: Optional[datetime] = None  # 👈 добавлено
+    actual_hours: float = 0.0  # 👈 добавлено
+    kpd_score: Optional[float] = None  # 👈 КПД задачи
 
 
 class TaskCardDTO(BaseModel):
@@ -39,7 +44,9 @@ class TaskCardDTO(BaseModel):
     deadline: Optional[datetime]
     assigned_to_name: Optional[str]
     is_overdue: bool
-    difficulty: float = 0.0  # 👈 добавляем сложность
+    difficulty: float = 0.0
+    progress_percent: float = 0.0  # 👈 добавлено
+    kpd_score: Optional[float] = None  # 👈 добавлено
 
     @field_validator('priority', mode='before')
     @classmethod
