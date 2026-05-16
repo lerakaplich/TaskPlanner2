@@ -116,6 +116,8 @@ class ProjectViewHandler:
             else:
                 QMessageBox.critical(self.main, "Ошибка", "Не удалось создать проект в базе данных.")
 
+        # windows/projects/main_window_handlers.py
+
     def archive_project(self, project_id):
         """Архивация проекта"""
         try:
@@ -135,8 +137,11 @@ class ProjectViewHandler:
                         self.main.current_owner_filter = False
                     self.main.filterCombo.blockSignals(False)
                 self.refresh_projects_view()
+
+                # Обновляем страницу архива если она открыта
                 if 'archive' in self.main.pages:
-                    self.main.pages['archive'].show_projects_list()
+                    self.main.pages['archive'].refresh_current_view()
+
                 QMessageBox.information(self.main, "Архивация", f"Проект '{project_name}' перемещён в архив.")
                 return True
             else:

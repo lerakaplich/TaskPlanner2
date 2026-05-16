@@ -235,6 +235,12 @@ class TasksService:
         import json
         return json.dumps(task_data, ensure_ascii=False, default=str).encode("utf-8")
 
+    def pause_task(self, task_id: int):
+        return self.crud.pause_task(task_id)
+
+    def resume_task(self, task_id: int):
+        return self.crud.resume_task(task_id)
+
     # ==========================================================
     # Прокси для работы с прогрессом
     # ==========================================================

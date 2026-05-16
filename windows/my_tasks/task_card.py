@@ -6,17 +6,18 @@ import os
 from PyQt6 import uic
 from PyQt6.QtCore import Qt, QMimeData, pyqtSignal, QPoint
 from PyQt6.QtGui import QDrag, QPixmap, QPainter
-from PyQt6.QtWidgets import QFrame, QPushButton, QMenu, QApplication, QSizePolicy
+from PyQt6.QtWidgets import QFrame, QPushButton, QMenu, QApplication, QSizePolicy, QLabel
 
 
 class TaskCard(QFrame):
     """UI карточки задачи - только отображение и сигналы"""
 
-    # Сигналы для передачи в сервис
     edit_requested = pyqtSignal(int)  # task_id
     delete_requested = pyqtSignal(int)  # task_id
     archive_requested = pyqtSignal(int)  # task_id
     duplicate_requested = pyqtSignal(int)  # task_id
+    pause_requested = pyqtSignal(int)  # task_id
+    resume_requested = pyqtSignal(int)  # task_id
     move_requested = pyqtSignal(int, str)  # task_id, new_status
     drag_started = pyqtSignal(dict)  # task_data
     progress_changed = pyqtSignal(int, int)  # task_id, new_progress_percent
@@ -52,8 +53,6 @@ class TaskCard(QFrame):
 
         self.fill_ui()
         self.menuButton.clicked.connect(self._show_context_menu)
-
-    # windows/my_tasks/task_card.py
 
     def _on_progress_click(self, event):
         """Обработчик клика по прогресс-бару для изменения значения"""
@@ -222,6 +221,8 @@ class TaskCard(QFrame):
         # Теги
         self._setup_tags()
 
+        self._setup_pause_indicator()
+
         # Обновляем размер
         self.adjustSize()
         self.updateGeometry()
@@ -321,10 +322,6 @@ class TaskCard(QFrame):
 
         self.tagsLayout.addStretch()
 
-    # ==========================================================
-    # Контекстное меню
-    # ==========================================================
-
     def _show_context_menu(self):
         """Показывает контекстное меню"""
         menu = QMenu(self)
@@ -348,26 +345,42 @@ class TaskCard(QFrame):
             }
         """)
 
-        edit_action = menu.addAction("Редактировать")
-        duplicate_action = menu.addAction("Дублировать")
+        # Дублировать
+        duplicate_action = menu.addAction("📋 Дублировать")
+
         menu.addSeparator()
-        delete_action = menu.addAction("Удалить")
-        archive_action = menu.addAction("Архивировать")
+
+        # Пауза/Возобновление (только для активных задач)
+        is_paused = self.task_data.get("is_paused", False)
+        is_completed = self.task_data.get("completed", False)
+
+        pause_action = None
+        if not is_completed:
+            if is_paused:
+                pause_action = menu.addAction("▶️ Возобновить")
+            else:
+                pause_action = menu.addAction("⏸️ Пауза")
+            menu.addSeparator()
+
+        # Архивировать
+        archive_action = menu.addAction("📦 Архивировать")
+
+        # Удалить
+        delete_action = menu.addAction("🗑️ Удалить")
 
         action = menu.exec(self.menuButton.mapToGlobal(QPoint(0, self.menuButton.height())))
 
-        if action == edit_action:
-            self.edit_requested.emit(self.task_id)
-        elif action == delete_action:
-            self.delete_requested.emit(self.task_id)
+        if action == duplicate_action:
+            self.duplicate_requested.emit(self.task_id)
+        elif pause_action and action == pause_action:
+            if is_paused:
+                self.resume_requested.emit(self.task_id)
+            else:
+                self.pause_requested.emit(self.task_id)
         elif action == archive_action:
             self.archive_requested.emit(self.task_id)
-        elif action == duplicate_action:
-            self.duplicate_requested.emit(self.task_id)
-
-    # ==========================================================
-    # Drag & Drop
-    # ==========================================================
+        elif action == delete_action:
+            self.delete_requested.emit(self.task_id)
 
     def mousePressEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
@@ -408,9 +421,55 @@ class TaskCard(QFrame):
 
         drag.exec(Qt.DropAction.MoveAction)
 
-    # ==========================================================
-    # Обновление данных
-    # ==========================================================
+    def _update_pause_indicator(self):
+        """Обновляет индикатор паузы в карточке"""
+        is_paused = self.task_data.get("is_paused", False)
+
+        # Ищем существующий индикатор паузы в titleLayout
+        pause_indicator = None
+        for i in range(self.titleLayout.count()):
+            widget = self.titleLayout.itemAt(i).widget()
+            if widget and hasattr(widget, 'is_pause_indicator') and widget.is_pause_indicator:
+                pause_indicator = widget
+                break
+
+        if is_paused:
+            if not pause_indicator:
+                # Создаём новый индикатор
+                from PyQt6.QtWidgets import QLabel
+                pause_indicator = QLabel("⏸️ ПАУЗА")
+                pause_indicator.is_pause_indicator = True
+                pause_indicator.setStyleSheet("""
+                    background-color: #FF9800;
+                    color: white;
+                    font-size: 10px;
+                    font-weight: bold;
+                    padding: 2px 8px;
+                    border-radius: 10px;
+                """)
+                # Вставляем в начало titleLayout
+                self.titleLayout.insertWidget(0, pause_indicator)
+        else:
+            if pause_indicator:
+                pause_indicator.deleteLater()
+
+    def _setup_pause_indicator(self):
+        """Настраивает индикатор паузы при инициализации"""
+        is_paused = self.task_data.get("is_paused", False)
+        if is_paused:
+            from PyQt6.QtWidgets import QLabel
+            pause_indicator = QLabel("⏸️ ПАУЗА")
+            pause_indicator.is_pause_indicator = True
+            pause_indicator.setStyleSheet("""
+                background-color: #FF9800;
+                color: white;
+                font-size: 10px;
+                font-weight: bold;
+                padding: 2px 8px;
+                border-radius: 10px;
+            """)
+            # Вставляем в начало titleLayout
+            self.titleLayout.insertWidget(0, pause_indicator)
 
     def update_task_data(self, new_data):
         """Обновляет данные карточки"""

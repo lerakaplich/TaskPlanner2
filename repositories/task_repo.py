@@ -80,7 +80,45 @@ class TaskRepo:
         )
         return list(self.session.scalars(stmt))
 
-    # repositories/task_repo.py
+    def pause_task(self, task_id: int) -> Optional[Task]:
+        """Поставить задачу на паузу"""
+        task = self.get_by_id(task_id)
+        if task and not task.is_paused and not task.completed:
+            task.is_paused = True
+            task.paused_at = datetime.now()
+            self.session.flush()
+            print(f"⏸️ Задача {task_id} поставлена на паузу в {task.paused_at}")
+        return task
+
+    def resume_task(self, task_id: int) -> Optional[Task]:
+        """Возобновить выполнение задачи"""
+        task = self.get_by_id(task_id)
+        if task and task.is_paused and task.paused_at:
+            # Рассчитываем время паузы
+            paused_duration = (datetime.now() - task.paused_at).total_seconds()
+            task.total_paused_seconds += int(paused_duration)
+            task.is_paused = False
+            task.paused_at = None
+            self.session.flush()
+            print(
+                f"▶️ Задача {task_id} возобновлена. Время паузы: {paused_duration:.0f} сек. Всего пауз: {task.total_paused_seconds} сек.")
+        return task
+
+    def get_effective_work_seconds(self, task_id: int) -> float:
+        """Получить эффективное время работы (без учёта пауз)"""
+        task = self.get_by_id(task_id)
+        if not task or not task.started_at:
+            return 0.0
+
+        total_seconds = (datetime.now() - task.started_at).total_seconds()
+        effective_seconds = total_seconds - task.total_paused_seconds
+
+        # Если задача на паузе сейчас, вычитаем текущую паузу
+        if task.is_paused and task.paused_at:
+            current_pause = (datetime.now() - task.paused_at).total_seconds()
+            effective_seconds -= current_pause
+
+        return max(0, effective_seconds)
 
     def update_progress(self, task_id: int, progress_percent: float) -> Optional[Task]:
         """Обновить прогресс выполнения задачи (0-100)"""

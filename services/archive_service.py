@@ -178,19 +178,37 @@ class ArchiveService:
     # Задачи
     # ======================================================
 
-    def get_project_tasks(self, project_id: int) -> List[Dict]:
-        """Возвращает все архивные задачи проекта (подготовленные данные)"""
-        if not hasattr(Task, 'is_archived'):
-            print("⚠️ У задачи нет поля is_archived")
-            return []
+    # services/archive_service.py
 
+    def get_project_tasks(self, project_id: int) -> List[Dict]:
+        """Возвращает все архивные задачи проекта"""
         stmt = select(Task).where(
             Task.project_id == project_id,
-            Task.is_archived == True
+            Task.is_archived == True  # Только архивированные
         ).order_by(Task.archived_at.desc())
         tasks = self.session.scalars(stmt).all()
-
         return [self._prepare_task_data(task) for task in tasks]
+
+    def search_all_archived_tasks(self, text: str = "") -> List[Dict]:
+        """Поиск по всем архивированным задачам"""
+        stmt = select(Task).where(Task.is_archived == True)
+        if text:
+            stmt = stmt.where(Task.title.ilike(f"%{text}%"))
+        stmt = stmt.order_by(Task.archived_at.desc())
+        tasks = self.session.scalars(stmt).all()
+        return [self._prepare_task_data(task) for task in tasks]
+
+    def restore_task(self, task_id: int) -> bool:
+        """Восстанавливает задачу из архива"""
+        task = self.session.get(Task, task_id)
+        if not task:
+            return False
+
+        task.is_archived = False
+        task.archived_at = None
+        self.session.commit()
+        print(f"🔄 Задача {task_id} восстановлена из архива")
+        return True
 
     def search_tasks(self, project_id: int, text: str) -> List[Dict]:
         """Поиск по архивным задачам проекта"""
@@ -256,17 +274,6 @@ class ArchiveService:
             "deadline": task.deadline.strftime("%d.%m.%Y") if task.deadline else "",
             "tags": tags
         }
-
-    def restore_task(self, task_id: int) -> bool:
-        """Восстанавливает задачу из архива"""
-        task = self.session.get(Task, task_id)
-        if not task:
-            return False
-
-        task.is_archived = False
-        task.archived_at = None
-        self.session.commit()
-        return True
 
     def delete_task_permanently(self, task_id: int) -> bool:
         """Полностью удаляет задачу из БД"""

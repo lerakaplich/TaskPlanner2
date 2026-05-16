@@ -17,6 +17,9 @@
    <string notr="true">background-color: white;</string>
   </property>
   <layout class="QVBoxLayout" name="main_layout">
+   <property name="spacing">
+    <number>15</number>
+   </property>
    <property name="leftMargin">
     <number>20</number>
    </property>
@@ -29,14 +32,8 @@
    <property name="bottomMargin">
     <number>20</number>
    </property>
-   <property name="spacing">
-    <number>15</number>
-   </property>
    <item>
     <widget class="QPushButton" name="back_button">
-     <property name="text">
-      <string>← Назад к проектам</string>
-     </property>
      <property name="styleSheet">
       <string notr="true">QPushButton {
     background-color: #1B232A;
@@ -54,16 +51,13 @@ QPushButton:hover {
     color: black;
 }</string>
      </property>
+     <property name="text">
+      <string>← Назад к проектам</string>
+     </property>
     </widget>
    </item>
    <item>
     <widget class="QScrollArea" name="scroll_area">
-     <property name="frameShape">
-      <enum>QFrame::NoFrame</enum>
-     </property>
-     <property name="widgetResizable">
-      <bool>true</bool>
-     </property>
      <property name="styleSheet">
       <string notr="true">QScrollArea {
     background-color: transparent;
@@ -98,16 +92,25 @@ QScrollBar::handle:horizontal:hover {
     background: #998664;
 }</string>
      </property>
+     <property name="frameShape">
+      <enum>QFrame::NoFrame</enum>
+     </property>
+     <property name="widgetResizable">
+      <bool>true</bool>
+     </property>
      <widget class="QWidget" name="content_container">
       <property name="geometry">
        <rect>
         <x>0</x>
         <y>0</y>
         <width>984</width>
-        <height>688</height>
+        <height>676</height>
        </rect>
       </property>
       <layout class="QVBoxLayout" name="content_layout">
+       <property name="spacing">
+        <number>15</number>
+       </property>
        <property name="leftMargin">
         <number>0</number>
        </property>
@@ -120,19 +123,55 @@ QScrollBar::handle:horizontal:hover {
        <property name="bottomMargin">
         <number>10</number>
        </property>
-       <property name="spacing">
-        <number>15</number>
-       </property>
+       <item>
+        <widget class="QComboBox" name="filterCombo">
+         <property name="maximumSize">
+          <size>
+           <width>204</width>
+           <height>16777215</height>
+          </size>
+         </property>
+         <property name="styleSheet">
+          <string notr="true">QComboBox {
+    border: 2px solid #E0E0E0;
+    border-radius: 8px;
+    padding: 8px 16px;
+    font-size: 14px;
+    background-color: white;
+    min-width: 150px;
+}
+QComboBox:hover {
+    border: 2px solid #ccab6e;
+}
+QComboBox::drop-down {
+    border: none;
+}</string>
+         </property>
+         <property name="currentText">
+          <string>Проекты</string>
+         </property>
+         <item>
+          <property name="text">
+           <string>Проекты</string>
+          </property>
+         </item>
+         <item>
+          <property name="text">
+           <string>Задачи</string>
+          </property>
+         </item>
+        </widget>
+       </item>
        <item>
         <widget class="QLabel" name="section_title">
-         <property name="text">
-          <string>Архивированные проекты</string>
-         </property>
          <property name="styleSheet">
           <string notr="true">font-size: 20px;
 font-weight: bold;
 color: #1B232A;
 padding: 5px 0;</string>
+         </property>
+         <property name="text">
+          <string>Архивированные проекты</string>
          </property>
         </widget>
        </item>
@@ -183,8 +222,8 @@ padding: 5px 0;</string>
        </item>
        <item>
         <widget class="QLabel" name="empty_label">
-         <property name="text">
-          <string>📭 Архив пуст</string>
+         <property name="visible">
+          <bool>false</bool>
          </property>
          <property name="styleSheet">
           <string notr="true">font-size: 24px;
@@ -193,11 +232,11 @@ padding: 100px;
 background-color: #f9f9f9;
 border-radius: 20px;</string>
          </property>
+         <property name="text">
+          <string>📭 Архив пуст</string>
+         </property>
          <property name="alignment">
           <set>Qt::AlignCenter</set>
-         </property>
-         <property name="visible">
-          <bool>false</bool>
          </property>
         </widget>
        </item>

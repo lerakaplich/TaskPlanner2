@@ -47,10 +47,6 @@ class MyTasksPage(QWidget):
         # Фильтры
         self.priorityFilter.currentTextChanged.connect(self._on_filter_changed)
 
-    # ==========================================================
-    # Настройка UI
-    # ==========================================================
-
     def setup_board(self):
         """Создает колонки канбан-доски"""
         self.clear_layout(self.kanbanLayout)
@@ -139,10 +135,6 @@ class MyTasksPage(QWidget):
                 else:
                     self.clear_layout(item.layout())
 
-    # ==========================================================
-    # Загрузка и отображение задач
-    # ==========================================================
-
     def load_tasks(self):
         """Загружает и отображает задачи"""
         tasks = self.service.get_tasks_for_board()
@@ -178,9 +170,148 @@ class MyTasksPage(QWidget):
         card.delete_requested.connect(self._on_delete_task)
         card.archive_requested.connect(self._on_archive_task)
         card.duplicate_requested.connect(self._on_duplicate_task)
+        card.pause_requested.connect(self._on_pause_task)
+        card.resume_requested.connect(self._on_resume_task)
         card.drag_started.connect(self._on_drag_started)
-        # Добавляем сигнал изменения прогресса
         card.progress_changed.connect(self._on_progress_changed)
+
+    def _on_edit_task(self, task_id: int):
+        """Редактирование задачи"""
+        print(f"✏️ Редактирование задачи {task_id}")
+        task = self.service.get_task_by_id(task_id)
+        if task:
+            from windows.other_tasks.task_dialog import TaskDialog
+            dialog = TaskDialog(
+                self,
+                task_data=task,
+                mode="edit",
+                current_user=self.current_user
+            )
+            dialog.set_service(self.service)
+            dialog.task_saved.connect(self._on_task_updated_from_edit)
+            dialog.exec()
+
+    def _on_task_updated_from_edit(self, task_id, form_data):
+        """Обработчик обновления задачи из диалога"""
+        updated_task = self.service.update_task(task_id, form_data)
+        if updated_task:
+            self.update_task_card(updated_task)
+            self.update_statistics()
+
+    def _on_duplicate_task(self, task_id: int):
+        """Дублирование задачи"""
+        print(f"📋 Дублирование задачи {task_id}")
+        new_task = self.service.duplicate_task(task_id)
+        if new_task:
+            # Добавляем новую карточку в UI
+            task_card = TaskCard(new_task)
+            self._connect_task_card_signals(task_card)
+            column_name = new_task.get("status")
+            if column_name in self.columns:
+                self.columns[column_name].add_task(task_card)
+            self.update_statistics()
+            QMessageBox.information(self, "Успех", f"Задача '{new_task.get('title')}' дублирована")
+
+    def _on_pause_task(self, task_id: int):
+        """Поставить задачу на паузу"""
+        print(f"⏸️ Пауза задачи {task_id}")
+        updated_task = self.service.pause_task(task_id)
+        if updated_task:
+            # Обновляем карточку без перезагрузки
+            self._update_task_card_data(task_id, updated_task)
+            self.update_statistics()
+            QMessageBox.information(self, "Пауза", f"Задача поставлена на паузу")
+
+    def _on_resume_task(self, task_id: int):
+        """Возобновить задачу"""
+        print(f"▶️ Возобновление задачи {task_id}")
+        updated_task = self.service.resume_task(task_id)
+        if updated_task:
+            # Обновляем карточку без перезагрузки
+            self._update_task_card_data(task_id, updated_task)
+            self.update_statistics()
+            QMessageBox.information(self, "Возобновление", f"Задача возобновлена")
+
+    def _update_task_card_data(self, task_id: int, updated_task: Dict):
+        """Обновляет данные карточки без пересоздания виджета"""
+        for column in self.column_widgets:
+            for card in column.get_tasks():
+                if card.task_id == task_id:
+                    # Обновляем только изменившиеся поля
+                    old_paused = card.task_data.get("is_paused", False)
+                    new_paused = updated_task.get("is_paused", False)
+
+                    # Обновляем словарь данных
+                    for key, value in updated_task.items():
+                        card.task_data[key] = value
+
+                    # Обновляем только статус паузы в UI (без пересоздания всей карточки)
+                    if old_paused != new_paused:
+                        card._update_pause_indicator()
+
+                    # Обновляем прогресс-бар если нужно
+                    new_progress = updated_task.get("progress_percent", 0)
+                    if card.task_data.get("progress_percent") != new_progress:
+                        card.overallProgress.blockSignals(True)
+                        card.overallProgress.setValue(new_progress)
+                        card.overallProgress.setFormat(f"Общий прогресс: {new_progress}%")
+                        card.overallProgress.blockSignals(False)
+
+                    print(f"✅ Данные задачи {task_id} обновлены в UI (пауза: {old_paused}->{new_paused})")
+                    return
+
+    # windows/my_tasks/my_tasks_page.py
+
+    def _on_archive_task(self, task_id: int):
+        """Архивирование задачи"""
+        reply = QMessageBox.question(
+            self, "Архивирование",
+            "Вы уверены, что хотите архивировать задачу?\nОна будет перемещена в архив.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+        )
+        if reply == QMessageBox.StandardButton.Yes:
+            if self.service.archive_task_by_id(task_id):
+                # Удаляем карточку из UI
+                self._remove_task_card_from_ui(task_id)
+                self.update_statistics()
+                QMessageBox.information(self, "Успех", "Задача архивирована")
+                print(f"📦 Задача {task_id} архивирована и удалена из UI")
+
+    def _on_delete_task(self, task_id: int):
+        """Удаление задачи"""
+        print(f"🗑️ Запрос на удаление задачи {task_id}")
+        reply = QMessageBox.question(
+            self, "Удаление",
+            "Вы уверены, что хотите полностью удалить задачу?\nЭто действие нельзя отменить.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+        )
+        if reply == QMessageBox.StandardButton.Yes:
+            try:
+                # Полное удаление из БД
+                success = self.service.delete_task_by_id(task_id)
+                if success:
+                    # Удаляем карточку из UI
+                    self._remove_task_card_from_ui(task_id)
+                    self.update_statistics()
+                    QMessageBox.information(self, "Успех", "Задача удалена")
+                    print(f"✅ Задача {task_id} удалена")
+                else:
+                    QMessageBox.warning(self, "Ошибка", "Не удалось удалить задачу")
+            except Exception as e:
+                print(f"❌ Ошибка при удалении: {e}")
+                QMessageBox.critical(self, "Ошибка", f"Ошибка при удалении: {str(e)}")
+
+    def _remove_task_card_from_ui(self, task_id: int):
+        """Удаляет карточку задачи из UI"""
+        for column in self.column_widgets:
+            for card in column.get_tasks()[:]:  # копия списка
+                if card.task_id == task_id:
+                    column.remove_task(card)
+                    card.deleteLater()
+                    print(f"   ✅ Карточка задачи {task_id} удалена из UI")
+                    return
+        # Если не нашли карточку, перезагружаем все задачи
+        self.load_tasks()
 
     def _on_progress_changed(self, task_id: int, progress_percent: int):
         """Обработчик изменения прогресса задачи"""
@@ -290,40 +421,6 @@ class MyTasksPage(QWidget):
         if hasattr(self, 'overallProgress'):
             self.overallProgress.setValue(self.service.get_progress_percent())
 
-    # ==========================================================
-    # Обработчики действий (вызывают сервис)
-    # ==========================================================
-
-    def _on_edit_task(self, task_id: int):
-        """Редактирование задачи"""
-        print(f"✏️ Редактирование задачи {task_id}")
-        # TODO: открыть диалог редактирования
-
-    def _on_delete_task(self, task_id: int):
-        """Удаление задачи"""
-        reply = QMessageBox.question(
-            self, "Удаление",
-            "Вы уверены, что хотите удалить задачу?",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
-        )
-        if reply == QMessageBox.StandardButton.Yes:
-            if self.service.delete_task_by_id(task_id):
-                self.load_tasks()
-                QMessageBox.information(self, "Успех", "Задача удалена")
-
-    def _on_archive_task(self, task_id: int):
-        """Архивирование задачи"""
-        if self.service.archive_task_by_id(task_id):
-            self.load_tasks()
-            QMessageBox.information(self, "Успех", "Задача архивирована")
-
-    def _on_duplicate_task(self, task_id: int):
-        """Дублирование задачи"""
-        new_task = self.service.duplicate_task(task_id)
-        if new_task:
-            self.load_tasks()
-            QMessageBox.information(self, "Успех", "Задача дублирована")
-
     def _on_drag_started(self, task_data: dict):
         """Начало перетаскивания задачи"""
         print(f"🖱️ Начато перетаскивание задачи {task_data.get('id')}")
@@ -350,10 +447,6 @@ class MyTasksPage(QWidget):
                     card.show()
                 else:
                     card.hide()
-
-    # ==========================================================
-    # Drag & Drop — ИСПРАВЛЕННАЯ ВЕРСИЯ
-    # ==========================================================
 
     def _on_task_dropped(self, task_id: int, target_column_id: int):
         """Обработчик drop из KanbanColumn"""

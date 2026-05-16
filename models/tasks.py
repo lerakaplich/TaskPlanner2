@@ -10,11 +10,12 @@ from sqlalchemy import (
     DateTime,
     Enum,
     Boolean,
-    Float,
+    Float, Integer,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .employees import Base
+from .projects import BoardColumn
 
 
 class TaskPriorityEnum(str, enum.Enum):
@@ -59,6 +60,10 @@ class Task(Base):
     completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     started_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     actual_hours: Mapped[float] = mapped_column(Float, default=0.0)  # Фактические часы
+
+    is_paused: Mapped[bool] = mapped_column(Boolean, default=False)
+    paused_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    total_paused_seconds: Mapped[int] = mapped_column(Integer, default=0)  # Общее время пауз в секундах
 
     # Relationships
     column: Mapped[Optional["BoardColumn"]] = relationship(back_populates="tasks")

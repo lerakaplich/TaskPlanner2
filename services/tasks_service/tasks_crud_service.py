@@ -21,29 +21,6 @@ class TasksCrudService:
         self.current_user = current_user
         self.mode = mode
 
-    def get_all_columns(self) -> List[Dict]:
-        """Получить все уникальные колонки"""
-        from models.projects import BoardColumn
-        from sqlalchemy import select
-
-        stmt = select(BoardColumn).order_by(BoardColumn.position)
-        all_columns = list(self.db_session.scalars(stmt))
-
-        columns_by_name = {}
-        for col in all_columns:
-            if col.name not in columns_by_name:
-                columns_by_name[col.name] = {
-                    "id": col.id,
-                    "name": col.name,
-                    "color": col.color if col.color else "#2196F3",
-                    "position": col.position,
-                    "is_done": col.is_done_column,
-                    "project_ids": []
-                }
-            columns_by_name[col.name]["project_ids"].append(col.project_id)
-
-        return sorted(columns_by_name.values(), key=lambda x: x["position"])
-
     def get_task_by_id(self, task_id: int) -> Optional[Dict]:
         """Получить задачу по ID"""
         task_orm = self.repo.get_by_id(task_id)
@@ -103,8 +80,6 @@ class TasksCrudService:
         except Exception as e:
             self.db_session.rollback()
             raise
-
-    # services/tasks_service/tasks_crud_service.py
 
     def update_task_progress(self, task_id: int, progress_percent: float) -> Optional[Dict]:
         """Обновить прогресс выполнения задачи"""
@@ -214,17 +189,6 @@ class TasksCrudService:
 
         return self._task_to_dict(task)
 
-    def delete_task(self, task_id: int) -> bool:
-        """Удалить задачу"""
-        try:
-            self.repo.delete(task_id)
-            self.db_session.commit()
-            return True
-        except Exception as e:
-            self.db_session.rollback()
-            print(f"❌ Ошибка удаления задачи: {e}")
-            return False
-
     def format_assignee_name(self, assignee_id: Optional[int]) -> str:
         """Форматирует имя исполнителя"""
         if not assignee_id:
@@ -245,16 +209,6 @@ class TasksCrudService:
                 employees_session.close()
 
         return "Неизвестен"
-
-    def archive_task(self, task_id: int) -> bool:
-        """Архивировать задачу"""
-        task = self.repo.get_by_id(task_id)
-        if not task:
-            return False
-        task.is_archived = True
-        task.archived_at = datetime.now()
-        self.db_session.commit()
-        return True
 
     def prepare_dialog_data(self, mode: str, task_data: Optional[Dict] = None) -> Dict:
         """Подготавливает данные для диалога создания/редактирования задачи"""
@@ -348,35 +302,6 @@ class TasksCrudService:
 
         return processed
 
-    def duplicate_task(self, task_id: int) -> Optional[Dict]:
-        """Дублировать задачу"""
-        original = self.repo.get_by_id(task_id)
-        if not original:
-            return None
-
-        new_task_data = {
-            "project_id": original.project_id,
-            "column_id": original.column_id,
-            "title": f"{original.title} (копия)",
-            "description": original.description,
-            "priority": original.priority,
-            "deadline": original.deadline,
-            "created_by": original.created_by,
-            "assigned_to": original.assigned_to,
-            "difficulty": original.difficulty,
-            "created_at": datetime.now(),
-            "updated_at": datetime.now(),
-        }
-
-        max_pos = self.db_session.scalar(
-            select(func.max(Task.position)).where(Task.column_id == original.column_id)
-        )
-        new_task_data["position"] = (max_pos or 0) + 1
-
-        new_task = self.repo.create(**new_task_data)
-        self.db_session.commit()
-        return self._task_to_dict(new_task)
-
     def get_tasks_for_board(self) -> List[Dict]:
         """Получить задачи для доски с учётом режима"""
         return self.load_tasks()
@@ -403,23 +328,36 @@ class TasksCrudService:
         return None
 
     def load_tasks(self) -> List[Dict]:
-        """Загрузить задачи с фильтрацией по режиму"""
+        """Загрузить задачи с фильтрацией по режиму и архиву"""
         user_id = self.current_user.get("id") if self.current_user else None
 
-        stmt = select(Task)
+        print(f"\n🔍 [DEBUG] load_tasks: mode={self.mode}, user_id={user_id}")
+
+        # ВАЖНО: фильтруем только НЕархивированные задачи
+        stmt = select(Task).where(Task.is_archived == False)
         all_tasks = list(self.db_session.scalars(stmt))
+
+        print(f"🔍 [DEBUG] Всего неархивированных задач: {len(all_tasks)}")
 
         filtered_tasks = []
         for task in all_tasks:
+            include = False
             if self.mode == "my":
                 if task.assigned_to == user_id or task.created_by == user_id:
-                    filtered_tasks.append(task)
+                    include = True
+                    print(f"   ✅ Включена задача {task.id}: '{task.title}'")
             elif self.mode == "others":
                 if task.assigned_to != user_id and task.created_by != user_id:
-                    filtered_tasks.append(task)
+                    include = True
+                    print(f"   ✅ Включена задача {task.id}: '{task.title}' (чужая)")
             else:
+                include = True
+                print(f"   ✅ Включена задача {task.id}: '{task.title}' (all mode)")
+
+            if include:
                 filtered_tasks.append(task)
 
+        print(f"🔍 [DEBUG] Отфильтровано задач: {len(filtered_tasks)}\n")
         return [self._task_to_dict(task) for task in filtered_tasks]
 
     def is_deadline_overdue(self, deadline_str: str, completed: bool) -> bool:
@@ -460,8 +398,6 @@ class TasksCrudService:
     def get_column_data(self) -> List[Dict]:
         """Получить данные колонок для UI"""
         return self.get_all_columns()
-
-    # services/tasks_service/tasks_crud_service.py
 
     def _task_to_dict(self, task: Task) -> Dict[str, Any]:
         """Преобразование задачи в словарь"""
@@ -536,6 +472,8 @@ class TasksCrudService:
             "created_text": created_display,
             "updated_text": updated_display,
             "author_text": author_display,
+            "is_paused": task.is_paused,  # 👈 ДОБАВИТЬ
+            "total_paused_seconds": task.total_paused_seconds,  # 👈 ДОБАВИТЬ
             "executor_text": executor_display,
             "status": task.column.name if task.column else None,
             "completed": task.completed,
@@ -556,6 +494,96 @@ class TasksCrudService:
             BoardColumn.project_id == project_id
         ).order_by(BoardColumn.position)
         return self.db_session.scalar(stmt)
+
+    def pause_task(self, task_id: int) -> Optional[Dict]:
+        """Поставить задачу на паузу"""
+        task = self.repo.pause_task(task_id)
+        if task:
+            self.db_session.commit()
+            return self._task_to_dict(task)
+        return None
+
+    def resume_task(self, task_id: int) -> Optional[Dict]:
+        """Возобновить задачу"""
+        task = self.repo.resume_task(task_id)
+        if task:
+            self.db_session.commit()
+            return self._task_to_dict(task)
+        return None
+
+    def duplicate_task(self, task_id: int) -> Optional[Dict]:
+        """Дублировать задачу - создаёт точную копию в той же колонке"""
+        original = self.repo.get_by_id(task_id)
+        if not original:
+            return None
+
+        # Создаём копию задачи
+        new_task_data = {
+            "project_id": original.project_id,
+            "column_id": original.column_id,
+            "title": f"{original.title} (копия)",
+            "description": original.description,
+            "priority": original.priority,
+            "deadline": original.deadline,
+            "created_by": original.created_by,
+            "assigned_to": original.assigned_to,
+            "difficulty": original.difficulty,
+            "progress_percent": 0,  # Копия начинается с 0%
+            "is_archived": False,
+            "created_at": datetime.now(),
+            "updated_at": datetime.now(),
+        }
+
+        # Находим максимальную позицию в той же колонке
+        max_pos = self.db_session.scalar(
+            select(func.max(Task.position)).where(Task.column_id == original.column_id)
+        )
+        new_task_data["position"] = (max_pos or 0) + 1
+
+        new_task = self.repo.create(**new_task_data)
+        self.db_session.commit()
+
+        # Копируем теги
+        from models.tasks import TaskTag
+        for tag in original.tags:
+            new_task_tag = TaskTag(task_id=new_task.id, tag_id=tag.tag_id)
+            self.db_session.add(new_task_tag)
+
+        self.db_session.commit()
+        print(f"📋 Задача {task_id} дублирована -> новая задача {new_task.id}")
+
+        return self._task_to_dict(new_task)
+
+    def archive_task(self, task_id: int) -> bool:
+        """Архивировать задачу"""
+        task = self.repo.get_by_id(task_id)
+        if not task:
+            return False
+        task.is_archived = True
+        task.archived_at = datetime.now()
+        self.db_session.commit()
+        print(f"📦 Задача {task_id} архивирована")
+        return True
+
+    def delete_task(self, task_id: int) -> bool:
+        """Полное удаление задачи из БД"""
+        try:
+            # Сначала удаляем связи с тегами
+            from models.tasks import TaskTag
+            self.db_session.query(TaskTag).filter(TaskTag.task_id == task_id).delete()
+
+            # Затем удаляем саму задачу
+            task = self.repo.get_by_id(task_id)
+            if task:
+                self.db_session.delete(task)
+                self.db_session.commit()
+                print(f"🗑️ Задача {task_id} полностью удалена из БД")
+                return True
+            return False
+        except Exception as e:
+            self.db_session.rollback()
+            print(f"❌ Ошибка удаления задачи: {e}")
+            return False
 
     def _parse_date(self, date_str: Optional[str]) -> Optional[datetime]:
         """Парсинг даты"""
