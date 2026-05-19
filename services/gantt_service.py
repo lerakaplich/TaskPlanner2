@@ -4,11 +4,11 @@ from datetime import datetime, timedelta
 from typing import List, Dict, Optional, Tuple
 
 from PyQt6.QtGui import QPainter
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import select, func
 
 from database import get_employees_session
-from models.tasks import Task
+from models.tasks import Task, TaskDependency
 from models.projects import Project
 from models.employees import Employee
 
@@ -46,11 +46,16 @@ class GanttService:
         if not project:
             return self._get_empty_result()
 
+        # ✅ ИСПРАВЛЕНИЕ: добавляем joinedload для колонки
         stmt = select(Task).where(
             Task.project_id == project_id,
             Task.is_archived == False
+        ).options(
+            joinedload(Task.column),
+            joinedload(Task.dependencies_as_predecessor)  # 👈 ДОБАВИТЬ
         )
-        tasks = self.session.scalars(stmt).all()
+
+        tasks = self.session.scalars(stmt).unique().all()  # unique() для устранения дублей
 
         if not tasks:
             return self._get_empty_result()
@@ -83,6 +88,22 @@ class GanttService:
             start_date = task.created_at.date() if task.created_at else today
             end_date = task.deadline.date() if task.deadline else start_date + timedelta(days=7)
 
+            # ✅ Исправляем отрицательную длительность
+            if start_date > end_date:
+                start_date, end_date = end_date, start_date  # Меняем местами
+                # Или можно задать end_date = start_date + timedelta(days=7)
+
+            # ✅ ДОБАВЛЯЕМ проверку на наличие колонки
+            column_name = task.column.name if task.column else "unknown"
+
+            dependencies = []
+            for dep in task.dependencies_as_predecessor:
+                dependencies.append({
+                    "successor_id": dep.successor_id,
+                    "lag": dep.lag,
+                    "type": dep.type
+                })
+
             gantt_tasks.append({
                 "id": task.id,
                 "title": task.title,
@@ -92,10 +113,10 @@ class GanttService:
                 "assignee": assignee_name,
                 "assignee_id": task.assigned_to,
                 "is_critical": is_critical,
-                "dependencies": [],
+                "dependencies": dependencies,
                 "children": [],
                 "project_id": task.project_id,
-                "status": task.column.name if task.column else "unknown",
+                "status": column_name,  # <-- ИСПРАВЛЕНО
                 "is_completed": is_completed,
                 "is_overdue": is_overdue,
                 "duration_days": (end_date - start_date).days + 1,
@@ -170,7 +191,8 @@ class GanttService:
             print(f"Ошибка экспорта: {e}")
             return False
 
-    def add_task(self, project_id: int, title: str, start_date: datetime, end_date: datetime, assigned_to: int = None) -> Optional[int]:
+    def add_task(self, project_id: int, title: str, start_date: datetime, end_date: datetime,
+                 assigned_to: int = None) -> Optional[int]:
         """Создает новую задачу"""
         try:
             new_task = Task(
@@ -192,13 +214,67 @@ class GanttService:
             print(f"Ошибка создания задачи: {e}")
             return None
 
-    def update_task_dates(self, task_id: int, start_date: datetime.date, end_date: datetime.date) -> bool:
-        task = self.session.get(Task, task_id)
-        if task:
-            if hasattr(task, 'deadline'):
-                task.deadline = datetime.combine(end_date, datetime.min.time())
+    def add_dependency(self, predecessor_id: int, successor_id: int, lag: int = 0, dep_type: str = "FS") -> bool:
+        """Добавляет связь между задачами"""
+        try:
+            # Проверяем, существует ли уже такая связь
+            existing = self.session.query(TaskDependency).filter(
+                TaskDependency.predecessor_id == predecessor_id,
+                TaskDependency.successor_id == successor_id
+            ).first()
+
+            if existing:
+                print(f"⚠️ Связь между задачами {predecessor_id} и {successor_id} уже существует")
+                return False
+
+            dependency = TaskDependency(
+                predecessor_id=predecessor_id,
+                successor_id=successor_id,
+                lag=lag,
+                type=dep_type
+            )
+            self.session.add(dependency)
             self.session.commit()
+            print(f"✅ Связь создана: {predecessor_id} → {successor_id} (лаг: {lag}, тип: {dep_type})")
             return True
+        except Exception as e:
+            self.session.rollback()
+            print(f"❌ Ошибка создания связи: {e}")
+            import traceback
+            traceback.print_exc()
+            return False
+
+    def get_task_dependencies(self, task_id: int) -> List[Dict]:
+        """Получает все связи для задачи"""
+        deps = self.session.query(TaskDependency).filter(
+            TaskDependency.predecessor_id == task_id
+        ).all()
+
+        return [{
+            "successor_id": d.successor_id,
+            "lag": d.lag,
+            "type": d.type
+        } for d in deps]
+
+    def update_task_dates(self, task_id: int, start_date: datetime.date, end_date: datetime.date) -> bool:
+        """Обновляет даты начала и окончания задачи"""
+        try:
+            print(f"🔄 update_task_dates: task_id={task_id}, start={start_date}, end={end_date}")
+            task = self.session.get(Task, task_id)
+            if task:
+                print(f"   Задача найдена: {task.title}")
+                task.created_at = datetime.combine(start_date, datetime.min.time())
+                task.deadline = datetime.combine(end_date, datetime.min.time())
+                self.session.commit()
+                print(f"✅ Задача {task_id}: даты обновлены на {start_date} - {end_date}")
+                return True
+            else:
+                print(f"❌ Задача {task_id} не найдена!")
+        except Exception as e:
+            self.session.rollback()
+            print(f"❌ Ошибка обновления дат задачи {task_id}: {e}")
+            import traceback
+            traceback.print_exc()
         return False
 
     def get_task_by_id(self, task_id: int) -> Optional[Dict]:
@@ -213,3 +289,6 @@ class GanttService:
             "assignee": self._get_employee_name(task.assigned_to) if task.assigned_to else "",
             "assignee_id": task.assigned_to
         }
+
+    def get_current_user_id(self) -> Optional[int]:
+        return self.current_user_id

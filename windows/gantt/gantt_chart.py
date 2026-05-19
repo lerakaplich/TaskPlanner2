@@ -1,43 +1,82 @@
 # windows/gantt/gantt_chart.py
 
+# windows/gantt/gantt_chart.py
+
 import os
 from datetime import datetime, timedelta
-from typing import List, Dict, Optional
+from typing import List, Dict
 
 from PyQt6 import uic
+from PyQt6.QtCore import Qt, pyqtSignal, QEvent
+from PyQt6.QtGui import (
+    QBrush, QPen, QColor, QFont, QPainter, QWheelEvent
+)
 from PyQt6.QtWidgets import (
     QWidget, QGraphicsView, QGraphicsScene, QGraphicsRectItem,
-    QGraphicsItem, QGraphicsLineItem, QGraphicsSimpleTextItem,
-    QMessageBox, QInputDialog, QTreeWidgetItem, QFileDialog
+    QGraphicsLineItem, QGraphicsSimpleTextItem,
+    QMessageBox, QInputDialog, QTreeWidgetItem, QFileDialog, QDialog, QVBoxLayout, QComboBox, QLabel, QSpinBox,
+    QDialogButtonBox
 )
-from PyQt6.QtCore import Qt, QRectF, QPointF, pyqtSignal, QEvent
-from PyQt6.QtGui import (
-    QBrush, QPen, QColor, QFont, QPainter, QLinearGradient, QWheelEvent, QPixmap
+from windows.gantt.gantt_constants import (
+    PIXELS_PER_DAY,  # 👈 ДОБАВИТЬ ЭТУ СТРОКУ
+    TASK_HEIGHT, HEADER_HEIGHT, ROW_HEIGHT,
+    COLOR_PRIMARY, COLOR_ACCENT, COLOR_BACKGROUND, COLOR_SECONDARY, COLOR_BORDER,
+    COLOR_COMPLETED, COLOR_OVERDUE, COLOR_TEXT, TODAY_COLOR, TODAY
 )
-
 from services.gantt_service import GanttService
+from windows.gantt.gantt_constants import (
+    TASK_HEIGHT, HEADER_HEIGHT, ROW_HEIGHT,
+    COLOR_PRIMARY, COLOR_ACCENT, COLOR_BACKGROUND, COLOR_SECONDARY, COLOR_BORDER,
+    COLOR_TEXT, TODAY_COLOR, TODAY
+)
+from windows.other_tasks.task_dialog import TaskDialog
 
 
-# Константы
-PIXELS_PER_DAY = 40
-TASK_HEIGHT = 28
-TASK_VERTICAL_SPACING = 5
-HEADER_HEIGHT = 50
-ROW_HEIGHT = TASK_HEIGHT + TASK_VERTICAL_SPACING
+class DependencyDialog(QDialog):
+    def __init__(self, parent=None, tasks=None, current_task_id=None):
+        super().__init__(parent)
+        self.setWindowTitle("Создание связи")
+        self.setModal(True)
+        self.setMinimumWidth(400)
 
-# Цвета
-COLOR_PRIMARY = "#D22730"
-COLOR_ACCENT = "#ccab6e"
-COLOR_BACKGROUND = "#1B232A"
-COLOR_SECONDARY = "#2C3640"
-COLOR_BORDER = "#3A4550"
-COLOR_COMPLETED = "#2E8B57"
-COLOR_OVERDUE = "#8B0000"
-COLOR_TEXT = "#FFFFFF"
-TODAY_COLOR = "#ccab6e"
+        layout = QVBoxLayout(self)
 
-TODAY = datetime.now().date()
+        # Выбор задачи-предшественника
+        layout.addWidget(QLabel("Выберите задачу-предшественник:"))
+        self.task_combo = QComboBox()
+        for task in tasks:
+            if task.id != current_task_id:
+                self.task_combo.addItem(f"{task.title} ({task.start_date} - {task.end_date})", task.id)
+        layout.addWidget(self.task_combo)
 
+        # Задержка (лаг)
+        layout.addWidget(QLabel("Задержка (дней):"))
+        self.lag_spin = QSpinBox()
+        self.lag_spin.setRange(0, 365)
+        self.lag_spin.setValue(0)
+        layout.addWidget(self.lag_spin)
+
+        # Тип связи
+        layout.addWidget(QLabel("Тип связи:"))
+        self.type_combo = QComboBox()
+        self.type_combo.addItem("Финиш-Старт (FS)", "FS")
+        self.type_combo.addItem("Финиш-Финиш (FF)", "FF")
+        self.type_combo.addItem("Старт-Старт (SS)", "SS")
+        self.type_combo.addItem("Старт-Финиш (SF)", "SF")
+        layout.addWidget(self.type_combo)
+
+        # Кнопки
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+
+    def get_dependency(self):
+        return {
+            "predecessor_id": self.task_combo.currentData(),
+            "lag": self.lag_spin.value(),
+            "type": self.type_combo.currentData()
+        }
 
 class GanttTask:
     """Модель задачи для Ганта"""
@@ -55,7 +94,7 @@ class GanttTask:
         self.color = COLOR_PRIMARY
         self.project_id = task_data.get("project_id")
         self.status = task_data.get("status", "")
-        self._is_completed = task_data.get("is_completed", False)
+        self._is_completed = task_data.get("is_completed", False)  # Это из БД (is_done_column)
         self.priority = task_data.get("priority", "medium")
 
     @property
@@ -64,11 +103,30 @@ class GanttTask:
 
     @property
     def is_overdue(self) -> bool:
-        return self.end_date < TODAY and not self._is_completed
+        """Просрочена ли задача (дедлайн меньше сегодня, но не завершена)"""
+        return self.end_date < TODAY and not self.is_completed
 
     @property
     def is_completed(self) -> bool:
-        return self._is_completed or (self.end_date < TODAY)
+        """
+        Задача считается завершенной если:
+        1. В БД колонка is_done_column = True, ИЛИ
+        2. Статус из колонки содержит "Готово" или "Done"
+        """
+        # Если из БД пришел флаг завершения
+        if self._is_completed:
+            return True
+        # Проверяем статус колонки
+        if self.status and ("Готово" in self.status or "Done" in self.status or "completed" in self.status.lower()):
+            return True
+        # Если дата окончания меньше сегодня, но это не значит что завершено!
+        # Поэтому убираем условие self.end_date < TODAY
+        return False
+
+    @property
+    def is_in_progress(self) -> bool:
+        """В работе - не завершена и не просрочена"""
+        return not self.is_completed and not self.is_overdue
 
 
 class GanttHeaderItem(QGraphicsRectItem):
@@ -130,6 +188,10 @@ class GanttScene(QGraphicsScene):
         self.dependency_items: List[GanttDependencyItem] = []
         self.setBackgroundBrush(QBrush(QColor(COLOR_BACKGROUND)))
 
+    def _on_task_updated(self, task_id: int):
+        if self.widget:
+            self.widget.update_task_in_tree(task_id)
+
     def update_scene(self):
         self.clear()
         self.task_items.clear()
@@ -142,7 +204,9 @@ class GanttScene(QGraphicsScene):
         y = HEADER_HEIGHT
         for task in self.tasks:
             from windows.gantt.gantt_task_item import GanttTaskItem
-            item = GanttTaskItem(task, self.project_start, y)
+            # ✅ ПЕРЕДАЕМ parent_widget (self.widget)
+            item = GanttTaskItem(task, self.project_start, y, self.widget)  # <-- ВАЖНО!
+
             self.addItem(item)
             self.task_items[task.id] = item
             y += ROW_HEIGHT
@@ -162,6 +226,29 @@ class GanttScene(QGraphicsScene):
             self.addItem(text)
 
         self.setSceneRect(0, 0, total_days * PIXELS_PER_DAY + 500, y + 100)
+
+    def _on_task_moved(self, task_id: int, old_start, new_start):
+        """Обработчик перемещения задачи"""
+        if self.widget and hasattr(self.widget, 'gantt_service'):
+            task = next((t for t in self.tasks if t.id == task_id), None)
+            if task:
+                # Обновляем задачу в БД
+                self.widget.gantt_service.update_task_dates(
+                    task_id,
+                    task.start_date,
+                    task.end_date
+                )
+
+    def _on_task_resized(self, task_id: int, old_end, new_end):
+        """Обработчик изменения размера задачи"""
+        if self.widget and hasattr(self.widget, 'gantt_service'):
+            task = next((t for t in self.tasks if t.id == task_id), None)
+            if task:
+                self.widget.gantt_service.update_task_dates(
+                    task_id,
+                    task.start_date,
+                    task.end_date
+                )
 
     def scroll_to_today(self, view):
         days = (TODAY - self.project_start).days
@@ -207,6 +294,20 @@ class GanttChartWidget(QWidget):
         self.filterInProgress.toggled.connect(self.on_filter_changed)
         self.filterCompleted.toggled.connect(self.on_filter_changed)
 
+    def update_task_in_tree(self, task_id: int):
+        """Обновляет задачу в дереве задач"""
+        # Ищем элемент в дереве
+        for i in range(self.taskList.topLevelItemCount()):
+            item = self.taskList.topLevelItem(i)
+            if item.data(0, Qt.ItemDataRole.UserRole) == task_id:
+                # Находим задачу в scene.tasks
+                task = next((t for t in self.scene.tasks if t.id == task_id), None)
+                if task:
+                    status_emoji = "✅" if task.is_completed else "⚠️" if task.is_overdue else "🔄"
+                    date_str = f"{task.start_date.strftime('%d.%m')}–{task.end_date.strftime('%d.%m')}"
+                    item.setText(0, f"{status_emoji} {task.title} | {date_str} | {task.assignee}")
+                break
+
     def _load_projects(self):
         if not self.gantt_service:
             return
@@ -242,6 +343,11 @@ class GanttChartWidget(QWidget):
 
         try:
             result = self.gantt_service.get_project_tasks_for_gantt(self.current_project_id, filters)
+
+            # ✅ ОТЛАДКА
+            print(f"🔍 DEBUG: Получено задач: {len(result['tasks'])}")
+            for t in result['tasks'][:5]:  # первые 5 задач
+                print(f"   - {t['title']} | start: {t['start_date']} | end: {t['end_date']} | status: {t['status']}")
 
             if not result["tasks"]:
                 self._show_empty_message(result["project_name"])
@@ -332,25 +438,122 @@ class GanttChartWidget(QWidget):
             else:
                 QMessageBox.warning(self, "Ошибка", "Не удалось экспортировать диаграмму")
 
+    # Замените метод add_task_dialog на этот:
     def add_task_dialog(self):
-        title, ok = QInputDialog.getText(self, "Новая задача", "Название задачи:")
-        if ok and title:
-            start_date = datetime.now().date()
-            end_date = start_date + timedelta(days=7)
-            task_id = self.gantt_service.add_task(
-                self.current_project_id, title, start_date, end_date
-            )
-            if task_id:
-                QMessageBox.information(self, "Успех", f"Задача '{title}' создана")
-                self.refresh_chart()
-            else:
-                QMessageBox.warning(self, "Ошибка", "Не удалось создать задачу")
+        """Открывает диалог создания задачи (как в OthersTasksPage)"""
+        if not self.current_project_id:
+            QMessageBox.warning(self, "Предупреждение", "Сначала выберите проект")
+            return
+
+        # Создаем диалог создания задачи
+        dialog = TaskDialog(
+            self,
+            task_data=None,
+            mode="create",
+            current_user={"id": self.gantt_service.current_user_id} if self.gantt_service else None
+        )
+
+        # Устанавливаем сервис задач
+        from services.tasks_service.tasks_service import TasksService
+        from database import get_tasks_session
+
+        tasks_session = get_tasks_session()
+        tasks_service = TasksService(
+            db_session=tasks_session,
+            current_user={"id": self.gantt_service.current_user_id} if self.gantt_service else None,
+            mode="all"  # Режим для работы со всеми задачами
+        )
+        dialog.set_service(tasks_service)
+
+        # Подключаем сигнал сохранения
+        dialog.task_saved.connect(self.on_task_created)
+
+        dialog.exec()
+
+    def on_task_created(self, task_id, form_data):
+        """Обработчик создания задачи"""
+        print(f"📝 Создана задача: {form_data}")
+        # Обновляем диаграмму
+        self.refresh_chart()
+
+        # Показываем уведомление
+        QMessageBox.information(self, "Успех", f"Задача '{form_data.get('title', '')}' создана")
 
     def toggle_linking_mode(self):
+        """Включение/выключение режима создания связей"""
         self.linking_mode = not self.linking_mode
-        self.btnCreateLink.setText("Отмена" if self.linking_mode else "Создать связь")
+        if self.linking_mode:
+            self.btnCreateLink.setText("Отмена")
+            self.btnCreateLink.setStyleSheet("background-color: #8B0000;")
+            self.statusLabel.setText("🔗 Режим создания связей: нажмите на первую задачу, затем на вторую")
+        else:
+            self.btnCreateLink.setText("Создать связь")
+            self.btnCreateLink.setStyleSheet("")
+            self.pending_pred = None
+            self.statusLabel.setText(
+                f"✅ Завершено: {self.statusLabel.text().split('|')[0] if '|' in self.statusLabel.text() else ''} | "
+                f"🔄 В работе: ... | ⚠️ Просрочено: ... | 📊 Всего: ..."
+            )
         cursor = Qt.CursorShape.PointingHandCursor if self.linking_mode else Qt.CursorShape.ArrowCursor
         self.ganttView.viewport().setCursor(cursor)
+
+    def create_dependency(self, predecessor_id: int, successor_id: int):
+        """Создает связь между задачами через диалог"""
+        # Находим задачи
+        pred_task = next((t for t in self.scene.tasks if t.id == predecessor_id), None)
+        succ_task = next((t for t in self.scene.tasks if t.id == successor_id), None)
+
+        if not pred_task or not succ_task:
+            QMessageBox.warning(self, "Ошибка", "Задачи не найдены")
+            return
+
+        if predecessor_id == successor_id:
+            QMessageBox.warning(self, "Ошибка", "Нельзя создать связь с самой собой")
+            return
+
+        # Открываем диалог для задания параметров связи
+        dialog = DependencyDialog(self, self.scene.tasks, predecessor_id)
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            dep_data = dialog.get_dependency()
+
+            # Сохраняем связь в БД через сервис
+            if self.gantt_service:
+                success = self.gantt_service.add_dependency(
+                    predecessor_id=predecessor_id,
+                    successor_id=successor_id,
+                    lag=dep_data["lag"],
+                    dep_type=dep_data["type"]
+                )
+                if success:
+                    # Добавляем связь в модель
+                    pred_task.dependencies.append({
+                        "successor_id": successor_id,
+                        "lag": dep_data["lag"],
+                        "type": dep_data["type"]
+                    })
+                    # Обновляем визуальное отображение связей
+                    self.update_dependencies_visual()
+                    QMessageBox.information(self, "Успех",
+                                            f"Связь создана: '{pred_task.title}' → '{succ_task.title}' (лаг: {dep_data['lag']} дн.)")
+                else:
+                    QMessageBox.warning(self, "Ошибка", "Не удалось сохранить связь")
+
+    def update_dependencies_visual(self):
+        """Обновляет визуальное отображение связей на диаграмме"""
+        # Удаляем существующие линии связей
+        for dep_item in self.scene.dependency_items:
+            self.scene.removeItem(dep_item)
+        self.scene.dependency_items.clear()
+
+        # Создаем новые линии для каждой связи
+        for task in self.scene.tasks:
+            for dep in task.dependencies:
+                pred_item = self.scene.task_items.get(task.id)
+                succ_item = self.scene.task_items.get(dep.get("successor_id"))
+                if pred_item and succ_item:
+                    dep_item = GanttDependencyItem(pred_item, succ_item, dep.get("lag", 0))
+                    self.scene.addItem(dep_item)
+                    self.scene.dependency_items.append(dep_item)
 
     def eventFilter(self, obj, event):
         if obj == self.ganttView.viewport() and event.type() == QEvent.Type.MouseButtonPress and self.linking_mode:
@@ -361,15 +564,19 @@ class GanttChartWidget(QWidget):
             if hasattr(item, 'task'):
                 if self.pending_pred is None:
                     self.pending_pred = item.task.id
-                    QMessageBox.information(self, "Связь", f"Выбрана задача: {item.task.title}")
+                    self.statusLabel.setText(f"🔗 Выбрана задача-предшественник: {item.task.title}")
+                    # Подсветим выбранную задачу
+                    if item in self.scene.task_items.values():
+                        item.rect_item.setOpacity(0.7)
                 else:
-                    lag, ok = QInputDialog.getInt(self, "Лаг", "Задержка (дней):", 0, 0, 30)
-                    if ok:
-                        # Здесь нужно сохранить зависимость
-                        QMessageBox.information(self, "Связь", f"Связь создана с задержкой {lag} дней")
+                    # Создаем связь между задачами
+                    self.create_dependency(self.pending_pred, item.task.id)
+                    # Снимаем подсветку
+                    for task_item in self.scene.task_items.values():
+                        task_item.rect_item.setOpacity(1.0)
                     self.pending_pred = None
                     self.toggle_linking_mode()
-            return True
+                return True
         return super().eventFilter(obj, event)
 
     def wheelEvent(self, event: QWheelEvent):
@@ -378,3 +585,4 @@ class GanttChartWidget(QWidget):
             event.accept()
         else:
             super().wheelEvent(event)
+

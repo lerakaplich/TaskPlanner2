@@ -10,7 +10,7 @@ from sqlalchemy import (
     DateTime,
     Enum,
     Boolean,
-    Float, Integer,
+    Float, Integer, Column,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -32,6 +32,29 @@ class TaskStatusEnum(str, enum.Enum):
     done = "done"
     cancelled = "cancelled"
 
+# models/tasks.py - добавьте в класс TaskDependency правильные отношения:
+
+class TaskDependency(Base):
+    """Модель связей между задачами для диаграммы Ганта"""
+    __tablename__ = "task_dependencies"
+
+    id = Column(Integer, primary_key=True)
+    predecessor_id = Column(Integer, ForeignKey("tasks.id", ondelete="CASCADE"), nullable=False)
+    successor_id = Column(Integer, ForeignKey("tasks.id", ondelete="CASCADE"), nullable=False)
+    lag = Column(Integer, default=0)  # Задержка в днях
+    type = Column(String(2), default="FS")  # FS, FF, SS, SF
+
+    # 👇 ПРАВИЛЬНЫЕ ОТНОШЕНИЯ
+    predecessor = relationship(
+        "Task",
+        foreign_keys=[predecessor_id],
+        back_populates="dependencies_as_predecessor"
+    )
+    successor = relationship(
+        "Task",
+        foreign_keys=[successor_id],
+        back_populates="dependencies_as_successor"
+    )
 
 class Task(Base):
     __tablename__ = "tasks"
@@ -68,6 +91,21 @@ class Task(Base):
     # Relationships
     column: Mapped[Optional["BoardColumn"]] = relationship(back_populates="tasks")
     tags: Mapped[List["TaskTag"]] = relationship(back_populates="task", cascade="all, delete-orphan")
+
+    # Связи как предшественник
+    dependencies_as_predecessor = relationship(
+        "TaskDependency",
+        foreign_keys="TaskDependency.predecessor_id",
+        back_populates="predecessor",
+        cascade="all, delete-orphan"
+    )
+    # Связи как последователь
+    dependencies_as_successor = relationship(
+        "TaskDependency",
+        foreign_keys="TaskDependency.successor_id",
+        back_populates="successor",
+        cascade="all, delete-orphan"
+    )
 
     @property
     def status(self) -> Optional[str]:
