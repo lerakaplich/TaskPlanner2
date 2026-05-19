@@ -286,13 +286,103 @@ class GanttChartWidget(QWidget):
         self.btnExport.clicked.connect(self.export_chart)
         self.btnAddTask.clicked.connect(self.add_task_dialog)
         self.btnCreateLink.clicked.connect(self.toggle_linking_mode)
-        self.autoPlanningCheck.toggled.connect(self.refresh_chart)
+        self.autoPlanningCheck.toggled.connect(self.on_auto_plan_toggled)
         self.projectCombo.currentIndexChanged.connect(self.on_project_changed)
         self.searchTasks.textChanged.connect(self.on_search)
         self.filterMyTasks.toggled.connect(self.on_filter_changed)
         self.filterOverdue.toggled.connect(self.on_filter_changed)
         self.filterInProgress.toggled.connect(self.on_filter_changed)
         self.filterCompleted.toggled.connect(self.on_filter_changed)
+
+    def on_auto_plan_toggled(self, checked):
+        """Обработчик включения/выключения автопланирования"""
+        if checked:
+            # Выключаем чекбокс, чтобы он не оставался включенным
+            self.autoPlanningCheck.setChecked(False)
+            # Запускаем автопланирование
+            self.auto_plan()
+
+    def auto_plan(self):
+        """Автоматическое планирование задач"""
+        if not self.current_project_id:
+            QMessageBox.warning(self, "Предупреждение", "Сначала выберите проект")
+            return
+
+        # Запрашиваем дату начала планирования
+        from PyQt6.QtWidgets import QDateEdit
+        from PyQt6.QtCore import QDate
+
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Автопланирование")
+        dialog.setModal(True)
+        layout = QVBoxLayout(dialog)
+
+        layout.addWidget(QLabel("Дата начала проекта:"))
+        date_edit = QDateEdit()
+        date_edit.setDate(QDate.currentDate())
+        date_edit.setCalendarPopup(True)
+        layout.addWidget(date_edit)
+
+        # Опционально: добавить выбор метода планирования
+        layout.addWidget(QLabel("Метод планирования:"))
+        method_combo = QComboBox()
+        method_combo.addItem("По дате начала", "start_date")
+        method_combo.addItem("По дате окончания", "end_date")
+        layout.addWidget(method_combo)
+
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
+        buttons.accepted.connect(dialog.accept)
+        buttons.rejected.connect(dialog.reject)
+        layout.addWidget(buttons)
+
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+
+        start_date = date_edit.date().toPyDate()
+        method = method_combo.currentData()
+
+        # Показываем прогресс
+        QMessageBox.information(self, "Автопланирование", "Выполняется автоматическое планирование...")
+
+        # Выполняем автопланирование
+        result = self.gantt_service.auto_plan_tasks(self.current_project_id, start_date)
+
+        if result["tasks"]:
+            # Обновляем отображение
+            self.refresh_chart()
+            QMessageBox.information(
+                self,
+                "Автопланирование завершено",
+                f"Обновлено {len(result['tasks'])} задач\n\n{result['message']}"
+            )
+        else:
+            QMessageBox.information(self, "Автопланирование", result["message"])
+
+    def show_critical_path(self):
+        """Показать критический путь"""
+        if not self.current_project_id:
+            QMessageBox.warning(self, "Предупреждение", "Сначала выберите проект")
+            return
+
+        critical_path = self.gantt_service.calculate_critical_path(self.current_project_id)
+
+        if critical_path:
+            # Подсвечиваем задачи на критическом пути
+            for task_item in self.scene.task_items.values():
+                if task_item.task.id in [t["id"] for t in critical_path]:
+                    # Подсвечиваем красным
+                    task_item.rect_item.setPen(QPen(QColor("#FF4444"), 3))
+                else:
+                    task_item.rect_item.setPen(QPen(QColor(COLOR_BORDER), 1))
+
+            # Показываем список
+            message = "Критический путь:\n" + "\n".join([
+                f"  • {t['title']} ({t['start_date']} - {t['end_date']})"
+                for t in critical_path
+            ])
+            QMessageBox.information(self, "Критический путь", message)
+        else:
+            QMessageBox.information(self, "Критический путь", "Не удалось рассчитать критический путь")
 
     def update_task_in_tree(self, task_id: int):
         """Обновляет задачу в дереве задач"""

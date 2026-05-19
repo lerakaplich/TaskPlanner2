@@ -37,6 +37,265 @@ class GanttService:
         projects = self.session.scalars(stmt).all()
         return [{"id": p.id, "name": p.name} for p in projects]
 
+    def auto_plan_tasks(self, project_id: int, start_date: datetime.date = None) -> Dict:
+        """
+        Автоматическое планирование задач проекта на основе зависимостей.
+        Возвращает обновленные задачи.
+        """
+        try:
+            # Получаем все задачи проекта
+            stmt = select(Task).where(
+                Task.project_id == project_id,
+                Task.is_archived == False
+            ).options(
+                joinedload(Task.column),
+                joinedload(Task.dependencies_as_predecessor),
+                joinedload(Task.dependencies_as_successor)
+            )
+
+            tasks = list(self.session.scalars(stmt).unique())
+
+            if not tasks:
+                return {"tasks": [], "message": "Нет задач для планирования"}
+
+            # Если не указана дата начала, берем минимальную из существующих
+            if start_date is None:
+                start_date = min(
+                    (t.created_at.date() if t.created_at else datetime.now().date() for t in tasks),
+                    default=datetime.now().date()
+                )
+
+            # Создаем словарь для быстрого доступа к задачам
+            task_dict = {t.id: t for t in tasks}
+
+            # Словарь для хранения вычисленных дат
+            planned_dates = {}
+
+            # Строим граф зависимостей
+            dependencies = {}
+            for task in tasks:
+                dependencies[task.id] = []
+                for dep in task.dependencies_as_predecessor:
+                    dependencies[task.id].append({
+                        "pred_id": dep.predecessor_id,
+                        "lag": dep.lag,
+                        "type": dep.type
+                    })
+
+            # Выполняем топологическую сортировку
+            sorted_task_ids = self._topological_sort(dependencies, [t.id for t in tasks])
+
+            if not sorted_task_ids:
+                # Если есть циклы, используем простой порядок
+                sorted_task_ids = [t.id for t in tasks]
+
+            # Вычисляем даты
+            for task_id in sorted_task_ids:
+                task = task_dict.get(task_id)
+                if not task:
+                    continue
+
+                # Начальная дата - текущая или дедлайн предшественника
+                earliest_start = start_date
+
+                # Проверяем зависимости
+                for dep in dependencies.get(task_id, []):
+                    pred_task = task_dict.get(dep["pred_id"])
+                    if pred_task and pred_task.id in planned_dates:
+                        pred_end = planned_dates[pred_task.id]["end_date"]
+
+                        if dep["type"] == "FS":  # Финиш-Старт
+                            earliest_start = max(earliest_start, pred_end + timedelta(days=dep["lag"]))
+                        elif dep["type"] == "SS":  # Старт-Старт
+                            pred_start = planned_dates[pred_task.id]["start_date"]
+                            earliest_start = max(earliest_start, pred_start + timedelta(days=dep["lag"]))
+                        elif dep["type"] == "FF":  # Финиш-Финиш
+                            pred_end = planned_dates[pred_task.id]["end_date"]
+                            # Для FF нужно, чтобы дата окончания была не раньше pred_end + lag
+                            pass  # Обработаем при вычислении end_date
+
+                # Вычисляем дату окончания
+                duration = task.duration_days if hasattr(task, 'duration_days') else 7
+                end_date = earliest_start + timedelta(days=duration - 1)
+
+                # Корректировка для FF зависимостей
+                for dep in dependencies.get(task_id, []):
+                    if dep["type"] == "FF":
+                        pred_task = task_dict.get(dep["pred_id"])
+                        if pred_task and pred_task.id in planned_dates:
+                            pred_end = planned_dates[pred_task.id]["end_date"]
+                            required_end = pred_end + timedelta(days=dep["lag"])
+                            if end_date < required_end:
+                                end_date = required_end
+                                earliest_start = end_date - timedelta(days=duration - 1)
+
+                planned_dates[task_id] = {
+                    "start_date": earliest_start,
+                    "end_date": end_date,
+                    "duration": duration
+                }
+
+            # Применяем вычисленные даты к задачам
+            updated_tasks = []
+            for task_id, dates in planned_dates.items():
+                task = task_dict.get(task_id)
+                if task:
+                    old_start = task.created_at.date() if task.created_at else None
+                    old_end = task.deadline.date() if task.deadline else None
+
+                    if old_start != dates["start_date"] or old_end != dates["end_date"]:
+                        task.created_at = datetime.combine(dates["start_date"], datetime.min.time())
+                        task.deadline = datetime.combine(dates["end_date"], datetime.min.time())
+                        updated_tasks.append({
+                            "id": task.id,
+                            "title": task.title,
+                            "old_start": old_start,
+                            "old_end": old_end,
+                            "new_start": dates["start_date"],
+                            "new_end": dates["end_date"]
+                        })
+
+            if updated_tasks:
+                self.session.commit()
+                print(f"✅ Автопланирование выполнено: обновлено {len(updated_tasks)} задач")
+
+            return {
+                "tasks": updated_tasks,
+                "message": f"Обновлено {len(updated_tasks)} задач" if updated_tasks else "Все задачи уже оптимально спланированы"
+            }
+
+        except Exception as e:
+            self.session.rollback()
+            print(f"❌ Ошибка автопланирования: {e}")
+            import traceback
+            traceback.print_exc()
+            return {"tasks": [], "message": f"Ошибка: {str(e)}"}
+
+    def _topological_sort(self, dependencies: Dict, task_ids: List[int]) -> List[int]:
+        """Топологическая сортировка задач по зависимостям"""
+        from collections import deque
+
+        # Строим граф
+        graph = {tid: [] for tid in task_ids}
+        in_degree = {tid: 0 for tid in task_ids}
+
+        for task_id in task_ids:
+            for dep in dependencies.get(task_id, []):
+                pred_id = dep["pred_id"]
+                if pred_id in graph:
+                    graph[pred_id].append(task_id)
+                    in_degree[task_id] = in_degree.get(task_id, 0) + 1
+
+        # Алгоритм Кана
+        queue = deque([tid for tid in task_ids if in_degree.get(tid, 0) == 0])
+        result = []
+
+        while queue:
+            node = queue.popleft()
+            result.append(node)
+
+            for neighbor in graph.get(node, []):
+                in_degree[neighbor] -= 1
+                if in_degree[neighbor] == 0:
+                    queue.append(neighbor)
+
+        # Если не все задачи отсортированы, значит есть цикл
+        if len(result) != len(task_ids):
+            print("⚠️ Обнаружен цикл в зависимостях, используется простой порядок")
+            return task_ids
+
+        return result
+
+    def calculate_critical_path(self, project_id: int) -> List[Dict]:
+        """
+        Расчет критического пути проекта.
+        Возвращает список задач на критическом пути.
+        """
+        try:
+            # Получаем все задачи проекта
+            stmt = select(Task).where(
+                Task.project_id == project_id,
+                Task.is_archived == False
+            ).options(
+                joinedload(Task.dependencies_as_predecessor)
+            )
+
+            tasks = list(self.session.scalars(stmt).unique())
+
+            if not tasks:
+                return []
+
+            # Строим граф зависимостей
+            task_dict = {t.id: t for t in tasks}
+            dependencies = {}
+            for task in tasks:
+                dependencies[task.id] = []
+                for dep in task.dependencies_as_predecessor:
+                    dependencies[task.id].append({
+                        "pred_id": dep.predecessor_id,
+                        "lag": dep.lag,
+                        "type": dep.type
+                    })
+
+            # Вычисляем ранние сроки
+            early_start = {}
+            early_finish = {}
+
+            for task in tasks:
+                duration = (task.deadline - task.created_at).days + 1 if task.deadline and task.created_at else 7
+                early_start[task.id] = task.created_at.date() if task.created_at else datetime.now().date()
+
+                # Учитываем зависимости
+                for dep in dependencies.get(task.id, []):
+                    if dep["type"] == "FS":
+                        pred_finish = early_finish.get(dep["pred_id"])
+                        if pred_finish:
+                            new_start = pred_finish + timedelta(days=dep["lag"])
+                            if new_start > early_start[task.id]:
+                                early_start[task.id] = new_start
+
+                early_finish[task.id] = early_start[task.id] + timedelta(days=duration - 1)
+
+            # Находим максимальную дату окончания
+            project_end = max(early_finish.values()) if early_finish else datetime.now().date()
+
+            # Вычисляем поздние сроки (итеративно)
+            late_finish = {tid: project_end for tid in task_ids}
+            late_start = {}
+
+            # Проходим в обратном порядке
+            for task in reversed(tasks):
+                duration = (task.deadline - task.created_at).days + 1 if task.deadline and task.created_at else 7
+                late_start[task.id] = late_finish[task.id] - timedelta(days=duration - 1)
+
+                # Обновляем поздние сроки для предшественников
+                for dep in dependencies.get(task.id, []):
+                    if dep["type"] == "FS":
+                        pred_id = dep["pred_id"]
+                        if pred_id in late_finish:
+                            new_pred_finish = late_start[task.id] - timedelta(days=dep["lag"])
+                            if new_pred_finish < late_finish[pred_id]:
+                                late_finish[pred_id] = new_pred_finish
+
+            # Определяем задачи на критическом пути (где резерв = 0)
+            critical_path = []
+            for task in tasks:
+                slack = (late_start[task.id] - early_start[task.id]).days
+                if slack == 0:
+                    critical_path.append({
+                        "id": task.id,
+                        "title": task.title,
+                        "start_date": early_start[task.id],
+                        "end_date": early_finish[task.id],
+                        "slack": slack
+                    })
+
+            return critical_path
+
+        except Exception as e:
+            print(f"❌ Ошибка расчета критического пути: {e}")
+            return []
+
     def get_project_tasks_for_gantt(self, project_id: int, filters: Dict = None) -> Dict:
         """
         Получает задачи проекта с учетом фильтров.
