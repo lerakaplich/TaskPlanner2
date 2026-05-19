@@ -127,16 +127,30 @@ class ChartWidget(QWidget):
 
     def load_data(self, employee_id=None):
         """Загружает данные через сервис"""
+        print(f"\n🔍 [DEBUG] ChartWidget.load_data, employee_id={employee_id or self.employee_id}")
+
         if employee_id:
             self.employee_id = employee_id
+
         if self.profile_service and self.employee_id:
+            print(f"   Вызываем profile_service.get_kpd_chart_data({self.employee_id})")
             topics, kpd = self.profile_service.get_kpd_chart_data(self.employee_id)
+            print(f"   Получено: topics={topics}, kpd={kpd}")
             self.update_chart(topics, kpd)
+        else:
+            print(f"   ❌ profile_service={self.profile_service}, employee_id={self.employee_id}")
 
     def update_chart(self, topics, kpd_values):
         """Обновляет данные графика"""
+        print(f"\n🔍 [DEBUG] ChartWidget.update_chart")
+        print(f"   topics: {topics}")
+        print(f"   kpd_values: {kpd_values}")
+
         if hasattr(self, "bar_chart"):
+            print(f"   bar_chart найден, вызываем set_data")
             self.bar_chart.set_data(topics, kpd_values)
+        else:
+            print(f"   ❌ bar_chart не найден!")
 
     def _init_chart(self):
         """Инициализирует график"""

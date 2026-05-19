@@ -49,15 +49,20 @@ class ProfilePage(QWidget):
 
     def load_employee(self):
         """Загружает данные через сервис и обновляет UI"""
+        print(f"\n🔍 [DEBUG] ProfilePage.load_employee, employee_id={self.employee_id}")
+
         if not self.profile_service:
+            print("   ❌ profile_service отсутствует!")
             return
 
         # Загружаем основные данные
         self.employee_data = self.profile_service.get_employee_profile(self.employee_id)
+        print(f"   Загружены данные сотрудника: {self.employee_data.get('full_name')}")
 
         # Загружаем статистику и проекты
         stats = self.profile_service.get_employee_statistics(self.employee_id)
         projects = self.profile_service.get_employee_projects(self.employee_id)
+        print(f"   Статистика: {stats}")
 
         # Обогащаем данные
         self.employee_data.update(stats)
@@ -66,9 +71,11 @@ class ProfilePage(QWidget):
         analytics = AnalyticsService(self.profile_service.session)
         emp_analytics = analytics.get_employee_card_data(self.employee_id)
         self.employee_data["tag_analytics"] = emp_analytics.get("tag_analytics", [])
+        print(f"   tag_analytics: {len(self.employee_data['tag_analytics'])} записей")
 
         # Обновляем UI
         self._update_ui()
+        print("   UI обновлен")
 
     def _update_ui(self):
         """Обновляет UI из self.employee_data"""

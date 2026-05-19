@@ -34,10 +34,6 @@ class ProfileService:
     def set_current_user_id(self, user_id: int):
         self.current_user_id = user_id
 
-    # ======================================================
-    # Получение данных профиля
-    # ======================================================
-
     def get_employee_profile(self, employee_id: int) -> Dict[str, Any]:
         """Получает полный профиль сотрудника"""
         try:
@@ -139,26 +135,93 @@ class ProfileService:
             print(f"❌ Ошибка загрузки проектов: {e}")
             return []
 
-    # ======================================================
-    # Данные для графика КПД
-    # ======================================================
-
     def get_kpd_chart_data(self, employee_id: int) -> Tuple[List[str], List[float]]:
         """Получает данные для графика КПД по темам"""
-        try:
-            from services.analytics_service import AnalyticsService
-            analytics = AnalyticsService(self.session)
-            employee_data = analytics.get_employee_card_data(employee_id)
-            tag_analytics = employee_data.get("tag_analytics", [])
+        print(f"\n🔍 [DEBUG] get_kpd_chart_data для сотрудника {employee_id}")
 
-            if not tag_analytics:
+        try:
+            from models.tasks import Task, TaskTag, Tag
+            from models.projects import BoardColumn
+
+            # Получаем все задачи сотрудника, которые находятся в завершенных колонках
+            completed_tasks = self.session.query(Task).filter(
+                Task.assigned_to == employee_id,
+                Task.is_archived == False
+            ).join(Task.column).filter(
+                BoardColumn.is_done_column == True
+            ).all()
+
+            print(f"   Найдено завершенных задач: {len(completed_tasks)}")
+
+            for task in completed_tasks[:3]:  # Показываем первые 3 для отладки
+                print(f"      - Задача: {task.title}, КПД: {task.kpd_score}")
+
+            if not completed_tasks:
+                print("   ❌ Нет завершенных задач!")
                 return ["Нет данных"], [0]
 
-            topics = [item.get("tag", "Без темы") for item in tag_analytics]
-            kpd_values = [item.get("kpd", 0) for item in tag_analytics]
-            return topics, kpd_values
+            # Собираем статистику по тегам
+            tag_stats = {}
+
+            print(f"\n   Сбор статистики по тегам:")
+
+            for task in completed_tasks:
+                # Получаем теги задачи
+                tags = self.session.query(Tag).join(TaskTag).filter(
+                    TaskTag.task_id == task.id
+                ).all()
+
+                print(f"      Задача '{task.title}': {len(tags)} тегов")
+
+                if not tags:
+                    tag_name = "Без темы"
+                    if tag_name not in tag_stats:
+                        tag_stats[tag_name] = {"total_kpd": 0, "count": 0}
+                    tag_stats[tag_name]["total_kpd"] += task.kpd_score
+                    tag_stats[tag_name]["count"] += 1
+                    print(f"         Добавлен тег 'Без темы', КПД={task.kpd_score}")
+                else:
+                    for tag in tags:
+                        tag_name = tag.name
+                        if tag_name not in tag_stats:
+                            tag_stats[tag_name] = {"total_kpd": 0, "count": 0}
+                        tag_stats[tag_name]["total_kpd"] += task.kpd_score
+                        tag_stats[tag_name]["count"] += 1
+                        print(f"         Тег '{tag_name}', КПД={task.kpd_score}")
+
+            print(f"\n   Статистика по тегам:")
+            for tag_name, stats in tag_stats.items():
+                print(f"      {tag_name}: {stats['count']} задач, сумма КПД={stats['total_kpd']:.2f}")
+
+            # Формируем результаты
+            topics = []
+            kpd_values = []
+
+            for tag_name, stats in tag_stats.items():
+                avg_kpd = stats["total_kpd"] / stats["count"] if stats["count"] > 0 else 0
+                topics.append(tag_name)
+                kpd_values.append(round(avg_kpd, 2))
+                print(f"      Итог: {tag_name} -> средний КПД={avg_kpd:.2f}")
+
+            # Сортируем по КПД (по убыванию)
+            sorted_data = sorted(zip(topics, kpd_values), key=lambda x: x[1], reverse=True)
+
+            if sorted_data:
+                topics, kpd_values = zip(*sorted_data)
+                topics = list(topics)
+                kpd_values = list(kpd_values)
+                print(f"\n   Итоговые данные для графика:")
+                for topic, kpd in zip(topics, kpd_values):
+                    print(f"      {topic}: {kpd}")
+                return topics, kpd_values
+
+            print("   ❌ Нет данных для графика!")
+            return ["Нет данных"], [0]
+
         except Exception as e:
             print(f"❌ Ошибка получения данных для графика: {e}")
+            import traceback
+            traceback.print_exc()
             return ["Нет данных"], [0]
 
     def get_chart_title(self) -> str:
@@ -173,10 +236,6 @@ class ProfileService:
         topics = ["Проектирование", "Разработка", "Тестирование", "Документация", "Аналитика"]
         kpd_values = [round(random.uniform(0.3, 0.95), 2) for _ in range(len(topics))]
         return topics, kpd_values
-
-    # ======================================================
-    # Расчёт рейтинга
-    # ======================================================
 
     def calculate_rating(self, employee_data: Dict[str, Any]) -> float:
         """Вычисляет рейтинг сотрудника"""
@@ -199,10 +258,6 @@ class ProfileService:
         elif rating >= 10:
             return 1
         return 0
-
-    # ======================================================
-    # Обновление профиля
-    # ======================================================
 
     def get_edit_form_data(self, employee_data: Dict[str, Any]) -> Dict[str, Any]:
         """Подготавливает данные для формы редактирования"""
@@ -264,10 +319,6 @@ class ProfileService:
             self.session.rollback()
             print(f"❌ Ошибка обновления профиля: {e}")
             return False
-
-    # ======================================================
-    # Вспомогательные методы
-    # ======================================================
 
     def _get_empty_profile(self, employee_id: int) -> Dict[str, Any]:
         return {
