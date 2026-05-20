@@ -22,14 +22,15 @@ class TagsTab(BaseTab):
         self.tag_service = None
         self.session = None
 
-        self.hide_filters()
-
         if self.btnAdd:
             self.btnAdd.setText("Добавить тему")
             self.btnAdd.setObjectName("btnAddTag")
             self.btnAdd.clicked.connect(self.on_add_clicked)
 
         self.item_deleted.connect(self.delete_item)
+
+        self.filterDepartment.hide() if hasattr(self, 'filterDepartment') else None
+        self.filterSubDepartment.hide() if hasattr(self, 'filterSubDepartment') else None
 
     def set_session(self, session):
         """Установка сессии и создание сервиса тегов"""

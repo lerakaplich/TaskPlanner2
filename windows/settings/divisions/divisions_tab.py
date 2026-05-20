@@ -29,6 +29,9 @@ class DivisionsTab(BaseTab):
 
         self.item_deleted.connect(self.delete_item)
 
+        self.filterDepartment.hide() if hasattr(self, 'filterDepartment') else None
+        self.filterSubDepartment.hide() if hasattr(self, 'filterSubDepartment') else None
+
     def set_employee_service(self, service):
         """Установка сервиса для работы с БД"""
         self.employee_service = service
@@ -109,9 +112,9 @@ class DivisionsTab(BaseTab):
         if not self.employee_service:
             return
 
-        dependencies = self.employee_service.check_division_dependencies(division_id)
-        has_departments = dependencies['has_departments']
-        has_employees = dependencies['has_employees']
+        # ИСПРАВЛЕНО: используем существующие методы для проверки зависимостей
+        has_departments = self.employee_service.has_departments_in_division(division_id)
+        has_employees = self.employee_service.has_employees_in_division(division_id)
 
         if has_departments or has_employees:
             self.show_delete_with_dependencies_dialog(division_id, has_departments, has_employees)
@@ -176,8 +179,8 @@ class DivisionsTab(BaseTab):
         self.reassign_combo = QComboBox()
         self.reassign_combo.setVisible(False)
 
-        # Загружаем другие подразделения через сервис
-        other_divisions = self.employee_service.get_other_divisions_for_reassignment(division_id)
+        # Загружаем другие подразделения через сервис - ИСПРАВЛЕНО: используем get_other_divisions
+        other_divisions = self.employee_service.get_other_divisions(exclude_division_id=division_id)
         self.reassign_combo.addItem("— Выберите подразделение —", None)
         for div in other_divisions:
             self.reassign_combo.addItem(f"{div.get('name', 'Без названия')} (№{div.get('number', '?')})", div.get('id'))
@@ -227,7 +230,8 @@ class DivisionsTab(BaseTab):
 
         def do_delete():
             if radio_delete_all.isChecked():
-                success = self.employee_service.delete_division_with_options(division_id, delete_all=True)
+                # ИСПРАВЛЕНО: используем delete_division_by_id
+                success = self.employee_service.delete_division_by_id(division_id, delete_departments=True)
                 if success:
                     self.load_divisions()
                     QMessageBox.information(self, "Успех", "Подразделение и все связанные данные удалены")
@@ -240,9 +244,10 @@ class DivisionsTab(BaseTab):
                     QMessageBox.warning(dialog, "Ошибка", "Выберите подразделение для переназначения")
                     return
 
-                success = self.employee_service.delete_division_with_options(
+                # ИСПРАВЛЕНО: используем delete_division_by_id с переназначением
+                success = self.employee_service.delete_division_by_id(
                     division_id,
-                    delete_all=True,
+                    delete_departments=True,
                     target_division_id=target_division_id
                 )
                 if success:

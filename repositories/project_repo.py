@@ -21,6 +21,31 @@ class ProjectRepo:
     def get_by_id(self, project_id: int) -> Optional[Project]:
         return self.session.get(Project, project_id)
 
+    def clear_project_members(self, project_id: int):
+        """Удаляет всех участников проекта"""
+        stmt = delete(EmployeeProject).where(EmployeeProject.project_id == project_id)
+        self.session.execute(stmt)
+
+    # repositories/project_repo.py
+
+    def add_project_member(self, project_id: int, employee_id: int, is_admin: bool = False):
+        """Добавляет участника в проект"""
+        # Проверяем, нет ли уже
+        existing = self.get_member(project_id, employee_id)
+        if existing:
+            if existing.is_admin != is_admin:
+                self.update_member_role(project_id, employee_id, is_admin)
+            return existing
+
+        rel = EmployeeProject(
+            project_id=project_id,
+            employee_id=employee_id,
+            is_admin=is_admin
+        )
+        self.session.add(rel)
+        self.session.flush()
+        return rel
+
     def get_all(self, exclude_archived: bool = False) -> List[Project]:
         stmt = select(Project).options(joinedload(Project.members))
 

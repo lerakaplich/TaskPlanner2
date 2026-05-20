@@ -52,6 +52,8 @@ class DepartmentsTab(BaseTab):
 
         self.item_deleted.connect(self.delete_item)
 
+        self.filterDepartment.hide() if hasattr(self, 'filterDepartment') else None
+
     def set_employee_service(self, service):
         """Установка сервиса для работы с БД"""
         self.employee_service = service

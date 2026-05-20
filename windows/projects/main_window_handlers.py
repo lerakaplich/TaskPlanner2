@@ -189,6 +189,7 @@ class NavigationHandler(QObject):
         self.pages = {}
         self._is_switching = False  # Флаг для предотвращения множественных переключений
         self._pending_switch = None  # Ожидаемое переключение
+        self._loading_pages = set()
 
         # Индексы страниц
         self.PAGE_PROJECTS = 0
@@ -206,15 +207,12 @@ class NavigationHandler(QObject):
         """Обновить колонки на страницах задач"""
         print("🔄 Обновление колонок на страницах задач")
 
-        # Обновляем страницу Мои задачи
         if 'my_tasks' in self.pages:
             print("   - Обновляем страницу Мои задачи")
-            # Используем QTimer для отложенного обновления, чтобы не блокировать UI
             QTimer.singleShot(50, self.pages['my_tasks'].refresh_columns)
         else:
             print("   - Страница Мои задачи еще не создана")
 
-        # Обновляем страницу Чужие задачи
         if 'other_tasks' in self.pages:
             print("   - Обновляем страницу Чужие задачи")
             QTimer.singleShot(50, self.pages['other_tasks'].refresh_columns)
@@ -222,72 +220,237 @@ class NavigationHandler(QObject):
             print("   - Страница Чужие задачи еще не создана")
 
     def switch_page(self, page_index):
-        """Переключение между страницами с защитой от быстрых кликов"""
+        """Переключение между страницами с защитой от быстрых кликов и отладкой"""
+        print(f"\n{'=' * 60}")
+        print(f"🔀 ПЕРЕКЛЮЧЕНИЕ СТРАНИЦЫ: index={page_index}")
+        print(f"   - Текущая страница: {self.main.contentStack.currentIndex()}")
+        print(f"   - Загружено страниц в кэше: {list(self.pages.keys())}")
+        print(f"   - is_switching: {self._is_switching}")
+        print(f"   - pending_switch: {self._pending_switch}")
+
         # Защита от множественных переключений
         if self._is_switching:
             self._pending_switch = page_index
+            print(f"   ⏳ Переключение уже выполняется, сохраняем pending={page_index}")
             return
 
         self._is_switching = True
 
+        # Определяем имя страницы для отладки
+        page_names = {
+            self.PAGE_PROJECTS: "Проекты",
+            self.PAGE_MY_TASKS: "Мои задачи",
+            self.PAGE_OTHER_TASKS: "Чужие задачи",
+            self.PAGE_GANTT: "Гант",
+            self.PAGE_ANALYTICS: "Аналитика",
+            self.PAGE_CHAT: "Чат",
+            self.PAGE_OVERTIME: "Переработки",
+            self.PAGE_SETTINGS: "Настройки",
+            self.PAGE_ARCHIVE: "Архив",
+            self.PAGE_PROFILE: "Профиль"
+        }
+        page_name = page_names.get(page_index, f"Неизвестная({page_index})")
+        print(f"   🎯 Целевая страница: {page_name}")
+
         try:
+            # Флаг, была ли страница создана сейчас
+            page_was_created = False
+
             # Создаем страницу при первом открытии
             if page_index == self.PAGE_MY_TASKS:
+                print("   📄 Создаём/получаем страницу Мои задачи...")
+                page_was_created = 'my_tasks' not in self.pages
                 self.get_my_tasks_page()
+
+                # Перезагружаем задачи при повторном открытии
+                if not page_was_created and 'my_tasks' in self.pages:
+                    print("   🔄 Страница уже была в кэше, перезагружаем задачи...")
+                    self.pages['my_tasks'].load_tasks()
+
             elif page_index == self.PAGE_OTHER_TASKS:
+                print("   📄 Создаём/получаем страницу Чужие задачи...")
+                page_was_created = 'other_tasks' not in self.pages
                 self.get_other_tasks_page()
+
+                # ВАЖНО: Даже если страница уже была в кэше, перезагружаем задачи
+                if not page_was_created and 'other_tasks' in self.pages:
+                    print("   🔄 Страница уже была в кэше, перезагружаем задачи...")
+                    self.pages['other_tasks'].load_tasks()
+
             elif page_index == self.PAGE_GANTT:
+                print("   📄 Создаём/получаем страницу Гант...")
                 self.get_gantt_page()
             elif page_index == self.PAGE_ANALYTICS:
+                print("   📄 Создаём/получаем страницу Аналитика...")
                 self.get_analytics_page()
             elif page_index == self.PAGE_CHAT:
+                print("   📄 Создаём/получаем страницу Чат...")
                 self.get_chat_page()
             elif page_index == self.PAGE_OVERTIME:
+                print("   📄 Создаём/получаем страницу Переработки...")
                 self.get_overtime_page()
             elif page_index == self.PAGE_SETTINGS:
+                print("   📄 Создаём/получаем страницу Настройки...")
                 self.get_settings_page()
             elif page_index == self.PAGE_ARCHIVE:
+                print("   📄 Создаём/получаем страницу Архив...")
+                page_was_created = 'archive' not in self.pages
                 self.get_archive_page()
+
                 if 'archive' in self.pages:
-                    self.pages['archive'].show_projects_list()
+                    print("   📂 Показываем список проектов в архиве...")
+                    # ВАЖНО: Принудительно обновляем содержимое архива
+                    if hasattr(self.pages['archive'], 'refresh_current_view'):
+                        self.pages['archive'].refresh_current_view()
+                    elif hasattr(self.pages['archive'], 'show_projects_list'):
+                        self.pages['archive'].show_projects_list()
+                    else:
+                        # Если нет метода, просто показываем список проектов
+                        self.pages['archive']._update_projects_view()
+
+            elif page_index == self.PAGE_PROJECTS:
+                print("   📄 Страница Проекты всегда доступна (индекс 0)")
 
             # Показываем страницу
+            print(f"   📺 Переключаем contentStack на индекс {page_index}")
             self.main.contentStack.setCurrentIndex(page_index)
 
-            # Обновляем состояние кнопок навигации
-            for i, btn in enumerate(self.main.nav_buttons):
-                btn.setChecked(i == page_index)
+            # Проверяем, успешно ли переключилось
+            current_idx = self.main.contentStack.currentIndex()
+            if current_idx == page_index:
+                print(f"   ✅ Успешно переключено на {page_name} (индекс {current_idx})")
+            else:
+                print(f"   ⚠️ Ожидался индекс {page_index}, но текущий {current_idx}")
 
+            # Обновляем состояние кнопок навигации
+            self._update_nav_buttons_state(page_index)
+
+        except Exception as e:
+            print(f"   ❌ ОШИБКА при переключении на {page_name}: {e}")
+            import traceback
+            traceback.print_exc()
         finally:
-            # Снимаем блокировку через небольшую задержку
+            print(f"   🔓 Снимаем блокировку через 300мс")
             QTimer.singleShot(300, self._on_switch_complete)
+
+        print(f"{'=' * 60}\n")
+
+    def _update_nav_buttons_state(self, active_index):
+        """Обновляет состояние кнопок навигации"""
+        # Определяем стили для нормального состояния
+        normal_style = """
+            QPushButton {
+                color: white;
+                font-size: 16px;
+                font-weight: bold;
+                padding: 15px 20px;
+                text-align: left;
+                border: none;
+                background-color: transparent;
+            }
+            QPushButton:hover {
+                background-color: #2C3640;
+                border-left: 4px solid #D22730;
+            }
+        """
+
+        # Определяем стили для активного (checked) состояния
+        checked_style = """
+            QPushButton {
+                color: white;
+                font-size: 16px;
+                font-weight: bold;
+                padding: 15px 20px;
+                text-align: left;
+                border: none;
+                background-color: #2C3640;
+                border-left: 4px solid #ccab6e;
+            }
+        """
+
+        # Определяем стили для свернутой панели
+        collapsed_normal_style = """
+            QPushButton {
+                color: white;
+                font-size: 20px;
+                padding: 15px 0px;
+                text-align: center;
+                border: none;
+                background-color: transparent;
+            }
+            QPushButton:hover {
+                background-color: #2C3640;
+                border-left: 4px solid #D22730;
+            }
+        """
+
+        collapsed_checked_style = """
+            QPushButton {
+                color: white;
+                font-size: 20px;
+                padding: 15px 0px;
+                text-align: center;
+                border: none;
+                background-color: #2C3640;
+                border-left: 4px solid #ccab6e;
+            }
+        """
+
+        # Проверяем, свернута ли панель
+        is_collapsed = self.main.leftPanel.width() <= 100
+
+        for i, btn in enumerate(self.main.nav_buttons):
+            if i == active_index:
+                if is_collapsed:
+                    btn.setStyleSheet(collapsed_checked_style)
+                else:
+                    btn.setStyleSheet(checked_style)
+                btn.setChecked(True)
+            else:
+                if is_collapsed:
+                    btn.setStyleSheet(collapsed_normal_style)
+                else:
+                    btn.setStyleSheet(normal_style)
+                btn.setChecked(False)
 
     def _on_switch_complete(self):
         """Обработчик завершения переключения"""
+        print(f"✅ _on_switch_complete: is_switching={self._is_switching}, pending={self._pending_switch}")
         self._is_switching = False
 
-        # Если есть ожидаемое переключение, выполняем его
         if self._pending_switch is not None:
             pending = self._pending_switch
             self._pending_switch = None
+            print(f"🔄 Выполняем отложенное переключение на {pending}")
             self.switch_page(pending)
 
     def get_my_tasks_page(self):
         """Возвращает страницу моих задач с подключенными сигналами"""
+        print("   🚀 get_my_tasks_page вызван")
+
         if 'my_tasks' not in self.pages:
             from windows.my_tasks.my_tasks_page import MyTasksPage
 
-            # Показываем индикатор загрузки
             self.main.contentStack.setUpdatesEnabled(False)
 
             try:
+                print("   🏗️ Создаём экземпляр MyTasksPage...")
                 self.pages['my_tasks'] = MyTasksPage(
                     db_session=self.main.session,
                     current_user={"id": self.main.current_user_id, "last_name": "", "first_name": ""},
                     column_service=self.main.column_service
                 )
+                print("   🔗 Подключаем сигнал open_project_requested...")
                 self.pages['my_tasks'].open_project_requested.connect(self.open_project_by_id)
+
+                print(f"   📌 Вставляем в contentStack на позицию {self.PAGE_MY_TASKS}")
                 self.main.contentStack.insertWidget(self.PAGE_MY_TASKS, self.pages['my_tasks'])
+                print("   ✅ MyTasksPage создана и вставлена")
+
+            except Exception as e:
+                print(f"   ❌ Ошибка создания MyTasksPage: {e}")
+                import traceback
+                traceback.print_exc()
             finally:
                 self.main.contentStack.setUpdatesEnabled(True)
 
@@ -295,20 +458,32 @@ class NavigationHandler(QObject):
 
     def get_other_tasks_page(self):
         """Возвращает страницу чужих задач с подключенными сигналами"""
+        print("   🚀 get_other_tasks_page вызван")
+
         if 'other_tasks' not in self.pages:
             from windows.other_tasks.others_tasks_page import OthersTasksPage
 
             self.main.contentStack.setUpdatesEnabled(False)
 
             try:
+                print("   🏗️ Создаём экземпляр OthersTasksPage...")
                 self.pages['other_tasks'] = OthersTasksPage(
                     parent=self.main,
                     current_user={"id": self.main.current_user_id, "last_name": "", "first_name": ""},
                     project_id=2,
                     column_service=self.main.column_service
                 )
+                print("   🔗 Подключаем сигнал open_project_requested...")
                 self.pages['other_tasks'].open_project_requested.connect(self.open_project_by_id)
+
+                print(f"   📌 Вставляем в contentStack на позицию {self.PAGE_OTHER_TASKS}")
                 self.main.contentStack.insertWidget(self.PAGE_OTHER_TASKS, self.pages['other_tasks'])
+                print("   ✅ OthersTasksPage создана и вставлена")
+
+            except Exception as e:
+                print(f"   ❌ Ошибка создания OthersTasksPage: {e}")
+                import traceback
+                traceback.print_exc()
             finally:
                 self.main.contentStack.setUpdatesEnabled(True)
 
@@ -342,12 +517,41 @@ class NavigationHandler(QObject):
         }
 
     def _get_or_create_page(self, page_name, creator_func, insert_index):
-        """Универсальный метод для ленивой загрузки страниц"""
+        """Универсальный метод для ленивой загрузки страниц с отладкой"""
+        print(f"   🔍 _get_or_create_page: page_name={page_name}, insert_index={insert_index}")
+
         if page_name not in self.pages:
-            self.pages[page_name] = creator_func()
-            existing = self.main.contentStack.widget(insert_index)
-            if existing != self.pages[page_name]:
-                self.main.contentStack.insertWidget(insert_index, self.pages[page_name])
+            print(f"   📦 Страница {page_name} отсутствует в кэше, создаём...")
+
+            # Проверяем, не создаётся ли уже эта страница
+            if page_name in self._loading_pages:
+                print(f"   ⏳ Страница {page_name} уже создаётся, ждём...")
+                # Ждём немного и возвращаем существующую
+                QTimer.singleShot(100, lambda: None)
+                return self.pages.get(page_name)
+
+            self._loading_pages.add(page_name)
+
+            try:
+                self.pages[page_name] = creator_func()
+                print(f"   ✅ Страница {page_name} создана")
+
+                existing = self.main.contentStack.widget(insert_index)
+                if existing != self.pages[page_name]:
+                    print(f"   📌 Вставляем страницу в contentStack на позицию {insert_index}")
+                    self.main.contentStack.insertWidget(insert_index, self.pages[page_name])
+                else:
+                    print(f"   ℹ️ Страница уже была на позиции {insert_index}")
+
+            except Exception as e:
+                print(f"   ❌ Ошибка создания страницы {page_name}: {e}")
+                import traceback
+                traceback.print_exc()
+            finally:
+                self._loading_pages.discard(page_name)
+        else:
+            print(f"   ✅ Страница {page_name} уже есть в кэше")
+
         return self.pages[page_name]
 
     def _recreate_page(self, page_name):

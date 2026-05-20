@@ -31,6 +31,9 @@ class ColumnsTab(BaseTab):
 
         self.item_deleted.connect(self.delete_item)
 
+        self.filterDepartment.hide() if hasattr(self, 'filterDepartment') else None
+        self.filterSubDepartment.hide() if hasattr(self, 'filterSubDepartment') else None
+
     def set_session(self, session):
         """Установка сессии и создание сервиса колонок"""
         self.session = session

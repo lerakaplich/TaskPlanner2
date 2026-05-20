@@ -91,7 +91,12 @@ class ArchivePage(QWidget):
         self._update_all_tasks_view()
 
     def refresh_current_view(self):
-        """Обновляет текущее представление"""
+        """Обновляет текущее представление (для вызова из навигации)"""
+        print("🔄 ArchivePage.refresh_current_view вызван")
+        print(f"   - current_filter_type: {self.current_filter_type}")
+        print(f"   - current_project_id: {self.current_project_id}")
+
+        # Обновляем в зависимости от текущего состояния
         if self.current_filter_type == "projects":
             self._update_projects_view()
         elif self.current_project_id is not None:

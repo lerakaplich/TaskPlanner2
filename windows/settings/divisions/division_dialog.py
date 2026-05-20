@@ -317,15 +317,15 @@ class DivisionDialog(QDialog):
 
         division_data = self.get_division_data()
 
-        # Валидация через сервис
-        is_valid, error_msg = self.employee_service.validate_division_form_data(division_data)
+        # Валидация через сервис - ИСПРАВЛЕНО: используем validate_division_form
+        is_valid, error_msg = self.employee_service.validate_division_form(division_data)
 
         if not is_valid:
             QMessageBox.warning(self, "Ошибка", error_msg)
             return
 
-        # Сохраняем через сервис
-        result = self.employee_service.save_division_from_dialog_data(division_data)
+        # Сохраняем через сервис - ИСПРАВЛЕНО: используем save_division_from_dialog
+        result = self.employee_service.save_division_from_dialog(division_data)
 
         if result:
             self.division_saved.emit(result)

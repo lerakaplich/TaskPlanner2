@@ -4,7 +4,7 @@ import logging
 import secrets
 import string
 from datetime import datetime
-from typing import Dict, Optional
+from typing import Dict, Optional, List
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
@@ -230,6 +230,85 @@ class TelegramBot:
             """)
             tasks = tasks_session.execute(select_stmt, {'user_id': user_id}).fetchall()
             return tasks
+
+    # telegram_bot.py
+
+    # telegram_bot.py
+
+    async def send_project_notification_to_many(self, user_chat_ids: List[int],
+                                                project_name: str,
+                                                manager_name: str,
+                                                description: str,
+                                                role: str):
+        """
+        Отправляет уведомления о проекте нескольким пользователям
+        """
+        success_count = 0
+        for chat_id in user_chat_ids:
+            if await self.send_project_notification(chat_id, project_name, manager_name, description, role):
+                success_count += 1
+        logger.info(f"📨 Отправлено {success_count} уведомлений о проекте '{project_name}'")
+        return success_count
+
+    async def send_project_update_notification(self, user_chat_id: int, project_name: str):
+        """Отправляет уведомление об обновлении проекта"""
+        try:
+            message_text = (
+                f"📝 *ПРОЕКТ ОБНОВЛЕН*\n\n"
+                f"📋 *Название:* {project_name}\n\n"
+                f"Проект «{project_name}» был обновлён.\n"
+                f"Вы можете просмотреть изменения в приложении TaskPlanner."
+            )
+            await self.bot.send_message(
+                chat_id=user_chat_id,
+                text=message_text,
+                parse_mode="Markdown"
+            )
+            return True
+        except Exception as e:
+            logger.error(f"❌ Ошибка отправки уведомления об обновлении: {e}")
+            return False
+
+    async def send_project_notification(self, user_chat_id: int, project_name: str,
+                                        manager_name: str, description: str,
+                                        role: str):
+        """
+        Отправляет уведомление пользователю о добавлении в проект
+
+        Args:
+            user_chat_id: ID чата пользователя в Telegram
+            project_name: Название проекта
+            manager_name: ФИО куратора
+            description: Описание проекта
+            role: Роль пользователя ('участник', 'администратор', 'куратор')
+        """
+        try:
+            # Определяем эмодзи в зависимости от роли
+            role_emoji = {
+                'куратор': '👤',
+                'администратор': '🛡️',
+                'участник': '👥'
+            }.get(role, '👥')
+
+            message_text = (
+                f"🆕 *НОВЫЙ ПРОЕКТ*\n\n"
+                f"📋 *Название:* {project_name}\n"
+                f"{role_emoji} *{role.capitalize()}:* {manager_name}\n"
+                f"📝 *Описание:* {description[:200]}{'...' if len(description) > 200 else ''}\n\n"
+                f"Вы были добавлены в проект «{project_name}» в роли *{role}*.\n\n"
+                f"Вы можете просмотреть проект в приложении TaskPlanner."
+            )
+
+            await self.bot.send_message(
+                chat_id=user_chat_id,
+                text=message_text,
+                parse_mode="Markdown"
+            )
+            logger.info(f"✅ Уведомление о проекте отправлено пользователю {user_chat_id} (роль: {role})")
+            return True
+        except Exception as e:
+            logger.error(f"❌ Ошибка отправки уведомления о проекте пользователю {user_chat_id}: {e}")
+            return False
 
     def _setup_handlers(self):
         """Настройка обработчиков команд"""

@@ -94,7 +94,7 @@ QComboBox::drop-down {
     border: none;
 }</string>
         </property>
-        <property name="placeholderText">
+        <property name="placeholderText" stdset="0">
          <string>Все подразделения</string>
         </property>
        </widget>
@@ -129,7 +129,7 @@ QComboBox::drop-down {
     border: none;
 }</string>
         </property>
-        <property name="placeholderText">
+        <property name="placeholderText" stdset="0">
          <string>Все отделы</string>
         </property>
        </widget>
@@ -137,10 +137,7 @@ QComboBox::drop-down {
       <item>
        <spacer name="horizontalSpacer">
         <property name="orientation">
-         <enum>Qt::Orientation::Horizontal</enum>
-        </property>
-        <property name="sizeType">
-         <enum>QSizePolicy::Policy::Expanding</enum>
+         <enum>Qt::Horizontal</enum>
         </property>
         <property name="sizeHint" stdset="0">
          <size>
@@ -160,9 +157,12 @@ QComboBox::drop-down {
         </property>
         <property name="maximumSize">
          <size>
-          <width>16777215</width>
+          <width>396</width>
           <height>35</height>
          </size>
+        </property>
+        <property name="layoutDirection">
+         <enum>Qt::LeftToRight</enum>
         </property>
         <property name="styleSheet">
          <string notr="true">QPushButton {

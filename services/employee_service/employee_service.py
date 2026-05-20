@@ -172,6 +172,28 @@ class EmployeeService:
             print(f"❌ Ошибка в get_employee_card_data: {e}")
             return [] if employee_id is None else None
 
+    def get_employees_for_division_selector(self) -> List[Dict[str, Any]]:
+        """
+        Возвращает список сотрудников для выбора руководителей в диалоге подразделения.
+        Возвращает: [{'id': 1, 'full_name': 'Иванов Иван Иванович', 'position': 'Начальник цеха'}, ...]
+        """
+        employees = self.employee_repo.get_all()
+        result = []
+        for emp in employees:
+            full_name = self.base._get_full_name(emp)
+            result.append({
+                'id': emp.id,
+                'full_name': full_name,
+                'position': emp.position or 'Сотрудник'
+            })
+        return result
+
+    def get_employees_for_department_selector(self) -> List[Dict[str, Any]]:
+        """
+        Возвращает список сотрудников для выбора руководителей в диалоге отдела.
+        """
+        return self.get_employees_for_division_selector()
+
     def get_employee_full_info(self, employee_id: int) -> Optional[Dict[str, Any]]:
         """Возвращает полную информацию о сотруднике для диалога редактирования"""
         try:
@@ -315,9 +337,6 @@ class EmployeeService:
         """Удаляет сотрудника по ID (мягкое удаление)"""
         return self.delete_employee(employee_id)
 
-    # =====================================================
-    # Прокси для отделов (только employees)
-    # =====================================================
     def get_all_departments(self) -> List[Dict[str, Any]]:
         return self.departments.get_all_departments()
 

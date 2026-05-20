@@ -1,13 +1,53 @@
 # services/projects_service/projects_crud_service.py
-
 from datetime import datetime
 from typing import List, Optional, Dict, Any
-from sqlalchemy import select
-from database import get_employees_session
-from models.schemas.projects_dto import ProjectWithMembersDTO, ProjectCardDTO
-from repositories.project_repo import ProjectRepo
-from repositories.employee_repo import EmployeeRepo
 
+from sqlalchemy import select
+
+from models.schemas.projects_dto import ProjectWithMembersDTO, ProjectCardDTO
+from repositories.employee_repo import EmployeeRepo
+from repositories.project_repo import ProjectRepo
+from telegram_bot import logger
+
+
+def _send_notification_sync(chat_id: int, project_name: str, manager_name: str, description: str, role: str):
+        """Синхронная обёртка для отправки уведомления (запускается в отдельном потоке)"""
+        try:
+            import asyncio
+            from telegram_bot import telegram_bot
+
+            # Создаём новый event loop для этого потока
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+
+            try:
+                loop.run_until_complete(
+                    telegram_bot.send_project_notification(
+                        chat_id, project_name, manager_name, description, role
+                    )
+                )
+            finally:
+                loop.close()
+        except Exception as e:
+            logger.error(f"❌ Ошибка при отправке уведомления: {e}")
+
+def _send_update_notification_sync(chat_id: int, project_name: str):
+    """Синхронная обёртка для отправки уведомления об обновлении"""
+    try:
+        import asyncio
+        from telegram_bot import telegram_bot
+
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+
+        try:
+            loop.run_until_complete(
+                telegram_bot.send_project_update_notification(chat_id, project_name)
+            )
+        finally:
+            loop.close()
+    except Exception as e:
+        logger.error(f"❌ Ошибка при отправке уведомления об обновлении: {e}")
 
 class ProjectsCrudService:
     """CRUD операции с проектами"""
@@ -113,6 +153,9 @@ class ProjectsCrudService:
                 self.project_repo.save_selected_column_ids(project.id, default_column_ids)
 
             self.session.commit()
+            # === ОТПРАВКА УВЕДОМЛЕНИЙ В TELEGRAM ===
+            self._send_project_notifications(project.id, project.name, raw_data, creator_id)
+
             return self.get_project_for_edit(project.id)
 
         except Exception as e:
@@ -120,32 +163,211 @@ class ProjectsCrudService:
             print(f"❌ Ошибка при создании проекта: {e}")
             return None
 
-    def update_project(self, project_id: int, dto: ProjectWithMembersDTO) -> bool:
-        """Обновить проект"""
+    def _send_project_notifications(self, project_id: int, project_name: str,
+                                    raw_data: Dict[str, Any], creator_id: int):
+        """
+        Отправляет уведомления о новом проекте всем участникам, администраторам и куратору
+        """
         try:
+            from database import get_employees_session
+            from models.employees import Employee
+            import threading
+
+            # Получаем список ID участников, администраторов и куратора
+            member_ids = set()
+
+            # Добавляем участников
+            participants_ids = raw_data.get('participants_ids', '')
+            if participants_ids:
+                for pid in participants_ids.split(','):
+                    if pid and pid.strip():
+                        member_ids.add(int(pid.strip()))
+
+            # Добавляем администраторов
+            admins_ids = raw_data.get('admins_ids', '')
+            if admins_ids:
+                for aid in admins_ids.split(','):
+                    if aid and aid.strip():
+                        member_ids.add(int(aid.strip()))
+
+            # Добавляем куратора
+            manager_id = raw_data.get('manager_id')
+            if manager_id:
+                member_ids.add(int(manager_id))
+
+            # Добавляем создателя (если его нет в списке)
+            member_ids.add(creator_id)
+
+            # Получаем имя куратора
+            manager_name = raw_data.get('manager_name', 'Не назначен')
+            if not manager_name or manager_name == 'Не назначен':
+                manager_id = raw_data.get('manager_id')
+                if manager_id:
+                    with get_employees_session() as emp_session:
+                        employee = emp_session.get(Employee, manager_id)
+                        if employee:
+                            first_initial = f"{employee.first_name[0]}." if employee.first_name else ""
+                            middle_initial = f"{employee.middle_name[0]}." if employee.middle_name else ""
+                            manager_name = f"{employee.last_name} {first_initial}{middle_initial}".strip()
+
+            description = raw_data.get('description', '')
+
+            # Отправляем уведомления в отдельных потоках
+            with get_employees_session() as emp_session:
+                for emp_id in member_ids:
+                    employee = emp_session.get(Employee, emp_id)
+                    if employee and employee.chat_id:
+                        # Определяем роль пользователя
+                        role = 'участник'
+                        if manager_id and emp_id == manager_id:
+                            role = 'куратор'
+                        elif admins_ids and str(emp_id) in admins_ids.split(','):
+                            role = 'администратор'
+
+                        # Запускаем отправку в отдельном потоке
+                        thread = threading.Thread(
+                            target=_send_notification_sync,
+                            args=(employee.chat_id, project_name, manager_name, description, role),
+                            daemon=True
+                        )
+                        thread.start()
+
+            logger.info(f"📨 Отправлены уведомления о проекте '{project_name}' для {len(member_ids)} участников")
+        except Exception as e:
+            logger.error(f"❌ Ошибка при отправке уведомлений о проекте: {e}")
+
+    def update_project(self, project_id: int, updated_data: Any) -> bool:
+        """Обновляет проект и отправляет уведомления о изменениях"""
+        try:
+            # Получаем существующий проект
             project = self.project_repo.get_by_id(project_id)
             if not project:
+                print(f"❌ Проект {project_id} не найден")
                 return False
 
-            project.name = dto.name
-            project.description = dto.description
-            project.is_archived = dto.is_archived
-            project.deadline = dto.deadline
-            project.updated_at = datetime.now()
-            project.manager_id = dto.manager_id
+            # Преобразуем DTO в словарь, если это DTO
+            if hasattr(updated_data, 'model_dump'):
+                data_dict = updated_data.model_dump()
+            elif hasattr(updated_data, 'dict'):
+                data_dict = updated_data.dict()
+            else:
+                data_dict = updated_data
 
-            if hasattr(dto, 'selected_columns_data') and dto.selected_columns_data:
-                column_ids = [col.get('id') for col in dto.selected_columns_data if col.get('id')]
+            # Обновляем поля проекта
+            if 'name' in data_dict and data_dict['name']:
+                project.name = data_dict['name']
+            if 'description' in data_dict:
+                project.description = data_dict['description']
+            if 'is_archived' in data_dict:
+                project.is_archived = data_dict['is_archived']
+            if 'manager_id' in data_dict:
+                project.manager_id = data_dict['manager_id']
+
+            # Обновляем дату
+            project.updated_at = datetime.now()
+
+            # Обновляем участников и администраторов
+            member_ids = data_dict.get('member_ids', [])
+            admin_ids = data_dict.get('admin_ids', [])
+
+            # ВАЖНО: Сначала добавляем отсутствующих сотрудников в employees_data
+            self._ensure_employees_exist_in_taskplanner(member_ids)
+
+            # Очищаем существующие связи
+            self.project_repo.clear_project_members(project_id)
+
+            # Добавляем новых участников
+            for emp_id in member_ids:
+                is_admin = emp_id in admin_ids
+                self.project_repo.add_project_member(project_id, emp_id, is_admin)
+
+            # Обновляем выбранные колонки
+            selected_columns_data = data_dict.get('selected_columns_data', [])
+            if selected_columns_data:
+                column_ids = [col.get('id') for col in selected_columns_data if col.get('id')]
                 if column_ids:
                     self.project_repo.save_selected_column_ids(project_id, column_ids)
 
             self.session.commit()
+
+            # === ОТПРАВКА УВЕДОМЛЕНИЙ ОБ ИЗМЕНЕНИЯХ ===
+            self._send_project_update_notifications(project_id, project.name, data_dict)
+
+            print(f"✅ Проект '{project.name}' обновлён")
             return True
 
         except Exception as e:
             self.session.rollback()
             print(f"❌ Ошибка при обновлении проекта: {e}")
+            import traceback
+            traceback.print_exc()
             return False
+
+    def _ensure_employees_exist_in_taskplanner(self, employee_ids: List[int]):
+        """Проверяет наличие записей сотрудников в employees_data и создаёт их при необходимости"""
+        try:
+            from sqlalchemy import text
+
+            for emp_id in employee_ids:
+                # Проверяем, есть ли запись в employees_data
+                check_stmt = text("SELECT employee_id FROM public.employees_data WHERE employee_id = :emp_id")
+                result = self.session.execute(check_stmt, {'emp_id': emp_id}).first()
+
+                if not result:
+                    # Создаём запись
+                    insert_stmt = text("""
+                        INSERT INTO public.employees_data (employee_id, is_active, role, created_at, updated_at)
+                        VALUES (:emp_id, true, 'user', NOW(), NOW())
+                    """)
+                    self.session.execute(insert_stmt, {'emp_id': emp_id})
+                    print(f"✅ Создана запись в employees_data для сотрудника {emp_id}")
+        except Exception as e:
+            print(f"⚠️ Ошибка при проверке/создании employees_data: {e}")
+
+    def _send_project_update_notifications(self, project_id: int, project_name: str,
+                                           updated_data: Dict[str, Any]):
+        """
+        Отправляет уведомления об изменении проекта
+        """
+        try:
+            from database import get_employees_session
+            from models.employees import Employee
+            import threading
+
+            # Получаем список ID участников из данных обновления
+            member_ids = set()
+
+            participants_ids = updated_data.get('participants_ids', '')
+            if participants_ids:
+                for pid in participants_ids.split(','):
+                    if pid and pid.strip():
+                        member_ids.add(int(pid.strip()))
+
+            admins_ids = updated_data.get('admins_ids', '')
+            if admins_ids:
+                for aid in admins_ids.split(','):
+                    if aid and aid.strip():
+                        member_ids.add(int(aid.strip()))
+
+            manager_id = updated_data.get('manager_id')
+            if manager_id:
+                member_ids.add(int(manager_id))
+
+            # Отправляем уведомления в отдельных потоках
+            with get_employees_session() as emp_session:
+                for emp_id in member_ids:
+                    employee = emp_session.get(Employee, emp_id)
+                    if employee and employee.chat_id:
+                        thread = threading.Thread(
+                            target=_send_update_notification_sync,
+                            args=(employee.chat_id, project_name),
+                            daemon=True
+                        )
+                        thread.start()
+
+            print(f"📨 Отправлены уведомления об обновлении проекта '{project_name}' для {len(member_ids)} участников")
+        except Exception as e:
+            print(f"❌ Ошибка при отправке уведомлений об обновлении: {e}")
 
     def get_projects_for_cards(self, search_query: str = "", status_filter: str = "Все",
                                owner_filter: bool = False) -> List[ProjectCardDTO]:

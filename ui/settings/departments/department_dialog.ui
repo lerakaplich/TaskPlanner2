@@ -190,17 +190,17 @@
      <property name="minimumSize">
       <size>
        <width>0</width>
-       <height>35</height>
+       <height>50</height>
       </size>
      </property>
      <property name="maximumSize">
       <size>
        <width>16777215</width>
-       <height>35</height>
+       <height>50</height>
       </size>
      </property>
      <property name="styleSheet">
-      <string notr="true">font-size: 24px; font-weight: bold; color: #D22730; margin-bottom: 10px;</string>
+      <string notr="true">font-size: 24px; font-weight: bold; color: #D22730; background-color: transparent;</string>
      </property>
      <property name="text">
       <string>Добавление нового отдела</string>
