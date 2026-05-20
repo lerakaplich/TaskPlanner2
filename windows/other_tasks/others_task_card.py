@@ -32,12 +32,22 @@ class OthersTaskCard(TaskCard):
         self.drag_start_position = None
 
         self._disconnect_parent_signals()
+        self._reconnect_project_signal()
         self.setup_creator_context_menu()
         self.setup_creator_ui()
+        self.projectButton.setCursor(Qt.CursorShape.PointingHandCursor)
 
-    # =====================================================
-    # UI helpers
-    # =====================================================
+    def _reconnect_project_signal(self):
+        """Повторно подключает сигнал клика по проекту после отключения родительских сигналов"""
+        try:
+            # Отключаем старый, если есть
+            self.project_clicked.disconnect()
+        except TypeError:
+            pass
+        # Подключаем через сигнал родителя (он уже объявлен в TaskCard)
+        # Сигнал остаётся, его просто нужно пробросить дальше через OthersTasksPage
+        # Для этого нужно добавить сигнал в OthersTasksPage
+        pass
 
     def _disconnect_parent_signals(self):
         """Отключение сигналов родителя."""
@@ -57,6 +67,11 @@ class OthersTaskCard(TaskCard):
             self.duplicate_requested.disconnect()
         except TypeError:
             pass
+        # НЕ отключаем project_clicked - он нужен для навигации
+        # try:
+        #     self.project_clicked.disconnect()
+        # except TypeError:
+        #     pass
 
     def setup_creator_ui(self):
         """Обновление UI для создателя."""

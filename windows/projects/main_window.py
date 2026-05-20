@@ -7,6 +7,7 @@ from PyQt6.QtWidgets import QMainWindow, QMessageBox
 from services.analytics_service.analytics_service import AnalyticsService
 from services.archive_service import ArchiveService
 from services.chat_service import ChatService
+from services.employee_service.column_service import ColumnService
 from services.overtime_service.overtime_service import OvertimeService
 from services.projects_service.projects_service import ProjectsService
 
@@ -35,6 +36,8 @@ class MainWindow(QMainWindow):
         self.project_cards = []
         self.pages = {}
 
+        self.column_service = ColumnService()
+
         # Инициализация
         self._init_services()
         self._load_current_user()
@@ -42,8 +45,64 @@ class MainWindow(QMainWindow):
         self._init_handlers()
         self._setup_navigation()
         self._setup_socket()
+        self._setup_column_service()
 
         self.showMaximized()
+
+    def _on_columns_updated(self):
+        """Обработчик обновления колонок"""
+        print("📢 Получен сигнал обновления колонок")
+
+        # Прямое обновление страницы Мои задачи
+        if hasattr(self, 'navigation') and 'my_tasks' in self.navigation.pages:
+            print("   - Прямое обновление страницы Мои задачи")
+            # Принудительно сбрасываем кэш колонок в сервисе
+            my_tasks = self.navigation.pages['my_tasks']
+            if hasattr(my_tasks.service.crud, '_column_cache'):
+                my_tasks.service.crud._column_cache = None
+            my_tasks.refresh_columns()
+
+        # Обновляем страницу Чужие задачи
+        if hasattr(self, 'navigation') and 'other_tasks' in self.navigation.pages:
+            print("   - Обновляем страницу Чужие задачи")
+            self.navigation.pages['other_tasks'].refresh_columns()
+
+        # Также через NavigationHandler
+        if hasattr(self, 'navigation'):
+            self.navigation.refresh_task_pages_columns()
+
+    def _setup_column_service(self):
+        """Настройка сервиса колонок и подключение сигналов"""
+        # Создаем экземпляр ColumnService как синглтон
+        self.column_service = ColumnService()
+
+        # Подключаем сигнал обновления колонок к NavigationHandler
+        self.column_service.columns_updated.connect(self._on_columns_updated)
+
+        # Дополнительно подключаем напрямую к страницам (страховка)
+        self.column_service.columns_updated.connect(self._force_refresh_task_pages)
+
+    def _force_refresh_task_pages(self):
+        """Принудительное обновление страниц задач"""
+        print("📢 Принудительное обновление страниц задач")
+        if hasattr(self, 'navigation'):
+            # Обновляем даже если страницы еще не созданы - они создадутся при первом открытии
+            if 'my_tasks' in self.navigation.pages:
+                self.navigation.pages['my_tasks'].refresh_columns()
+            if 'other_tasks' in self.navigation.pages:
+                self.navigation.pages['other_tasks'].refresh_columns()
+
+    def get_my_tasks_page_with_signals(self):
+        """Создает страницу моих задач с подключенными сигналами"""
+        from windows.my_tasks.my_tasks_page import MyTasksPage
+
+        page = MyTasksPage(
+            db_session=self.session,
+            current_user={"id": self.current_user_id, "last_name": "", "first_name": ""},
+            column_service=self.column_service  # <-- ПЕРЕДАЁМ
+        )
+        page.open_project_requested.connect(self.navigation.open_project_by_id)
+        return page
 
     def _init_services(self):
         """Инициализация сервисов"""

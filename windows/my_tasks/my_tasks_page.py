@@ -4,21 +4,26 @@ import os
 from typing import Dict
 
 from PyQt6 import uic
-from PyQt6.QtWidgets import QWidget, QScrollArea, QHBoxLayout, QMessageBox
-from PyQt6.QtCore import Qt, pyqtSignal, QPoint
+from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QDragEnterEvent, QDropEvent, QDragMoveEvent
+from PyQt6.QtWidgets import QWidget, QScrollArea, QHBoxLayout, QMessageBox, QSizePolicy
 
 from services.tasks_service.tasks_service import TasksService
 from windows.my_tasks.task_card import TaskCard
 from windows.widgets.kanban_column import KanbanColumn
 
+
 class MyTasksPage(QWidget):
     """Страница Мои задачи (только UI слой)"""
 
     task_moved = pyqtSignal()
+    open_project_requested = pyqtSignal(int)
 
-    def __init__(self, db_session, current_user, parent=None):
+    def __init__(self, db_session, current_user, parent=None, column_service=None):
         super().__init__(parent)
+
+        self._is_loading = False  # Флаг для предотвращения повторной загрузки
+        self._is_refreshing = False  # Флаг для обновления колонок
 
         ui_path = os.path.join(
             os.path.dirname(__file__),
@@ -27,11 +32,11 @@ class MyTasksPage(QWidget):
         )
         uic.loadUi(os.path.join(ui_path, "my_tasks_page.ui"), self)
 
-        # Сервис - режим "my" (только мои задачи)
         self.service = TasksService(
             db_session=db_session,
             current_user=current_user,
-            mode="my"
+            mode="my",
+            column_service=column_service  # <-- ПЕРЕДАЁМ
         )
 
         self.columns = {}
@@ -52,6 +57,10 @@ class MyTasksPage(QWidget):
         self.clear_layout(self.kanbanLayout)
 
         column_data = self.service.get_columns_for_board()
+        print(f"🔧 setup_board: получено {len(column_data)} колонок из сервиса")
+        for col in column_data:
+            print(f"   - {col['name']} (id={col.get('id')}, позиция={col.get('position')})")
+
         if not column_data:
             print("⚠️ Нет колонок для отображения")
             return
@@ -81,6 +90,8 @@ class MyTasksPage(QWidget):
         columns_layout = QHBoxLayout(columns_container)
         columns_layout.setSpacing(16)
         columns_layout.setContentsMargins(10, 10, 10, 10)
+        # Убираем растяжение, чтобы колонки сами определяли ширину
+        columns_layout.setAlignment(Qt.AlignmentFlag.AlignLeft)
 
         self.columns.clear()
         self.column_widgets.clear()
@@ -88,6 +99,11 @@ class MyTasksPage(QWidget):
         for col in sorted(column_data, key=lambda x: x["position"]):
             print(f"📦 Создаем колонку: {col['name']}")
             column_widget = KanbanColumn(col)
+            # Устанавливаем политику размера
+            column_widget.setSizePolicy(
+                QSizePolicy.Policy.MinimumExpanding,
+                QSizePolicy.Policy.Expanding
+            )
             self.columns[col["name"]] = column_widget
             self.column_widgets.append(column_widget)
             columns_layout.addWidget(column_widget)
@@ -95,7 +111,9 @@ class MyTasksPage(QWidget):
             # === ПОДКЛЮЧЕНИЕ СИГНАЛА ===
             column_widget.task_dropped.connect(self._on_task_dropped)
 
-        columns_layout.addStretch()
+        # Убираем stretch - колонки сами определяют свою ширину
+        # columns_layout.addStretch()  # <-- УБРАТЬ ИЛИ ЗАКОММЕНТИРОВАТЬ
+
         scroll_area.setWidget(columns_container)
 
         # Вертикальный скролл
@@ -136,28 +154,43 @@ class MyTasksPage(QWidget):
                     self.clear_layout(item.layout())
 
     def load_tasks(self):
-        """Загружает и отображает задачи"""
-        tasks = self.service.get_tasks_for_board()
+        """Загружает и отображает задачи с защитой от повторных вызовов"""
+        if self._is_loading:
+            print("⚠️ Загрузка задач уже выполняется, пропускаем")
+            return
 
-        print(f"\n📊 Загрузка моих задач: {len(tasks)}")
-        for task in tasks:
-            print(f"  - {task.get('title')} (проект: {task.get('project_name')}, статус: {task.get('status')})")
+        self._is_loading = True
 
-        self.clear_all_columns()
+        try:
+            # Очищаем все колонки перед загрузкой
+            self.clear_all_columns()
 
-        for task in tasks:
-            task_card = TaskCard(task)
-            self._connect_task_card_signals(task_card)
+            tasks = self.service.get_tasks_for_board()
 
-            column_name = task.get("status")
-            if column_name in self.columns:
-                column = self.columns[column_name]
-                column.add_task(task_card)
-                print(f"  ✅ Добавлена задача '{task.get('title')}' в колонку '{column_name}'")
-            else:
-                print(f"  ⚠️ Колонка '{column_name}' не найдена")
+            print(f"\n📊 Загрузка моих задач: {len(tasks)}")
+            for task in tasks:
+                print(f"  - {task.get('title')} (проект: {task.get('project_name')}, статус: {task.get('status')})")
 
-        self.update_statistics()
+            for task in tasks:
+                task_card = TaskCard(task)
+                self._connect_task_card_signals(task_card)
+
+                column_name = task.get("status")
+                if column_name in self.columns:
+                    column = self.columns[column_name]
+                    column.add_task(task_card)
+                    print(f"  ✅ Добавлена задача '{task.get('title')}' в колонку '{column_name}'")
+                else:
+                    print(f"  ⚠️ Колонка '{column_name}' не найдена")
+
+            self.update_statistics()
+
+        except Exception as e:
+            print(f"❌ Ошибка при загрузке задач: {e}")
+            import traceback
+            traceback.print_exc()
+        finally:
+            self._is_loading = False
 
     def clear_all_columns(self):
         """Очищает все колонки от карточек"""
@@ -174,6 +207,67 @@ class MyTasksPage(QWidget):
         card.resume_requested.connect(self._on_resume_task)
         card.drag_started.connect(self._on_drag_started)
         card.progress_changed.connect(self._on_progress_changed)
+        card.project_clicked.connect(self._on_project_clicked)
+
+    def _on_project_clicked(self, project_id: int):
+        """Обработчик клика по названию проекта"""
+        print(f"📁 Запрошено открытие проекта {project_id}")
+        self.open_project_requested.emit(project_id)
+
+    def refresh_columns(self):
+        """Обновить колонки (перезагрузить доску) с защитой от повторных вызовов"""
+        if self._is_refreshing:
+            print("⚠️ Обновление колонок уже выполняется, пропускаем")
+            return
+
+        self._is_refreshing = True
+
+        try:
+            print("🔄 ОБНОВЛЕНИЕ КОЛОНОК на странице Мои задачи")
+
+            # ВАЖНО: Принудительно очищаем кэш колонок в сервисе
+            # Для этого временно создаём новый сервис или вызываем сброс кэша
+            if hasattr(self.service.crud, '_column_cache'):
+                self.service.crud._column_cache = None
+
+            # Сохраняем текущие задачи
+            all_tasks = []
+            for column in self.column_widgets:
+                for card in column.get_tasks():
+                    all_tasks.append(card.task_data)
+
+            print(f"   - Сохранено задач: {len(all_tasks)}")
+
+            # Пересоздаем доску с НОВЫМИ колонками
+            self.setup_board()
+
+            # Восстанавливаем задачи в НОВЫЕ колонки
+            for task in all_tasks:
+                task_card = TaskCard(task)
+                self._connect_task_card_signals(task_card)
+
+                column_name = task.get("status")
+                # Используем обновленный self.columns
+                if column_name in self.columns:
+                    column = self.columns[column_name]
+                    column.add_task(task_card)
+                    print(f"   - Восстановлена задача '{task.get('title')}' в колонку '{column_name}'")
+                else:
+                    print(f"   - ⚠️ Колонка '{column_name}' не найдена для задачи '{task.get('title')}'")
+
+            self.update_statistics()
+            self.updateGeometry()
+            if self.parent():
+                self.parent().updateGeometry()
+
+            print("✅ Обновление колонок на странице Мои задачи завершено")
+
+        except Exception as e:
+            print(f"❌ Ошибка при обновлении колонок: {e}")
+            import traceback
+            traceback.print_exc()
+        finally:
+            self._is_refreshing = False
 
     def _on_edit_task(self, task_id: int):
         """Редактирование задачи"""

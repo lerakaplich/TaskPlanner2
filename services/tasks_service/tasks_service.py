@@ -1,6 +1,8 @@
 # services/tasks_service/tasks_service.py
 
 from typing import Dict, Optional, List
+
+from services.employee_service import column_service
 from services.tasks_service.tasks_crud_service import TasksCrudService
 from services.tasks_service.tasks_move_service import TasksMoveService
 from services.tasks_service.tasks_filter_service import TasksFilterService
@@ -16,9 +18,8 @@ class TasksService:
     Объединяет все функциональные модули через композицию.
     """
 
-    def __init__(self, db_session, current_user=None, mode="all"):
-        # Создаём экземпляры сервисов
-        self.crud = TasksCrudService(db_session, current_user, mode)
+    def __init__(self, db_session, current_user=None, mode="all", column_service=None):
+        self.crud = TasksCrudService(db_session, current_user, mode, column_service)
         self.move = TasksMoveService(db_session, self.crud.repo, current_user, mode)
         self.filter = TasksFilterService(db_session, self.crud.repo, current_user, mode)
         self.tag = TasksTagService(db_session, self.crud.repo, current_user, mode)

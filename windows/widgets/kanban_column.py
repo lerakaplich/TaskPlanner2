@@ -235,27 +235,46 @@ class KanbanColumn(QFrame):
 
         # Находим максимальную ширину среди карточек
         for card in self.task_cards:
-            if card:
+            if card and card.isVisible():
+                # Получаем фактическую ширину карточки
                 card_width = card.sizeHint().width()
                 if card_width > max_card_width:
                     max_card_width = card_width
 
-        # Если есть карточки, добавляем отступы
-        if max_card_width > 0:
-            # Ширина = максимальная ширина карточки + отступы (20px слева/справа)
-            width = max_card_width + 20
-        else:
-            width = 280  # минимальная ширина для пустой колонки
+        # Если карточек нет, используем минимальную ширину
+        if max_card_width == 0:
+            max_card_width = 280  # минимальная ширина для пустой колонки
+
+        # Ширина = максимальная ширина карточки + отступы (20px слева/справа от контента)
+        width = max_card_width + 20
+
+        # Дополнительно проверяем через содержимое layout
+        if self.tasks_layout.count() > 0:
+            # Проверяем, есть ли карточки в layout (включая скрытые)
+            for i in range(self.tasks_layout.count()):
+                item = self.tasks_layout.itemAt(i)
+                if item and item.widget() and item.widget() != self._stretch:
+                    w = item.widget()
+                    if w.isVisible():
+                        card_width = w.sizeHint().width()
+                        if card_width > max_card_width:
+                            max_card_width = card_width
+                            width = max_card_width + 20
+
+        # Ограничиваем максимальную ширину (опционально)
+        width = min(width, 400)  # Максимум 400px, чтобы колонки не стали слишком широкими
 
         return QSize(width, 500)
+
+    def updateGeometry(self):
+        """Переопределяем для принудительного обновления родителя"""
+        super().updateGeometry()
+        if self.parent():
+            self.parent().updateGeometry()
 
     def minimumSizeHint(self):
         """Возвращает минимальный размер колонки"""
         return QSize(280, 300)
-
-    # ==========================================================
-    # Drag & Drop
-    # ==========================================================
 
     def dragEnterEvent(self, event: QDragEnterEvent):
         if event.mimeData().hasFormat("application/x-task"):

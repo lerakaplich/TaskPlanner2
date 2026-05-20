@@ -21,6 +21,7 @@ class TaskCard(QFrame):
     move_requested = pyqtSignal(int, str)  # task_id, new_status
     drag_started = pyqtSignal(dict)  # task_data
     progress_changed = pyqtSignal(int, int)  # task_id, new_progress_percent
+    project_clicked = pyqtSignal(int)  # project_id  # <-- ДОБАВИТЬ ЭТУ СТРОКУ
 
     def __init__(self, task_data, parent=None):
         super().__init__(parent)
@@ -53,6 +54,13 @@ class TaskCard(QFrame):
 
         self.fill_ui()
         self.menuButton.clicked.connect(self._show_context_menu)
+        self.projectButton.clicked.connect(self._on_project_clicked)
+
+    def _on_project_clicked(self):
+        """Обработчик клика по названию проекта"""
+        project_id = self.task_data.get("project_id")
+        if project_id:
+            self.project_clicked.emit(project_id)
 
     def _on_progress_click(self, event):
         """Обработчик клика по прогресс-бару для изменения значения"""

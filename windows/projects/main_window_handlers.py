@@ -1,7 +1,7 @@
 # windows/projects/main_window_handlers.py
 
 from PyQt6.QtWidgets import QMessageBox, QDialog, QSizePolicy, QSpacerItem
-from PyQt6.QtCore import QObject, pyqtSignal
+from PyQt6.QtCore import QObject, pyqtSignal, QTimer
 
 from services.employee_service.employee_service import EmployeeService
 from windows.projects.project_card import ProjectCard
@@ -178,12 +178,17 @@ class ProjectViewHandler:
         self.refresh_projects_view()
 
 
-class NavigationHandler:
+class NavigationHandler(QObject):
     """Обработчик навигации и ленивой загрузки страниц"""
 
+    columns_updated = pyqtSignal()
+
     def __init__(self, main_window):
+        super().__init__()
         self.main = main_window
         self.pages = {}
+        self._is_switching = False  # Флаг для предотвращения множественных переключений
+        self._pending_switch = None  # Ожидаемое переключение
 
         # Индексы страниц
         self.PAGE_PROJECTS = 0
@@ -196,6 +201,131 @@ class NavigationHandler:
         self.PAGE_SETTINGS = 7
         self.PAGE_ARCHIVE = 8
         self.PAGE_PROFILE = 9
+
+    def refresh_task_pages_columns(self):
+        """Обновить колонки на страницах задач"""
+        print("🔄 Обновление колонок на страницах задач")
+
+        # Обновляем страницу Мои задачи
+        if 'my_tasks' in self.pages:
+            print("   - Обновляем страницу Мои задачи")
+            # Используем QTimer для отложенного обновления, чтобы не блокировать UI
+            QTimer.singleShot(50, self.pages['my_tasks'].refresh_columns)
+        else:
+            print("   - Страница Мои задачи еще не создана")
+
+        # Обновляем страницу Чужие задачи
+        if 'other_tasks' in self.pages:
+            print("   - Обновляем страницу Чужие задачи")
+            QTimer.singleShot(50, self.pages['other_tasks'].refresh_columns)
+        else:
+            print("   - Страница Чужие задачи еще не создана")
+
+    def switch_page(self, page_index):
+        """Переключение между страницами с защитой от быстрых кликов"""
+        # Защита от множественных переключений
+        if self._is_switching:
+            self._pending_switch = page_index
+            return
+
+        self._is_switching = True
+
+        try:
+            # Создаем страницу при первом открытии
+            if page_index == self.PAGE_MY_TASKS:
+                self.get_my_tasks_page()
+            elif page_index == self.PAGE_OTHER_TASKS:
+                self.get_other_tasks_page()
+            elif page_index == self.PAGE_GANTT:
+                self.get_gantt_page()
+            elif page_index == self.PAGE_ANALYTICS:
+                self.get_analytics_page()
+            elif page_index == self.PAGE_CHAT:
+                self.get_chat_page()
+            elif page_index == self.PAGE_OVERTIME:
+                self.get_overtime_page()
+            elif page_index == self.PAGE_SETTINGS:
+                self.get_settings_page()
+            elif page_index == self.PAGE_ARCHIVE:
+                self.get_archive_page()
+                if 'archive' in self.pages:
+                    self.pages['archive'].show_projects_list()
+
+            # Показываем страницу
+            self.main.contentStack.setCurrentIndex(page_index)
+
+            # Обновляем состояние кнопок навигации
+            for i, btn in enumerate(self.main.nav_buttons):
+                btn.setChecked(i == page_index)
+
+        finally:
+            # Снимаем блокировку через небольшую задержку
+            QTimer.singleShot(300, self._on_switch_complete)
+
+    def _on_switch_complete(self):
+        """Обработчик завершения переключения"""
+        self._is_switching = False
+
+        # Если есть ожидаемое переключение, выполняем его
+        if self._pending_switch is not None:
+            pending = self._pending_switch
+            self._pending_switch = None
+            self.switch_page(pending)
+
+    def get_my_tasks_page(self):
+        """Возвращает страницу моих задач с подключенными сигналами"""
+        if 'my_tasks' not in self.pages:
+            from windows.my_tasks.my_tasks_page import MyTasksPage
+
+            # Показываем индикатор загрузки
+            self.main.contentStack.setUpdatesEnabled(False)
+
+            try:
+                self.pages['my_tasks'] = MyTasksPage(
+                    db_session=self.main.session,
+                    current_user={"id": self.main.current_user_id, "last_name": "", "first_name": ""},
+                    column_service=self.main.column_service
+                )
+                self.pages['my_tasks'].open_project_requested.connect(self.open_project_by_id)
+                self.main.contentStack.insertWidget(self.PAGE_MY_TASKS, self.pages['my_tasks'])
+            finally:
+                self.main.contentStack.setUpdatesEnabled(True)
+
+        return self.pages['my_tasks']
+
+    def get_other_tasks_page(self):
+        """Возвращает страницу чужих задач с подключенными сигналами"""
+        if 'other_tasks' not in self.pages:
+            from windows.other_tasks.others_tasks_page import OthersTasksPage
+
+            self.main.contentStack.setUpdatesEnabled(False)
+
+            try:
+                self.pages['other_tasks'] = OthersTasksPage(
+                    parent=self.main,
+                    current_user={"id": self.main.current_user_id, "last_name": "", "first_name": ""},
+                    project_id=2,
+                    column_service=self.main.column_service
+                )
+                self.pages['other_tasks'].open_project_requested.connect(self.open_project_by_id)
+                self.main.contentStack.insertWidget(self.PAGE_OTHER_TASKS, self.pages['other_tasks'])
+            finally:
+                self.main.contentStack.setUpdatesEnabled(True)
+
+        return self.pages['other_tasks']
+
+    def open_project_by_id(self, project_id: int):
+        """Открыть страницу проекта по ID"""
+        from windows.projects.project_view_page import ProjectViewPage
+
+        project_page = ProjectViewPage(
+            session=self.main.session,
+            project_id=project_id,
+            service=self.main.project_service,
+            parent=self.main
+        )
+        self.main.contentStack.addWidget(project_page)
+        self.main.contentStack.setCurrentWidget(project_page)
 
     def get_page_index(self):
         return {
@@ -220,28 +350,30 @@ class NavigationHandler:
                 self.main.contentStack.insertWidget(insert_index, self.pages[page_name])
         return self.pages[page_name]
 
-    def get_my_tasks_page(self):
-        from windows.my_tasks.my_tasks_page import MyTasksPage
-        return self._get_or_create_page(
-            'my_tasks',
-            lambda: MyTasksPage(
-                db_session=self.main.session,
-                current_user={"id": self.main.current_user_id, "last_name": "", "first_name": ""}
-            ),
-            self.PAGE_MY_TASKS
-        )
+    def _recreate_page(self, page_name):
+        """Пересоздать страницу (для обновления колонок)"""
+        if page_name in self.pages:
+            # Сохраняем старую страницу
+            old_page = self.pages[page_name]
 
-    def get_other_tasks_page(self):
-        from windows.other_tasks.others_tasks_page import OthersTasksPage
-        return self._get_or_create_page(
-            'other_tasks',
-            lambda: OthersTasksPage(
-                parent=self.main,
-                current_user={"id": self.main.current_user_id, "last_name": "", "first_name": ""},
-                project_id=2
-            ),
-            self.PAGE_OTHER_TASKS
-        )
+            # Удаляем из contentStack если она там есть
+            index = self.main.contentStack.indexOf(old_page)
+            if index >= 0:
+                self.main.contentStack.removeWidget(old_page)
+
+            # Удаляем из словаря
+            del self.pages[page_name]
+            old_page.deleteLater()
+
+            # Пересоздаем страницу
+            if page_name == 'my_tasks':
+                self.get_my_tasks_page()
+            elif page_name == 'other_tasks':
+                self.get_other_tasks_page()
+
+            # Если страница была активна, переключаемся на неё
+            if self.main.contentStack.currentIndex() == index:
+                self.main.contentStack.setCurrentWidget(self.pages[page_name])
 
     def get_gantt_page(self):
         from windows.gantt.gantt_chart import GanttChartWidget
@@ -314,34 +446,6 @@ class NavigationHandler:
             )
             self.main.contentStack.addWidget(self.pages['profile'])
         return self.pages['profile']
-
-    def switch_page(self, page_index):
-        """Переключение между страницами"""
-        # Создаем страницу при первом открытии
-        if page_index == self.PAGE_MY_TASKS:
-            self.get_my_tasks_page()
-        elif page_index == self.PAGE_OTHER_TASKS:
-            self.get_other_tasks_page()
-        elif page_index == self.PAGE_GANTT:
-            self.get_gantt_page()
-        elif page_index == self.PAGE_ANALYTICS:
-            self.get_analytics_page()
-        elif page_index == self.PAGE_CHAT:
-            self.get_chat_page()
-        elif page_index == self.PAGE_OVERTIME:
-            self.get_overtime_page()
-        elif page_index == self.PAGE_SETTINGS:
-            self.get_settings_page()
-        elif page_index == self.PAGE_ARCHIVE:
-            self.get_archive_page()
-            if 'archive' in self.pages:
-                self.pages['archive'].show_projects_list()
-
-        self.main.contentStack.setCurrentIndex(page_index)
-
-        # Обновляем состояние кнопок навигации
-        for i, btn in enumerate(self.main.nav_buttons):
-            btn.setChecked(i == page_index)
 
     def show_profile(self):
         """Показать страницу профиля"""

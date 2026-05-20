@@ -1,4 +1,4 @@
-# services/column_service.py
+# services/employee_service/column_service.py
 
 from typing import List, Optional, Dict, Any
 from sqlalchemy.orm import Session
@@ -6,11 +6,16 @@ from datetime import datetime
 from repositories.column_repo import ColumnRepo
 from database import get_tasks_session
 
+from PyQt6.QtCore import QObject, pyqtSignal
 
-class ColumnService:
-    """Сервис для работы с шаблонными колонками (использует ColumnRepo)"""
+
+class ColumnService(QObject):
+    """Сервис для работы с шаблонными колонками"""
+
+    columns_updated = pyqtSignal()
 
     def __init__(self, session: Session = None):
+        super().__init__()
         self.session = session or get_tasks_session()
         self._own_session = session is None
         self.repo = ColumnRepo(self.session)
@@ -46,6 +51,8 @@ class ColumnService:
                 is_done_column=column_data.get('is_done_column', False)
             )
             self.session.commit()
+            print(f"✅ Колонка '{column.name}' создана, отправляем сигнал обновления")
+            self.columns_updated.emit()
             return self._column_to_dict(column)
         except Exception as e:
             self.session.rollback()
@@ -63,6 +70,8 @@ class ColumnService:
             )
             if success:
                 self.session.commit()
+                print(f"✅ Колонка {column_id} обновлена, отправляем сигнал обновления")
+                self.columns_updated.emit()
             return success
         except Exception as e:
             self.session.rollback()
@@ -75,6 +84,8 @@ class ColumnService:
             success = self.repo.delete_template_column(column_id)
             if success:
                 self.session.commit()
+                print(f"✅ Колонка {column_id} удалена, отправляем сигнал обновления")
+                self.columns_updated.emit()
             return success
         except Exception as e:
             self.session.rollback()

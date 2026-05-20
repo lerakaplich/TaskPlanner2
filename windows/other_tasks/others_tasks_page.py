@@ -1,27 +1,30 @@
 # windows/other_tasks/others_tasks_page.py
 
 import os
-from typing import Dict, Optional, List
-from PyQt6.QtWidgets import (QWidget, QFrame, QLabel, QScrollArea,
-                             QMessageBox, QSizePolicy, QSplitter,
-                             QVBoxLayout, QHBoxLayout)
+from typing import Dict
+
+from PyQt6 import uic
 from PyQt6.QtCore import Qt, pyqtSignal, QPoint
-from PyQt6.QtGui import QFont, QDragEnterEvent, QDropEvent
+from PyQt6.QtGui import QDragEnterEvent, QDropEvent
+from PyQt6.QtWidgets import (QWidget, QScrollArea,
+                             QMessageBox, QSizePolicy, QHBoxLayout)
 
 from database import get_tasks_session
 from services.tasks_service.tasks_service import TasksService
 from windows.other_tasks.others_task_card import OthersTaskCard
 from windows.other_tasks.task_dialog import TaskDialog
-from PyQt6 import uic
-
 from windows.widgets.kanban_column import KanbanColumn
 
 
 class OthersTasksPage(QWidget):
     taskUpdated = pyqtSignal()
+    open_project_requested = pyqtSignal(int)
 
-    def __init__(self, parent=None, current_user=None, project_id=None):
+    def __init__(self, parent=None, current_user=None, project_id=None, column_service=None):
         super().__init__(parent)
+
+        self._is_loading = False
+        self._is_refreshing = False
 
         self.current_user = current_user or {"id": 1, "last_name": "Копейкина", "first_name": "Виктория",
                                              "middle_name": "Анатольевна"}
@@ -38,7 +41,8 @@ class OthersTasksPage(QWidget):
         self.service = TasksService(
             db_session=self.db_session,
             current_user=self.current_user,
-            mode="others"  # 👈 КЛЮЧЕВОЕ: только чужие задачи
+            mode="others",
+            column_service=column_service  # <-- ПЕРЕДАЁМ
         )
 
         # Настройка UI
@@ -60,6 +64,10 @@ class OthersTasksPage(QWidget):
         self.clear_layout(self.kanbanLayout)
 
         column_data = self.service.get_column_data()
+        print(f"🔧 setup_kanban: получено {len(column_data)} колонок из сервиса")
+        for col in column_data:
+            print(f"   - {col['name']} (id={col.get('id')}, позиция={col.get('position')})")
+
         if not column_data:
             print("⚠️ Нет колонок для отображения")
             return
@@ -112,11 +120,13 @@ class OthersTasksPage(QWidget):
             }
         """)
 
-        # Контейнер для колонок
+        # Контейнер для колонок - используем QHBoxLayout без растяжения
         columns_container = QWidget()
         columns_layout = QHBoxLayout(columns_container)
         columns_layout.setSpacing(16)
         columns_layout.setContentsMargins(10, 10, 10, 10)
+        # ВАЖНО: НЕ добавляем растяжение, чтобы колонки не растягивались принудительно
+        columns_layout.setAlignment(Qt.AlignmentFlag.AlignLeft)
 
         self.columns.clear()
         self.column_widgets.clear()
@@ -124,11 +134,18 @@ class OthersTasksPage(QWidget):
         for col in sorted(column_data, key=lambda x: x["position"]):
             print(f"📦 Создаем колонку: {col['name']}")
             column_widget = KanbanColumn(col)
+            # ВАЖНО: устанавливаем фиксированную политику размера
+            column_widget.setSizePolicy(
+                QSizePolicy.Policy.MinimumExpanding,  # Минимальное расширение по ширине
+                QSizePolicy.Policy.Expanding  # Растягивается по высоте
+            )
             self.columns[col["name"]] = column_widget
             self.column_widgets.append(column_widget)
             columns_layout.addWidget(column_widget)
 
-        columns_layout.addStretch()
+        # Убираем stretch - колонки сами определяют свою ширину
+        # columns_layout.addStretch()  # <-- УБРАТЬ ЭТУ СТРОКУ
+
         horizontal_scroll.setWidget(columns_container)
         main_scroll.setWidget(horizontal_scroll)
         self.kanbanLayout.addWidget(main_scroll)
@@ -147,20 +164,34 @@ class OthersTasksPage(QWidget):
                     self.clear_layout(item.layout())
 
     def load_tasks(self):
-        """Загружает задачи (только чужие)"""
-        tasks = self.service.load_tasks()
+        """Загружает задачи (только чужие) с защитой от повторных вызовов"""
+        if self._is_loading:
+            print("⚠️ Загрузка чужих задач уже выполняется, пропускаем")
+            return
 
-        print(f"\n📊 Загрузка чужих задач: {len(tasks)}")
-        for task in tasks:
-            print(
-                f"  - {task.get('title')} (проект: {task.get('project_name')}, статус: {task.get('status')}, автор: {task.get('created_by_name')})")
+        self._is_loading = True
 
-        self.clear_all_columns()
+        try:
+            self.clear_all_columns()
 
-        for task in tasks:
-            self.add_task_card(task)
+            tasks = self.service.load_tasks()
 
-        self.update_statistics()
+            print(f"\n📊 Загрузка чужих задач: {len(tasks)}")
+            for task in tasks:
+                print(
+                    f"  - {task.get('title')} (проект: {task.get('project_name')}, статус: {task.get('status')}, автор: {task.get('created_by_name')})")
+
+            for task in tasks:
+                self.add_task_card(task)
+
+            self.update_statistics()
+
+        except Exception as e:
+            print(f"❌ Ошибка при загрузке задач: {e}")
+            import traceback
+            traceback.print_exc()
+        finally:
+            self._is_loading = False
 
     def add_task_card(self, task_data: Dict):
         """Добавляет карточку задачи в колонку."""
@@ -172,8 +203,14 @@ class OthersTasksPage(QWidget):
         column_name = task_data.get("status")
         if column_name in self.columns:
             column = self.columns[column_name]
-            # 👇 Добавляем с выравниванием по верху
-            column.add_task(card)  # Уже fixed в kanban_column
+            column.add_task(card)
+
+            # 👇 ПРИНУДИТЕЛЬНО ОБНОВЛЯЕМ ГЕОМЕТРИЮ КОЛОНКИ
+            column.updateGeometry()
+            # Обновляем геометрию родителя, чтобы пересчитать размеры
+            if column.parent():
+                column.parent().updateGeometry()
+
             print(f"  ✅ Добавлено в колонку '{column_name}'")
         else:
             print(f"  ❌ Колонка '{column_name}' не найдена!")
@@ -192,15 +229,74 @@ class OthersTasksPage(QWidget):
         card.approveRequested.connect(self.approve_task)
         card.returnToWorkRequested.connect(self.return_to_work)
         card.moveToDoneColumn.connect(self.move_to_done)
+        card.project_clicked.connect(self._on_project_clicked)  # <-- ДОБАВИТЬ
+
+    def _on_project_clicked(self, project_id: int):
+        """Обработчик клика по названию проекта"""
+        print(f"📁 Запрошено открытие проекта {project_id} из чужих задач")
+        self.open_project_requested.emit(project_id)
 
     def clear_all_columns(self):
         """Очищает все колонки от карточек."""
         for column in self.column_widgets:
             column.clear_tasks()
 
-    # =====================================================
-    # CRUD операции
-    # =====================================================
+    def refresh_columns(self):
+        """Обновляет колонки (после добавления/удаления) с защитой от повторных вызовов"""
+        if self._is_refreshing:
+            print("⚠️ Обновление колонок уже выполняется, пропускаем")
+            return
+
+        self._is_refreshing = True
+
+        try:
+            print("🔄 ОБНОВЛЕНИЕ КОЛОНОК на странице Чужие задачи")
+
+            # ВАЖНО: Принудительно очищаем кэш колонок в сервисе
+            if hasattr(self.service.crud, '_column_cache'):
+                self.service.crud._column_cache = None
+
+            # Пересоздаем доску с НОВЫМИ колонками
+            self.setup_kanban()
+
+            # ОЧИЩАЕМ ВСЕ КОЛОНКИ перед добавлением задач
+            self.clear_all_columns()
+
+            # ПЕРЕЗАГРУЖАЕМ ЗАДАЧИ заново из сервиса
+            tasks = self.service.load_tasks()
+
+            print(f"   - Загружено задач из БД: {len(tasks)}")
+
+            for task in tasks:
+                card = self.create_task_card(task)
+                self.connect_task_card_signals(card)
+
+                column_name = task.get("status")
+                if column_name in self.columns:
+                    column = self.columns[column_name]
+                    column.add_task(card)
+                    column.updateGeometry()
+                    if column.parent():
+                        column.parent().updateGeometry()
+                    print(f"   - Добавлена задача '{task.get('title')}' в колонку '{column_name}'")
+                else:
+                    print(f"   - ⚠️ Колонка '{column_name}' не найдена для задачи '{task.get('title')}'")
+
+            self.update_statistics()
+
+            # Принудительно обновляем геометрию
+            self.updateGeometry()
+            if self.parent():
+                self.parent().updateGeometry()
+
+            print("✅ Обновление колонок на странице Чужие задачи завершено")
+
+        except Exception as e:
+            print(f"❌ Ошибка при обновлении колонок: {e}")
+            import traceback
+            traceback.print_exc()
+        finally:
+            self._is_refreshing = False
 
     def create_new_task(self):
         """Создает новую задачу."""
@@ -304,10 +400,6 @@ class OthersTasksPage(QWidget):
                     column.remove_task(card)
                     return
 
-    # =====================================================
-    # Действия с задачами
-    # =====================================================
-
     def move_to_done(self, task_id: int):
         """Перемещает в 'Выполнено'."""
         result = self.service.move_task(task_id, "Готово")
@@ -325,10 +417,6 @@ class OthersTasksPage(QWidget):
 
     def return_to_work(self, task_id: int):
         print(f"Возврат на доработку задачи {task_id}")
-
-    # =====================================================
-    # Статистика и фильтрация
-    # =====================================================
 
     def update_statistics(self):
         """Обновляет статистику."""
@@ -370,10 +458,6 @@ class OthersTasksPage(QWidget):
                 else:
                     card.hide()
 
-    # =====================================================
-    # Drag & Drop
-    # =====================================================
-
     def dragEnterEvent(self, event: QDragEnterEvent):
         if event.mimeData().hasFormat("application/x-task"):
             event.acceptProposedAction()
@@ -405,10 +489,6 @@ class OthersTasksPage(QWidget):
             if column.geometry().contains(pos):
                 return column
         return None
-
-    # =====================================================
-    # Завершение работы
-    # =====================================================
 
     def closeEvent(self, event):
         self.db_session.close()

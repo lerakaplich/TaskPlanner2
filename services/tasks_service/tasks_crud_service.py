@@ -10,16 +10,18 @@ from models.projects import Project, BoardColumn
 from models.schemas.tasks_dto import TaskPriority
 from models.tasks import Task
 from repositories.task_repo import TaskRepo
+from services.employee_service.column_service import ColumnService
 
 
 class TasksCrudService:
     """Базовый CRUD сервис для задач"""
 
-    def __init__(self, db_session: Session, current_user: Dict = None, mode: str = "all"):
+    def __init__(self, db_session: Session, current_user: Dict = None, mode: str = "all", column_service: ColumnService = None):
         self.db_session = db_session
         self.repo = TaskRepo(db_session)
         self.current_user = current_user
         self.mode = mode
+        self._column_service = column_service
 
     def get_task_by_id(self, task_id: int) -> Optional[Dict]:
         """Получить задачу по ID"""
@@ -376,12 +378,37 @@ class TasksCrudService:
         return self.get_all_columns()
 
     def get_all_columns(self) -> List[Dict]:
-        """Получить все уникальные колонки"""
-        stmt = select(BoardColumn).order_by(BoardColumn.project_id, BoardColumn.position)
-        all_columns = list(self.db_session.scalars(stmt))
+        """Получить все уникальные колонки (из шаблонов и проектов)"""
+        print(f"🔍 get_all_columns: mode={self.mode}, вызывается...")
 
         columns_by_name = {}
-        for col in all_columns:
+
+        # 1. Получаем шаблонные колонки через переданный сервис
+        if self._column_service:
+            print("   - Получаем шаблонные колонки из ColumnService")
+            template_columns = self._column_service.get_template_columns()
+        else:
+            print("   - ColumnService не передан, создаём временный")
+            temp_service = ColumnService(self.db_session)
+            template_columns = temp_service.get_template_columns()
+
+        print(f"   - Найдено шаблонных колонок: {len(template_columns)}")
+        for col in template_columns:
+            columns_by_name[col["name"]] = {
+                "id": col["id"],
+                "name": col["name"],
+                "color": col.get("color", "#2196F3"),
+                "position": col.get("position", 0),
+                "is_done": col.get("is_done_column", False),
+                "is_template": True
+            }
+
+        # 2. Получаем колонки из проектов (если есть)
+        stmt = select(BoardColumn).order_by(BoardColumn.position)
+        project_columns = self.db_session.scalars(stmt).all()
+        print(f"   - Найдено колонок в проектах: {len(project_columns)}")
+
+        for col in project_columns:
             if col.name not in columns_by_name:
                 columns_by_name[col.name] = {
                     "id": col.id,
@@ -389,14 +416,20 @@ class TasksCrudService:
                     "color": col.color if col.color else "#2196F3",
                     "position": col.position,
                     "is_done": col.is_done_column,
-                    "project_ids": []
+                    "is_template": False
                 }
-            columns_by_name[col.name]["project_ids"].append(col.project_id)
 
-        return sorted(columns_by_name.values(), key=lambda x: x["position"])
+        # Сортируем по позиции
+        result = sorted(columns_by_name.values(), key=lambda x: x["position"])
+
+        print(f"📊 Загружено колонок: {len(result)}")
+        for col in result:
+            print(f"  - {col['name']} (позиция: {col['position']}, шаблон: {col.get('is_template', False)})")
+
+        return result
 
     def get_column_data(self) -> List[Dict]:
-        """Получить данные колонок для UI"""
+        """Получить данные колонок для UI (адаптер)"""
         return self.get_all_columns()
 
     def _task_to_dict(self, task: Task) -> Dict[str, Any]:
