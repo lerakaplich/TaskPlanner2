@@ -1,6 +1,5 @@
 # windows/settings/employees/employees_tab.py
 
-
 from PyQt6.QtCore import pyqtSignal, QTimer
 from PyQt6.QtWidgets import QMessageBox
 
@@ -29,16 +28,32 @@ class EmployeesTab(BaseTab):
         # Показываем фильтры
         self.show_filters()
 
-        # Настраиваем фильтры
-        if hasattr(self, 'filterDepartment') and self.filterDepartment:
+        # Принудительно показываем toolsFrame
+        if self.tools_frame:
+            self.tools_frame.setVisible(True)
+            self.tools_frame.show()
+            print(f"✅ tools_frame visible в __init__: {self.tools_frame.isVisible()}")
+
+        # Настраиваем фильтры (ОБА - QComboBox)
+        # filterDepartment - фильтр по отделам
+        if self.filterDepartment is not None:
             self.filterDepartment.clear()
             self.filterDepartment.addItem("Все отделы", None)
             self.filterDepartment.currentIndexChanged.connect(self.on_filter_department_changed)
+            self.filterDepartment.setVisible(True)
+            print(f"✅ filterDepartment настроен, visible={self.filterDepartment.isVisible()}")
+        else:
+            print(f"❌ filterDepartment равен None!")
 
-        if hasattr(self, 'filterSubDepartment') and self.filterSubDepartment:
+        # filterSubDepartment - фильтр по подразделениям
+        if self.filterSubDepartment is not None:
             self.filterSubDepartment.clear()
             self.filterSubDepartment.addItem("Все подразделения", None)
             self.filterSubDepartment.currentIndexChanged.connect(self.on_filter_division_changed)
+            self.filterSubDepartment.setVisible(True)
+            print(f"✅ filterSubDepartment настроен, visible={self.filterSubDepartment.isVisible()}")
+        else:
+            print(f"❌ filterSubDepartment равен None!")
 
         # Настраиваем кнопку "Добавить"
         if self.btnAdd:
@@ -53,42 +68,81 @@ class EmployeesTab(BaseTab):
         """Установка сервиса для работы с БД"""
         self.employee_service = service
         if service:
-            # Загружаем данные после инициализации сервиса
+            print("✅ Сервис установлен, загружаем фильтры...")
+            # Загружаем данные для фильтров
+            self.load_filter_data()
+            # Затем загружаем сотрудников
             QTimer.singleShot(100, self.load_employees)
 
-    def load_filter_data(self, departments: list, divisions: list):
-        """Загрузка данных для фильтров"""
-        self.all_departments = departments
-        self.all_divisions = divisions
+    def load_filter_data(self):
+        """Загрузка данных для фильтров из сервиса"""
+        if not self.employee_service:
+            print("❌ employee_service не установлен")
+            return
 
-        # Заполняем фильтр отделов
-        if hasattr(self, 'filterDepartment') and self.filterDepartment:
+        print("🔄 Начинаем загрузку данных для фильтров...")
+
+        # Получаем отделы и подразделения через сервис
+        filter_data = self.employee_service.get_filter_data()
+        self.all_departments = filter_data.get('departments', [])
+        self.all_divisions = filter_data.get('divisions', [])
+
+        print(f"📊 Загружено для фильтров: отделов={len(self.all_departments)}, подразделений={len(self.all_divisions)}")
+
+        # Заполняем фильтр отделов (QComboBox)
+        if self.filterDepartment is not None:
+            print("✅ Заполняем filterDepartment...")
             self.filterDepartment.blockSignals(True)
             self.filterDepartment.clear()
             self.filterDepartment.addItem("Все отделы", None)
-            for dept in departments:
+            for dept in self.all_departments:
                 self.filterDepartment.addItem(dept.get('name', 'Без названия'), dept.get('id'))
+                print(f"  Добавлен отдел: {dept.get('name')} (id={dept.get('id')})")
             self.filterDepartment.blockSignals(False)
+            self.filterDepartment.setVisible(True)
+            self.filterDepartment.show()
+            print(f"✅ Фильтр отделов заполнен: {self.filterDepartment.count()} элементов, visible={self.filterDepartment.isVisible()}")
+        else:
+            print("❌ filterDepartment равен None!")
 
-        # Заполняем фильтр подразделений
-        if hasattr(self, 'filterSubDepartment') and self.filterSubDepartment:
+        # Заполняем фильтр подразделений (QComboBox)
+        if self.filterSubDepartment is not None:
+            print("✅ Заполняем filterSubDepartment...")
             self.filterSubDepartment.blockSignals(True)
             self.filterSubDepartment.clear()
             self.filterSubDepartment.addItem("Все подразделения", None)
-            for div in divisions:
+            for div in self.all_divisions:
                 self.filterSubDepartment.addItem(div.get('name', 'Без названия'), div.get('id'))
+                print(f"  Добавлено подразделение: {div.get('name')} (id={div.get('id')})")
             self.filterSubDepartment.blockSignals(False)
+            self.filterSubDepartment.setVisible(True)
+            self.filterSubDepartment.show()
+            print(f"✅ Фильтр подразделений заполнен: {self.filterSubDepartment.count()} элементов, visible={self.filterSubDepartment.isVisible()}")
+        else:
+            print("❌ filterSubDepartment равен None!")
+
+        # Принудительно показываем toolsFrame
+        if self.tools_frame:
+            self.tools_frame.show()
+            self.tools_frame.setVisible(True)
+            self.tools_frame.update()
+            print(f"✅ tools_frame visible={self.tools_frame.isVisible()}")
+
+        self.updateGeometry()
+        print("✅ Загрузка фильтров завершена")
 
     def on_filter_department_changed(self, index):
         """Обработчик изменения фильтра отдела"""
-        if hasattr(self, 'filterDepartment') and self.filterDepartment:
+        if self.filterDepartment is not None:
             self.filter_department_id = self.filterDepartment.currentData()
+        print(f"🔍 Фильтр по отделу: {self.filter_department_id}")
         self.refresh_cards()
 
     def on_filter_division_changed(self, index):
         """Обработчик изменения фильтра подразделения"""
-        if hasattr(self, 'filterSubDepartment') and self.filterSubDepartment:
+        if self.filterSubDepartment is not None:
             self.filter_division_id = self.filterSubDepartment.currentData()
+        print(f"🔍 Фильтр по подразделению: {self.filter_division_id}")
         self.refresh_cards()
 
     def on_add_clicked(self):
@@ -110,6 +164,8 @@ class EmployeesTab(BaseTab):
         """Вызывается после успешного сохранения сотрудника"""
         if self.employee_service:
             self.load_employees()
+            # Перезагружаем фильтры
+            self.load_filter_data()
             QMessageBox.information(self, "Успех", "Сотрудник добавлен")
             self.employee_added.emit(employee_data)
 
@@ -135,6 +191,8 @@ class EmployeesTab(BaseTab):
             success = self.employee_service.update_employee(employee_id, employee_data)
             if success:
                 self.load_employees()
+                # Перезагружаем фильтры
+                self.load_filter_data()
                 QMessageBox.information(self, "Успех", "Сотрудник обновлён")
                 self.employee_updated.emit(employee_data)
             else:
@@ -152,7 +210,6 @@ class EmployeesTab(BaseTab):
     def delete_item(self, item_type: str, item_id: int):
         """Обработка подтверждённого удаления"""
         if item_type == "employee" and self.employee_service:
-            # Используем метод с проверкой задач
             result = self.employee_service.delete_employee_by_id_with_check(item_id)
             if result.get('success'):
                 self.load_employees()
@@ -193,7 +250,7 @@ class EmployeesTab(BaseTab):
         self.clear_cards()
 
         filtered_employees = self.get_filtered_employees()
-        print(f"🔄 Обновление карточек: отображается {len(filtered_employees)} сотрудников")
+        print(f"🔄 Обновление карточек: отображается {len(filtered_employees)} из {len(self.employees)} сотрудников")
 
         for i, employee in enumerate(filtered_employees):
             card = EmployeeCard(employee, self.employee_service, parent=self)

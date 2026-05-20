@@ -453,14 +453,41 @@ class EmployeeService:
     def hard_delete_template_column(self, column_id: int) -> bool:
         return self.columns.hard_delete_template_column(column_id)
 
-    # =====================================================
-    # Дополнительные методы
-    # =====================================================
     def get_filter_data(self) -> Dict[str, List[Dict[str, Any]]]:
-        return {
-            'departments': self.get_all_departments(),
-            'divisions': self.get_all_divisions()
-        }
+        """Возвращает данные для фильтров (отделы и подразделения)"""
+        try:
+            # Получаем отделы напрямую через SQLAlchemy
+            from models.employees import Department, Division
+
+            departments = self.session.query(Department).order_by(Department.name).all()
+            divisions = self.session.query(Division).order_by(Division.name).all()
+
+            departments_list = []
+            for dept in departments:
+                departments_list.append({
+                    'id': dept.id,
+                    'name': dept.name,
+                    'number': dept.number,
+                    'division_id': dept.division_id
+                })
+
+            divisions_list = []
+            for div in divisions:
+                divisions_list.append({
+                    'id': div.id,
+                    'name': div.name,
+                    'number': div.number
+                })
+
+            print(f"📊 get_filter_data: отделов={len(departments_list)}, подразделений={len(divisions_list)}")
+
+            return {
+                'departments': departments_list,
+                'divisions': divisions_list
+            }
+        except Exception as e:
+            print(f"❌ Ошибка в get_filter_data: {e}")
+            return {'departments': [], 'divisions': []}
 
     def get_all_employees_for_selector(self) -> List[Dict[str, Any]]:
         employees = self.employee_repo.get_all()
