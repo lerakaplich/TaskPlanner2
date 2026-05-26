@@ -1,4 +1,5 @@
 # windows/gantt/gantt_widget.py
+
 import os
 from datetime import datetime, timedelta
 from typing import Optional, List, Dict, Tuple
@@ -6,7 +7,7 @@ from PyQt6.QtCore import Qt, QDate, pyqtSignal
 from PyQt6.QtGui import QColor, QFont
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QTreeWidgetItem,
-    QDialog, QMessageBox, QPushButton, QComboBox
+    QDialog, QMessageBox, QPushButton, QComboBox, QFrame
 )
 from PyQt6 import uic
 
@@ -51,7 +52,7 @@ class GanttWidget(QWidget):
 
     def _create_ui_programmatically(self) -> None:
         """Создает UI программно если UI файл не найден"""
-        from PyQt6.QtWidgets import QSplitter, QFrame, QScrollArea
+        from PyQt6.QtWidgets import QFrame, QScrollArea
 
         main_layout = QHBoxLayout(self)
         main_layout.setContentsMargins(0, 0, 0, 0)
@@ -92,6 +93,17 @@ class GanttWidget(QWidget):
         filters_layout.addWidget(self.createLinkButton)
 
         left_layout.addWidget(filters_group)
+
+        # Легенда приоритетов
+        legend_group = QFrame()
+        legend_group.setStyleSheet("background-color: white; border-radius: 10px; margin: 10px;")
+        legend_layout = QVBoxLayout(legend_group)
+        legend_layout.addWidget(QLabel("🎨 Приоритеты:"))
+
+        self.prioritiesLayout = QVBoxLayout()
+        legend_layout.addLayout(self.prioritiesLayout)
+
+        left_layout.addWidget(legend_group)
 
         # Дерево проектов
         from PyQt6.QtWidgets import QTreeWidget
@@ -171,9 +183,8 @@ class GanttWidget(QWidget):
             gantt_layout.addWidget(self.gantt_canvas)
             self.ganttScrollArea.setWidget(self.gantt_canvas)
 
-        # Настройка приоритетов
-        if hasattr(self, 'prioritiesLayout'):
-            self._setup_priorities()
+        # Настройка приоритетов (если есть контейнер в UI)
+        self._setup_priorities()
 
     def _setup_priorities(self) -> None:
         """Настройка отображения приоритетов"""
@@ -192,6 +203,7 @@ class GanttWidget(QWidget):
             # Ищем виджет с приоритетами в загруженном UI
             for child in self.findChildren(QWidget):
                 if hasattr(child, 'layout') and child.layout() and child.layout().count() > 0:
+                    # Проверяем, есть ли там уже элементы приоритетов
                     container = child.layout()
                     break
 
@@ -247,8 +259,16 @@ class GanttWidget(QWidget):
         self._update_canvas_date_range()
 
     def refresh(self) -> None:
-        """Обновление данных"""
+        """Обновление данных - полная перезагрузка"""
+        print("🔄 GanttWidget.refresh() - полное обновление")
+        # Очищаем кэш сервиса и перезагружаем
+        self._service._cached_tasks = []
+        self._service._cached_projects = []
         self._populate_data()
+        # Принудительно обновляем холст
+        if hasattr(self, 'gantt_canvas'):
+            self.gantt_canvas.set_filtered_tasks(None)
+            self.gantt_canvas.update()
 
     def _populate_projects_tree(self) -> None:
         """Заполнение дерева проектов"""
@@ -280,7 +300,7 @@ class GanttWidget(QWidget):
 
             project_item.setExpanded(True)
 
-        print(f"   ✅ Дерево заполнено: {len(projects)} проектов")
+        print(f"   ✅ Дерево заполнено: {len(projects)} проектов, всего задач: {len(self._service.get_all_tasks())}")
 
     def _populate_filters(self) -> None:
         """Заполнение фильтров"""
@@ -436,7 +456,7 @@ class GanttWidget(QWidget):
         }
 
         dialog = TaskDialog(
-            self,
+            parent=None,
             task_data=task_data,
             mode="create",
             current_user={"id": self.current_user_id, "last_name": "", "first_name": ""}
@@ -449,12 +469,8 @@ class GanttWidget(QWidget):
         """Обработчик создания задачи"""
         print(f"✅ Задача создана в проекте {project_id}: {form_data}")
 
-        # Обновляем данные
-        self._service.load_data()
-        self._populate_projects_tree()
-        self._populate_filters()
-        self._apply_filters()
-        self._update_canvas_date_range()
+        # ВАЖНО: Полная перезагрузка данных
+        self.refresh()
 
         QMessageBox.information(self, "Успех", "Задача успешно создана!")
 

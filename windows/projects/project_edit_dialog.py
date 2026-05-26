@@ -47,8 +47,11 @@ class ProjectEditDialog(BaseProjectDialog):
         # Загружаем сохраненные колонки
         if 'selected_columns_data' in self.project_data:
             self.selected_columns_data = self.project_data['selected_columns_data']
-            self.selected_columns_keys = [col.get('col_key', '') for col in self.selected_columns_data]
-            self.update_columns_button_text()
+            # Обновляем состояние чекбоксов
+            selected_keys = [col.get('col_key', col.get('name', '').lower().replace(' ', '_'))
+                             for col in self.selected_columns_data]
+            for col_key, checkbox in self.column_checkboxes.items():
+                checkbox.setChecked(col_key in selected_keys)
 
         # Убеждаемся, что администраторы также являются участниками
         if self.service:
@@ -133,7 +136,6 @@ class ProjectEditDialog(BaseProjectDialog):
             'participants': self.participants,
             'admins': self.admins,
             'selected_columns_data': self.selected_columns_data,
-            'selected_columns_keys': self.selected_columns_keys,
             'manager_id': self.get_manager_id(),
             'manager_name': self.get_manager_name(),
         }
@@ -150,7 +152,7 @@ class ProjectEditDialog(BaseProjectDialog):
         raw_data['created_date'] = self.project_data.get('created_date', QDate.currentDate().toString("dd.MM.yyyy"))
 
         # Добавляем колонки
-        raw_data['selected_columns'] = self.selected_columns_keys
+        raw_data['selected_columns'] = self.get_selected_column_keys()
         raw_data['selected_columns_data'] = self.selected_columns_data
         raw_data['columns_display_names'] = {col['col_key']: col['name'] for col in self.selected_columns_data}
 

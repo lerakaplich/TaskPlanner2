@@ -123,9 +123,6 @@ QLineEdit, QTextEdit, QComboBox, QDateEdit {
      <property name="text">
       <string>Создание проекта</string>
      </property>
-     <property name="alignment">
-      <set>Qt::AlignmentFlag::AlignCenter</set>
-     </property>
     </widget>
    </item>
    <item>
@@ -206,6 +203,7 @@ QTextEdit:focus {
        <property name="font">
         <font>
          <pointsize>-1</pointsize>
+         <weight>75</weight>
          <bold>true</bold>
         </font>
        </property>
@@ -252,6 +250,7 @@ QPushButton:pressed {
        <property name="font">
         <font>
          <pointsize>-1</pointsize>
+         <weight>75</weight>
          <bold>true</bold>
         </font>
        </property>
@@ -321,7 +320,7 @@ QPushButton:pressed {
         <property name="editable">
          <bool>true</bool>
         </property>
-        <property name="placeholderText">
+        <property name="placeholderText" stdset="0">
          <string>Выберите руководителей</string>
         </property>
        </widget>
@@ -595,7 +594,7 @@ QCheckBox::indicator:checked {
      <item>
       <spacer name="horizontalSpacer">
        <property name="orientation">
-        <enum>Qt::Orientation::Horizontal</enum>
+        <enum>Qt::Horizontal</enum>
        </property>
        <property name="sizeHint" stdset="0">
         <size>
@@ -638,6 +637,7 @@ QCheckBox::indicator:checked {
      <property name="font">
       <font>
        <pointsize>-1</pointsize>
+       <weight>75</weight>
        <bold>true</bold>
       </font>
      </property>
@@ -665,19 +665,6 @@ QPushButton:pressed {
       <string>Создать проект</string>
      </property>
     </widget>
-   </item>
-   <item>
-    <spacer name="verticalSpacer">
-     <property name="orientation">
-      <enum>Qt::Orientation::Vertical</enum>
-     </property>
-     <property name="sizeHint" stdset="0">
-      <size>
-       <width>20</width>
-       <height>40</height>
-      </size>
-     </property>
-    </spacer>
    </item>
   </layout>
  </widget>

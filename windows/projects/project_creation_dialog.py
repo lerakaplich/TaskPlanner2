@@ -66,14 +66,18 @@ class ProjectCreationDialog(BaseProjectDialog):
             if emp_id:
                 admins_ids.append(str(emp_id))
 
+        # Получаем ключи выбранных колонок
+        selected_column_keys = [col.get('col_key', col.get('name', '').lower().replace(' ', '_'))
+                                for col in self.selected_columns_data]
+
         return {
             'name': self.nameInput.text(),
             'description': self.descInput.toPlainText(),
             'is_active': self.activeCheckbox.isChecked(),
             'participants_ids': ','.join(participants_ids),
             'admins_ids': ','.join(admins_ids),
-            'selected_columns_data': self.selected_columns_data,
-            'selected_columns': self.selected_columns_keys,
+            'selected_columns_data': self.selected_columns_data,  # Данные выбранных колонок
+            'selected_columns': selected_column_keys,  # Ключи выбранных колонок
             'manager_id': self.get_manager_id(),
         }
 
@@ -88,6 +92,7 @@ class ProjectCreationDialog(BaseProjectDialog):
         raw_data = self.get_raw_ui_data()
         prepared_data = self.service.prepare_project_data_for_creation(raw_data, self.creator_id)
 
+        # Добавляем дату создания и отображение названий колонок
         prepared_data.update({
             'id': None,
             'created_date': QDate.currentDate().toString("dd.MM.yyyy"),

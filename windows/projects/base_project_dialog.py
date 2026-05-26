@@ -5,7 +5,7 @@ import sys
 from typing import List, Dict, Optional
 from PyQt6 import uic
 from PyQt6.QtCore import QDate, pyqtSignal, Qt
-from PyQt6.QtWidgets import QDialog, QMessageBox, QComboBox
+from PyQt6.QtWidgets import QDialog, QMessageBox, QComboBox, QCheckBox, QVBoxLayout, QWidget, QLabel
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
@@ -28,47 +28,140 @@ class BaseProjectDialog(QDialog):
         self.project_data = project_data or {}
         self.participants = []
         self.admins = []
-
-        # Хранение выбранных колонок
-        self.selected_columns_data = []
-        self.selected_columns_keys = []
-
-        # Загружаем шаблонные колонки через сервис
-        self.template_columns = self._load_template_columns()
+        self.all_columns = []  # Все доступные канбан-колонки
+        self.column_checkboxes = {}  # Словарь чекбоксов: col_key -> checkbox
+        self.selected_columns_data = []  # Выбранные колонки
 
         # Настройка UI
         self.setup_base_ui()
         self.connect_signals()
         self.setup_manager_selector()
+        self.hide_field_checkboxes()  # Скрываем чекбоксы полей проекта
+        self.load_columns()
 
         # Загружаем данные проекта если есть
         if project_data:
             self.load_project_data()
-
-        # Скрываем старый GroupBox с чекбоксами (если есть)
-        if hasattr(self, 'columnsGroupBox'):
-            self.columnsGroupBox.hide()
-
-    def _load_template_columns(self) -> List[Dict]:
-        """Загружает шаблонные колонки через сервис"""
-        if self.service:
-            return self.service.load_template_columns()
-        return []
 
     def connect_signals(self):
         """Подключает сигналы"""
         self.participantsBtn.clicked.connect(self.select_participants)
         self.adminsBtn.clicked.connect(self.select_admins)
 
-        if hasattr(self, 'columnBtn'):
-            self.columnBtn.clicked.connect(self.select_columns)
-            self.columnBtn.setCursor(Qt.CursorShape.PointingHandCursor)
-
     def setup_base_ui(self):
         """Базовая настройка UI"""
         current_date = QDate.currentDate().toString("dd.MM.yyyy")
         self.dateLabel.setText(f"Создан: {current_date}")
         self.createBtn.setText("Создать проект")
+
+        # Переименовываем GroupBox для колонок
+        if hasattr(self, 'columnsGroupBox'):
+            self.columnsGroupBox.setTitle("Выбор канбан-колонок для проекта")
+
+    def hide_field_checkboxes(self):
+        """Скрывает ненужные чекбоксы полей проекта"""
+        field_checkboxes = [
+            'colNameCheckbox', 'colDescriptionCheckbox', 'colStatusCheckbox',
+            'colCreatedDateCheckbox', 'colDeadlineCheckbox',
+            'colParticipantsCheckbox', 'colProgressCheckbox'
+        ]
+        for cb_name in field_checkboxes:
+            if hasattr(self, cb_name):
+                getattr(self, cb_name).hide()
+
+    def load_columns(self):
+        """Загружает доступные канбан-колонки и создает чекбоксы"""
+        if not self.service:
+            return
+
+        # Получаем все доступные колонки
+        self.all_columns = self.service.get_template_columns_for_selector()
+
+        if not hasattr(self, 'columnsGroupBox'):
+            return
+
+        # Получаем layout внутри GroupBox
+        columns_layout = self.columnsGroupBox.layout()
+        if columns_layout is None:
+            columns_layout = QVBoxLayout(self.columnsGroupBox)
+            self.columnsGroupBox.setLayout(columns_layout)
+
+        # Удаляем старые динамически созданные чекбоксы колонок
+        for checkbox in self.column_checkboxes.values():
+            if checkbox and checkbox.parent():
+                checkbox.deleteLater()
+        self.column_checkboxes.clear()
+
+        # Создаем новые чекбоксы для каждой колонки
+        for col in self.all_columns:
+            col_id = col.get('id')
+            col_name = col.get('name', 'Без названия')
+            col_key = col.get('col_key', col_name.lower().replace(' ', '_'))
+            # Красный цвет для всех чекбоксов как в UI
+            col_color = "#D22730"
+
+            checkbox = QCheckBox(col_name)
+            checkbox.setProperty('col_id', col_id)
+            checkbox.setProperty('col_key', col_key)
+            checkbox.setProperty('col_data', col)
+            checkbox.setChecked(False)
+
+            # Стиль с красным цветом как в UI
+            checkbox.setStyleSheet(f"""
+                QCheckBox {{
+                    font-size: 13px;
+                    color: #1B232A;
+                    padding: 5px;
+                    spacing: 8px;
+                }}
+                QCheckBox::indicator {{
+                    width: 18px;
+                    height: 18px;
+                    border: 2px solid #1B232A;
+                    border-radius: 4px;
+                    background-color: white;
+                }}
+                QCheckBox::indicator:checked {{
+                    background-color: {col_color};
+                    border: 2px solid {col_color};
+                }}
+                QCheckBox::indicator:hover {{
+                    border-color: #D22730;
+                }}
+            """)
+
+            checkbox.stateChanged.connect(lambda checked, key=col_key: self._on_column_checkbox_changed(key, checked))
+            self.column_checkboxes[col_key] = checkbox
+            columns_layout.addWidget(checkbox)
+
+        # Добавляем растяжку в конец
+        columns_layout.addStretch()
+
+    def _on_column_checkbox_changed(self, col_key: str, state):
+        """Обработчик изменения состояния чекбокса колонки"""
+        # Находим колонку по ключу
+        col = None
+        for c in self.all_columns:
+            if c.get('col_key', c.get('name', '').lower().replace(' ', '_')) == col_key:
+                col = c
+                break
+
+        if not col:
+            return
+
+        if state == Qt.CheckState.Checked.value:
+            # Добавляем колонку в список выбранных
+            if col not in self.selected_columns_data:
+                self.selected_columns_data.append(col)
+        else:
+            # Удаляем колонку из списка выбранных
+            if col in self.selected_columns_data:
+                self.selected_columns_data.remove(col)
+
+    def get_selected_column_keys(self) -> List[str]:
+        """Возвращает список ключей выбранных колонок"""
+        return [col.get('col_key', col.get('name', '').lower().replace(' ', '_'))
+                for col in self.selected_columns_data]
 
     def setup_manager_selector(self):
         """Настройка комбобокса куратора"""
@@ -106,32 +199,6 @@ class BaseProjectDialog(QDialog):
         if combo:
             return combo.currentText()
         return None
-
-    def update_columns_button_text(self):
-        """Обновляет текст на кнопке выбора колонок"""
-        if not hasattr(self, 'columnBtn'):
-            return
-        count = len(self.selected_columns_data)
-        if count != 0:
-            self.columnBtn.setText(f"Выбрано колонок: {count}")
-
-    def select_columns(self):
-        """Открыть диалог выбора колонок"""
-        try:
-            from windows.projects.column_selector import ColumnSelectorDialog
-
-            dialog = ColumnSelectorDialog(
-                self,
-                service=self.service,  # ← передаем сервис
-                preselected_keys=self.selected_columns_keys
-            )
-
-            if dialog.exec() == QDialog.DialogCode.Accepted:
-                self.selected_columns_data = dialog.get_selected_columns_data()
-                self.selected_columns_keys = dialog.get_selected_keys()
-                self.update_columns_button_text()
-        except Exception as e:
-            QMessageBox.warning(self, "Ошибка", f"Ошибка при выборе колонок: {e}")
 
     def select_participants(self):
         try:
@@ -215,14 +282,37 @@ class BaseProjectDialog(QDialog):
                         combo.setCurrentIndex(i)
                         break
 
-        # Загружаем колонки
+        # Загружаем выбранные канбан-колонки
+        self.selected_columns_data = []
+        selected_keys = []
+
         if 'selected_columns_data' in self.project_data and self.project_data['selected_columns_data']:
             self.selected_columns_data = self.project_data['selected_columns_data']
-            self.selected_columns_keys = [col.get('col_key', '') for col in self.selected_columns_data]
-            self.update_columns_button_text()
+            selected_keys = [col.get('col_key', col.get('name', '').lower().replace(' ', '_'))
+                             for col in self.selected_columns_data]
+        elif self.project_data.get('selected_columns'):
+            selected_keys = self.project_data.get('selected_columns', [])
+            # Восстанавливаем данные колонок из ключей
+            self._restore_columns_from_keys(selected_keys)
+
+        # Устанавливаем состояние чекбоксов
+        for col_key, checkbox in self.column_checkboxes.items():
+            checkbox.setChecked(col_key in selected_keys)
 
         # Загружаем участников и администраторов
         self._load_participants_and_admins()
+
+    def _restore_columns_from_keys(self, column_keys: List[str]):
+        """Восстанавливает выбранные колонки из ключей"""
+        if not self.service or not column_keys:
+            return
+
+        all_columns = self.service.get_template_columns_for_selector()
+        self.selected_columns_data = []
+        for col in all_columns:
+            col_key = col.get('col_key', col.get('name', '').lower().replace(' ', '_'))
+            if col_key in column_keys:
+                self.selected_columns_data.append(col)
 
     def _load_participants_and_admins(self):
         """Загрузка участников и администраторов через сервис"""
@@ -288,9 +378,8 @@ class BaseProjectDialog(QDialog):
             'is_active': self.activeCheckbox.isChecked(),
             'created_date': QDate.currentDate().toString("dd.MM.yyyy"),
             'updated_date': QDate.currentDate().toString("dd.MM.yyyy"),
-            'selected_columns': self.selected_columns_keys,
-            'selected_columns_data': self.selected_columns_data,
-            'columns_display_names': {col['col_key']: col['name'] for col in self.selected_columns_data},
+            'selected_columns_data': self.selected_columns_data,  # Канбан-колонки для проекта
+            'selected_columns': self.get_selected_column_keys(),
             'manager_id': self.get_manager_id(),
         }
 
@@ -311,3 +400,13 @@ class BaseProjectDialog(QDialog):
             return False
 
         return True
+
+    def _create_employee_stub(self, emp_id: int) -> Dict:
+        """Создает заглушку для сотрудника"""
+        return {
+            'id': emp_id,
+            'last_name': f"User{emp_id}",
+            'first_name': f"User{emp_id}",
+            'middle_name': '',
+            'position': 'Сотрудник'
+        }
