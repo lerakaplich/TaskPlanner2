@@ -33,7 +33,7 @@ class TaskDialog(QDialog):
         ui_path = os.path.join(os.path.dirname(__file__), "..", "..", "ui", "other_tasks", "task_dialog.ui")
         uic.loadUi(ui_path, self)
 
-        # Настройка popup для выбора тегов (аналогично выбору руководителей)
+        # Настройка popup для выбора тегов
         self.setup_tags_popup()
 
         # Настройка звезд рейтинга
@@ -46,7 +46,14 @@ class TaskDialog(QDialog):
             self.createBtn.clicked.connect(self.validate_and_save)
 
     def setup_tags_popup(self):
-        """Настройка popup с чекбоксами для выбора тегов (аналогично выбору руководителей в отделах)"""
+        """Настройка popup с чекбоксами для выбора тегов"""
+        # Используем comboBoxTag (правильное имя из UI файла)
+        if not hasattr(self, 'comboBoxTag'):
+            print("⚠️ comboBoxTag не найден в UI, пропускаем настройку тегов")
+            return
+
+        self.comboTags = self.comboBoxTag  # Создаем алиас для совместимости
+
         # Настройка комбобокса
         self.comboTags.setEditable(True)
         line_edit = self.comboTags.lineEdit()
@@ -202,7 +209,7 @@ class TaskDialog(QDialog):
             cb.setChecked(False)
 
     def update_tags_button_text(self):
-        """Обновляет текст в комбобоксе с выбранными тегами (как в руководителях)"""
+        """Обновляет текст в комбобоксе с выбранными тегами"""
         selected_names = []
         for tag_id in self.selected_tag_ids:
             cb = self.tag_checkboxes_by_id.get(tag_id)
@@ -212,7 +219,6 @@ class TaskDialog(QDialog):
                     selected_names.append(name)
 
         if selected_names:
-            # Формируем текст как в руководителях: "✓ Выбрано (2): Тема1, Тема2..."
             text = f"✓ Выбрано ({len(selected_names)}): {', '.join(selected_names[:2])}"
             if len(selected_names) > 2:
                 text += f" и ещё {len(selected_names) - 2}"
@@ -317,6 +323,11 @@ class TaskDialog(QDialog):
             creator_name = self.format_creator_name()
             self.createdByLabel.setText(f"Создатель: {creator_name}")
 
+        # Если передан предустановленный проект (из диаграммы Ганта)
+        if self.task_data and self.task_data.get("project_id") and hasattr(self, 'comboBoxProject'):
+            preset_project_id = self.task_data.get("project_id")
+            # Нужно будет установить после загрузки данных, в load_dialog_data
+
     def format_creator_name(self) -> str:
         last = self.current_user.get('last_name', '')
         first = self.current_user.get('first_name', '')
@@ -337,7 +348,8 @@ class TaskDialog(QDialog):
             return
 
         dialog_data = self.service.prepare_dialog_data(self.mode, self.task_data)
-        print(f"📊 Загружено данных: проектов={len(dialog_data.get('projects', []))}, тегов={len(dialog_data.get('tags', []))}")
+        print(
+            f"📊 Загружено данных: проектов={len(dialog_data.get('projects', []))}, тегов={len(dialog_data.get('tags', []))}")
 
         # Загружаем проекты
         if hasattr(self, 'comboBoxProject'):
@@ -345,6 +357,16 @@ class TaskDialog(QDialog):
             self.comboBoxProject.addItem("Выберите проект", None)
             for project in dialog_data.get("projects", []):
                 self.comboBoxProject.addItem(project["name"], project["id"])
+
+            # Если есть предустановленный проект (из диаграммы Ганта)
+            if self.task_data and self.task_data.get("project_id"):
+                preset_project_id = self.task_data.get("project_id")
+                for i in range(self.comboBoxProject.count()):
+                    if self.comboBoxProject.itemData(i) == preset_project_id:
+                        self.comboBoxProject.setCurrentIndex(i)
+                        # Блокируем изменение проекта
+                        self.comboBoxProject.setEnabled(False)
+                        break
 
         # Загружаем статусы
         if hasattr(self, 'comboBoxStatus'):

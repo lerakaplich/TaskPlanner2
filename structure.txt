@@ -1,6 +1,9 @@
-﻿+-- __pycache__
+﻿+-- .dockerignore
++-- __pycache__
 +-- chat_server.py
 +-- database.py
++-- doc_2026-05-21_11-21-18.dockerignore
++-- Dockerfile.txt
 +-- images
 |  +-- checkbox.png
 |  +-- clock.png
@@ -9,11 +12,13 @@
 |  +-- gear.png
 |  +-- logo.png
 |  +-- qr.jpg
+|  +-- Untitled@1-1920x953 (7).png
 +-- main.py
 +-- models
 |  +-- __pycache__
 |  +-- chat.py
 |  +-- employees.py
+|  +-- gantt_data.py
 |  +-- projects.py
 |  +-- schemas
 |  |  +-- __pycache__
@@ -21,7 +26,6 @@
 |  |  +-- employees_dto.py
 |  |  +-- projects_dto.py
 |  |  +-- tasks_dto.py
-|  +-- task_progress.py
 |  +-- tasks.py
 +-- repositories
 |  +-- __pycache__
@@ -29,6 +33,7 @@
 |  +-- column_repo.py
 |  +-- employee_data_repo.py
 |  +-- employee_repo.py
+|  +-- kpd_repo.py
 |  +-- overtime_repo.py
 |  +-- project_repo.py
 |  +-- tag_repo.py
@@ -86,6 +91,7 @@
 |  |  +-- tasks_tag_service.py
 +-- shared_state.py
 +-- structure.txt
++-- taskplanner.zip
 +-- telegram_bot.py
 +-- ui
 |  +-- analytics
@@ -102,7 +108,7 @@
 |  |  +-- archived_project_card.ui
 |  |  +-- archived_task_card.ui
 |  +-- gantt
-|  |  +-- gantt_chart.ui
+|  |  +-- gantt_widget.ui
 |  +-- left_panel.ui
 |  +-- login
 |  |  +-- login_window.ui
@@ -153,6 +159,7 @@
 |  +-- error_handler.py
 |  +-- socket_manager.py
 +-- windows
+|  +-- 1.png
 |  +-- analytics
 |  |  +-- __pycache__
 |  |  +-- analytics_page.py
@@ -191,8 +198,10 @@
 |  |  +-- employee_selection_dialog.py
 |  +-- gantt
 |  |  +-- __pycache__
-|  |  +-- gantt_chart.py
-|  |  +-- gantt_task_item.py
+|  |  +-- gantt_canvas.py
+|  |  +-- gantt_widget.py
+|  |  +-- link_dialog.py
+|  |  +-- period_dialog.py
 |  +-- login
 |  |  +-- __pycache__
 |  |  +-- login_window.py

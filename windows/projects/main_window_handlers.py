@@ -580,13 +580,21 @@ class NavigationHandler(QObject):
                 self.main.contentStack.setCurrentWidget(self.pages[page_name])
 
     def get_gantt_page(self):
-        from windows.gantt.gantt_chart import GanttChartWidget
-        from services.gantt_service import GanttService
-        return self._get_or_create_page(
-            'gantt',
-            lambda: GanttChartWidget(service=GanttService(self.main.session, self.main.current_user_id)),
-            self.PAGE_GANTT
-        )
+        """Возвращает страницу диаграммы Ганта"""
+        from windows.gantt.gantt_widget import GanttWidget
+
+        if 'gantt' not in self.pages:
+            print("   🏗️ Создаём GanttWidget...")
+            self.pages['gantt'] = GanttWidget(
+                session=self.main.session,
+                current_user_id=self.main.current_user_id,
+                project_service=self.main.project_service
+            )
+            print(f"   📌 Вставляем в contentStack на позицию {self.PAGE_GANTT}")
+            self.main.contentStack.insertWidget(self.PAGE_GANTT, self.pages['gantt'])
+            print("   ✅ GanttWidget создан и вставлен")
+
+        return self.pages['gantt']
 
     def get_analytics_page(self):
         from windows.analytics.analytics_page import AnalyticsPage

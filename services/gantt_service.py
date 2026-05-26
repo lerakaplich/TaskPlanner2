@@ -1,51 +1,87 @@
 # services/gantt_service.py
-
-from datetime import datetime, timedelta
-from typing import List, Dict, Optional, Tuple
-
-from PyQt6.QtGui import QPainter
+from datetime import datetime, timedelta, date
+from typing import List, Dict, Optional, Any, Tuple
+from dataclasses import dataclass
 from sqlalchemy.orm import Session, joinedload
-from sqlalchemy import select, func
+from sqlalchemy import select, and_, or_
 
-from database import get_employees_session
 from models.tasks import Task, TaskDependency
 from models.projects import Project
-from models.employees import Employee
+from models.schemas.projects_dto import ProjectDTO
+
+
+@dataclass
+class TaskGanttData:
+    """Данные задачи для отображения на диаграмме Ганта"""
+    id: int
+    name: str
+    start_date: datetime
+    end_date: datetime
+    executor_name: str
+    executor_initials: str
+    executor_id: Optional[int]
+    color: str
+    priority: str
+    progress: float
+    dependencies: List[Dict]
+    project_id: int
+    project_name: str
+    status: str
+
+    @property
+    def duration_days(self) -> int:
+        return max(1, (self.end_date - self.start_date).days + 1)
 
 
 class GanttService:
-    """Сервис для работы с диаграммой Ганта"""
+    """Сервис для работы с диаграммой Ганта - реальные данные из БД"""
 
-    def __init__(self, session: Session, current_user_id: int = None):
+    # Константы для отрисовки
+    DAY_WIDTH = 30
+    ROW_HEIGHT = 50
+    HEADER_HEIGHT = 55
+    LEFT_PADDING = 200
+
+    # Цвета для приоритетов
+    PRIORITY_COLORS = {
+        "critical": "#D22730",  # Красный
+        "high": "#ccab6e",  # Золотой
+        "medium": "#1B232A",  # Темно-синий
+        "low": "#998664"  # Коричневый
+    }
+
+    def __init__(self, session: Session, current_user_id: int = None, project_service=None):
         self.session = session
-        self.employees_session = get_employees_session()
         self.current_user_id = current_user_id
+        self.project_service = project_service
+        self._cached_tasks: List[TaskGanttData] = []
+        self._cached_projects: List[ProjectDTO] = []
 
-    def __del__(self):
+    def load_data(self, project_id: Optional[int] = None) -> None:
+        """Загружает данные из БД"""
+        print(f"📊 GanttService.load_data(project_id={project_id})")
+
+        # Загружаем проекты
+        self._load_projects()
+
+        # Загружаем задачи
+        self._load_tasks(project_id)
+
+    def _load_projects(self) -> None:
+        """Загружает проекты из БД"""
         try:
-            if self.employees_session:
-                self.employees_session.close()
-        except:
-            pass
+            stmt = select(Project).where(Project.is_archived == False).order_by(Project.name)
+            projects = self.session.scalars(stmt).all()
+            self._cached_projects = [ProjectDTO.model_validate(p) for p in projects]
+            print(f"   ✅ Загружено {len(self._cached_projects)} проектов")
+        except Exception as e:
+            print(f"   ❌ Ошибка загрузки проектов: {e}")
+            self._cached_projects = []
 
-    def set_current_user_id(self, user_id: int):
-        self.current_user_id = user_id
-
-    def get_projects_for_gantt(self) -> List[Dict]:
-        """Получает список проектов для выбора"""
-        stmt = select(Project).where(Project.is_archived == False).order_by(Project.name)
-        projects = self.session.scalars(stmt).all()
-        return [{"id": p.id, "name": p.name} for p in projects]
-
-    def auto_plan_tasks(self, project_id: int, start_date: datetime.date = None) -> Dict:
-        """
-        Автоматическое планирование задач проекта на основе зависимостей.
-        Возвращает обновленные задачи.
-        """
+    def _load_tasks(self, project_id: Optional[int] = None) -> None:
+        """Загружает задачи из БД"""
         try:
-            # Получаем все задачи проекта
             stmt = select(Task).where(
-                Task.project_id == project_id,
                 Task.is_archived == False
             ).options(
                 joinedload(Task.column),
@@ -53,308 +89,53 @@ class GanttService:
                 joinedload(Task.dependencies_as_successor)
             )
 
-            tasks = list(self.session.scalars(stmt).unique())
+            if project_id:
+                stmt = stmt.where(Task.project_id == project_id)
 
-            if not tasks:
-                return {"tasks": [], "message": "Нет задач для планирования"}
+            tasks = self.session.scalars(stmt).unique().all()
+            print(f"   ✅ Загружено {len(tasks)} задач")
 
-            # Если не указана дата начала, берем минимальную из существующих
-            if start_date is None:
-                start_date = min(
-                    (t.created_at.date() if t.created_at else datetime.now().date() for t in tasks),
-                    default=datetime.now().date()
-                )
-
-            # Создаем словарь для быстрого доступа к задачам
-            task_dict = {t.id: t for t in tasks}
-
-            # Словарь для хранения вычисленных дат
-            planned_dates = {}
-
-            # Строим граф зависимостей
-            dependencies = {}
+            self._cached_tasks = []
             for task in tasks:
-                dependencies[task.id] = []
-                for dep in task.dependencies_as_predecessor:
-                    dependencies[task.id].append({
-                        "pred_id": dep.predecessor_id,
-                        "lag": dep.lag,
-                        "type": dep.type
-                    })
-
-            # Выполняем топологическую сортировку
-            sorted_task_ids = self._topological_sort(dependencies, [t.id for t in tasks])
-
-            if not sorted_task_ids:
-                # Если есть циклы, используем простой порядок
-                sorted_task_ids = [t.id for t in tasks]
-
-            # Вычисляем даты
-            for task_id in sorted_task_ids:
-                task = task_dict.get(task_id)
-                if not task:
-                    continue
-
-                # Начальная дата - текущая или дедлайн предшественника
-                earliest_start = start_date
-
-                # Проверяем зависимости
-                for dep in dependencies.get(task_id, []):
-                    pred_task = task_dict.get(dep["pred_id"])
-                    if pred_task and pred_task.id in planned_dates:
-                        pred_end = planned_dates[pred_task.id]["end_date"]
-
-                        if dep["type"] == "FS":  # Финиш-Старт
-                            earliest_start = max(earliest_start, pred_end + timedelta(days=dep["lag"]))
-                        elif dep["type"] == "SS":  # Старт-Старт
-                            pred_start = planned_dates[pred_task.id]["start_date"]
-                            earliest_start = max(earliest_start, pred_start + timedelta(days=dep["lag"]))
-                        elif dep["type"] == "FF":  # Финиш-Финиш
-                            pred_end = planned_dates[pred_task.id]["end_date"]
-                            # Для FF нужно, чтобы дата окончания была не раньше pred_end + lag
-                            pass  # Обработаем при вычислении end_date
-
-                # Вычисляем дату окончания
-                duration = task.duration_days if hasattr(task, 'duration_days') else 7
-                end_date = earliest_start + timedelta(days=duration - 1)
-
-                # Корректировка для FF зависимостей
-                for dep in dependencies.get(task_id, []):
-                    if dep["type"] == "FF":
-                        pred_task = task_dict.get(dep["pred_id"])
-                        if pred_task and pred_task.id in planned_dates:
-                            pred_end = planned_dates[pred_task.id]["end_date"]
-                            required_end = pred_end + timedelta(days=dep["lag"])
-                            if end_date < required_end:
-                                end_date = required_end
-                                earliest_start = end_date - timedelta(days=duration - 1)
-
-                planned_dates[task_id] = {
-                    "start_date": earliest_start,
-                    "end_date": end_date,
-                    "duration": duration
-                }
-
-            # Применяем вычисленные даты к задачам
-            updated_tasks = []
-            for task_id, dates in planned_dates.items():
-                task = task_dict.get(task_id)
-                if task:
-                    old_start = task.created_at.date() if task.created_at else None
-                    old_end = task.deadline.date() if task.deadline else None
-
-                    if old_start != dates["start_date"] or old_end != dates["end_date"]:
-                        task.created_at = datetime.combine(dates["start_date"], datetime.min.time())
-                        task.deadline = datetime.combine(dates["end_date"], datetime.min.time())
-                        updated_tasks.append({
-                            "id": task.id,
-                            "title": task.title,
-                            "old_start": old_start,
-                            "old_end": old_end,
-                            "new_start": dates["start_date"],
-                            "new_end": dates["end_date"]
-                        })
-
-            if updated_tasks:
-                self.session.commit()
-                print(f"✅ Автопланирование выполнено: обновлено {len(updated_tasks)} задач")
-
-            return {
-                "tasks": updated_tasks,
-                "message": f"Обновлено {len(updated_tasks)} задач" if updated_tasks else "Все задачи уже оптимально спланированы"
-            }
+                gantt_task = self._convert_to_gantt_data(task)
+                if gantt_task:
+                    self._cached_tasks.append(gantt_task)
 
         except Exception as e:
-            self.session.rollback()
-            print(f"❌ Ошибка автопланирования: {e}")
+            print(f"   ❌ Ошибка загрузки задач: {e}")
             import traceback
             traceback.print_exc()
-            return {"tasks": [], "message": f"Ошибка: {str(e)}"}
+            self._cached_tasks = []
 
-    def _topological_sort(self, dependencies: Dict, task_ids: List[int]) -> List[int]:
-        """Топологическая сортировка задач по зависимостям"""
-        from collections import deque
-
-        # Строим граф
-        graph = {tid: [] for tid in task_ids}
-        in_degree = {tid: 0 for tid in task_ids}
-
-        for task_id in task_ids:
-            for dep in dependencies.get(task_id, []):
-                pred_id = dep["pred_id"]
-                if pred_id in graph:
-                    graph[pred_id].append(task_id)
-                    in_degree[task_id] = in_degree.get(task_id, 0) + 1
-
-        # Алгоритм Кана
-        queue = deque([tid for tid in task_ids if in_degree.get(tid, 0) == 0])
-        result = []
-
-        while queue:
-            node = queue.popleft()
-            result.append(node)
-
-            for neighbor in graph.get(node, []):
-                in_degree[neighbor] -= 1
-                if in_degree[neighbor] == 0:
-                    queue.append(neighbor)
-
-        # Если не все задачи отсортированы, значит есть цикл
-        if len(result) != len(task_ids):
-            print("⚠️ Обнаружен цикл в зависимостях, используется простой порядок")
-            return task_ids
-
-        return result
-
-    def calculate_critical_path(self, project_id: int) -> List[Dict]:
-        """
-        Расчет критического пути проекта.
-        Возвращает список задач на критическом пути.
-        """
+    def _convert_to_gantt_data(self, task: Task) -> Optional[TaskGanttData]:
+        """Конвертирует Task в TaskGanttData"""
         try:
-            # Получаем все задачи проекта
-            stmt = select(Task).where(
-                Task.project_id == project_id,
-                Task.is_archived == False
-            ).options(
-                joinedload(Task.dependencies_as_predecessor)
-            )
+            # Получаем даты
+            start_date = task.created_at if task.created_at else datetime.now()
+            end_date = task.deadline if task.deadline else start_date + timedelta(days=7)
 
-            tasks = list(self.session.scalars(stmt).unique())
+            # Нормализуем даты (без времени)
+            start_date = start_date.replace(hour=0, minute=0, second=0, microsecond=0)
+            end_date = end_date.replace(hour=0, minute=0, second=0, microsecond=0)
 
-            if not tasks:
-                return []
-
-            # Строим граф зависимостей
-            task_dict = {t.id: t for t in tasks}
-            dependencies = {}
-            for task in tasks:
-                dependencies[task.id] = []
-                for dep in task.dependencies_as_predecessor:
-                    dependencies[task.id].append({
-                        "pred_id": dep.predecessor_id,
-                        "lag": dep.lag,
-                        "type": dep.type
-                    })
-
-            # Вычисляем ранние сроки
-            early_start = {}
-            early_finish = {}
-
-            for task in tasks:
-                duration = (task.deadline - task.created_at).days + 1 if task.deadline and task.created_at else 7
-                early_start[task.id] = task.created_at.date() if task.created_at else datetime.now().date()
-
-                # Учитываем зависимости
-                for dep in dependencies.get(task.id, []):
-                    if dep["type"] == "FS":
-                        pred_finish = early_finish.get(dep["pred_id"])
-                        if pred_finish:
-                            new_start = pred_finish + timedelta(days=dep["lag"])
-                            if new_start > early_start[task.id]:
-                                early_start[task.id] = new_start
-
-                early_finish[task.id] = early_start[task.id] + timedelta(days=duration - 1)
-
-            # Находим максимальную дату окончания
-            project_end = max(early_finish.values()) if early_finish else datetime.now().date()
-
-            # Вычисляем поздние сроки (итеративно)
-            late_finish = {tid: project_end for tid in task_ids}
-            late_start = {}
-
-            # Проходим в обратном порядке
-            for task in reversed(tasks):
-                duration = (task.deadline - task.created_at).days + 1 if task.deadline and task.created_at else 7
-                late_start[task.id] = late_finish[task.id] - timedelta(days=duration - 1)
-
-                # Обновляем поздние сроки для предшественников
-                for dep in dependencies.get(task.id, []):
-                    if dep["type"] == "FS":
-                        pred_id = dep["pred_id"]
-                        if pred_id in late_finish:
-                            new_pred_finish = late_start[task.id] - timedelta(days=dep["lag"])
-                            if new_pred_finish < late_finish[pred_id]:
-                                late_finish[pred_id] = new_pred_finish
-
-            # Определяем задачи на критическом пути (где резерв = 0)
-            critical_path = []
-            for task in tasks:
-                slack = (late_start[task.id] - early_start[task.id]).days
-                if slack == 0:
-                    critical_path.append({
-                        "id": task.id,
-                        "title": task.title,
-                        "start_date": early_start[task.id],
-                        "end_date": early_finish[task.id],
-                        "slack": slack
-                    })
-
-            return critical_path
-
-        except Exception as e:
-            print(f"❌ Ошибка расчета критического пути: {e}")
-            return []
-
-    def get_project_tasks_for_gantt(self, project_id: int, filters: Dict = None) -> Dict:
-        """
-        Получает задачи проекта с учетом фильтров.
-        filters: {'my_tasks': bool, 'overdue': bool, 'in_progress': bool, 'completed': bool, 'search': str}
-        """
-        project = self.session.get(Project, project_id)
-        if not project:
-            return self._get_empty_result()
-
-        # ✅ ИСПРАВЛЕНИЕ: добавляем joinedload для колонки
-        stmt = select(Task).where(
-            Task.project_id == project_id,
-            Task.is_archived == False
-        ).options(
-            joinedload(Task.column),
-            joinedload(Task.dependencies_as_predecessor)  # 👈 ДОБАВИТЬ
-        )
-
-        tasks = self.session.scalars(stmt).unique().all()  # unique() для устранения дублей
-
-        if not tasks:
-            return self._get_empty_result()
-
-        today = datetime.now().date()
-        gantt_tasks = []
-
-        for task in tasks:
-            # Применяем фильтры
-            if filters:
-                if filters.get('my_tasks') and task.assigned_to != self.current_user_id:
-                    continue
-                if filters.get('overdue') and not self._is_overdue(task, today):
-                    continue
-                if filters.get('completed') and not self._is_completed(task):
-                    continue
-                if filters.get('in_progress') and (self._is_completed(task) or self._is_overdue(task, today)):
-                    continue
-                if filters.get('search'):
-                    search = filters['search'].lower()
-                    if search not in task.title.lower():
-                        continue
-
-            assignee_name = self._get_employee_name(task.assigned_to) if task.assigned_to else ""
-            is_completed = self._is_completed(task)
-            is_overdue = self._is_overdue(task, today)
-            priority_value = task.priority.value if hasattr(task.priority, 'value') else str(task.priority)
-            is_critical = priority_value in ["high", "critical"]
-
-            start_date = task.created_at.date() if task.created_at else today
-            end_date = task.deadline.date() if task.deadline else start_date + timedelta(days=7)
-
-            # ✅ Исправляем отрицательную длительность
+            # Корректируем если start > end
             if start_date > end_date:
-                start_date, end_date = end_date, start_date  # Меняем местами
-                # Или можно задать end_date = start_date + timedelta(days=7)
+                start_date, end_date = end_date, start_date + timedelta(days=1)
 
-            # ✅ ДОБАВЛЯЕМ проверку на наличие колонки
-            column_name = task.column.name if task.column else "unknown"
+            # Получаем имя исполнителя
+            executor_name = ""
+            executor_initials = ""
+            if task.assigned_to and self.project_service:
+                user = self.project_service.get_user_by_id(task.assigned_to)
+                if user:
+                    executor_name = f"{user.get('last_name', '')} {user.get('first_name', '')}"
+                    executor_initials = self._get_initials(user)
 
+            # Получаем цвет по приоритету
+            priority_value = task.priority.value if hasattr(task.priority, 'value') else str(task.priority)
+            color = self.PRIORITY_COLORS.get(priority_value, self.PRIORITY_COLORS["medium"])
+
+            # Получаем зависимости
             dependencies = []
             for dep in task.dependencies_as_predecessor:
                 dependencies.append({
@@ -363,115 +144,132 @@ class GanttService:
                     "type": dep.type
                 })
 
-            gantt_tasks.append({
-                "id": task.id,
-                "title": task.title,
-                "description": task.description or "",
-                "start_date": start_date,
-                "end_date": end_date,
-                "assignee": assignee_name,
-                "assignee_id": task.assigned_to,
-                "is_critical": is_critical,
-                "dependencies": dependencies,
-                "children": [],
-                "project_id": task.project_id,
-                "status": column_name,  # <-- ИСПРАВЛЕНО
-                "is_completed": is_completed,
-                "is_overdue": is_overdue,
-                "duration_days": (end_date - start_date).days + 1,
-                "priority": priority_value
-            })
+            # Получаем имя проекта
+            project_name = ""
+            if task.project_id:
+                for p in self._cached_projects:
+                    if p.id == task.project_id:
+                        project_name = p.name
+                        break
 
-        if not gantt_tasks:
-            return self._get_empty_result()
-
-        start = min(t["start_date"] for t in gantt_tasks)
-        end = max(t["end_date"] for t in gantt_tasks)
-        total = len(gantt_tasks)
-        completed = sum(1 for t in gantt_tasks if t["is_completed"])
-        overdue = sum(1 for t in gantt_tasks if t["is_overdue"])
-
-        return {
-            "tasks": gantt_tasks,
-            "project_start": start,
-            "project_end": end,
-            "total_tasks": total,
-            "completed_tasks": completed,
-            "overdue_tasks": overdue,
-            "in_progress_tasks": total - completed,
-            "project_name": project.name
-        }
-
-    def _is_completed(self, task: Task) -> bool:
-        return task.column and task.column.is_done_column
-
-    def _is_overdue(self, task: Task, today: datetime.date) -> bool:
-        if task.deadline and not self._is_completed(task):
-            return task.deadline.date() < today
-        return False
-
-    def _get_empty_result(self) -> Dict:
-        today = datetime.now().date()
-        return {
-            "tasks": [],
-            "project_start": today,
-            "project_end": today + timedelta(days=30),
-            "total_tasks": 0,
-            "completed_tasks": 0,
-            "overdue_tasks": 0,
-            "in_progress_tasks": 0,
-            "project_name": ""
-        }
-
-    def _get_employee_name(self, employee_id: int) -> str:
-        try:
-            employee = self.employees_session.get(Employee, employee_id)
-            if employee:
-                name = f"{employee.last_name} {employee.first_name[0] if employee.first_name else ''}."
-                if employee.middle_name:
-                    name += f" {employee.middle_name[0]}."
-                return name
-        except Exception as e:
-            print(f"⚠️ Ошибка получения имени сотрудника: {e}")
-        return ""
-
-    def export_to_image(self, scene, filepath: str) -> bool:
-        """Экспорт диаграммы в изображение"""
-        try:
-            from PyQt6.QtGui import QPixmap
-            rect = scene.sceneRect()
-            pixmap = QPixmap(int(rect.width()), int(rect.height()))
-            pixmap.fill()
-            painter = QPainter(pixmap)
-            scene.render(painter)
-            painter.end()
-            return pixmap.save(filepath)
-        except Exception as e:
-            print(f"Ошибка экспорта: {e}")
-            return False
-
-    def add_task(self, project_id: int, title: str, start_date: datetime, end_date: datetime,
-                 assigned_to: int = None) -> Optional[int]:
-        """Создает новую задачу"""
-        try:
-            new_task = Task(
-                project_id=project_id,
-                title=title,
-                description="",
-                deadline=end_date,
-                created_at=start_date,
-                created_by=self.current_user_id,
-                assigned_to=assigned_to,
-                priority="medium",
-                position=0
+            return TaskGanttData(
+                id=task.id,
+                name=task.title,
+                start_date=start_date,
+                end_date=end_date,
+                executor_name=executor_name,
+                executor_initials=executor_initials,
+                executor_id=task.assigned_to,
+                color=color,
+                priority=priority_value,
+                progress=task.progress_percent,
+                dependencies=dependencies,
+                project_id=task.project_id,
+                project_name=project_name,
+                status=task.column.name if task.column else "unknown"
             )
-            self.session.add(new_task)
-            self.session.commit()
-            return new_task.id
+        except Exception as e:
+            print(f"   ⚠️ Ошибка конвертации задачи {task.id}: {e}")
+            return None
+
+    def _get_initials(self, user: Dict) -> str:
+        """Получает инициалы пользователя"""
+        first = user.get('first_name', '')
+        last = user.get('last_name', '')
+        if last and first:
+            return f"{last[0]}{first[0]}".upper()
+        return "??"
+
+    def get_projects(self) -> List[ProjectDTO]:
+        """Возвращает список проектов"""
+        return self._cached_projects
+
+    def get_all_tasks(self) -> List[TaskGanttData]:
+        """Возвращает все задачи"""
+        return self._cached_tasks
+
+    def get_tasks_for_project(self, project_id: int) -> List[TaskGanttData]:
+        """Возвращает задачи для конкретного проекта"""
+        return [t for t in self._cached_tasks if t.project_id == project_id]
+
+    def get_all_links(self) -> Dict[int, List[int]]:
+        """Возвращает все связи между задачами"""
+        links = {}
+        for task in self._cached_tasks:
+            for dep in task.dependencies:
+                links[task.id] = links.get(task.id, [])
+                links[task.id].append(dep["successor_id"])
+        return links
+
+    def get_linked_tasks_for_update(self, task_id: int) -> List[int]:
+        """Возвращает ID задач, которые зависят от данной"""
+        linked = []
+        for task in self._cached_tasks:
+            for dep in task.dependencies:
+                if dep["successor_id"] == task_id:
+                    linked.append(task.id)
+        return linked
+
+    def calculate_bar_position(self, task: TaskGanttData, start_date: datetime) -> Tuple[float, float]:
+        """Вычисляет позицию и ширину полосы задачи"""
+        total_days = max(1, (task.end_date - task.start_date).days + 1)
+        offset_days = max(0, (task.start_date - start_date).days)
+
+        x = self.LEFT_PADDING + offset_days * self.DAY_WIDTH
+        width = total_days * self.DAY_WIDTH
+
+        return float(x), float(width)
+
+    def get_date_range(self, period: str) -> Tuple[datetime, datetime]:
+        """Возвращает диапазон дат для выбранного периода"""
+        today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+
+        if period == "Месяц":
+            start = today.replace(day=1)
+            if start.month == 12:
+                end = start.replace(year=start.year + 1, month=1, day=1) - timedelta(days=1)
+            else:
+                end = start.replace(month=start.month + 1, day=1) - timedelta(days=1)
+            return start, end
+        elif period == "Квартал":
+            quarter = (today.month - 1) // 3
+            start = today.replace(month=quarter * 3 + 1, day=1)
+            if quarter == 3:
+                end = start.replace(year=start.year + 1, month=1, day=1) - timedelta(days=1)
+            else:
+                end = start.replace(month=start.month + 3, day=1) - timedelta(days=1)
+            return start, end
+        elif period == "Год":
+            start = today.replace(month=1, day=1)
+            end = today.replace(month=12, day=31)
+            return start, end
+        else:  # "Неделя" или по умолчанию
+            start = today - timedelta(days=today.weekday())
+            end = start + timedelta(days=6)
+            return start, end
+
+    def update_task_dates(self, task_id: int, start_date: datetime, end_date: datetime) -> bool:
+        """Обновляет даты задачи в БД"""
+        try:
+            task = self.session.get(Task, task_id)
+            if task:
+                task.created_at = start_date
+                task.deadline = end_date
+                self.session.commit()
+
+                # Обновляем в кэше
+                for t in self._cached_tasks:
+                    if t.id == task_id:
+                        t.start_date = start_date
+                        t.end_date = end_date
+                        break
+
+                print(f"✅ Задача {task_id}: даты обновлены на {start_date.date()} - {end_date.date()}")
+                return True
         except Exception as e:
             self.session.rollback()
-            print(f"Ошибка создания задачи: {e}")
-            return None
+            print(f"❌ Ошибка обновления дат: {e}")
+        return False
 
     def add_dependency(self, predecessor_id: int, successor_id: int, lag: int = 0, dep_type: str = "FS") -> bool:
         """Добавляет связь между задачами"""
@@ -483,7 +281,6 @@ class GanttService:
             ).first()
 
             if existing:
-                print(f"⚠️ Связь между задачами {predecessor_id} и {successor_id} уже существует")
                 return False
 
             dependency = TaskDependency(
@@ -494,60 +291,19 @@ class GanttService:
             )
             self.session.add(dependency)
             self.session.commit()
-            print(f"✅ Связь создана: {predecessor_id} → {successor_id} (лаг: {lag}, тип: {dep_type})")
+
+            # Обновляем кэш
+            for t in self._cached_tasks:
+                if t.id == predecessor_id:
+                    t.dependencies.append({
+                        "successor_id": successor_id,
+                        "lag": lag,
+                        "type": dep_type
+                    })
+                    break
+
             return True
         except Exception as e:
             self.session.rollback()
             print(f"❌ Ошибка создания связи: {e}")
-            import traceback
-            traceback.print_exc()
             return False
-
-    def get_task_dependencies(self, task_id: int) -> List[Dict]:
-        """Получает все связи для задачи"""
-        deps = self.session.query(TaskDependency).filter(
-            TaskDependency.predecessor_id == task_id
-        ).all()
-
-        return [{
-            "successor_id": d.successor_id,
-            "lag": d.lag,
-            "type": d.type
-        } for d in deps]
-
-    def update_task_dates(self, task_id: int, start_date: datetime.date, end_date: datetime.date) -> bool:
-        """Обновляет даты начала и окончания задачи"""
-        try:
-            print(f"🔄 update_task_dates: task_id={task_id}, start={start_date}, end={end_date}")
-            task = self.session.get(Task, task_id)
-            if task:
-                print(f"   Задача найдена: {task.title}")
-                task.created_at = datetime.combine(start_date, datetime.min.time())
-                task.deadline = datetime.combine(end_date, datetime.min.time())
-                self.session.commit()
-                print(f"✅ Задача {task_id}: даты обновлены на {start_date} - {end_date}")
-                return True
-            else:
-                print(f"❌ Задача {task_id} не найдена!")
-        except Exception as e:
-            self.session.rollback()
-            print(f"❌ Ошибка обновления дат задачи {task_id}: {e}")
-            import traceback
-            traceback.print_exc()
-        return False
-
-    def get_task_by_id(self, task_id: int) -> Optional[Dict]:
-        task = self.session.get(Task, task_id)
-        if not task:
-            return None
-        return {
-            "id": task.id,
-            "title": task.title,
-            "start_date": task.created_at.date() if task.created_at else datetime.now().date(),
-            "end_date": task.deadline.date() if task.deadline else datetime.now().date() + timedelta(days=7),
-            "assignee": self._get_employee_name(task.assigned_to) if task.assigned_to else "",
-            "assignee_id": task.assigned_to
-        }
-
-    def get_current_user_id(self) -> Optional[int]:
-        return self.current_user_id
