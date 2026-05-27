@@ -147,8 +147,6 @@ class MyTasksPage(QWidget):
                 else:
                     self.clear_layout(item.layout())
 
-    # windows/my_tasks/my_tasks_page.py - исправленный метод load_tasks
-
     def load_tasks(self):
         """Загружает и отображает задачи с защитой от повторных вызовов"""
         if self._is_loading:
@@ -286,8 +284,12 @@ class MyTasksPage(QWidget):
 
     def _on_task_updated_from_edit(self, task_id, form_data):
         """Обработчик обновления задачи из диалога"""
+        print(f"🔄 Обновление задачи {task_id} из диалога")
+        print(f"   Новые данные: {form_data}")
+
         updated_task = self.service.update_task(task_id, form_data)
         if updated_task:
+            print(f"   Новый статус: {updated_task.get('status')}")
             self.update_task_card(updated_task)
             self.update_statistics()
 
@@ -352,8 +354,6 @@ class MyTasksPage(QWidget):
 
                     print(f"✅ Данные задачи {task_id} обновлены в UI (пауза: {old_paused}->{new_paused})")
                     return
-
-    # windows/my_tasks/my_tasks_page.py
 
     def _on_archive_task(self, task_id: int):
         """Архивирование задачи"""
@@ -447,6 +447,8 @@ class MyTasksPage(QWidget):
 
         print(f"🔍 [DEBUG] _on_progress_changed: конец\n")
 
+    # windows/my_tasks/my_tasks_page.py
+
     def update_task_card(self, updated_task: Dict):
         """Обновляет карточку задачи в UI после перемещения"""
         task_id = updated_task.get("id")
@@ -459,40 +461,38 @@ class MyTasksPage(QWidget):
         # Ищем карточку во всех колонках
         found = False
         for column in self.column_widgets:
-            print(f"   - проверяем колонку: {column.column_name}")
             for card in column.get_tasks()[:]:  # копия списка
                 card_id = getattr(card, 'task_id', None)
-                print(f"     - карточка в колонке: task_id={card_id}, card={card}")
                 if card_id == task_id:
                     found = True
                     old_status = card.task_data.get("status")
-                    print(f"     - НАЙДЕНА! old_status={old_status}")
 
                     if old_status != new_status:
-                        print(f"     - статус изменился, перемещаем")
+                        print(f"     - статус изменился {old_status} -> {new_status}, перемещаем")
                         column.remove_task(card)
                         new_column = self.columns.get(new_status)
                         if new_column:
+                            # Нужно обновить данные карточки перед добавлением
+                            card.update_task_data(updated_task)
                             new_column.add_task(card)
                             print(f"     - перемещена в колонку '{new_status}'")
                         else:
                             print(f"     - ⚠️ колонка '{new_status}' не найдена")
-
-                    print(f"     - обновляем данные карточки")
-                    card.update_task_data(updated_task)
-                    print(f"     - карточка обновлена, isVisible={card.isVisible()}")
+                            card.update_task_data(updated_task)
+                    else:
+                        card.update_task_data(updated_task)
                     break
             if found:
                 break
 
         if not found:
             print(f"   - ⚠️ карточка НЕ найдена в UI")
-            print(f"   - перезагружаем все задачи")
             self.load_tasks()
-        else:
-            print(f"   - карточка найдена и обновлена")
 
-        print(f"🔍 [DEBUG] update_task_card: конец\n")
+        # Обновляем геометрию
+        self.updateGeometry()
+        if self.parent():
+            self.parent().updateGeometry()
 
     def update_statistics(self):
         """Обновляет статистику"""

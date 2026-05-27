@@ -177,6 +177,25 @@ class TasksCrudService:
         if not task:
             return None
 
+        # === НОВЫЙ КОД: Обработка изменения статуса ===
+        if "status" in updated_data:
+            new_status_name = updated_data["status"]
+            # Находим колонку по имени
+            column = self._get_column_by_name(new_status_name, task.project_id)
+            if column and task.column_id != column.id:
+                print(f"🔄 Изменение статуса в БД: {task.column.name if task.column else 'None'} -> {new_status_name}")
+                task.column_id = column.id
+
+                # Если перемещаем в Done колонку - устанавливаем прогресс 100%
+                if column.is_done_column:
+                    task.progress_percent = 100.0
+                    task.completed_at = datetime.now()
+                    task.completed = True
+                elif task.column and task.column.is_done_column:
+                    # Если убираем из Done колонки
+                    task.completed_at = None
+                    task.completed = False
+
         if "title" in updated_data:
             task.title = updated_data["title"]
         if "description" in updated_data:
@@ -362,27 +381,37 @@ class TasksCrudService:
         stmt = select(Task).where(Task.is_archived == False)
         all_tasks = list(self.db_session.scalars(stmt))
 
-        print(f"🔍 [DEBUG] Всего неархивированных задач: {len(all_tasks)}")
+        print(f"🔍 [DEBUG] Всего неархивированных задач в БД: {len(all_tasks)}")
 
         filtered_tasks = []
         for task in all_tasks:
             include = False
+
+            # Для режима "my" - задачи, где пользователь является ИСПОЛНИТЕЛЕМ
             if self.mode == "my":
-                if task.assigned_to == user_id or task.created_by == user_id:
+                if task.assigned_to == user_id:
                     include = True
-                    print(f"   ✅ Включена задача {task.id}: '{task.title}'")
+                    print(f"   ✅ Моя задача (исполнитель) {task.id}: '{task.title}' (исполнитель={task.assigned_to})")
+                else:
+                    print(f"   ❌ Не моя задача {task.id}: '{task.title}' (исполнитель={task.assigned_to})")
+
+            # Для режима "others" - задачи, где пользователь НЕ является исполнителем
             elif self.mode == "others":
-                if task.assigned_to != user_id and task.created_by != user_id:
+                if task.assigned_to != user_id:
                     include = True
-                    print(f"   ✅ Включена задача {task.id}: '{task.title}' (чужая)")
+                    print(f"   ✅ Чужая задача {task.id}: '{task.title}' (исполнитель={task.assigned_to})")
+                else:
+                    print(f"   ❌ Не чужая задача {task.id}: '{task.title}' (исполнитель={task.assigned_to})")
+
+            # Для режима "all" - все задачи
             else:
                 include = True
-                print(f"   ✅ Включена задача {task.id}: '{task.title}' (all mode)")
+                print(f"   ✅ Все задачи: {task.id}: '{task.title}'")
 
             if include:
                 filtered_tasks.append(task)
 
-        print(f"🔍 [DEBUG] Отфильтровано задач: {len(filtered_tasks)}\n")
+        print(f"🔍 [DEBUG] Отфильтровано задач для режима '{self.mode}': {len(filtered_tasks)}\n")
         return [self._task_to_dict(task) for task in filtered_tasks]
 
     def is_deadline_overdue(self, deadline_str: str, completed: bool) -> bool:
@@ -551,11 +580,41 @@ class TasksCrudService:
         }
 
     def _get_column_by_name(self, column_name: str, project_id: int = None) -> Optional[BoardColumn]:
-        """Получить колонку по имени"""
-        stmt = select(BoardColumn).where(BoardColumn.name == column_name)
+        """Получить колонку по имени (сначала ищем шаблонные, потом проектные)"""
+        if not column_name:
+            return None
+
+        # Сначала ищем в шаблонных колонках (is_template=True)
+        stmt = select(BoardColumn).where(
+            BoardColumn.name == column_name,
+            BoardColumn.is_template == True
+        )
+        column = self.db_session.scalar(stmt)
+
+        if column:
+            print(f"   ✅ Найдена шаблонная колонка '{column_name}' с id={column.id}")
+            return column
+
+        # Если не нашли и есть project_id, ищем среди колонок проекта
         if project_id:
-            stmt = stmt.where(BoardColumn.project_id == project_id)
-        return self.db_session.scalar(stmt)
+            stmt = select(BoardColumn).where(
+                BoardColumn.name == column_name,
+                BoardColumn.project_id == project_id
+            )
+            column = self.db_session.scalar(stmt)
+            if column:
+                print(f"   ✅ Найдена колонка проекта '{column_name}' с id={column.id}")
+                return column
+
+        # Если всё ещё не нашли, ищем любую колонку с таким именем
+        stmt = select(BoardColumn).where(BoardColumn.name == column_name)
+        column = self.db_session.scalar(stmt)
+        if column:
+            print(f"   ⚠️ Найдена колонка '{column_name}' (не шаблонная, не для проекта {project_id}) с id={column.id}")
+            return column
+
+        print(f"   ❌ Колонка '{column_name}' не найдена!")
+        return None
 
     def _get_first_column(self, project_id: int) -> Optional[BoardColumn]:
         """Получить первую колонку проекта"""

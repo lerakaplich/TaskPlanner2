@@ -393,29 +393,27 @@ class TaskCard(QFrame):
         """Показывает контекстное меню"""
         menu = QMenu(self)
         menu.setStyleSheet("""
-            QMenu {
-                background-color: #ffffff;
-                border: 1px solid #e0e0e0;
-                border-radius: 10px;
-                padding: 6px 0;
-                font-size: 14px;
-            }
-            QMenu::item {
-                padding: 10px 30px 10px 15px;
-                color: #1B232A;
-            }
-            QMenu::item:selected {
-                background-color: #ccab6e;
-                color: white;
-                border-radius: 6px;
-                margin: 2px 6px;
-            }
-        """)
+                    QMenu {
+                        background-color: #ffffff;
+                        border: 1px solid #e0e0e0;
+                        border-radius: 10px;
+                        padding: 6px 0;
+                        font-size: 14px;
+                    }
+                    QMenu::item {
+                        padding: 10px 30px 10px 15px;
+                        color: #1B232A;
+                    }
+                    QMenu::item:selected {
+                        background-color: #ccab6e;
+                        color: white;
+                        border-radius: 6px;
+                        margin: 2px 6px;
+                    }
+                """)
 
         # Дублировать
-        duplicate_action = menu.addAction("📋 Дублировать")
-
-        menu.addSeparator()
+        duplicate_action = menu.addAction("Дублировать")
 
         # Пауза/Возобновление (только для активных задач)
         is_paused = self.task_data.get("is_paused", False)
@@ -424,16 +422,16 @@ class TaskCard(QFrame):
         pause_action = None
         if not is_completed:
             if is_paused:
-                pause_action = menu.addAction("▶️ Возобновить")
+                pause_action = menu.addAction("Возобновить")
             else:
-                pause_action = menu.addAction("⏸️ Пауза")
+                pause_action = menu.addAction("Пауза")
             menu.addSeparator()
 
         # Архивировать
-        archive_action = menu.addAction("📦 Архивировать")
+        archive_action = menu.addAction("Архивировать")
 
         # Удалить
-        delete_action = menu.addAction("🗑️ Удалить")
+        delete_action = menu.addAction("Удалить")
 
         action = menu.exec(self.menuButton.mapToGlobal(QPoint(0, self.menuButton.height())))
 

@@ -394,8 +394,6 @@ class TaskDialog(QDialog):
         if self.mode == "edit" and "task_data" in dialog_data:
             self.fill_task_data(dialog_data["task_data"])
 
-    # windows/other_tasks/task_dialog.py - исправленный fill_task_data
-
     def fill_task_data(self, task_data: Dict):
         if hasattr(self, 'lineEditTitle'):
             self.lineEditTitle.setText(task_data.get("title", ""))
@@ -404,7 +402,11 @@ class TaskDialog(QDialog):
             self.textEditDescription.setPlainText(task_data.get("description", ""))
 
         if hasattr(self, 'comboBoxPriority'):
-            priority = task_data.get("priority", "Средний")
+            priority = task_data.get("priority_text", task_data.get("priority", "Средний"))
+            # Приоритет может быть в виде "Низкий", "Средний" и т.д. или в виде "low", "medium"
+            if priority in ["low", "medium", "high", "critical"]:
+                priority_map = {"low": "Низкий", "medium": "Средний", "high": "Высокий", "critical": "Критический"}
+                priority = priority_map.get(priority, "Средний")
             index = self.comboBoxPriority.findText(priority)
             if index >= 0:
                 self.comboBoxPriority.setCurrentIndex(index)
@@ -439,6 +441,19 @@ class TaskDialog(QDialog):
         if task_data.get("tags"):
             self.set_selected_tags(task_data["tags"])
 
+        # === ИСПРАВЛЕНИЕ: устанавливаем сложность ===
+        difficulty = task_data.get("difficulty", 0)
+        if difficulty:
+            # Преобразуем в int, если это float или str
+            try:
+                difficulty_value = int(float(difficulty))
+            except (ValueError, TypeError):
+                difficulty_value = 0
+
+            # Ограничиваем от 1 до 5
+            difficulty_value = max(1, min(5, difficulty_value))
+            self.set_difficulty(difficulty_value)
+
         # === ИСПРАВЛЕНИЕ: показываем создателя задачи (не текущего пользователя) ===
         if hasattr(self, 'createdByLabel'):
             creator_name = task_data.get("created_by_name", "")
@@ -449,6 +464,20 @@ class TaskDialog(QDialog):
                     creator_name = self.service.format_assignee_name(created_by_id)
             self.createdByLabel.setText(f"Создатель: {creator_name if creator_name else 'Неизвестен'}")
             self.createdByLabel.show()
+
+        # Устанавливаем даты создания и обновления для режима редактирования
+        if self.mode == "edit":
+            if hasattr(self, 'createdAtLabel'):
+                created_at = task_data.get("created_at", "")
+                if created_at:
+                    self.createdAtLabel.setText(f"Создано: {created_at}")
+                    self.createdAtLabel.show()
+
+            if hasattr(self, 'updatedAtLabel'):
+                updated_at = task_data.get("updated_at", "")
+                if updated_at:
+                    self.updatedAtLabel.setText(f"Обновлено: {updated_at}")
+                    self.updatedAtLabel.show()
 
     def collect_form_data(self) -> Dict:
         data = {}

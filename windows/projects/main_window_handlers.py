@@ -456,8 +456,6 @@ class NavigationHandler(QObject):
 
         return self.pages['my_tasks']
 
-    # windows/projects/main_window_handlers.py - в get_other_tasks_page
-
     def get_other_tasks_page(self):
         """Возвращает страницу чужих задач с подключенными сигналами"""
         print("   🚀 get_other_tasks_page вызван")
@@ -478,7 +476,7 @@ class NavigationHandler(QObject):
                 }
                 self.pages['other_tasks'] = OthersTasksPage(
                     parent=self.main,
-                    current_user=current_user,  # <-- Передаём полного пользователя
+                    current_user=current_user,
                     project_id=2,
                     column_service=self.main.column_service
                 )
@@ -495,6 +493,11 @@ class NavigationHandler(QObject):
                 traceback.print_exc()
             finally:
                 self.main.contentStack.setUpdatesEnabled(True)
+        else:
+            # Если страница уже существует, принудительно перезагружаем задачи
+            print("   🔄 Страница уже в кэше, перезагружаем задачи...")
+            if hasattr(self.pages['other_tasks'], 'load_tasks'):
+                self.pages['other_tasks'].load_tasks()
 
         return self.pages['other_tasks']
 

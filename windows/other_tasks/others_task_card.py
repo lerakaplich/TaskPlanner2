@@ -22,6 +22,9 @@ class OthersTaskCard(TaskCard):
     archiveRequested = pyqtSignal(int)
     approveRequested = pyqtSignal(int)
     returnToWorkRequested = pyqtSignal(int)
+    duplicateRequested = pyqtSignal(int)
+    pauseRequested = pyqtSignal(int)
+    resumeRequested = pyqtSignal(int)
 
     def __init__(self, task_data, service: Optional[TasksService] = None,
                  is_creator=False, parent=None):
@@ -40,14 +43,9 @@ class OthersTaskCard(TaskCard):
     def _reconnect_project_signal(self):
         """Повторно подключает сигнал клика по проекту после отключения родительских сигналов"""
         try:
-            # Отключаем старый, если есть
             self.project_clicked.disconnect()
         except TypeError:
             pass
-        # Подключаем через сигнал родителя (он уже объявлен в TaskCard)
-        # Сигнал остаётся, его просто нужно пробросить дальше через OthersTasksPage
-        # Для этого нужно добавить сигнал в OthersTasksPage
-        pass
 
     def _disconnect_parent_signals(self):
         """Отключение сигналов родителя."""
@@ -67,11 +65,14 @@ class OthersTaskCard(TaskCard):
             self.duplicate_requested.disconnect()
         except TypeError:
             pass
-        # НЕ отключаем project_clicked - он нужен для навигации
-        # try:
-        #     self.project_clicked.disconnect()
-        # except TypeError:
-        #     pass
+        try:
+            self.pause_requested.disconnect()
+        except TypeError:
+            pass
+        try:
+            self.resume_requested.disconnect()
+        except TypeError:
+            pass
 
     def setup_creator_ui(self):
         """Обновление UI для создателя."""
@@ -90,7 +91,6 @@ class OthersTaskCard(TaskCard):
 
         self.update_deadline_color()
 
-        # Обновляем сложность
         difficulty = self.task_data.get("difficulty", 0)
         self._set_difficulty_display(difficulty)
 
@@ -110,7 +110,6 @@ class OthersTaskCard(TaskCard):
 
     def _on_progress_click(self, event):
         """Запрещаем изменение прогресса в чужих задачах"""
-        # Показываем подсказку, что нельзя менять
         self.setToolTip("Вы не можете изменять прогресс чужих задач")
         event.accept()
 
@@ -120,13 +119,10 @@ class OthersTaskCard(TaskCard):
             self.menuButton.clicked.disconnect()
         except TypeError:
             pass
-        self.menuButton.clicked.connect(self.show_creator_context_menu)
+        self.menuButton.clicked.connect(self.show_full_context_menu)
 
-    def show_creator_context_menu(self):
-        """Показывает контекстное меню."""
-        if not self.is_creator:
-            return
-
+    def show_full_context_menu(self):
+        """Показывает полное контекстное меню (для всех пользователей)"""
         menu = QMenu(self)
         menu.setStyleSheet("""
             QMenu {
@@ -149,49 +145,66 @@ class OthersTaskCard(TaskCard):
         """)
 
         status = self.task_data.get("status")
+        is_paused = self.task_data.get("is_paused", False)
+        is_completed = self.task_data.get("completed", False)
 
-        edit_action = QAction("Редактировать", self)
-        edit_action.triggered.connect(
-            lambda: self.editRequested.emit(self.task_data["id"])
-        )
-        menu.addAction(edit_action)
+        # ===== РЕДАКТИРОВАНИЕ (только для создателя) =====
+        if self.is_creator:
+            edit_action = QAction("✏️ Редактировать", self)
+            edit_action.triggered.connect(
+                lambda: self.editRequested.emit(self.task_data["id"])
+            )
+            menu.addAction(edit_action)
 
-        delete_action = QAction("Удалить", self)
-        delete_action.triggered.connect(
-            lambda: self.deleteRequested.emit(self.task_data["id"])
+            delete_action = QAction("🗑️ Удалить", self)
+            delete_action.triggered.connect(
+                lambda: self.deleteRequested.emit(self.task_data["id"])
+            )
+            menu.addAction(delete_action)
+            menu.addSeparator()
+
+        # ===== ДУБЛИРОВАНИЕ (доступно всем) =====
+        duplicate_action = QAction("📋 Дублировать", self)
+        duplicate_action.triggered.connect(
+            lambda: self.duplicateRequested.emit(self.task_data["id"])
         )
-        menu.addAction(delete_action)
+        menu.addAction(duplicate_action)
         menu.addSeparator()
 
-        if status == "review":
-            approve_action = QAction("Одобрить выполнение", self)
-            approve_action.triggered.connect(
-                lambda: self.approveRequested.emit(self.task_data["id"])
-            )
-            menu.addAction(approve_action)
+        # ===== ПАУЗА/ВОЗОБНОВЛЕНИЕ (для активных задач) =====
+        if not is_completed:
+            if is_paused:
+                pause_action = QAction("▶️ Возобновить", self)
+                pause_action.triggered.connect(
+                    lambda: self.resumeRequested.emit(self.task_data["id"])
+                )
+            else:
+                pause_action = QAction("⏸️ Пауза", self)
+                pause_action.triggered.connect(
+                    lambda: self.pauseRequested.emit(self.task_data["id"])
+                )
+            menu.addAction(pause_action)
+            menu.addSeparator()
 
-            return_action = QAction("Вернуть на доработку", self)
-            return_action.triggered.connect(
-                lambda: self.returnToWorkRequested.emit(self.task_data["id"])
-            )
-            menu.addAction(return_action)
-
-        elif status == "done":
-            archive_action = QAction("Архивировать", self)
-            archive_action.triggered.connect(
-                lambda: self.archiveRequested.emit(self.task_data["id"])
-            )
-            menu.addAction(archive_action)
-
-        else:
-            done_action = QAction("✓ Отметить выполненной", self)
+        # ===== ОТМЕТИТЬ ВЫПОЛНЕННОЙ (если не в Done колонке) =====
+        if status != "Готово" and not is_completed:
+            done_action = QAction("✅ Отметить выполненной", self)
             done_action.triggered.connect(self.mark_as_done)
             menu.addAction(done_action)
+            menu.addSeparator()
+
+        # ===== АРХИВИРОВАНИЕ =====
+        archive_action = QAction("📦 Архивировать", self)
+        archive_action.triggered.connect(
+            lambda: self.archiveRequested.emit(self.task_data["id"])
+        )
+        menu.addAction(archive_action)
 
         menu.exec(self.menuButton.mapToGlobal(self.menuButton.rect().bottomLeft()))
 
     def mark_as_done(self):
-        """Отмечает задачу как выполненную."""
+        """Отмечает задачу как выполненную (перемещает в колонку Готово)"""
+        print(f"✅ Отметка задачи {self.task_data['id']} как выполненной")
         self.moveToDoneColumn.emit(self.task_data["id"])
 
     def update_task_data(self, new_data):
@@ -201,7 +214,6 @@ class OthersTaskCard(TaskCard):
         self.setup_creator_ui()
 
     def mousePressEvent(self, event):
-        """Обработка нажатия мыши."""
         if event.button() == Qt.MouseButton.LeftButton:
             self.drag_start_position = event.pos()
         super().mousePressEvent(event)
@@ -217,19 +229,13 @@ class OthersTaskCard(TaskCard):
         if (event.pos() - self.drag_start_position).manhattanLength() < QApplication.startDragDistance():
             return
 
+        # Сигнал о начале перетаскивания
+        self.drag_started.emit(self.task_data)
+
         drag = QDrag(self)
         mime_data = QMimeData()
 
-        if self.service:
-            task_json = self.service.serialize_task_for_drag(self.task_data)
-        else:
-            task_json = json.dumps(self.task_data, ensure_ascii=False, default=str)
-
-        # Исправлено: преобразуем bytes в строку, если нужно
-        if isinstance(task_json, bytes):
-            task_json = task_json.decode("utf-8")
-
-        mime_data.setText(task_json)  # Теперь передаём строку
+        task_json = json.dumps(self.task_data, ensure_ascii=False, default=str)
         mime_data.setData("application/x-task", task_json.encode("utf-8"))
         drag.setMimeData(mime_data)
 
@@ -245,13 +251,10 @@ class OthersTaskCard(TaskCard):
         drag.exec(Qt.DropAction.MoveAction)
 
     def dragEnterEvent(self, event):
-        """Обработка входа drag."""
         event.acceptProposedAction()
 
     def dragMoveEvent(self, event):
-        """Обработка движения drag."""
         event.acceptProposedAction()
 
     def dropEvent(self, event):
-        """Обработка сброса drag."""
         event.acceptProposedAction()
