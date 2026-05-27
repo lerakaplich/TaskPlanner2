@@ -114,13 +114,21 @@ class TagRepo:
         return list(self.session.scalars(stmt))
 
     def set_task_tags(self, task_id: int, tag_ids: List[int]) -> bool:
-        stmt = delete(TaskTag).where(TaskTag.task_id == task_id)
-        self.session.execute(stmt)
+        """Установить теги задачи (полная замена)"""
+        try:
+            # Удаляем все старые связи
+            stmt = delete(TaskTag).where(TaskTag.task_id == task_id)
+            self.session.execute(stmt)
 
-        for tag_id in tag_ids:
-            self.session.add(TaskTag(task_id=task_id, tag_id=tag_id))
+            # Добавляем новые
+            for tag_id in tag_ids:
+                self.session.add(TaskTag(task_id=task_id, tag_id=tag_id))
 
-        return True
+            self.session.flush()
+            return True
+        except Exception as e:
+            print(f"❌ Ошибка при установке тегов: {e}")
+            return False
 
     def get_tasks_by_tag(self, tag_id: int) -> List[int]:
         """Получить ID всех задач с данным тегом"""

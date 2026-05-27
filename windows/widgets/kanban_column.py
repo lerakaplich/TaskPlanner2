@@ -1,7 +1,7 @@
 # windows/widgets/kanban_column.py
 
 from PyQt6.QtWidgets import QFrame, QVBoxLayout, QHBoxLayout, QLabel, QScrollArea, QWidget, QSizePolicy
-from PyQt6.QtCore import Qt, QSize, pyqtSignal, QMimeData
+from PyQt6.QtCore import Qt, QSize, pyqtSignal
 from PyQt6.QtGui import QDragEnterEvent, QDropEvent, QDragMoveEvent
 
 
@@ -22,7 +22,6 @@ class KanbanColumn(QFrame):
 
         self.task_cards = []
         self._drag_over_index = -1
-        self._stretch = None  # Сохраняем ссылку на растяжение
 
         self.setup_ui()
         self.setAcceptDrops(True)
@@ -37,11 +36,10 @@ class KanbanColumn(QFrame):
             }
         """)
 
-        # Убираем фиксированную минимальную ширину - колонка будет
-        # подстраиваться под содержимое
-        self.setMinimumWidth(280)
-        # Разрешаем расширение по ширине
-        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        # Колонка с фиксированной шириной
+        self.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Expanding)
+        self.setFixedWidth(360)
+        self.setMinimumHeight(300)
 
         main_layout = QVBoxLayout()
         main_layout.setSpacing(8)
@@ -79,7 +77,6 @@ class KanbanColumn(QFrame):
                 padding: 5px;
             }
         """)
-        # Разрешаем заголовку расширяться
         self.title_label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
         header_layout.addWidget(self.title_label)
 
@@ -120,23 +117,31 @@ class KanbanColumn(QFrame):
                 background: #c0c0c0;
                 border-radius: 3px;
             }
+            QScrollBar::handle:vertical:hover {
+                background: #a0a0a0;
+            }
         """)
 
         self.tasks_container = QWidget()
         self.tasks_container.setStyleSheet("background-color: transparent;")
-        # Разрешаем контейнеру расширяться по ширине
-        self.tasks_container.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+
+        # КРИТИЧЕСКИ ВАЖНО: контейнер должен иметь минимальную высоту по содержимому
+        # и НЕ РАСТЯГИВАТЬСЯ
+        self.tasks_container.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
 
         self.tasks_layout = QVBoxLayout(self.tasks_container)
         self.tasks_layout.setSpacing(8)
-        self.tasks_layout.setContentsMargins(2, 2, 2, 2)
-        # Убираем фиксированную ширину - layout будет расширяться под карточки
+        self.tasks_layout.setContentsMargins(12, 8, 12, 8)
         self.tasks_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
 
-        # Сохраняем ссылку на растяжение
-        self._stretch = self.tasks_layout.addStretch()
+        # НЕ ДОБАВЛЯЕМ stretch!
 
         scroll.setWidget(self.tasks_container)
+
+        # КЛЮЧЕВОЕ ИСПРАВЛЕНИЕ: запрещаем scroll area растягивать контейнер
+        # Устанавливаем политику размера для scroll area
+        scroll.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+
         parent_layout.addWidget(scroll)
 
     # ==========================================================
@@ -148,34 +153,19 @@ class KanbanColumn(QFrame):
         if task_card is None:
             return
 
-        # Устанавливаем политику размера для карточки
-        task_card.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
-
-        # Получаем индекс растяжения
-        stretch_index = -1
-        for i in range(self.tasks_layout.count()):
-            item = self.tasks_layout.itemAt(i)
-            if item and item.widget() == self._stretch:
-                stretch_index = i
-                break
-
-        # Вставляем перед растяжением
-        if stretch_index >= 0:
-            self.tasks_layout.insertWidget(stretch_index, task_card)
-        else:
-            self.tasks_layout.addWidget(task_card)
-
+        # Добавляем в layout
+        self.tasks_layout.addWidget(task_card)
         self.task_cards.append(task_card)
 
         # Принудительно обновляем
         task_card.show()
         task_card.updateGeometry()
-        self.tasks_container.updateGeometry()
 
-        # Обновляем размер колонки
+        # ВАЖНО: обновляем размер контейнера, чтобы scroll area корректно работал
+        self.tasks_container.adjustSize()
+        self.tasks_container.updateGeometry()
         self.updateGeometry()
 
-        # Сообщаем родителю, что размер изменился
         if self.parent():
             self.parent().updateGeometry()
 
@@ -185,8 +175,12 @@ class KanbanColumn(QFrame):
             self.task_cards.remove(task_card)
 
         self.tasks_layout.removeWidget(task_card)
-        task_card.setParent(None)  # ← важно
-        task_card.hide()  # ← важно
+        task_card.setParent(None)
+        task_card.hide()
+
+        # Обновляем размер контейнера
+        self.tasks_container.adjustSize()
+        self.tasks_container.updateGeometry()
 
     def clear_tasks(self):
         """Очищает все карточки из колонки"""
@@ -194,6 +188,10 @@ class KanbanColumn(QFrame):
             self.tasks_layout.removeWidget(card)
             card.deleteLater()
         self.task_cards.clear()
+
+        # Обновляем размер контейнера
+        self.tasks_container.adjustSize()
+        self.tasks_container.updateGeometry()
 
     def get_tasks(self):
         """Возвращает список всех карточек в колонке"""
@@ -209,72 +207,28 @@ class KanbanColumn(QFrame):
 
     def reorder_tasks(self, task_widgets_order: list):
         """Переупорядочивает карточки"""
-        # Очищаем layout от карточек, но сохраняем растяжение
         for card in self.task_cards:
             self.tasks_layout.removeWidget(card)
 
-        # Добавляем в новом порядке
-        stretch_index = -1
-        for i in range(self.tasks_layout.count()):
-            item = self.tasks_layout.itemAt(i)
-            if item and item.widget() == self._stretch:
-                stretch_index = i
-                break
-
-        for i, card in enumerate(task_widgets_order):
-            if stretch_index >= 0:
-                self.tasks_layout.insertWidget(stretch_index + i, card)
-            else:
-                self.tasks_layout.addWidget(card)
+        for card in task_widgets_order:
+            self.tasks_layout.addWidget(card)
 
         self.task_cards = task_widgets_order
+        self.tasks_container.adjustSize()
 
     def sizeHint(self):
-        """Возвращает предпочтительный размер колонки на основе максимальной ширины карточек"""
-        max_card_width = 0
+        """Возвращает предпочтительный размер колонки"""
+        return QSize(360, 500)
 
-        # Находим максимальную ширину среди карточек
-        for card in self.task_cards:
-            if card and card.isVisible():
-                # Получаем фактическую ширину карточки
-                card_width = card.sizeHint().width()
-                if card_width > max_card_width:
-                    max_card_width = card_width
-
-        # Если карточек нет, используем минимальную ширину
-        if max_card_width == 0:
-            max_card_width = 280  # минимальная ширина для пустой колонки
-
-        # Ширина = максимальная ширина карточки + отступы (20px слева/справа от контента)
-        width = max_card_width + 20
-
-        # Дополнительно проверяем через содержимое layout
-        if self.tasks_layout.count() > 0:
-            # Проверяем, есть ли карточки в layout (включая скрытые)
-            for i in range(self.tasks_layout.count()):
-                item = self.tasks_layout.itemAt(i)
-                if item and item.widget() and item.widget() != self._stretch:
-                    w = item.widget()
-                    if w.isVisible():
-                        card_width = w.sizeHint().width()
-                        if card_width > max_card_width:
-                            max_card_width = card_width
-                            width = max_card_width + 20
-
-        # Ограничиваем максимальную ширину (опционально)
-        width = min(width, 400)  # Максимум 400px, чтобы колонки не стали слишком широкими
-
-        return QSize(width, 500)
+    def minimumSizeHint(self):
+        """Возвращает минимальный размер колонки"""
+        return QSize(340, 300)
 
     def updateGeometry(self):
         """Переопределяем для принудительного обновления родителя"""
         super().updateGeometry()
         if self.parent():
             self.parent().updateGeometry()
-
-    def minimumSizeHint(self):
-        """Возвращает минимальный размер колонки"""
-        return QSize(280, 300)
 
     def dragEnterEvent(self, event: QDragEnterEvent):
         if event.mimeData().hasFormat("application/x-task"):
@@ -302,7 +256,6 @@ class KanbanColumn(QFrame):
             task_id = task_data.get("id")
 
             if task_id:
-                # Главный сигнал для страницы
                 self.task_dropped.emit(task_id, self.column_id)
                 event.acceptProposedAction()
                 print(f"📥 Drop принят в колонку '{self.column_name}' (task_id={task_id})")

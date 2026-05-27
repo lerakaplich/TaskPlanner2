@@ -90,7 +90,12 @@ class Task(Base):
 
     # Relationships
     column: Mapped[Optional["BoardColumn"]] = relationship(back_populates="tasks")
-    tags: Mapped[List["TaskTag"]] = relationship(back_populates="task", cascade="all, delete-orphan")
+    tags: Mapped[List["TaskTag"]] = relationship(
+        "TaskTag",
+        back_populates="task",
+        cascade="all, delete-orphan",
+        lazy="selectin"  # <-- ДОБАВЬТЕ ДЛЯ АВТОМАТИЧЕСКОЙ ЗАГРУЗКИ
+    )
 
     # Связи как предшественник
     dependencies_as_predecessor = relationship(

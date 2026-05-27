@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>500</width>
-    <height>650</height>
+    <height>672</height>
    </rect>
   </property>
   <property name="minimumSize">
@@ -78,15 +78,15 @@
         height: 0;
     }
     /* Стиль для звезд рейтинга */
-    QLabel[objectName^="star"] {
+    QLabel[objectName^=&quot;star&quot;] {
         font-size: 28px;
         font-weight: normal;
         color: #D3D3D3;
     }
-    QLabel[objectName^="star"]:hover {
+    QLabel[objectName^=&quot;star&quot;]:hover {
         color: #FFD700;
     }
-    QLabel[objectName^="star"][active="true"] {
+    QLabel[objectName^=&quot;star&quot;][active=&quot;true&quot;] {
         color: #FFD700;
     }
    </string>
@@ -114,9 +114,6 @@
      </property>
      <property name="text">
       <string>Создание новой задачи</string>
-     </property>
-     <property name="alignment">
-      <set>Qt::AlignmentFlag::AlignCenter</set>
      </property>
     </widget>
    </item>
@@ -148,21 +145,21 @@
    </item>
    <item>
     <widget class="QComboBox" name="comboBoxProject">
-     <property name="placeholderText">
+     <property name="placeholderText" stdset="0">
       <string>Выберите проект</string>
      </property>
     </widget>
    </item>
    <item>
     <widget class="QComboBox" name="comboBoxTag">
-     <property name="placeholderText">
+     <property name="placeholderText" stdset="0">
       <string>Выберите теги</string>
      </property>
     </widget>
    </item>
    <item>
     <widget class="QComboBox" name="comboBoxAssignee">
-     <property name="placeholderText">
+     <property name="placeholderText" stdset="0">
       <string>Выберите исполнителя</string>
      </property>
     </widget>
@@ -193,9 +190,6 @@
        <property name="text">
         <string>☆</string>
        </property>
-       <property name="alignment">
-        <set>Qt::AlignmentFlag::AlignCenter</set>
-       </property>
       </widget>
      </item>
      <item>
@@ -208,9 +202,6 @@
        </property>
        <property name="text">
         <string>☆</string>
-       </property>
-       <property name="alignment">
-        <set>Qt::AlignmentFlag::AlignCenter</set>
        </property>
       </widget>
      </item>
@@ -225,9 +216,6 @@
        <property name="text">
         <string>☆</string>
        </property>
-       <property name="alignment">
-        <set>Qt::AlignmentFlag::AlignCenter</set>
-       </property>
       </widget>
      </item>
      <item>
@@ -241,9 +229,6 @@
        <property name="text">
         <string>☆</string>
        </property>
-       <property name="alignment">
-        <set>Qt::AlignmentFlag::AlignCenter</set>
-       </property>
       </widget>
      </item>
      <item>
@@ -256,9 +241,6 @@
        </property>
        <property name="text">
         <string>☆</string>
-       </property>
-       <property name="alignment">
-        <set>Qt::AlignmentFlag::AlignCenter</set>
        </property>
       </widget>
      </item>
@@ -274,9 +256,6 @@
      </item>
      <item>
       <spacer name="horizontalSpacerDiff">
-       <property name="orientation">
-        <enum>Qt::Orientation::Horizontal</enum>
-       </property>
        <property name="sizeHint" stdset="0">
         <size>
          <width>40</width>
@@ -444,9 +423,6 @@
      </item>
      <item>
       <spacer name="horizontalSpacer">
-       <property name="orientation">
-        <enum>Qt::Orientation::Horizontal</enum>
-       </property>
        <property name="sizeHint" stdset="0">
         <size>
          <width>40</width>

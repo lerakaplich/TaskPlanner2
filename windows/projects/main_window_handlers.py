@@ -456,6 +456,8 @@ class NavigationHandler(QObject):
 
         return self.pages['my_tasks']
 
+    # windows/projects/main_window_handlers.py - в get_other_tasks_page
+
     def get_other_tasks_page(self):
         """Возвращает страницу чужих задач с подключенными сигналами"""
         print("   🚀 get_other_tasks_page вызван")
@@ -467,9 +469,16 @@ class NavigationHandler(QObject):
 
             try:
                 print("   🏗️ Создаём экземпляр OthersTasksPage...")
+                # Передаём полного пользователя
+                current_user = self.main.current_user if self.main.current_user else {
+                    "id": self.main.current_user_id,
+                    "last_name": "",
+                    "first_name": "",
+                    "middle_name": ""
+                }
                 self.pages['other_tasks'] = OthersTasksPage(
                     parent=self.main,
-                    current_user={"id": self.main.current_user_id, "last_name": "", "first_name": ""},
+                    current_user=current_user,  # <-- Передаём полного пользователя
                     project_id=2,
                     column_service=self.main.column_service
                 )

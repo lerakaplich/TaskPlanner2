@@ -120,6 +120,16 @@ class MainWindow(QMainWindow):
     def _load_current_user(self):
         """Загрузка текущего пользователя через сервис"""
         self.current_user = self.project_service.get_user_by_id(self.current_user_id)
+        print(f"🔍 Загружен пользователь: {self.current_user}")  # Для отладки
+
+        # Если нет полей, добавляем дефолтные значения
+        if self.current_user:
+            if 'last_name' not in self.current_user:
+                self.current_user['last_name'] = ''
+            if 'first_name' not in self.current_user:
+                self.current_user['first_name'] = ''
+            if 'middle_name' not in self.current_user:
+                self.current_user['middle_name'] = ''
 
     def _setup_ui(self):
         """Загрузка UI файлов"""

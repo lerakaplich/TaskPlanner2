@@ -53,15 +53,21 @@ class TasksTagService:
 
     def set_task_tags(self, task_id: int, tag_names: List[str]) -> bool:
         """Установить теги задачи по названиям"""
+        if not tag_names:
+            # Если нет тегов, удаляем все
+            return self.tag_repo.set_task_tags(task_id, [])
+
         tag_ids = []
         for tag_name in tag_names:
             tag = self.tag_repo.get_by_name(tag_name)
             if not tag:
+                # Создаём новый тег, если не существует
                 tag = self.tag_repo.create(tag_name, "#ccab6e")
+                self.db_session.flush()
             tag_ids.append(tag.id)
 
         result = self.tag_repo.set_task_tags(task_id, tag_ids)
-        self.db_session.commit()
+        self.db_session.flush()
         return result
 
     def add_tag_to_task(self, task_id: int, tag_id: int) -> bool:

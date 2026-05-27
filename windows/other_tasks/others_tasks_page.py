@@ -120,12 +120,10 @@ class OthersTasksPage(QWidget):
             }
         """)
 
-        # Контейнер для колонок - используем QHBoxLayout без растяжения
         columns_container = QWidget()
         columns_layout = QHBoxLayout(columns_container)
         columns_layout.setSpacing(16)
         columns_layout.setContentsMargins(10, 10, 10, 10)
-        # ВАЖНО: НЕ добавляем растяжение, чтобы колонки не растягивались принудительно
         columns_layout.setAlignment(Qt.AlignmentFlag.AlignLeft)
 
         self.columns.clear()
@@ -134,17 +132,10 @@ class OthersTasksPage(QWidget):
         for col in sorted(column_data, key=lambda x: x["position"]):
             print(f"📦 Создаем колонку: {col['name']}")
             column_widget = KanbanColumn(col)
-            # ВАЖНО: устанавливаем фиксированную политику размера
-            column_widget.setSizePolicy(
-                QSizePolicy.Policy.MinimumExpanding,  # Минимальное расширение по ширине
-                QSizePolicy.Policy.Expanding  # Растягивается по высоте
-            )
+            # НЕ УСТАНАВЛИВАЕМ политику размера
             self.columns[col["name"]] = column_widget
             self.column_widgets.append(column_widget)
             columns_layout.addWidget(column_widget)
-
-        # Убираем stretch - колонки сами определяют свою ширину
-        # columns_layout.addStretch()  # <-- УБРАТЬ ЭТУ СТРОКУ
 
         horizontal_scroll.setWidget(columns_container)
         main_scroll.setWidget(horizontal_scroll)

@@ -78,6 +78,17 @@ class TasksCrudService:
         try:
             new_task = self.repo.create(**task_data)
             self.db_session.commit()
+
+            # === СОХРАНЯЕМ ТЕГИ ===
+            tags = data.get("tags", [])
+            if tags:
+                print(f"🏷️ Сохраняем теги для задачи {new_task.id}: {tags}")
+                from services.tasks_service.tasks_tag_service import TasksTagService
+                tag_service = TasksTagService(self.db_session, self.repo)
+                tag_service.set_task_tags(new_task.id, tags)
+                self.db_session.commit()
+                print(f"   ✅ Теги сохранены")
+
             return self._task_to_dict(new_task)
         except Exception as e:
             self.db_session.rollback()
@@ -188,6 +199,16 @@ class TasksCrudService:
 
         task.updated_at = datetime.now()
         self.db_session.commit()
+
+        # === ОБНОВЛЯЕМ ТЕГИ ===
+        tags = updated_data.get("tags")
+        if tags is not None:
+            print(f"🏷️ Обновляем теги для задачи {task_id}: {tags}")
+            from services.tasks_service.tasks_tag_service import TasksTagService
+            tag_service = TasksTagService(self.db_session, self.repo)
+            tag_service.set_task_tags(task_id, tags)
+            self.db_session.commit()
+            print(f"   ✅ Теги обновлены")
 
         return self._task_to_dict(task)
 
@@ -324,6 +345,8 @@ class TasksCrudService:
                     first_initial = f"{employee.first_name[0]}." if employee.first_name else ""
                     middle_initial = f"{employee.middle_name[0]}." if employee.middle_name else ""
                     return f"{employee.last_name} {first_initial}{middle_initial}".strip()
+            except Exception as e:
+                print(f"⚠️ Ошибка получения имени сотрудника {employee_id}: {e}")
             finally:
                 employees_session.close()
 
@@ -478,6 +501,19 @@ class TasksCrudService:
         if assignee_name:
             executor_display = assignee_name
 
+        # === ЗАГРУЖАЕМ ТЕГИ ===
+        tag_names = []
+        try:
+            from models.tasks import Tag
+            # Получаем теги через связь task.tags
+            if task.tags:
+                for task_tag in task.tags:
+                    if task_tag.tag:
+                        tag_names.append(task_tag.tag.name)
+            print(f"🏷️ Загружены теги для задачи {task.id}: {tag_names}")
+        except Exception as e:
+            print(f"⚠️ Ошибка загрузки тегов: {e}")
+
         return {
             "id": task.id,
             "project_id": task.project_id,
@@ -489,10 +525,10 @@ class TasksCrudService:
             "priority_text": priority_text,
             "priority_color": priority_color,
             "difficulty": float(task.difficulty) if task.difficulty else 0,
-            "progress_percent": float(task.progress_percent) if task.progress_percent else 0,  # 👈 ДОБАВЛЕНО
-            "completed_at": task.completed_at.strftime("%d.%m.%Y") if task.completed_at else None,  # 👈 ДОБАВЛЕНО
-            "started_at": task.started_at.strftime("%d.%m.%Y") if task.started_at else None,  # 👈 ДОБАВЛЕНО
-            "actual_hours": float(task.actual_hours) if task.actual_hours else 0,  # 👈 ДОБАВЛЕНО
+            "progress_percent": float(task.progress_percent) if task.progress_percent else 0,
+            "completed_at": task.completed_at.strftime("%d.%m.%Y") if task.completed_at else None,
+            "started_at": task.started_at.strftime("%d.%m.%Y") if task.started_at else None,
+            "actual_hours": float(task.actual_hours) if task.actual_hours else 0,
             "deadline": task.deadline.strftime("%d.%m.%Y") if task.deadline else "",
             "deadline_text": deadline_text,
             "deadline_color": deadline_color,
@@ -505,13 +541,13 @@ class TasksCrudService:
             "created_text": created_display,
             "updated_text": updated_display,
             "author_text": author_display,
-            "is_paused": task.is_paused,  # 👈 ДОБАВИТЬ
-            "total_paused_seconds": task.total_paused_seconds,  # 👈 ДОБАВИТЬ
+            "is_paused": task.is_paused,
+            "total_paused_seconds": task.total_paused_seconds,
             "executor_text": executor_display,
             "status": task.column.name if task.column else None,
             "completed": task.completed,
             "column_id": task.column_id,
-            "tags": []
+            "tags": tag_names  # <-- ТЕПЕРЬ ТЕГИ ВОЗВРАЩАЮТСЯ
         }
 
     def _get_column_by_name(self, column_name: str, project_id: int = None) -> Optional[BoardColumn]:

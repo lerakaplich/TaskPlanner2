@@ -90,7 +90,8 @@ class MyTasksPage(QWidget):
         columns_layout = QHBoxLayout(columns_container)
         columns_layout.setSpacing(16)
         columns_layout.setContentsMargins(10, 10, 10, 10)
-        # Убираем растяжение, чтобы колонки сами определяли ширину
+        # ВАЖНО: НЕ используем растяжение, колонки будут следовать друг за другом
+        # и при необходимости появится горизонтальный скролл
         columns_layout.setAlignment(Qt.AlignmentFlag.AlignLeft)
 
         self.columns.clear()
@@ -99,20 +100,13 @@ class MyTasksPage(QWidget):
         for col in sorted(column_data, key=lambda x: x["position"]):
             print(f"📦 Создаем колонку: {col['name']}")
             column_widget = KanbanColumn(col)
-            # Устанавливаем политику размера
-            column_widget.setSizePolicy(
-                QSizePolicy.Policy.MinimumExpanding,
-                QSizePolicy.Policy.Expanding
-            )
+            # НЕ УСТАНАВЛИВАЕМ политику размера - колонка сама управляет
             self.columns[col["name"]] = column_widget
             self.column_widgets.append(column_widget)
             columns_layout.addWidget(column_widget)
 
             # === ПОДКЛЮЧЕНИЕ СИГНАЛА ===
             column_widget.task_dropped.connect(self._on_task_dropped)
-
-        # Убираем stretch - колонки сами определяют свою ширину
-        # columns_layout.addStretch()  # <-- УБРАТЬ ИЛИ ЗАКОММЕНТИРОВАТЬ
 
         scroll_area.setWidget(columns_container)
 
@@ -153,6 +147,8 @@ class MyTasksPage(QWidget):
                 else:
                     self.clear_layout(item.layout())
 
+    # windows/my_tasks/my_tasks_page.py - исправленный метод load_tasks
+
     def load_tasks(self):
         """Загружает и отображает задачи с защитой от повторных вызовов"""
         if self._is_loading:
@@ -172,15 +168,18 @@ class MyTasksPage(QWidget):
                 print(f"  - {task.get('title')} (проект: {task.get('project_name')}, статус: {task.get('status')})")
 
             for task in tasks:
-                task_card = TaskCard(task)
+                # НЕ передаём parent=None - пусть parent будет колонка при добавлении
+                task_card = TaskCard(task)  # parent=None - нормально, но колонка установит parent при add_task
                 self._connect_task_card_signals(task_card)
 
                 column_name = task.get("status")
                 if column_name in self.columns:
                     column = self.columns[column_name]
-                    column.add_task(task_card)
+                    column.add_task(task_card)  # здесь будет установлен parent
                     print(f"  ✅ Добавлена задача '{task.get('title')}' в колонку '{column_name}'")
                 else:
+                    # Если колонки нет, не создаём карточку
+                    task_card.deleteLater()
                     print(f"  ⚠️ Колонка '{column_name}' не найдена")
 
             self.update_statistics()

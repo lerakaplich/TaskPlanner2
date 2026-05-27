@@ -291,6 +291,8 @@ class TaskDialog(QDialog):
             difficulty_names = ["", "Очень низкая", "Низкая", "Средняя", "Высокая", "Максимальная"]
             self.labelDifficultyValue.setText(difficulty_names[value] if value <= 5 else "")
 
+    # windows/other_tasks/task_dialog.py - исправленный метод setup_ui
+
     def setup_ui(self):
         if self.mode == "create":
             self.setWindowTitle("Создание задачи")
@@ -307,7 +309,13 @@ class TaskDialog(QDialog):
             if hasattr(self, 'updatedAtLabel'):
                 self.updatedAtLabel.hide()
 
-        else:
+            # === ИСПРАВЛЕНИЕ: показываем создателя (текущего пользователя) ===
+            if hasattr(self, 'createdByLabel'):
+                creator_name = self.format_creator_name()
+                self.createdByLabel.setText(f"Создатель: {creator_name}")
+                self.createdByLabel.show()
+
+        else:  # mode == "edit"
             self.setWindowTitle("Редактирование задачи")
             if hasattr(self, 'createBtn'):
                 self.createBtn.setText("Сохранить")
@@ -319,24 +327,22 @@ class TaskDialog(QDialog):
             if hasattr(self, 'updatedAtLabel'):
                 self.updatedAtLabel.show()
 
-        if hasattr(self, 'createdByLabel'):
-            creator_name = self.format_creator_name()
-            self.createdByLabel.setText(f"Создатель: {creator_name}")
-
-        # Если передан предустановленный проект (из диаграммы Ганта)
-        if self.task_data and self.task_data.get("project_id") and hasattr(self, 'comboBoxProject'):
-            preset_project_id = self.task_data.get("project_id")
-            # Нужно будет установить после загрузки данных, в load_dialog_data
+            # Для редактирования показываем создателя из данных задачи
+            if hasattr(self, 'createdByLabel'):
+                # Будет установлено позже в fill_task_data
+                pass
 
     def format_creator_name(self) -> str:
         last = self.current_user.get('last_name', '')
         first = self.current_user.get('first_name', '')
         middle = self.current_user.get('middle_name', '')
 
+        print(f"🔍 format_creator_name: last={last}, first={first}, middle={middle}")  # Добавьте для отладки
+
         if last and first:
             first_initial = first[0] + '.' if first else ''
             middle_initial = middle[0] + '.' if middle else ''
-            return f"{last} {first_initial}{middle_initial}"
+            return f"{last} {first_initial}{middle_initial}".strip()
         return "Неизвестен"
 
     def set_service(self, service: TasksService):
@@ -388,6 +394,8 @@ class TaskDialog(QDialog):
         if self.mode == "edit" and "task_data" in dialog_data:
             self.fill_task_data(dialog_data["task_data"])
 
+    # windows/other_tasks/task_dialog.py - исправленный fill_task_data
+
     def fill_task_data(self, task_data: Dict):
         if hasattr(self, 'lineEditTitle'):
             self.lineEditTitle.setText(task_data.get("title", ""))
@@ -431,6 +439,17 @@ class TaskDialog(QDialog):
         if task_data.get("tags"):
             self.set_selected_tags(task_data["tags"])
 
+        # === ИСПРАВЛЕНИЕ: показываем создателя задачи (не текущего пользователя) ===
+        if hasattr(self, 'createdByLabel'):
+            creator_name = task_data.get("created_by_name", "")
+            if not creator_name:
+                # Если нет имени, пробуем получить через сервис
+                created_by_id = task_data.get("created_by")
+                if created_by_id and self.service:
+                    creator_name = self.service.format_assignee_name(created_by_id)
+            self.createdByLabel.setText(f"Создатель: {creator_name if creator_name else 'Неизвестен'}")
+            self.createdByLabel.show()
+
     def collect_form_data(self) -> Dict:
         data = {}
 
@@ -457,9 +476,11 @@ class TaskDialog(QDialog):
 
         # Получаем выбранные теги
         data["tags"] = self.get_selected_tags()
+        print(f"🏷️ Выбранные теги из диалога: {data['tags']}")
 
         data["difficulty"] = self.difficulty_value
 
+        # НЕ ДОБАВЛЯЕМ created_by здесь - он будет добавлен в process_form_data
         return data
 
     def validate_and_save(self):
