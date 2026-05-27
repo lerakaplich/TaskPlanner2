@@ -149,8 +149,6 @@ class TaskCard(QFrame):
         print(f"\n⚠️ [DEBUG] deleteLater для задачи {self.task_id}")
         super().deleteLater()
 
-    # windows/my_tasks/task_card.py - исправленный метод fill_ui
-
     def fill_ui(self):
         """Заполнение карточки данными из task_data"""
         # Название задачи

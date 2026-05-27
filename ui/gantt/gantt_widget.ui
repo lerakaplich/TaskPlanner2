@@ -1,0 +1,567 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>GanttWidget</class>
+ <widget class="QWidget" name="GanttWidget">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>1200</width>
+    <height>800</height>
+   </rect>
+  </property>
+  <property name="windowTitle">
+   <string>Диаграмма Ганта</string>
+  </property>
+  <property name="styleSheet">
+   <string notr="true">background-color: white;</string>
+  </property>
+  <layout class="QVBoxLayout" name="mainLayout">
+   <property name="spacing">
+    <number>8</number>
+   </property>
+   <property name="leftMargin">
+    <number>10</number>
+   </property>
+   <property name="topMargin">
+    <number>10</number>
+   </property>
+   <property name="rightMargin">
+    <number>10</number>
+   </property>
+   <property name="bottomMargin">
+    <number>10</number>
+   </property>
+   <item>
+    <widget class="QWidget" name="topPanel" native="true">
+     <property name="maximumSize">
+      <size>
+       <width>16777215</width>
+       <height>50</height>
+      </size>
+     </property>
+     <property name="styleSheet">
+      <string notr="true">background-color: transparent;</string>
+     </property>
+     <layout class="QHBoxLayout" name="topPanelLayout">
+      <property name="spacing">
+       <number>10</number>
+      </property>
+      <property name="leftMargin">
+       <number>0</number>
+      </property>
+      <property name="topMargin">
+       <number>0</number>
+      </property>
+      <property name="rightMargin">
+       <number>0</number>
+      </property>
+      <property name="bottomMargin">
+       <number>0</number>
+      </property>
+      <item>
+       <widget class="QComboBox" name="projectFilter">
+        <property name="minimumSize">
+         <size>
+          <width>186</width>
+          <height>41</height>
+         </size>
+        </property>
+        <property name="maximumSize">
+         <size>
+          <width>16777215</width>
+          <height>41</height>
+         </size>
+        </property>
+        <property name="styleSheet">
+         <string notr="true">
+QComboBox {
+    border: 2px solid #E0E0E0;
+    border-radius: 8px;
+    padding: 8px 16px;
+    font-size: 14px;
+    background-color: white;
+    min-width: 150px;
+	color: black;
+}
+QComboBox:hover {
+    border: 2px solid #ccab6e;
+}
+QComboBox::drop-down {
+    border: none;
+}
+         </string>
+        </property>
+        <property name="editable">
+         <bool>true</bool>
+        </property>
+        <property name="placeholderText">
+         <string>Все проекты</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QComboBox" name="executorFilter">
+        <property name="minimumSize">
+         <size>
+          <width>186</width>
+          <height>41</height>
+         </size>
+        </property>
+        <property name="maximumSize">
+         <size>
+          <width>16777215</width>
+          <height>41</height>
+         </size>
+        </property>
+        <property name="styleSheet">
+         <string notr="true">
+QComboBox {
+    border: 2px solid #E0E0E0;
+    border-radius: 8px;
+    padding: 8px 16px;
+    font-size: 14px;
+    background-color: white;
+    min-width: 150px;
+	color: black;
+}
+QComboBox:hover {
+    border: 2px solid #ccab6e;
+}
+QComboBox::drop-down {
+    border: none;
+}
+         </string>
+        </property>
+        <property name="editable">
+         <bool>true</bool>
+        </property>
+        <property name="placeholderText">
+         <string>Все исполнители</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QComboBox" name="periodFilter">
+        <property name="minimumSize">
+         <size>
+          <width>186</width>
+          <height>41</height>
+         </size>
+        </property>
+        <property name="maximumSize">
+         <size>
+          <width>16777215</width>
+          <height>41</height>
+         </size>
+        </property>
+        <property name="styleSheet">
+         <string notr="true">
+QComboBox {
+    border: 2px solid #E0E0E0;
+    border-radius: 8px;
+    padding: 8px 16px;
+    font-size: 14px;
+    background-color: white;
+    min-width: 150px;
+	color: black;
+}
+QComboBox:hover {
+    border: 2px solid #ccab6e;
+}
+QComboBox::drop-down {
+    border: none;
+}
+         </string>
+        </property>
+        <item>
+         <property name="text">
+          <string>Неделя</string>
+         </property>
+        </item>
+        <item>
+         <property name="text">
+          <string>Месяц</string>
+         </property>
+        </item>
+        <item>
+         <property name="text">
+          <string>Полгода</string>
+         </property>
+        </item>
+        <item>
+         <property name="text">
+          <string>Год</string>
+         </property>
+        </item>
+        <item>
+         <property name="text">
+          <string>Выбрать период</string>
+         </property>
+        </item>
+       </widget>
+      </item>
+      <item>
+       <spacer name="horizontalSpacer">
+        <property name="orientation">
+         <enum>Qt::Orientation::Horizontal</enum>
+        </property>
+        <property name="sizeHint" stdset="0">
+         <size>
+          <width>40</width>
+          <height>20</height>
+         </size>
+        </property>
+       </spacer>
+      </item>
+      <item>
+       <widget class="QPushButton" name="createLinkButton">
+        <property name="minimumSize">
+         <size>
+          <width>0</width>
+          <height>41</height>
+         </size>
+        </property>
+        <property name="maximumSize">
+         <size>
+          <width>16777215</width>
+          <height>41</height>
+         </size>
+        </property>
+        <property name="styleSheet">
+         <string notr="true">
+QPushButton {
+    background-color: #1B232A;
+    color: white;
+    border: none;
+    border-radius: 10px;
+    padding: 8px 12px;
+    font-size: 16px;
+    font-weight: bold;
+}
+QPushButton:hover {
+    background-color: #D9D9D6;
+    color: black;
+}
+QPushButton:pressed {
+    background-color: #B8B8B5;
+}
+         </string>
+        </property>
+        <property name="text">
+         <string>Создать связь</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QPushButton" name="addTaskButton">
+        <property name="minimumSize">
+         <size>
+          <width>0</width>
+          <height>41</height>
+         </size>
+        </property>
+        <property name="maximumSize">
+         <size>
+          <width>16777215</width>
+          <height>41</height>
+         </size>
+        </property>
+        <property name="styleSheet">
+         <string notr="true">
+QPushButton {
+    background-color: #ccab6e;
+    color: white;
+    border-radius: 10px;
+    font-weight: bold;
+    font-size: 16px;
+    border: none;
+    padding: 12px 24px;
+}
+QPushButton:hover {
+    background-color: #998664;
+}
+QPushButton:pressed {
+    background-color: #7a6a50;
+}
+         </string>
+        </property>
+        <property name="text">
+         <string>Добавить задачу</string>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <item>
+    <widget class="QTabWidget" name="tabWidget">
+     <property name="styleSheet">
+      <string notr="true">
+QTabBar::tab {
+    background-color: transparent;
+    padding: 12px 20px;
+    margin-right: 2px;
+    border-top-left-radius: 8px;
+    border-top-right-radius: 8px;
+    border: 1px solid #E0E0E0;
+    border-bottom: none;
+    font-weight: bold;
+    font-size: 14px;
+    min-width: 120px;
+}
+QTabBar::tab:selected {
+    background-color: #1B232A;
+    color: white;
+    border-color: #1B232A;
+}
+QTabBar::tab:hover:!selected {
+    background-color: #F0F0F0;
+    border-color: #ccab6e;
+}
+QTabWidget::pane {
+    background-color: white;
+    border: 1px solid #E0E0E0;
+    border-radius: 0px 8px 8px 8px;
+    margin-top: -1px;
+}
+QTabWidget::tab-bar {
+    alignment: left;
+backgroun-color: transparent;
+}
+      </string>
+     </property>
+     <property name="currentIndex">
+      <number>0</number>
+     </property>
+     <widget class="QWidget" name="ganttTab">
+      <attribute name="title">
+       <string>Диаграмма Ганта</string>
+      </attribute>
+      <layout class="QHBoxLayout" name="ganttTabLayout">
+       <property name="spacing">
+        <number>0</number>
+       </property>
+       <property name="leftMargin">
+        <number>0</number>
+       </property>
+       <property name="topMargin">
+        <number>0</number>
+       </property>
+       <property name="rightMargin">
+        <number>0</number>
+       </property>
+       <property name="bottomMargin">
+        <number>0</number>
+       </property>
+       <item>
+        <widget class="QScrollArea" name="leftScrollArea">
+         <property name="minimumSize">
+          <size>
+           <width>300</width>
+           <height>0</height>
+          </size>
+         </property>
+         <property name="maximumSize">
+          <size>
+           <width>500</width>
+           <height>16777215</height>
+          </size>
+         </property>
+         <property name="verticalScrollBarPolicy">
+          <enum>Qt::ScrollBarPolicy::ScrollBarAsNeeded</enum>
+         </property>
+         <property name="horizontalScrollBarPolicy">
+          <enum>Qt::ScrollBarPolicy::ScrollBarAsNeeded</enum>
+         </property>
+         <property name="widgetResizable">
+          <bool>true</bool>
+         </property>
+         <widget class="QWidget" name="leftPanel">
+          <property name="geometry">
+           <rect>
+            <x>0</x>
+            <y>0</y>
+            <width>498</width>
+            <height>684</height>
+           </rect>
+          </property>
+          <layout class="QVBoxLayout" name="leftPanelLayout">
+           <property name="spacing">
+            <number>10</number>
+           </property>
+           <property name="leftMargin">
+            <number>10</number>
+           </property>
+           <property name="topMargin">
+            <number>10</number>
+           </property>
+           <property name="rightMargin">
+            <number>10</number>
+           </property>
+           <property name="bottomMargin">
+            <number>10</number>
+           </property>
+           <item>
+            <widget class="QGroupBox" name="projectsGroup">
+             <property name="styleSheet">
+              <string notr="true">
+QGroupBox {
+    font-weight: bold;
+    font-size: 16px;
+    color: #1B232A;
+    border: 1px solid #E0E0E0;
+    border-radius: 8px;
+    margin-top: 10px;
+    padding-top: 15px;
+}
+QGroupBox::title {
+    subcontrol-origin: margin;
+    left: 10px;
+    padding: 0 5px 0 5px;
+}
+              </string>
+             </property>
+             <property name="title">
+              <string>Проекты</string>
+             </property>
+             <layout class="QVBoxLayout" name="projectsLayout">
+              <property name="spacing">
+               <number>5</number>
+              </property>
+              <item>
+               <widget class="QTreeWidget" name="projectsTree">
+                <property name="styleSheet">
+                 <string notr="true">
+QTreeWidget {
+    border: none;
+    font-size: 14px;
+}
+QTreeWidget::item {
+    padding: 5px;
+    border-bottom: 1px solid #F0F0F0;
+}
+QTreeWidget::item:hover {
+    background-color: #F5F5F5;
+}
+QTreeWidget::branch:has-children:!has-siblings:closed,
+QTreeWidget::branch:closed:has-children:has-siblings {
+    border-image: none;
+}
+QTreeWidget::branch:open:has-children:!has-siblings,
+QTreeWidget::branch:open:has-children:has-siblings {
+    border-image: none;
+}
+                 </string>
+                </property>
+                <property name="indentation">
+                 <number>20</number>
+                </property>
+                <property name="animated">
+                 <bool>true</bool>
+                </property>
+                <property name="headerHidden">
+                 <bool>true</bool>
+                </property>
+                <column>
+                 <property name="text">
+                  <string notr="true">1</string>
+                 </property>
+                </column>
+               </widget>
+              </item>
+             </layout>
+            </widget>
+           </item>
+           <item>
+            <widget class="QGroupBox" name="prioritiesGroup">
+             <property name="styleSheet">
+              <string notr="true">
+QGroupBox {
+    font-weight: bold;
+    font-size: 16px;
+    color: #1B232A;
+    border: 1px solid #E0E0E0;
+    border-radius: 8px;
+    margin-top: 10px;
+    padding-top: 15px;
+}
+QGroupBox::title {
+    subcontrol-origin: margin;
+    left: 10px;
+    padding: 0 5px 0 5px;
+}
+              </string>
+             </property>
+             <property name="title">
+              <string>Приоритеты</string>
+             </property>
+             <layout class="QVBoxLayout" name="prioritiesLayout">
+              <property name="spacing">
+               <number>8</number>
+              </property>
+             </layout>
+            </widget>
+           </item>
+          </layout>
+         </widget>
+        </widget>
+       </item>
+       <item>
+        <widget class="QScrollArea" name="ganttScrollArea">
+         <property name="verticalScrollBarPolicy">
+          <enum>Qt::ScrollBarPolicy::ScrollBarAsNeeded</enum>
+         </property>
+         <property name="horizontalScrollBarPolicy">
+          <enum>Qt::ScrollBarPolicy::ScrollBarAsNeeded</enum>
+         </property>
+         <property name="widgetResizable">
+          <bool>true</bool>
+         </property>
+         <widget class="QWidget" name="ganttCanvas">
+          <property name="geometry">
+           <rect>
+            <x>0</x>
+            <y>0</y>
+            <width>800</width>
+            <height>667</height>
+           </rect>
+          </property>
+          <property name="minimumSize">
+           <size>
+            <width>800</width>
+            <height>600</height>
+           </size>
+          </property>
+         </widget>
+        </widget>
+       </item>
+      </layout>
+     </widget>
+     <widget class="QWidget" name="calendarTab">
+      <attribute name="title">
+       <string>Календарь</string>
+      </attribute>
+      <layout class="QVBoxLayout" name="calendarTabLayout">
+       <item>
+        <widget class="QLabel" name="calendarPlaceholder">
+         <property name="styleSheet">
+          <string notr="true">font-size: 18px; color: #999; font-style: italic;</string>
+         </property>
+         <property name="text">
+          <string>Календарь (в разработке)</string>
+         </property>
+         <property name="alignment">
+          <set>Qt::AlignmentFlag::AlignCenter</set>
+         </property>
+        </widget>
+       </item>
+      </layout>
+     </widget>
+    </widget>
+   </item>
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>

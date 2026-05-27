@@ -7,7 +7,7 @@ from PyQt6.QtCore import Qt, QDate, pyqtSignal
 from PyQt6.QtGui import QColor, QFont
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QTreeWidgetItem,
-    QDialog, QMessageBox, QPushButton, QComboBox, QFrame
+    QDialog, QMessageBox, QPushButton, QComboBox, QFrame, QGroupBox, QSizePolicy, QScrollArea
 )
 from PyQt6 import uic
 
@@ -44,11 +44,14 @@ class GanttWidget(QWidget):
         ui_path = os.path.join(project_root, "ui", "gantt", "gantt_widget.ui")
 
         if not os.path.exists(ui_path):
-            # Создаем UI программно если файл не найден
             self._create_ui_programmatically()
         else:
             uic.loadUi(ui_path, self)
             self._setup_loaded_ui()
+            # Вызываем настройку приоритетов после полной загрузки UI
+            # Используем QTimer.singleShot чтобы дать UI время на инициализацию
+            from PyQt6.QtCore import QTimer
+            QTimer.singleShot(100, self._setup_priorities)
 
     def _create_ui_programmatically(self) -> None:
         """Создает UI программно если UI файл не найден"""
@@ -100,7 +103,7 @@ class GanttWidget(QWidget):
         legend_layout = QVBoxLayout(legend_group)
         legend_layout.addWidget(QLabel("🎨 Приоритеты:"))
 
-        self.prioritiesLayout = QVBoxLayout()
+        self.prioritiesLayout = QVBoxLayout()  # <-- СОХРАНЯЕМ ССЫЛКУ
         legend_layout.addLayout(self.prioritiesLayout)
 
         left_layout.addWidget(legend_group)
@@ -183,56 +186,93 @@ class GanttWidget(QWidget):
             gantt_layout.addWidget(self.gantt_canvas)
             self.ganttScrollArea.setWidget(self.gantt_canvas)
 
-        # Настройка приоритетов (если есть контейнер в UI)
-        self._setup_priorities()
+        # НЕ СОЗДАЁМ prioritiesLayout, он уже есть в UI
+        print("✅ UI загружен, prioritiesGroup существует в файле")
 
     def _setup_priorities(self) -> None:
-        """Настройка отображения приоритетов"""
+        """Настройка отображения приоритетов в UI из файла"""
+        print("\n🎨 _setup_priorities вызван")
+
         priorities = [
-            ("critical", "Критический", "#D22730"),
-            ("high", "Высокий", "#ccab6e"),
-            ("medium", "Средний", "#1B232A"),
-            ("low", "Низкий", "#998664"),
+            ("Критический", "#D22730"),
+            ("Высокий", "#ccab6e"),
+            ("Средний", "#1B232A"),
+            ("Низкий", "#998664"),
         ]
 
-        # Находим или создаем контейнер для приоритетов
-        container = None
-        if hasattr(self, 'prioritiesLayout'):
-            container = self.prioritiesLayout
-        else:
-            # Ищем виджет с приоритетами в загруженном UI
-            for child in self.findChildren(QWidget):
-                if hasattr(child, 'layout') and child.layout() and child.layout().count() > 0:
-                    # Проверяем, есть ли там уже элементы приоритетов
-                    container = child.layout()
-                    break
+        # Ищем prioritiesGroup
+        container = self.findChild(QGroupBox, "prioritiesGroup")
 
-        if container:
-            # Очищаем существующие
-            while container.count():
-                item = container.takeAt(0)
+        if not container:
+            print("❌ prioritiesGroup не найден")
+            return
+
+        print(f"✅ Найден prioritiesGroup: {container.objectName()}")
+
+        # Убеждаемся, что группа видна
+        container.setVisible(True)
+        container.setMinimumHeight(80)
+        container.setMaximumHeight(120)
+
+        # Получаем существующий layout или создаем новый
+        layout = container.layout()
+        if layout is None:
+            # Создаем новый горизонтальный layout для компактного отображения
+            layout = QHBoxLayout(container)
+            layout.setContentsMargins(10, 5, 10, 5)
+            layout.setSpacing(20)
+            container.setLayout(layout)
+            print("✅ Создан новый QHBoxLayout")
+        else:
+            # Очищаем существующий layout
+            print(f"✅ Используем существующий layout: {type(layout).__name__}")
+            # Удаляем все виджеты из layout
+            while layout.count():
+                item = layout.takeAt(0)
                 if item.widget():
                     item.widget().deleteLater()
 
-            for _, name, color in priorities:
-                item_widget = QWidget()
-                item_layout = QHBoxLayout(item_widget)
-                item_layout.setContentsMargins(5, 2, 5, 2)
-                item_layout.setSpacing(10)
+        # Добавляем приоритеты в одну строку
+        layout.setAlignment(Qt.AlignmentFlag.AlignLeft)
 
-                # Цветовой индикатор
-                indicator = QLabel()
-                indicator.setFixedSize(16, 16)
-                indicator.setStyleSheet(f"background-color: {color}; border-radius: 8px;")
-                item_layout.addWidget(indicator)
+        for name, color in priorities:
+            # Создаем контейнер для одного приоритета
+            item_widget = QWidget()
+            item_layout = QHBoxLayout(item_widget)
+            item_layout.setContentsMargins(0, 0, 0, 0)
+            item_layout.setSpacing(5)
 
-                # Название приоритета
-                name_label = QLabel(name)
-                name_label.setStyleSheet("font-size: 13px; color: #1B232A;")
-                item_layout.addWidget(name_label)
+            # Цветной кружок
+            indicator = QLabel()
+            indicator.setFixedSize(12, 12)
+            indicator.setStyleSheet(f"""
+                background-color: {color}; 
+                border-radius: 6px;
+                border: 1px solid rgba(0,0,0,0.1);
+            """)
+            item_layout.addWidget(indicator)
 
-                item_layout.addStretch()
-                container.addWidget(item_widget)
+            # Название
+            name_label = QLabel(name)
+            name_label.setStyleSheet("font-size: 12px; color: #1B232A; font-weight: normal;")
+            item_layout.addWidget(name_label)
+
+            layout.addWidget(item_widget)
+
+        # Добавляем растяжку в конец
+        layout.addStretch()
+
+        # Принудительно обновляем
+        container.updateGeometry()
+        container.update()
+
+        # Обновляем родителя
+        if container.parent():
+            container.parent().updateGeometry()
+
+        print(f"✅ Приоритеты добавлены, layout.count() = {layout.count()}")
+        print(f"   - container.isVisible(): {container.isVisible()}")
+        print(f"   - container.height(): {container.height()}")
 
     def _connect_signals(self) -> None:
         """Подключение сигналов"""
@@ -326,14 +366,55 @@ class GanttWidget(QWidget):
         self.projectFilter.blockSignals(False)
         self.executorFilter.blockSignals(False)
 
-    def _on_project_filter_changed(self) -> None:
+        # Настраиваем отображение текста в editable режиме
+        self._setup_filters_placeholder()
+
+    def _on_project_filter_changed(self, text: str) -> None:
         """Обработка изменения фильтра проектов"""
-        self._current_project_filter = self.projectFilter.currentData()
+        # Получаем текущие данные
+        current_data = self.projectFilter.currentData()
+
+        # Если текст введен вручную (не из списка), current_data может быть None
+        if current_data is None or current_data == "all":
+            # Пользователь ввел свой текст или выбрал "Все проекты"
+            if text == "Все проекты" or text == "":
+                self._current_project_filter = "all"
+            else:
+                # Ищем проект по введенному тексту
+                for i in range(self.projectFilter.count()):
+                    if self.projectFilter.itemText(i) == text:
+                        self._current_project_filter = self.projectFilter.itemData(i)
+                        break
+                else:
+                    # Если не нашли, оставляем текущий фильтр
+                    pass
+        else:
+            self._current_project_filter = current_data
+
         self._apply_filters()
 
-    def _on_executor_filter_changed(self) -> None:
+    def _on_executor_filter_changed(self, text: str) -> None:
         """Обработка изменения фильтра исполнителей"""
-        self._current_executor_filter = self.executorFilter.currentData()
+        # Получаем текущие данные
+        current_data = self.executorFilter.currentData()
+
+        # Если текст введен вручную (не из списка), current_data может быть None
+        if current_data is None or current_data == "all":
+            # Пользователь ввел свой текст или выбрал "Все исполнители"
+            if text == "Все исполнители" or text == "":
+                self._current_executor_filter = "all"
+            else:
+                # Ищем исполнителя по введенному тексту
+                for i in range(self.executorFilter.count()):
+                    if self.executorFilter.itemText(i) == text:
+                        self._current_executor_filter = self.executorFilter.itemData(i)
+                        break
+                else:
+                    # Если не нашли, оставляем текущий фильтр
+                    pass
+        else:
+            self._current_executor_filter = current_data
+
         self._apply_filters()
 
     def _apply_filters(self) -> None:
@@ -358,6 +439,32 @@ class GanttWidget(QWidget):
 
         # Обновляем видимость в дереве проектов
         self._update_tree_visibility()
+
+    def _setup_filters_placeholder(self) -> None:
+        """Настройка плейсхолдеров для фильтров"""
+        # Для projectFilter
+        if hasattr(self, 'projectFilter'):
+            # Устанавливаем текущий текст как "Все проекты"
+            self.projectFilter.setEditText("Все проекты")
+            # Настраиваем, чтобы при клике текст не выделялся полностью
+            line_edit = self.projectFilter.lineEdit()
+            if line_edit:
+                line_edit.setPlaceholderText("Все проекты")
+                line_edit.setReadOnly(False)
+                # При фокусе не выделять весь текст
+                line_edit.setSelection(0, 0)
+
+        # Для executorFilter
+        if hasattr(self, 'executorFilter'):
+            # Устанавливаем текущий текст как "Все исполнители"
+            self.executorFilter.setEditText("Все исполнители")
+            # Настраиваем, чтобы при клике текст не выделялся полностью
+            line_edit = self.executorFilter.lineEdit()
+            if line_edit:
+                line_edit.setPlaceholderText("Все исполнители")
+                line_edit.setReadOnly(False)
+                # При фокусе не выделять весь текст
+                line_edit.setSelection(0, 0)
 
     def _update_tree_visibility(self) -> None:
         """Обновляет видимость элементов в дереве проектов на основе фильтров"""
