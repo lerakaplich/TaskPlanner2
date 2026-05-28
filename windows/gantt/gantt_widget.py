@@ -301,13 +301,29 @@ class GanttWidget(QWidget):
     def refresh(self) -> None:
         """Обновление данных - полная перезагрузка"""
         print("🔄 GanttWidget.refresh() - полное обновление")
-        # Очищаем кэш сервиса и перезагружаем
+
+        # Очищаем кэш сервиса
         self._service._cached_tasks = []
         self._service._cached_projects = []
-        self._populate_data()
-        # Принудительно обновляем холст
+
+        # Полная перезагрузка данных
+        self._service.load_data()
+
+        # Обновляем дерево проектов
+        self._populate_projects_tree()
+
+        # Обновляем фильтры
+        self._populate_filters()
+
+        # Применяем фильтры (это обновит холст)
+        self._apply_filters()
+
+        # Обновляем диапазон дат на холсте
+        self._update_canvas_date_range()
+
+        # Обновляем связи на холсте
         if hasattr(self, 'gantt_canvas'):
-            self.gantt_canvas.set_filtered_tasks(None)
+            self.gantt_canvas.set_links(self._service.get_all_links())
             self.gantt_canvas.update()
 
     def _populate_projects_tree(self) -> None:
@@ -547,13 +563,14 @@ class GanttWidget(QWidget):
         # Создаем диалог создания задачи
         from windows.other_tasks.task_dialog import TaskDialog
         from services.tasks_service.tasks_service import TasksService
+        from services.employee_service.column_service import ColumnService
 
-        # Создаем сервис задач
+        # ИСПРАВЛЕНО: передаём корректный db_session
         task_service = TasksService(
-            db_session=self.session,
+            db_session=self.session,  # <-- ИСПРАВЛЕНО! Используем self.session
             current_user={"id": self.current_user_id, "last_name": "", "first_name": ""},
-            mode="others",  # Для создания задач в проекте
-            column_service=None
+            mode="others",
+            column_service=ColumnService(self.session)  # Передаём column_service
         )
 
         # Подготавливаем данные задачи с предустановленным проектом
@@ -576,10 +593,36 @@ class GanttWidget(QWidget):
         """Обработчик создания задачи"""
         print(f"✅ Задача создана в проекте {project_id}: {form_data}")
 
-        # ВАЖНО: Полная перезагрузка данных
-        self.refresh()
+        # СОЗДАЁМ ЗАДАЧУ ЧЕРЕЗ СЕРВИС
+        from services.tasks_service.tasks_service import TasksService
+        from services.employee_service.column_service import ColumnService
 
-        QMessageBox.information(self, "Успех", "Задача успешно создана!")
+        task_service = TasksService(
+            db_session=self.session,
+            current_user={"id": self.current_user_id, "last_name": "", "first_name": ""},
+            mode="others",
+            column_service=ColumnService(self.session)
+        )
+
+        try:
+            # Добавляем project_id в form_data если его нет
+            if "project_id" not in form_data:
+                form_data["project_id"] = project_id
+
+            # Создаём задачу
+            new_task = task_service.create_task(form_data)
+            print(f"✅ Задача успешно создана! ID: {new_task.get('id')}")
+
+            # Полная перезагрузка данных
+            self.refresh()
+
+            QMessageBox.information(self, "Успех", "Задача успешно создана!")
+
+        except Exception as e:
+            print(f"❌ Ошибка при создании задачи: {e}")
+            import traceback
+            traceback.print_exc()
+            QMessageBox.critical(self, "Ошибка", f"Не удалось создать задачу:\n{str(e)}")
 
     def _on_create_link(self) -> None:
         """Обработка кнопки создания связи"""
