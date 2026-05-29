@@ -442,7 +442,7 @@ class AnalyticsPage(QWidget):
 
         for position, emp_data in enumerate(rating_employees):
             try:
-                card = RatingEmployeeCard(emp_data, position=position, parent=self)
+                card = RatingEmployeeCard(emp_data, position=position, parent=None)
                 card.setMinimumHeight(80)
                 card.clicked.connect(self._on_employee_clicked)
                 self.rating_layout.addWidget(card)

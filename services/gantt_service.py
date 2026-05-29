@@ -57,6 +57,144 @@ class GanttService:
         self._cached_tasks: List[TaskGanttData] = []
         self._cached_projects: List[ProjectDTO] = []
 
+    def create_task_via_service(self, form_data: Dict) -> Optional[Dict]:
+        """
+        Создаёт задачу через сервис задач.
+
+        Args:
+            form_data: данные формы задачи
+
+        Returns:
+            Dict: созданная задача или None
+        """
+        from services.tasks_service.tasks_service import TasksService
+        from services.employee_service.column_service import ColumnService
+
+        try:
+            task_service = TasksService(
+                db_session=self.session,
+                current_user={"id": self.current_user_id, "last_name": "", "first_name": ""},
+                mode="others",
+                column_service=ColumnService(self.session)
+            )
+
+            # Добавляем created_by если нет
+            if "created_by" not in form_data:
+                form_data["created_by"] = self.current_user_id
+
+            new_task = task_service.create_task(form_data)
+            print(f"✅ Задача создана: {new_task.get('id')}")
+            return new_task
+
+        except Exception as e:
+            print(f"❌ Ошибка создания задачи: {e}")
+            import traceback
+            traceback.print_exc()
+            return None
+
+    def update_task_dates_with_linked(self, task_id: int, new_start: datetime, new_end: datetime) -> bool:
+        """
+        Обновляет даты задачи и всех зависимых задач.
+
+        Args:
+            task_id: ID задачи
+            new_start: новая дата начала
+            new_end: новая дата окончания
+
+        Returns:
+            bool: успех операции
+        """
+        try:
+            # Обновляем основную задачу
+            if not self.update_task_dates(task_id, new_start, new_end):
+                return False
+
+            # Обновляем зависимые задачи
+            old_task = None
+            for t in self._cached_tasks:
+                if t.id == task_id:
+                    old_start = t.start_date
+                    old_end = t.end_date
+                    break
+
+            if old_task:
+                delta = (new_start - old_start).days
+                linked_ids = self.get_linked_tasks_for_update(task_id)
+
+                for linked_id in linked_ids:
+                    for t in self._cached_tasks:
+                        if t.id == linked_id:
+                            new_linked_start = t.start_date + timedelta(days=delta)
+                            new_linked_end = t.end_date + timedelta(days=delta)
+                            self.update_task_dates(linked_id, new_linked_start, new_linked_end)
+                            break
+
+            return True
+        except Exception as e:
+            print(f"❌ Ошибка обновления дат с зависимостями: {e}")
+            return False
+
+    def get_all_data(self) -> Dict:
+        """
+        Возвращает все данные для UI.
+
+        Returns:
+            Dict: словарь с проектами, задачами, связями
+        """
+        return {
+            "projects": self._cached_projects,
+            "tasks": self._cached_tasks,
+            "links": self.get_all_links(),
+            "executors": self.get_unique_executors()
+        }
+
+    def get_task_by_id(self, task_id: int) -> Optional[TaskGanttData]:
+        """
+        Возвращает задачу по ID.
+
+        Args:
+            task_id: ID задачи
+
+        Returns:
+            TaskGanttData или None
+        """
+        for task in self._cached_tasks:
+            if task.id == task_id:
+                return task
+        return None
+
+    def validate_project_selected(self, project_filter: str) -> Tuple[bool, Optional[int], Optional[str]]:
+        """
+        Проверяет, выбран ли проект.
+
+        Args:
+            project_filter: текущий фильтр проекта ("all" или "project_{id}")
+
+        Returns:
+            Tuple[bool, Optional[int], Optional[str]]: (is_valid, project_id, error_message)
+        """
+        if project_filter == "all":
+            return False, None, "Пожалуйста, сначала выберите проект из списка проектов"
+
+        try:
+            project_id = int(project_filter.split("_")[1])
+            return True, project_id, None
+        except (ValueError, IndexError):
+            return False, None, "Неверный формат фильтра проекта"
+
+    def get_tasks_for_tree(self) -> List[Tuple[ProjectDTO, List[TaskGanttData]]]:
+        """
+        Возвращает проекты с их задачами для дерева.
+
+        Returns:
+            List[Tuple[ProjectDTO, List[TaskGanttData]]]: список (проект, задачи проекта)
+        """
+        result = []
+        for project in self._cached_projects:
+            tasks = self.get_tasks_for_project(project.id)
+            result.append((project, tasks))
+        return result
+
     def load_data(self, project_id: Optional[int] = None) -> None:
         """Загружает данные из БД"""
         print(f"📊 GanttService.load_data(project_id={project_id})")
@@ -66,6 +204,127 @@ class GanttService:
 
         # Загружаем задачи
         self._load_tasks(project_id)
+
+    def create_task_from_dialog(self, form_data: Dict, current_user_id: int) -> Optional[Dict]:
+        """
+        Создаёт задачу из данных диалога.
+
+        Args:
+            form_data: данные формы задачи
+            current_user_id: ID текущего пользователя
+
+        Returns:
+            Dict: созданная задача или None
+        """
+        from services.tasks_service.tasks_service import TasksService
+        from services.employee_service.column_service import ColumnService
+
+        try:
+            task_service = TasksService(
+                db_session=self.session,
+                current_user={"id": current_user_id, "last_name": "", "first_name": ""},
+                mode="others",
+                column_service=ColumnService(self.session)
+            )
+
+            # Добавляем created_by если нет
+            if "created_by" not in form_data:
+                form_data["created_by"] = current_user_id
+
+            new_task = task_service.create_task(form_data)
+            print(f"✅ Задача создана: {new_task.get('id')}")
+            return new_task
+
+        except Exception as e:
+            print(f"❌ Ошибка создания задачи: {e}")
+            import traceback
+            traceback.print_exc()
+            return None
+
+    def refresh_all_data(self, project_id: Optional[int] = None) -> None:
+        """
+        Полностью перезагружает все данные.
+
+        Args:
+            project_id: опциональный ID проекта для фильтрации
+        """
+        self._cached_tasks = []
+        self._cached_projects = []
+        self.load_data(project_id)
+
+    def get_project_name(self, project_id: int) -> str:
+        """
+        Возвращает имя проекта по ID.
+
+        Args:
+            project_id: ID проекта
+
+        Returns:
+            str: имя проекта или пустая строка
+        """
+        for project in self._cached_projects:
+            if project.id == project_id:
+                return project.name
+        return ""
+
+    def get_filtered_tasks(self, project_filter: str, executor_filter: str) -> List[TaskGanttData]:
+        """
+        Возвращает задачи с применением фильтров.
+
+        Args:
+            project_filter: "all" или "project_{id}"
+            executor_filter: "all" или имя исполнителя
+
+        Returns:
+            List[TaskGanttData]: отфильтрованные задачи
+        """
+        all_tasks = self.get_all_tasks()
+
+        # Фильтр по проекту
+        if project_filter != "all":
+            project_id = int(project_filter.split("_")[1])
+            filtered = [t for t in all_tasks if t.project_id == project_id]
+        else:
+            filtered = all_tasks.copy()
+
+        # Фильтр по исполнителю
+        if executor_filter != "all":
+            filtered = [t for t in filtered if t.executor_name == executor_filter]
+
+        return filtered
+
+    def get_date_range_for_tasks(self, tasks: List[TaskGanttData], padding_days: int = 7) -> Tuple[datetime, datetime]:
+        """
+        Возвращает диапазон дат для списка задач с отступом.
+
+        Args:
+            tasks: список задач
+            padding_days: количество дней отступа
+
+        Returns:
+            Tuple[datetime, datetime]: (start_date, end_date)
+        """
+        if not tasks:
+            today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+            return today, today + timedelta(days=30)
+
+        start = min(t.start_date for t in tasks)
+        end = max(t.end_date for t in tasks)
+
+        return start - timedelta(days=padding_days), end + timedelta(days=padding_days)
+
+    def get_unique_executors(self) -> List[str]:
+        """
+        Возвращает список уникальных имён исполнителей.
+
+        Returns:
+            List[str]: отсортированный список имён исполнителей
+        """
+        executors = set()
+        for task in self.get_all_tasks():
+            if task.executor_name:
+                executors.add(task.executor_name)
+        return sorted(executors)
 
     def _load_projects(self) -> None:
         """Загружает проекты из БД"""

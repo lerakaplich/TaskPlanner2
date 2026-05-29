@@ -1,335 +1,249 @@
-# windows/analytics/rating/rating_employee_card.py
 
 from PyQt6.QtWidgets import QFrame, QLabel, QHBoxLayout, QVBoxLayout, QProgressBar, QSizePolicy
 from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.uic import loadUi
+import os
 
 
 class RatingEmployeeCard(QFrame):
-    """Карточка сотрудника для рейтинга с КПД (использует новые поля)"""
+    """Карточка сотрудника для рейтинга с КПД - единый дизайн для БД"""
 
-    clicked = pyqtSignal(int)
+    clicked = pyqtSignal(int)  # Сигнал при клике на карточку
 
     def __init__(self, employee_data, position=0, parent=None):
+        """
+        Args:
+            employee_data: dict с данными сотрудника из БД
+            position: int (0-based) позиция в рейтинге
+            parent: родительский виджет
+        """
         super().__init__(parent)
         self.employee_data = employee_data
         self.employee_id = employee_data.get('id')
         self.position = position
 
-        # Логирование получения данных
-        self._log_employee_data()
+        # Загружаем UI из файла
+        self._load_ui()
+        # Заполняем данными
+        self._setup_dynamic_ui()
 
-        self._init_ui()
+    def _load_ui(self):
+        """Загрузка UI из .ui файла"""
+        ui_file_path = r"../../../ui/analytics/rating/rating_employee_card.ui"
 
-    def _log_employee_data(self):
-        """Логирует полученные данные сотрудника для отладки"""
-        print(f"\n{'=' * 60}")
-        print(f"📊 РАСЧЕТ КПД ДЛЯ СОТРУДНИКА #{self.position + 1}")
-        print(f"{'=' * 60}")
-        print(f"👤 Сотрудник: {self.employee_data.get('name', 'Неизвестно')}")
-        print(f"📋 Должность: {self.employee_data.get('position', '—')}")
-        print(f"📁 Отдел: {self.employee_data.get('department', '—')}")
-        print(f"{'-' * 40}")
-
-        # Базовые метрики
-        completed_tasks = self.employee_data.get('completed_tasks', 0)
-        total_tasks = self.employee_data.get('total_tasks', 0)
-        overdue_tasks = self.employee_data.get('overdue_tasks', 0)
-
-        print(f"📊 Базовые метрики:")
-        print(f"   ✅ Выполнено задач: {completed_tasks}")
-        print(f"   📋 Всего задач: {total_tasks}")
-        print(f"   ⏰ Просрочено: {overdue_tasks}")
-
-        if total_tasks > 0:
-            completion_rate = (completed_tasks / total_tasks) * 100
-            print(f"   📈 Процент выполнения: {completion_rate:.1f}%")
-
-        # Данные из EmployeeData (рассчитанные в БД)
-        kpd_rating = self.employee_data.get('kpd_rating', 0)
-        on_time_rate = self.employee_data.get('on_time_rate', 0)
-        tasks_completed_total = self.employee_data.get('tasks_completed_total', 0)
-        tasks_completed_on_time = self.employee_data.get('tasks_completed_on_time', 0)
-        avg_completion_days = self.employee_data.get('avg_task_completion_days', 0)
-
-        print(f"\n📊 Данные из EmployeeData (рассчитанные в БД):")
-        print(f"   ⭐ КПД рейтинг: {kpd_rating:.1f}%")
-        print(f"   🎯 Процент в срок: {on_time_rate:.1f}%")
-        print(f"   ✅ Выполнено (БД): {tasks_completed_total}")
-        print(f"   🎯 В срок (БД): {tasks_completed_on_time}")
-        print(f"   📅 Среднее время выполнения: {avg_completion_days:.1f} дн.")
-
-        # Данные из analytics (рассчитанные в реальном времени)
-        kpd_percent = self.employee_data.get('kpd_percent', 0)
-        weighted_kpd = self.employee_data.get('weighted_kpd', 0)
-        overtime_hours = self.employee_data.get('overtime_hours', 0)
-
-        print(f"\n📊 Данные из Analytics (рассчитанные в real-time):")
-        print(f"   ⚡ КПД процент: {kpd_percent:.1f}%")
-        print(f"   🎯 Взвешенный КПД: {weighted_kpd:.1f}%")
-        print(f"   ⏱️ Часы переработок: {overtime_hours:.1f} ч.")
-
-        # Формула расчета
-        print(f"\n📐 ФОРМУЛА РАСЧЕТА КПД ЗАДАЧИ:")
-        print(f"   KPD = Сложность × Приоритет × Эффективность × Готовность")
-        print(f"   ")
-        print(f"   где:")
-        print(f"   • Сложность: 1★=0.6, 2★=0.8, 3★=1.0, 4★=1.2, 5★=1.5")
-        print(f"   • Приоритет: low=0.8, medium=1.0, high=1.2, critical=1.5")
-        print(f"   • Эффективность = Плановые_дни / Фактические_дни")
-        print(f"   • Готовность: 1.0 для выполненных задач")
-
-        # Итоговый КПД
-        final_kpd = kpd_percent if kpd_percent > 0 else kpd_rating
-        if final_kpd == 0 and total_tasks > 0:
-            final_kpd = (completed_tasks / total_tasks * 100)
-
-        print(f"\n🎯 ИТОГОВЫЙ КПД: {final_kpd:.1f}%")
-
-        # Оценка
-        if final_kpd >= 80:
-            print(f"🏆 ОЦЕНКА: Отлично! Высокая эффективность")
-        elif final_kpd >= 60:
-            print(f"👍 ОЦЕНКА: Хорошо! Есть куда расти")
-        elif final_kpd >= 40:
-            print(f"⚠️ ОЦЕНКА: Средне! Требуется улучшение")
+        if os.path.exists(ui_file_path):
+            loadUi(ui_file_path, self)
+            # Получаем ссылки на виджеты после загрузки UI
+            self.position_label = self.findChild(QLabel, "positionLabel")
+            self.name_label = self.findChild(QLabel, "nameLabel")
+            self.dept_label = self.findChild(QLabel, "deptLabel")
+            self.stats_label = self.findChild(QLabel, "statsLabel")
+            self.kpd_label = self.findChild(QLabel, "kpdLabel")
+            self.weighted_label = self.findChild(QLabel, "weightedLabel")
+            self.progress_bar = self.findChild(QProgressBar, "progressBar")
+            self.overtime_label = self.findChild(QLabel, "overtimeLabel")
         else:
-            print(f"❌ ОЦЕНКА: Низкая эффективность! Требует внимания")
-
-        print(f"{'=' * 60}\n")
+            # Если UI файл не найден, создаем UI программно
+            self._init_ui()
 
     def _init_ui(self):
-        # Стили
-        self.setStyleSheet("""
-            QFrame {
-                background-color: white;
-                border-radius: 12px;
-                border: 1px solid #E0E0E0;
-                margin: 4px 0;
-            }
-            QFrame:hover {
-                background-color: #FAFAFA;
-                border-color: #ccab6e;
-            }
-        """)
-
+        """Создание UI программно - единый стиль (fallback)"""
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
         self.setMinimumHeight(70)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
 
         # Основной layout
         main_layout = QHBoxLayout(self)
         main_layout.setContentsMargins(15, 12, 15, 12)
         main_layout.setSpacing(15)
 
-        # Позиция (место)
-        position_colors = {
-            1: "#FFD700",  # Золото
-            2: "#C0C0C0",  # Серебро
-            3: "#CD7F32"  # Бронза
-        }
-        color = position_colors.get(self.position + 1, "#E0E0E0")
-        font_size = "24px" if self.position < 3 else "18px"
+        # === ПОЗИЦИЯ ===
+        self.position_label = QLabel()
+        self.position_label.setFixedSize(50, 50)
+        self.position_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        main_layout.addWidget(self.position_label)
 
-        position_label = QLabel(f"{self.position + 1}")
-        position_label.setFixedSize(50, 50)
-        position_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        position_label.setStyleSheet(f"""
+        # === ИНФОРМАЦИЯ ===
+        info_layout = QVBoxLayout()
+        info_layout.setSpacing(5)
+
+        self.name_label = QLabel()
+        self.name_label.setStyleSheet("font-size: 16px; font-weight: bold; color: #1B232A;")
+        self.name_label.setWordWrap(True)
+        info_layout.addWidget(self.name_label)
+
+        self.dept_label = QLabel()
+        self.dept_label.setStyleSheet("color: #666; font-size: 11px;")
+        self.dept_label.setWordWrap(True)
+        info_layout.addWidget(self.dept_label)
+
+        self.stats_label = QLabel()
+        self.stats_label.setStyleSheet("color: #888; font-size: 11px;")
+        info_layout.addWidget(self.stats_label)
+
+        main_layout.addLayout(info_layout, stretch=1)
+
+        # === КПД ===
+        kpd_layout = QVBoxLayout()
+        kpd_layout.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+
+        self.kpd_label = QLabel()
+        self.kpd_label.setAlignment(Qt.AlignmentFlag.AlignRight)
+        kpd_layout.addWidget(self.kpd_label)
+
+        self.weighted_label = QLabel()
+        self.weighted_label.setAlignment(Qt.AlignmentFlag.AlignRight)
+        self.weighted_label.setStyleSheet("color: #888; font-size: 10px;")
+        self.weighted_label.setVisible(False)
+        kpd_layout.addWidget(self.weighted_label)
+
+        self.progress_bar = QProgressBar()
+        self.progress_bar.setRange(0, 100)
+        self.progress_bar.setFixedWidth(120)
+        self.progress_bar.setFixedHeight(8)
+        self.progress_bar.setTextVisible(False)
+        kpd_layout.addWidget(self.progress_bar)
+
+        self.overtime_label = QLabel()
+        self.overtime_label.setAlignment(Qt.AlignmentFlag.AlignRight)
+        self.overtime_label.setVisible(False)
+        kpd_layout.addWidget(self.overtime_label)
+
+        main_layout.addLayout(kpd_layout)
+
+    def _setup_dynamic_ui(self):
+        """Заполнение карточки данными из БД"""
+
+        # === ПОЗИЦИЯ ===
+        colors = {0: "#FFD700", 1: "#C0C0C0", 2: "#CD7F32"}
+        color = colors.get(self.position, "#E0E0E0")
+        font_size = "24px" if self.position < 3 else "18px"
+        text_color = '#333' if self.position < 3 else '#666'
+
+        self.position_label.setText(str(self.position + 1))
+        self.position_label.setStyleSheet(f"""
             background-color: {color};
             border-radius: 25px;
             font-size: {font_size};
             font-weight: bold;
-            color: {'#333' if self.position < 3 else '#666'};
+            color: {text_color};
         """)
-        main_layout.addWidget(position_label)
 
-        # Информация о сотруднике
-        info_layout = QVBoxLayout()
-        info_layout.setSpacing(5)
+        # === ИМЯ ===
+        self.name_label.setText(self.employee_data.get('name', 'Без имени'))
 
-        # Имя
-        name_label = QLabel(self.employee_data.get('name', 'Без имени'))
-        name_label.setStyleSheet("font-size: 16px; font-weight: bold; color: #1B232A;")
-        name_label.setWordWrap(True)
-        info_layout.addWidget(name_label)
+        # === ДОЛЖНОСТЬ И ОТДЕЛ ===
+        parts = []
+        if self.employee_data.get('position'):
+            parts.append(self.employee_data['position'])
+        if self.employee_data.get('department'):
+            parts.append(self.employee_data['department'])
+        if self.employee_data.get('subdivision'):
+            parts.append(self.employee_data['subdivision'])
 
-        # Должность и отдел
-        position_text = self.employee_data.get('position', '—')
-        department = self.employee_data.get('department', '')
-        if department and department != '—':
-            position_text += f" · {department}"
-        subdivision = self.employee_data.get('subdivision', '')
-        if subdivision and subdivision != '—':
-            position_text += f" · {subdivision}"
+        self.dept_label.setText(' · '.join(parts) if parts else '—')
 
-        dept_label = QLabel(position_text)
-        dept_label.setStyleSheet("color: #666; font-size: 11px;")
-        dept_label.setWordWrap(True)
-        info_layout.addWidget(dept_label)
+        # === СТАТИСТИКА ===
+        completed = self.employee_data.get('completed_tasks', 0)
+        total = self.employee_data.get('total_tasks', 0)
+        on_time = self.employee_data.get('on_time_rate', 0)
 
-        # Статистика (выполнено/всего задач)
-        completed_tasks = self.employee_data.get('completed_tasks', 0)
-        total_tasks = self.employee_data.get('total_tasks', 0)
+        stats = f"📊 Задач: {completed} из {total}"
+        if on_time > 0:
+            stats += f" · В срок: {on_time:.0f}%"
+        self.stats_label.setText(stats)
 
-        # Используем новые поля из EmployeeData если есть
-        kpd_rating = self.employee_data.get('kpd_rating', 0)
-        on_time_rate = self.employee_data.get('on_time_rate', 0)
+        # === КПД ===
+        kpd = self.employee_data.get('kpd_percent', 0)
+        if kpd == 0:
+            kpd = self.employee_data.get('kpd_rating', 0)
+        if kpd == 0 and total > 0:
+            kpd = (completed / total * 100)
 
-        stats_text = f"📊 Задач: {completed_tasks} из {total_tasks}"
-        if on_time_rate > 0:
-            stats_text += f" · В срок: {on_time_rate:.0f}%"
-        stats_label = QLabel(stats_text)
-        stats_label.setStyleSheet("color: #888; font-size: 11px;")
-        info_layout.addWidget(stats_label)
+        weighted = self.employee_data.get('weighted_kpd', 0)
+        overtime = self.employee_data.get('overtime_hours', 0)
 
-        main_layout.addLayout(info_layout, stretch=1)
-
-        # КПД с процентами
-        kpd_layout = QVBoxLayout()
-        kpd_layout.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-
-        # Получаем КПД - приоритет новым полям
-        kpd_percent = self.employee_data.get('kpd_percent', 0)
-        if kpd_percent == 0:
-            kpd_percent = self.employee_data.get('kpd_rating', 0)
-        if kpd_percent == 0 and total_tasks > 0:
-            kpd_percent = (completed_tasks / total_tasks * 100) if total_tasks > 0 else 0
-
-        weighted_kpd = self.employee_data.get('weighted_kpd', 0)
-        overtime_hours = self.employee_data.get('overtime_hours', 0)
-
-        # Основной процент КПД
-        kpd_label = QLabel(f"{kpd_percent:.1f}%")
-        kpd_label.setAlignment(Qt.AlignmentFlag.AlignRight)
-
-        # Цвет в зависимости от КПД
-        if kpd_percent >= 80:
-            kpd_label.setStyleSheet("font-size: 22px; font-weight: bold; color: #2ecc71;")
-        elif kpd_percent >= 60:
-            kpd_label.setStyleSheet("font-size: 22px; font-weight: bold; color: #f1c40f;")
-        elif kpd_percent >= 40:
-            kpd_label.setStyleSheet("font-size: 22px; font-weight: bold; color: #e67e22;")
+        # Цвет КПД
+        if kpd >= 80:
+            color = "#2ecc71"
+        elif kpd >= 60:
+            color = "#f1c40f"
+        elif kpd >= 40:
+            color = "#e67e22"
         else:
-            kpd_label.setStyleSheet("font-size: 22px; font-weight: bold; color: #e74c3c;")
-        kpd_layout.addWidget(kpd_label)
+            color = "#e74c3c"
+
+        self.kpd_label.setText(f"{kpd:.1f}%")
+        self.kpd_label.setStyleSheet(f"font-size: 22px; font-weight: bold; color: {color};")
 
         # Взвешенный КПД
-        if weighted_kpd > 0 and weighted_kpd != kpd_percent:
-            weighted_label = QLabel(f"взв: {weighted_kpd:.1f}%")
-            weighted_label.setAlignment(Qt.AlignmentFlag.AlignRight)
-            weighted_label.setStyleSheet("color: #888; font-size: 10px;")
-            kpd_layout.addWidget(weighted_label)
+        if weighted > 0 and weighted != kpd:
+            self.weighted_label.setText(f"взв: {weighted:.1f}%")
+            self.weighted_label.setVisible(True)
 
         # Прогресс-бар
-        progress_bar = QProgressBar()
-        progress_bar.setRange(0, 100)
-        progress_bar.setValue(int(kpd_percent))
-        progress_bar.setFixedWidth(120)
-        progress_bar.setFixedHeight(8)
-        progress_bar.setTextVisible(False)
+        self.progress_bar.setValue(int(kpd))
 
-        # Выбираем цвет градиента
-        if kpd_percent >= 80:
+        # Градиент для прогресс-бара
+        if kpd >= 80:
             gradient = "stop:0 #2ecc71, stop:1 #27ae60"
-        elif kpd_percent >= 60:
+        elif kpd >= 60:
             gradient = "stop:0 #f1c40f, stop:1 #f39c12"
-        elif kpd_percent >= 40:
+        elif kpd >= 40:
             gradient = "stop:0 #e67e22, stop:1 #d35400"
         else:
             gradient = "stop:0 #e74c3c, stop:1 #c0392b"
 
-        progress_bar.setStyleSheet(f"""
+        self.progress_bar.setStyleSheet(f"""
             QProgressBar {{
                 background-color: #E0E0E0;
                 border-radius: 4px;
             }}
             QProgressBar::chunk {{
-                background-color: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-                    {gradient});
+                background-color: qlineargradient(x1:0, y1:0, x2:1, y2:0, {gradient});
                 border-radius: 4px;
             }}
         """)
-        kpd_layout.addWidget(progress_bar)
 
-        # Часы переработок
-        if overtime_hours > 0:
-            overtime_label = QLabel(f"⏱️ +{overtime_hours:.1f} ч")
-            overtime_label.setAlignment(Qt.AlignmentFlag.AlignRight)
-            if overtime_hours > 40:
-                overtime_label.setStyleSheet("color: #e74c3c; font-size: 11px;")
-            elif overtime_hours > 20:
-                overtime_label.setStyleSheet("color: #e67e22; font-size: 11px;")
+        # Переработки
+        if overtime > 0:
+            if overtime > 40:
+                ot_color = "#e74c3c"
+            elif overtime > 20:
+                ot_color = "#e67e22"
             else:
-                overtime_label.setStyleSheet("color: #2ecc71; font-size: 11px;")
-            kpd_layout.addWidget(overtime_label)
+                ot_color = "#2ecc71"
 
-        main_layout.addLayout(kpd_layout)
+            self.overtime_label.setText(f"⏱️ +{overtime:.1f} ч")
+            self.overtime_label.setStyleSheet(f"color: {ot_color}; font-size: 11px;")
+            self.overtime_label.setVisible(True)
 
         # Тултип
-        tooltip_text = self._generate_kpd_tooltip(
-            kpd_percent, weighted_kpd, overtime_hours,
-            total_tasks, completed_tasks, on_time_rate
-        )
-        self.setToolTip(tooltip_text)
-        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setToolTip(self._generate_tooltip(kpd, weighted, overtime, total, completed, on_time))
 
-    def _generate_kpd_tooltip(self, kpd_percent, weighted_kpd, overtime_hours,
-                              total_tasks, completed_tasks, on_time_rate):
-        """Генерирует пояснение расчета КПД"""
+    def _generate_tooltip(self, kpd, weighted, overtime, total, completed, on_time):
+        """Генерация всплывающей подсказки"""
+        return f"""
+        <div style="background-color: white; margin: 0; padding: 8px;">
+            <p style="margin: 0 0 8px 0;"><b>👤 {self.employee_data.get('name', '—')}</b></p>
+            <p style="margin: 0 0 8px 0;">📋 {self.employee_data.get('position', '—')}</p>
+            <p style="margin: 4px 0;">✅ Выполнено: {completed} из {total}</p>
+            <p style="margin: 4px 0;">🎯 В срок: {on_time:.1f}%</p>
+            <p style="margin: 4px 0;">⚡️ КПД: {kpd:.1f}%</p>
+            {f'<p style="margin: 4px 0;">🎯 Взвешенный: {weighted:.1f}%</p>' if weighted > 0 else ''}
+            {f'<p style="margin: 4px 0;">⏱️ Переработки: {overtime:.1f} ч</p>' if overtime > 0 else ''}
+        </div>
+        """
 
-        formula = """📐 ФОРМУЛА РАСЧЕТА КПД ЗАДАЧИ:
-
-KPD = Сложность × Приоритет × Эффективность × Готовность
-
-Где коэффициенты:
-• Сложность (difficulty): 1★=0.6, 2★=0.8, 3★=1.0, 4★=1.2, 5★=1.5
-• Приоритет: low=0.8, medium=1.0, high=1.2, critical=1.5
-• Эффективность = Плановые_дни / Фактические_дни
-  - Раньше срока: >1.0
-  - В срок: 1.0
-  - Просрочка: <1.0
-• Готовность: 1.0 для выполненных задач
-
-Итоговый КПД сотрудника = среднее арифметическое КПД всех задач"""
-
-        # Статистика сотрудника
-        stats = f"""
-📊 ВАША СТАТИСТИКА:
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-✅ Выполнено задач: {completed_tasks}
-📋 Всего задач: {total_tasks}
-🎯 Процент в срок: {on_time_rate:.0f}%
-⚡ Итоговый КПД: {kpd_percent:.1f}%
-{'🎯 Взвешенный КПД: ' + str(weighted_kpd) + '%' if weighted_kpd > 0 else ''}
-{'⏱️ Часы переработок: ' + str(overtime_hours) + ' ч.' if overtime_hours > 0 else ''}"""
-
-        # Интерпретация
-        if kpd_percent >= 80:
-            interpretation = """
-🏆 ИНТЕРПРЕТАЦИЯ: ОТЛИЧНО!
-   Вы показываете высокую эффективность.
-   Задачи выполняются качественно и в срок.
-   Продолжайте в том же духе!"""
-        elif kpd_percent >= 60:
-            interpretation = """
-👍 ИНТЕРПРЕТАЦИЯ: ХОРОШО!
-   Хороший результат, но есть куда расти.
-   Обратите внимание на соблюдение дедлайнов."""
-        elif kpd_percent >= 40:
-            interpretation = """
-⚠️ ИНТЕРПРЕТАЦИЯ: СРЕДНЕ
-   Результат ниже целевого.
-   Рекомендуется улучшить планирование задач
-   и соблюдение сроков выполнения."""
-        else:
-            interpretation = """
-❌ ИНТЕРПРЕТАЦИЯ: ТРЕБУЕТ УЛУЧШЕНИЯ
-   Низкая эффективность.
-   Необходимо пересмотреть подход к работе:
-   - Соблюдайте дедлайны
-   - Повышайте приоритет важных задач
-   - Старайтесь завершать начатые задачи"""
-
-        return f"{formula}\n{stats}\n{interpretation}"
 
     def mousePressEvent(self, event):
+        """Клик по карточке"""
         self.clicked.emit(self.employee_id)
         super().mousePressEvent(event)
+
+    def update_data(self, employee_data, position=0):
+        """Обновление данных карточки"""
+        self.employee_data = employee_data
+        self.employee_id = employee_data.get('id')
+        self.position = position
+        self._setup_dynamic_ui()

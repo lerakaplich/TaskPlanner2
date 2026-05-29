@@ -1,4 +1,5 @@
 # windows/gantt/gantt_canvas.py
+
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Tuple
 
@@ -15,9 +16,11 @@ from services.gantt_service import GanttService, TaskGanttData
 
 
 class GanttCanvas(QWidget):
-    """Холст для отрисовки диаграммы Ганта"""
+    """Холст для отрисовки диаграммы Ганта - только отображение и UI события"""
 
-    task_moved = pyqtSignal(int, datetime, datetime)
+    # Сигналы для передачи действий в сервис
+    task_moved_signal = pyqtSignal(int, datetime, datetime)
+    link_created_signal = pyqtSignal(int, int)
 
     def __init__(self, gantt_service: GanttService, parent=None):
         super().__init__(parent)
@@ -34,7 +37,7 @@ class GanttCanvas(QWidget):
         self._original_start: Optional[datetime] = None
         self._original_end: Optional[datetime] = None
         self._links: Dict[int, List[int]] = {}
-        self._filtered_tasks: Optional[List[TaskGanttData]] = None  # Добавляем атрибут
+        self._tasks: List[TaskGanttData] = []
 
         # Для создания связей (Ctrl+клик)
         self._selected_for_link: Optional[TaskGanttData] = None
@@ -48,6 +51,13 @@ class GanttCanvas(QWidget):
         p.setColor(self.backgroundRole(), QColor("#FFFFFF"))
         self.setPalette(p)
 
+    # ==================== Публичные методы для UI ====================
+
+    def set_tasks(self, tasks: List[TaskGanttData]) -> None:
+        """Устанавливает задачи для отображения"""
+        self._tasks = tasks
+        self.update()
+
     def set_date_range(self, start: datetime, end: datetime) -> None:
         """Установить диапазон дат"""
         self._start_date = start
@@ -59,16 +69,16 @@ class GanttCanvas(QWidget):
         self._links = links
         self.update()
 
-    def set_filtered_tasks(self, filtered_tasks: List[TaskGanttData]) -> None:
-        """Устанавливает отфильтрованные задачи для отображения"""
-        self._filtered_tasks = filtered_tasks
+    def clear_selection(self) -> None:
+        """Очищает выделение для связи"""
+        self._selected_for_link = None
         self.update()
 
-    def _get_display_tasks(self) -> List[TaskGanttData]:
-        """Возвращает задачи для отображения (с учетом фильтра)"""
-        if self._filtered_tasks is not None:
-            return self._filtered_tasks
-        return self._service.get_all_tasks()
+    def refresh_view(self) -> None:
+        """Обновляет отображение"""
+        self.update()
+
+    # ==================== Внутренние методы отрисовки ====================
 
     def _get_total_days(self) -> int:
         """Получить общее количество дней в диапазоне"""
@@ -80,12 +90,10 @@ class GanttCanvas(QWidget):
 
     def _get_total_height(self) -> int:
         """Получить общую высоту диаграммы"""
-        tasks_count = len(self._get_display_tasks())
-        return self._header_height + tasks_count * self._row_height + 100
+        return self._header_height + len(self._tasks) * self._row_height + 100
 
     def paintEvent(self, event) -> None:
         """Отрисовка диаграммы Ганта"""
-        # Проверяем, что QPainter можно создать
         try:
             painter = QPainter(self)
         except Exception as e:
@@ -94,8 +102,7 @@ class GanttCanvas(QWidget):
 
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
 
-        tasks = self._get_display_tasks()
-        if not tasks:
+        if not self._tasks:
             painter.setPen(QColor("#666666"))
             painter.drawText(
                 self.rect(),
@@ -107,22 +114,18 @@ class GanttCanvas(QWidget):
 
         total_width = self._get_total_width()
         total_height = self._get_total_height()
-
-        # Устанавливаем размер холста
         self.setFixedSize(total_width, total_height)
 
-        # Рисуем фон
         painter.fillRect(0, 0, total_width, total_height, QColor("#FFFFFF"))
 
         try:
             self._draw_header(painter)
-            self._draw_grid(painter, tasks)
-            self._draw_task_bars(painter, tasks)
-            self._draw_links(painter, tasks)
+            self._draw_grid(painter)
+            self._draw_task_bars(painter)
+            self._draw_links(painter)
 
-            # Рисуем выделение для связи
             if self._selected_for_link:
-                self._draw_selection_highlight(painter, self._selected_for_link, tasks)
+                self._draw_selection_highlight(painter)
         except Exception as e:
             print(f"Ошибка отрисовки: {e}")
             import traceback
@@ -134,15 +137,12 @@ class GanttCanvas(QWidget):
         """Отрисовка шапки"""
         total_days = self._get_total_days()
 
-        # Фон шапки
         painter.fillRect(0, 0, self._get_total_width(), self._header_height, QColor("#F8F9FA"))
 
-        # Шрифт для месяцев
         month_font = QFont("Arial", 12, QFont.Weight.Bold)
         painter.setFont(month_font)
         painter.setPen(QColor("#1B232A"))
 
-        # Рисуем месяцы
         current_month = -1
         month_start_x = self._left_padding
         month_width = 0
@@ -165,13 +165,11 @@ class GanttCanvas(QWidget):
             else:
                 month_width += self._day_width
 
-        # Последний месяц
         if current_month != -1:
             month_rect = QRectF(month_start_x, 0, month_width, 30)
             painter.drawText(month_rect, Qt.AlignmentFlag.AlignCenter,
                              f"{month_names[current_month]} {year}")
 
-        # Дни
         day_font = QFont("Arial", 8)
         painter.setFont(day_font)
         painter.setPen(QColor("#666666"))
@@ -182,7 +180,7 @@ class GanttCanvas(QWidget):
             day_rect = QRectF(x, 30, self._day_width, 25)
             painter.drawText(day_rect, Qt.AlignmentFlag.AlignCenter, str(date.day))
 
-    def _draw_grid(self, painter: QPainter, tasks: List[TaskGanttData]) -> None:
+    def _draw_grid(self, painter: QPainter) -> None:
         """Отрисовка сетки"""
         total_days = self._get_total_days()
         total_height = self._get_total_height()
@@ -190,41 +188,35 @@ class GanttCanvas(QWidget):
         pen = QPen(QColor("#E8E8E8"), 1)
         painter.setPen(pen)
 
-        # Вертикальные линии
         for day_offset in range(total_days + 1):
             x = self._left_padding + day_offset * self._day_width
             painter.drawLine(x, self._header_height, x, total_height)
 
-        # Горизонтальные линии
-        for i in range(len(tasks) + 1):
+        for i in range(len(self._tasks) + 1):
             y = self._header_height + i * self._row_height
             painter.drawLine(self._left_padding, y, self._get_total_width(), y)
 
-    def _draw_task_bars(self, painter: QPainter, tasks: List[TaskGanttData]) -> None:
+    def _draw_task_bars(self, painter: QPainter) -> None:
         """Отрисовка полос задач"""
-        for index, task in enumerate(tasks):
+        for index, task in enumerate(self._tasks):
             y = self._header_height + index * self._row_height + 5
             x, width = self._service.calculate_bar_position(task, self._start_date)
 
             if width <= 0:
                 continue
 
-            # Скруглённый прямоугольник
             path = QPainterPath()
             bar_rect = QRectF(x, y, max(1.0, width), max(1.0, self._row_height - 10))
             path.addRoundedRect(bar_rect, 8.0, 8.0)
 
-            # Заливка цветом приоритета
             color = QColor(task.color)
             painter.fillPath(path, QBrush(color))
 
-            # Текст названия
             if width > 50:
                 painter.setPen(QColor("#FFFFFF"))
                 font = QFont("Arial", 8, QFont.Weight.Bold)
                 painter.setFont(font)
                 text_rect = QRectF(x + 5, y, width - 30, self._row_height - 10)
-                # Преобразуем width в int для elidedText
                 text_width = int(width) - 35
                 if text_width > 10:
                     elided_text = painter.fontMetrics().elidedText(
@@ -232,7 +224,6 @@ class GanttCanvas(QWidget):
                     )
                     painter.drawText(text_rect, Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, elided_text)
 
-            # Кружок с инициалом исполнителя
             if width > 30 and task.executor_initials:
                 circle_x = x + width - 20
                 circle_y = y + (self._row_height - 10) // 2 - 10
@@ -247,13 +238,12 @@ class GanttCanvas(QWidget):
                 painter.setFont(init_font)
                 painter.drawText(circle_rect, Qt.AlignmentFlag.AlignCenter, task.executor_initials)
 
-    def _draw_links(self, painter: QPainter, tasks: List[TaskGanttData]) -> None:
+    def _draw_links(self, painter: QPainter) -> None:
         """Отрисовка стрелок связей"""
         if not self._links:
             return
 
-        # Создаем карту id -> индекс
-        task_map = {task.id: idx for idx, task in enumerate(tasks)}
+        task_map = {task.id: idx for idx, task in enumerate(self._tasks)}
 
         arrow_pen = QPen(QColor("#D22730"), 2)
         painter.setPen(arrow_pen)
@@ -261,20 +251,19 @@ class GanttCanvas(QWidget):
         for from_id, to_ids in self._links.items():
             if from_id not in task_map:
                 continue
-            from_task = tasks[task_map[from_id]]
+            from_task = self._tasks[task_map[from_id]]
             from_x, from_width = self._service.calculate_bar_position(from_task, self._start_date)
             from_y = self._header_height + task_map[from_id] * self._row_height + self._row_height // 2
 
             for to_id in to_ids:
                 if to_id not in task_map:
                     continue
-                to_task = tasks[task_map[to_id]]
+                to_task = self._tasks[task_map[to_id]]
                 to_x, _ = self._service.calculate_bar_position(to_task, self._start_date)
                 to_y = self._header_height + task_map[to_id] * self._row_height + self._row_height // 2
 
                 start_point = QPointF(from_x + from_width + 5, from_y)
                 end_point = QPointF(to_x - 5, to_y)
-
                 mid_x = (start_point.x() + end_point.x()) // 2
 
                 path = QPainterPath()
@@ -284,7 +273,6 @@ class GanttCanvas(QWidget):
                 path.lineTo(end_point)
                 painter.drawPath(path)
 
-                # Стрелка
                 if end_point.x() > start_point.x():
                     arrow_size = 6
                     painter.setBrush(QBrush(QColor("#D22730")))
@@ -295,10 +283,10 @@ class GanttCanvas(QWidget):
                     arrow.closeSubpath()
                     painter.drawPath(arrow)
 
-    def _draw_selection_highlight(self, painter: QPainter, task: TaskGanttData, tasks: List[TaskGanttData]) -> None:
+    def _draw_selection_highlight(self, painter: QPainter) -> None:
         """Рисует подсветку выбранной задачи для связи"""
-        for index, t in enumerate(tasks):
-            if t.id == task.id:
+        for index, task in enumerate(self._tasks):
+            if task.id == self._selected_for_link.id:
                 y = self._header_height + index * self._row_height + 5
                 x, width = self._service.calculate_bar_position(task, self._start_date)
 
@@ -309,10 +297,11 @@ class GanttCanvas(QWidget):
                 painter.drawRoundedRect(bar_rect, 8.0, 8.0)
                 break
 
+    # ==================== Обработка событий мыши ====================
+
     def _get_task_at_position(self, pos: QPointF) -> Optional[TaskGanttData]:
         """Получить задачу по позиции"""
-        tasks = self._get_display_tasks()
-        for index, task in enumerate(tasks):
+        for index, task in enumerate(self._tasks):
             y = self._header_height + index * self._row_height + 5
             x, width = self._service.calculate_bar_position(task, self._start_date)
             if x <= pos.x() <= x + width and y <= pos.y() <= y + self._row_height - 10:
@@ -333,9 +322,9 @@ class GanttCanvas(QWidget):
                         self._selected_for_link = task
                         self.update()
                     else:
-                        # Создаем связь
                         if self._selected_for_link.id != task.id:
-                            self._create_link(self._selected_for_link, task)
+                            # Передаём в сервис через сигнал
+                            self.link_created_signal.emit(self._selected_for_link.id, task.id)
                         self._selected_for_link = None
                         self.update()
                 else:
@@ -352,26 +341,6 @@ class GanttCanvas(QWidget):
 
         super().mousePressEvent(event)
 
-    def _create_link(self, predecessor: TaskGanttData, successor: TaskGanttData) -> None:
-        """Создает связь между задачами"""
-        reply = QMessageBox.question(
-            self,
-            "Создание связи",
-            f"Создать связь:\n"
-            f"'{predecessor.name}' → '{successor.name}'?\n\n"
-            f"Тип связи: Финиш-Старт (FS)\n"
-            f"Задержка: 0 дней",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
-        )
-
-        if reply == QMessageBox.StandardButton.Yes:
-            if self._service.add_dependency(predecessor.id, successor.id):
-                QMessageBox.information(self, "Успех", "Связь успешно создана!")
-                self.set_links(self._service.get_all_links())
-                self.update()
-            else:
-                QMessageBox.warning(self, "Ошибка", "Не удалось создать связь (возможно, она уже существует)")
-
     def mouseMoveEvent(self, event: QMouseEvent) -> None:
         """Обработка перемещения мыши"""
         if self._dragging_task:
@@ -383,18 +352,12 @@ class GanttCanvas(QWidget):
                 duration = (self._original_end - self._original_start).days
                 new_end = new_start + timedelta(days=duration)
 
-                # Обновляем задачу в памяти
+                # Обновляем задачу в памяти для отображения
                 self._dragging_task.start_date = new_start
                 self._dragging_task.end_date = new_end
 
-                # Обновляем зависимые задачи
-                linked_ids = self._service.get_linked_tasks_for_update(self._dragging_task.id)
-                all_tasks = self._service.get_all_tasks()
-                for tid in linked_ids:
-                    for t in all_tasks:
-                        if t.id == tid:
-                            t.start_date += timedelta(days=days_delta)
-                            t.end_date += timedelta(days=days_delta)
+                # Отправляем сигнал для сохранения в БД
+                self.task_moved_signal.emit(self._dragging_task.id, new_start, new_end)
 
                 self._drag_start_x = int(event.position().x())
                 self.update()
@@ -406,14 +369,8 @@ class GanttCanvas(QWidget):
 
     def mouseReleaseEvent(self, event: QMouseEvent) -> None:
         """Обработка отпускания мыши"""
-        if self._dragging_task:
-            self.task_moved.emit(
-                self._dragging_task.id,
-                self._dragging_task.start_date,
-                self._dragging_task.end_date
-            )
-            self._dragging_task = None
-            self._original_start = None
-            self._original_end = None
-            self.setCursor(Qt.CursorShape.ArrowCursor)
+        self._dragging_task = None
+        self._original_start = None
+        self._original_end = None
+        self.setCursor(Qt.CursorShape.ArrowCursor)
         super().mouseReleaseEvent(event)
