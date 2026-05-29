@@ -9,12 +9,13 @@ from PyQt6.QtWidgets import (
     QWidget, QTabWidget, QGridLayout, QScrollArea,
     QVBoxLayout, QLabel, QFrame, QSizePolicy, QMessageBox, QComboBox, QHBoxLayout
 )
-
+from windows.profile.profile_page import ProfilePage
 from services.analytics_service.analytics_service import AnalyticsService
 from windows.analytics.employees.employee_card import EmployeeCard
 from windows.analytics.theme.theme_card import ThemeCard
 from windows.analytics.projects.project_card_analytics import ProjectCard
 from windows.analytics.rating.rating_employee_card import RatingEmployeeCard
+from models.employees import Employee
 
 
 class AnalyticsPage(QWidget):
@@ -26,6 +27,21 @@ class AnalyticsPage(QWidget):
         # Инициализируем сервис
         self.session = session
         self.service = AnalyticsService(session) if session else None
+
+        # Инициализируем атрибуты ДО загрузки UI
+        self._employees_raw_data = []
+        self._employees_data = []
+        self._themes_data = []
+        self._projects_data = []
+        self._departments = []
+        self._current_department_filter = "all"
+        self._current_rating_department_filter = "all"
+        self._current_period_filter = "all"
+        self.department_filter = None
+        self.rating_department_filter = None
+        self.period_filter = None
+        self._is_loading = False
+        self._departments_loaded = False
 
         # Загружаем UI
         ui_path = os.path.join(
@@ -39,21 +55,6 @@ class AnalyticsPage(QWidget):
             self._setup_ui_from_file()
         else:
             self._create_ui_programmatically()
-
-        # Кэш для данных
-        self._employees_raw_data = []  # Исходные данные сотрудников (без фильтрации)
-        self._employees_data = []  # Отфильтрованные данные для отображения
-        self._themes_data = []
-        self._projects_data = []
-        self._departments = []  # Список отделов для фильтра
-        self._current_department_filter = "all"  # Текущий выбранный отдел для сотрудников
-        self._current_rating_department_filter = "all"  # Текущий выбранный отдел для рейтинга
-        self._current_period_filter = "all"  # Текущий выбранный период для рейтинга
-        self.department_filter = None  # Ссылка на комбобокс фильтра (сотрудники)
-        self.rating_department_filter = None  # Ссылка на комбобокс фильтра (рейтинг)
-        self.period_filter = None  # Ссылка на комбобокс фильтра периода
-        self._is_loading = False  # Флаг загрузки для предотвращения рекурсии
-        self._departments_loaded = False  # Флаг загрузки отделов
 
         # Загружаем данные
         if self.service:
@@ -226,169 +227,247 @@ class AnalyticsPage(QWidget):
             self.period_filter = None
 
     def _get_date_range_for_period(self, period: str) -> tuple:
-        """
-        Возвращает начальную и конечную дату для выбранного периода.
-        Returns: (start_date, end_date) или (None, None) для "all"
-        """
+        """Возвращает начальную и конечную дату для выбранного периода."""
         now = datetime.now()
 
         if period == "all":
             return None, None
-
         elif period == "year":
             start_date = datetime(now.year, 1, 1)
             end_date = now
             return start_date, end_date
-
         elif period == "quarter":
             quarter = (now.month - 1) // 3 + 1
             start_month = (quarter - 1) * 3 + 1
             start_date = datetime(now.year, start_month, 1)
             end_date = now
             return start_date, end_date
-
         elif period == "month":
             start_date = datetime(now.year, now.month, 1)
             end_date = now
             return start_date, end_date
-
         elif period == "last_30_days":
             start_date = now - timedelta(days=30)
             end_date = now
             return start_date, end_date
-
         elif period == "last_90_days":
             start_date = now - timedelta(days=90)
             end_date = now
             return start_date, end_date
-
         return None, None
 
     def _filter_employees_by_period(self, employees_data: List[Dict], period: str) -> List[Dict]:
-        """
-        Фильтрует данные сотрудников по периоду на основе дат завершения задач.
-        Для каждого сотрудника пересчитывает статистику за указанный период.
-        """
+        """Фильтрует данные сотрудников по периоду, используя правильный расчет КПД."""
+        print(f"\n🔍 _filter_employees_by_period вызван с period={period}")
+
         if period == "all" or not employees_data:
+            print(f"📊 РЕЙТИНГ: Период 'Все время' - без фильтрации, сотрудников: {len(employees_data)}")
             return employees_data
 
         start_date, end_date = self._get_date_range_for_period(period)
         if start_date is None:
             return employees_data
 
-        print(f"📅 Фильтрация по периоду: {start_date.strftime('%d.%m.%Y')} - {end_date.strftime('%d.%m.%Y')}")
+        print(f"\n{'=' * 80}")
+        print(f"📊 РЕЙТИНГ: Начало расчета КПД за период")
+        print(f"   Период: {period}")
+        print(f"   Диапазон: {start_date.strftime('%d.%m.%Y')} - {end_date.strftime('%d.%m.%Y')}")
+        print(f"   Всего сотрудников в БД: {len(employees_data)}")
+        print(f"{'=' * 80}")
 
-        # Получаем задачи сотрудников за период из сервиса
         try:
-            # Получаем задачи за период из БД
             tasks_by_employee = self._get_tasks_for_period(start_date, end_date)
 
-            # Обновляем статистику для каждого сотрудника
             filtered_employees = []
             for emp in employees_data:
                 emp_id = emp.get("id")
-                tasks_info = tasks_by_employee.get(emp_id, {"completed": 0, "total": 0, "overtime": 0})
+                emp_name = emp.get("name", "Неизвестный")
+                tasks_info = tasks_by_employee.get(emp_id, {
+                    "completed": 0, "total": 0, "kpd_percent": 0, "weighted_kpd": 0, "overtime": 0
+                })
 
-                # Создаем копию данных сотрудника с обновленной статистикой
                 emp_copy = emp.copy()
-                completed = tasks_info["completed"]
-                total = tasks_info["total"]
-
-                emp_copy["completed_tasks"] = completed
-                emp_copy["total_tasks"] = total
-
-                # Пересчитываем КПД
-                if total > 0:
-                    kpd_percent = (completed / total) * 100
-                else:
-                    kpd_percent = 0
-
-                emp_copy["kpd_percent"] = kpd_percent
-                emp_copy["kpd"] = kpd_percent / 100 if kpd_percent > 0 else 0
+                emp_copy["completed_tasks"] = tasks_info["completed"]
+                emp_copy["total_tasks"] = tasks_info["total"]
+                emp_copy["kpd_percent"] = tasks_info["kpd_percent"]
+                emp_copy["weighted_kpd"] = tasks_info["weighted_kpd"]
+                emp_copy["kpd"] = tasks_info["kpd_percent"] / 100 if tasks_info["kpd_percent"] > 0 else 0
                 emp_copy["overtime_hours"] = tasks_info.get("overtime", 0)
 
-                # Добавляем только сотрудников с задачами за период
-                # (или всех, если нужно показывать и тех, у кого 0 задач)
                 filtered_employees.append(emp_copy)
 
+                print(f"\n👤 Сотрудник: {emp_name} (ID: {emp_id})")
+                print(f"   📋 Всего задач за период: {tasks_info['total']}")
+                print(f"   ✅ Выполнено: {tasks_info['completed']}")
+                print(f"   📊 Итоговый КПД: {tasks_info['kpd_percent']:.1f}%")
+                print(f"   ⚖️ Взвешенный КПД: {tasks_info['weighted_kpd']:.1f}%")
+                print(f"   ⏱️ Переработки: {tasks_info.get('overtime', 0):.1f} ч")
+
+            print(f"\n{'=' * 80}")
+            print(f"📊 РЕЙТИНГ: Итоги за период {period}")
+            print(f"   Обработано сотрудников: {len(filtered_employees)}")
+
+            sorted_by_kpd = sorted(filtered_employees, key=lambda x: x.get('kpd_percent', 0), reverse=True)
+            print(f"\n   🏆 ТОП-5 сотрудников за период:")
+            for i, emp in enumerate(sorted_by_kpd[:5]):
+                print(f"      {i + 1}. {emp.get('name', 'Неизвестный')}: {emp.get('kpd_percent', 0):.1f}% "
+                      f"({emp.get('completed_tasks', 0)}/{emp.get('total_tasks', 0)} задач)")
+
+            print(f"{'=' * 80}\n")
             return filtered_employees
 
         except Exception as e:
             print(f"❌ Ошибка фильтрации по периоду: {e}")
+            import traceback
+            traceback.print_exc()
             return employees_data
 
     def _get_tasks_for_period(self, start_date: datetime, end_date: datetime) -> Dict:
-        """
-        Получает задачи сотрудников за указанный период.
-        Возвращает словарь {employee_id: {"completed": int, "total": int, "overtime": float}}
-        """
+        """Получает задачи сотрудников за указанный период и рассчитывает КПД."""
         if not self.service or not self.service.base:
             return {}
 
         try:
             from models.tasks import Task
             from models.employees import EmployeeNote
+            from services.analytics_service.kpd_calculator import KPDCalculator
 
             tasks_session = self.service.base.session
             employees_session = self.service.base.employees_session
 
-            # Получаем задачи, завершенные в указанный период
-            tasks = tasks_session.query(Task).filter(
-                Task.completed == True,
-                Task.archived_at >= start_date,
-                Task.archived_at <= end_date
-            ).all()
+            print(f"\n{'─' * 60}")
+            print(f"🔍 ПОЛУЧЕНИЕ ЗАДАЧ ЗА ПЕРИОД")
+            print(f"   Начало: {start_date.strftime('%d.%m.%Y %H:%M:%S')}")
+            print(f"   Конец: {end_date.strftime('%d.%m.%Y %H:%M:%S')}")
+            print(f"{'─' * 60}")
 
-            # Также получаем задачи, созданные в период (активные)
+            # Получаем задачи, завершенные в указанный период
+            completed_tasks = tasks_session.query(Task).filter(
+                Task.completed == True,
+                Task.completed_at >= start_date,
+                Task.completed_at <= end_date
+            ).all()
+            # В _get_tasks_for_period после получения completed_tasks
+            print(f"📋 Завершенных задач в период: {len(completed_tasks)}")
+            for task in completed_tasks:
+                print(
+                    f"   - Задача {task.id}: '{task.title[:30]}', assigned_to={task.assigned_to}, completed_at={task.completed_at}")
+                if task.assigned_to:
+                    emp = employees_session.query(Employee).filter(Employee.id == task.assigned_to).first()
+                    print(
+                        f"     Исполнитель: {emp.last_name} {emp.first_name} (ID: {emp.id})" if emp else "     Исполнитель не найден в БД")
+
+            # Получаем задачи, созданные в период (активные, еще не завершенные)
             active_tasks = tasks_session.query(Task).filter(
                 Task.completed == False,
                 Task.created_at >= start_date,
                 Task.created_at <= end_date
             ).all()
+            print(f"📋 Активных задач (созданных в период): {len(active_tasks)}")
 
-            # Собираем статистику по сотрудникам
+            all_relevant_tasks = completed_tasks + active_tasks
+            print(f"📋 Всего релевантных задач: {len(all_relevant_tasks)}")
+
             result = {}
 
-            # Обрабатываем завершенные задачи
-            for task in tasks:
-                if task.assigned_to:
-                    emp_id = task.assigned_to
-                    if emp_id not in result:
-                        result[emp_id] = {"completed": 0, "total": 0, "overtime": 0}
-                    result[emp_id]["completed"] += 1
-                    result[emp_id]["total"] += 1
+            for task in all_relevant_tasks:
+                if not task.assigned_to:
+                    continue
 
-            # Обрабатываем активные задачи
-            for task in active_tasks:
-                if task.assigned_to:
-                    emp_id = task.assigned_to
-                    if emp_id not in result:
-                        result[emp_id] = {"completed": 0, "total": 0, "overtime": 0}
-                    result[emp_id]["total"] += 1
+                emp_id = task.assigned_to
+                if emp_id not in result:
+                    result[emp_id] = {
+                        "tasks": [], "completed_count": 0, "total_count": 0, "overtime": 0.0
+                    }
+
+                result[emp_id]["tasks"].append(task)
+                result[emp_id]["total_count"] += 1
+
+                if task.completed:
+                    result[emp_id]["completed_count"] += 1
+
+            print(f"\n{'─' * 40}")
+            print(f"📊 РАСЧЕТ КПД ДЛЯ КАЖДОГО СОТРУДНИКА")
+            print(f"{'─' * 40}")
+
+            for emp_id, data in result.items():
+                emp = employees_session.query(Employee).filter(Employee.id == emp_id).first()
+                emp_name = f"{emp.last_name} {emp.first_name}" if emp else f"ID:{emp_id}"
+
+                print(f"\n👤 Сотрудник: {emp_name}")
+                print(f"   Всего задач за период: {len(data['tasks'])}")
+                print(f"   Выполнено: {data['completed_count']}")
+                print(f"   Не выполнено: {data['total_count'] - data['completed_count']}")
+
+                if data["tasks"]:
+                    kpd_result = KPDCalculator.calculate_employee_kpd(data["tasks"])
+                    print(f"\n   🔢 РАСЧЕТ КПД:")
+                    print(f"      Суммарный КПД: {kpd_result['total_kpd']:.2f}%")
+                    print(f"      Взвешенный КПД: {kpd_result['weighted_kpd']:.2f}%")
+                    print(f"      Выполнено задач: {kpd_result['completed_tasks_count']}")
+                    print(f"      Всего задач: {kpd_result['total_tasks_count']}")
+
+                    print(f"\n   📋 Задачи сотрудника:")
+                    for i, task in enumerate(data["tasks"]):
+                        status = "✅" if task.completed else "⏳"
+                        task_kpd = task.kpd_score if task.completed else 0
+                        print(f"      {status} {i + 1}. {task.title[:50]} - КПД: {task_kpd:.1f}%")
+                        if task.completed:
+                            print(f"         Эффективность: {task.efficiency_factor:.2f}")
+                            print(f"         Приоритет: {task.priority_factor:.2f}")
+                            print(f"         Сложность: {task.difficulty}")
+
+                    data["kpd_percent"] = kpd_result["total_kpd"]
+                    data["weighted_kpd"] = kpd_result["weighted_kpd"]
+                    data["completed"] = data["completed_count"]
+                    data["total"] = data["total_count"]
+                else:
+                    data["kpd_percent"] = 0
+                    data["weighted_kpd"] = 0
+                    data["completed"] = 0
+                    data["total"] = 0
 
             # Получаем переработки за период
+            print(f"\n{'─' * 40}")
+            print(f"⏱️ ПЕРЕРАБОТКИ ЗА ПЕРИОД")
+            print(f"{'─' * 40}")
+
+            # ИСПРАВЛЕНО: используем overtime_date вместо created_at
             overtimes = employees_session.query(EmployeeNote).filter(
-                EmployeeNote.created_at >= start_date,
-                EmployeeNote.created_at <= end_date
+                EmployeeNote.overtime_date >= start_date.date(),
+                EmployeeNote.overtime_date <= end_date.date()
             ).all()
+
+            print(f"   Найдено записей о переработках: {len(overtimes)}")
 
             for ot in overtimes:
                 emp_id = ot.employee_id
                 if emp_id not in result:
-                    result[emp_id] = {"completed": 0, "total": 0, "overtime": 0}
+                    result[emp_id] = {
+                        "tasks": [], "completed_count": 0, "total_count": 0, "overtime": 0.0,
+                        "kpd_percent": 0, "weighted_kpd": 0, "completed": 0, "total": 0
+                    }
 
                 if ot.overtime_start and ot.overtime_end:
-                    start = datetime.combine(datetime.today(), ot.overtime_start)
-                    end = datetime.combine(datetime.today(), ot.overtime_end)
+                    # Используем overtime_date для создания datetime
+                    start = datetime.combine(ot.overtime_date, ot.overtime_start)
+                    end = datetime.combine(ot.overtime_date, ot.overtime_end)
                     if end < start:
+                        # Если время окончания меньше времени начала, добавляем день
                         end = end.replace(day=end.day + 1)
                     hours = (end - start).total_seconds() / 3600
                     result[emp_id]["overtime"] += hours
+
+                    emp = employees_session.query(Employee).filter(Employee.id == emp_id).first()
+                    emp_name = f"{emp.last_name} {emp.first_name}" if emp else f"ID:{emp_id}"
+                    print(f"   👤 {emp_name}: {ot.overtime_date.strftime('%d.%m.%Y')} +{hours:.1f} ч переработок")
 
             return result
 
         except Exception as e:
             print(f"❌ Ошибка получения задач за период: {e}")
+            import traceback
+            traceback.print_exc()
             return {}
 
     def _load_departments(self):
@@ -406,8 +485,9 @@ class AnalyticsPage(QWidget):
             departments = employees_session.query(Department).order_by(Department.name).all()
 
             print(f"📊 Найдено отделов в БД: {len(departments)}")
+            for dept in departments:
+                print(f"   - {dept.name} (ID: {dept.id})")
 
-            # Заполняем фильтр для сотрудников
             if self.department_filter:
                 self.department_filter.blockSignals(True)
                 self.department_filter.clear()
@@ -417,7 +497,6 @@ class AnalyticsPage(QWidget):
                 self.department_filter.blockSignals(False)
                 print(f"✅ Загружено отделов в фильтр сотрудников: {self.department_filter.count() - 1}")
 
-            # Заполняем фильтр для рейтинга
             if self.rating_department_filter:
                 self.rating_department_filter.blockSignals(True)
                 self.rating_department_filter.clear()
@@ -432,20 +511,29 @@ class AnalyticsPage(QWidget):
 
         except Exception as e:
             print(f"❌ Ошибка загрузки отделов: {e}")
+            import traceback
+            traceback.print_exc()
 
     def _on_period_filter_changed(self, text: str) -> None:
         """Обработчик изменения фильтра периода для рейтинга"""
-        if not hasattr(self, '_is_loading') or self._is_loading:
+        # Проверяем существование атрибута
+        if not hasattr(self, '_is_loading'):
+            return
+
+        print(f"\n🔄 _on_period_filter_changed: text='{text}', _is_loading={self._is_loading}")
+
+        if self._is_loading:
+            print("   ⏭️ Пропуск: идет загрузка")
             return
 
         if not self.period_filter:
+            print("   ❌ period_filter is None")
             return
 
         current_data = self.period_filter.currentData()
         if current_data:
             self._current_period_filter = current_data
         else:
-            # Определяем по тексту
             period_map = {
                 "Все время": "all",
                 "Текущий год": "year",
@@ -456,11 +544,13 @@ class AnalyticsPage(QWidget):
             }
             self._current_period_filter = period_map.get(text, "all")
 
-        print(f"📅 Период изменен: {self._current_period_filter}")
+        print(f"📅 Период изменен на: {self._current_period_filter}")
 
-        # Обновляем рейтинг с учетом периода
         if self._employees_raw_data:
+            print(f"📊 Применяем фильтр периода к {len(self._employees_raw_data)} сотрудникам")
             self._apply_all_rating_filters()
+        else:
+            print("⚠️ _employees_raw_data пуст, фильтр не применен")
 
     def _on_department_filter_changed(self, text: str) -> None:
         """Обработчик изменения фильтра по отделам для вкладки сотрудников"""
@@ -505,6 +595,8 @@ class AnalyticsPage(QWidget):
         else:
             self._current_rating_department_filter = current_data
 
+        print(f"📋 Фильтр отдела рейтинга изменен: {self._current_rating_department_filter}")
+
         if self._employees_raw_data:
             self._apply_all_rating_filters()
 
@@ -513,7 +605,6 @@ class AnalyticsPage(QWidget):
         if not self._employees_raw_data:
             return
 
-        # Фильтруем по отделу
         filtered_data = self._get_filtered_by_department(self._employees_raw_data, self._current_department_filter)
         self._employees_data = filtered_data
 
@@ -522,13 +613,18 @@ class AnalyticsPage(QWidget):
 
     def _apply_all_rating_filters(self) -> None:
         """Применяет все фильтры (период + отдел) к рейтингу"""
+        print(f"\n🔧 _apply_all_rating_filters вызван")
+        print(f"   _current_period_filter = {self._current_period_filter}")
+        print(f"   _employees_raw_data размер = {len(self._employees_raw_data)}")
+
         if not self._employees_raw_data:
+            print("   ❌ _employees_raw_data пуст")
             return
 
-        # Сначала фильтруем по периоду
+        print(f"📊 Шаг 1: Фильтрация по периоду '{self._current_period_filter}'...")
         period_filtered = self._filter_employees_by_period(self._employees_raw_data, self._current_period_filter)
 
-        # Затем фильтруем по отделу
+        print(f"📊 Шаг 2: Фильтрация по отделу '{self._current_rating_department_filter}'...")
         filtered_data = self._get_filtered_by_department(period_filtered, self._current_rating_department_filter)
 
         print(f"📊 Фильтр рейтинга: {len(filtered_data)}/{len(self._employees_raw_data)} сотрудников")
@@ -566,6 +662,7 @@ class AnalyticsPage(QWidget):
             try:
                 card = EmployeeCard(emp_data)
                 card.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
+                card.clicked.connect(self._open_employee_profile)  # Подключаем сигнал
                 self.employees_grid.addWidget(card, row, col, alignment=Qt.AlignmentFlag.AlignTop)
                 col += 1
                 if col >= max_cols:
@@ -580,8 +677,62 @@ class AnalyticsPage(QWidget):
 
         print(f"✅ Отображено {len(employees_data)} сотрудников")
 
+    def _open_employee_profile(self, employee_id: int):
+        """Открывает профиль сотрудника"""
+        if not employee_id:
+            return
+
+        # Получаем данные сотрудника
+        employee_data = None
+        for emp in self._employees_raw_data:
+            if emp.get('id') == employee_id:
+                employee_data = emp
+                break
+
+        if not employee_data:
+            QMessageBox.warning(self, "Ошибка", "Сотрудник не найден")
+            return
+
+        # Создаем и показываем страницу профиля
+        try:
+            # Ищем главное окно
+            main_window = self.window()
+            while main_window and not hasattr(main_window, 'navigation'):
+                main_window = main_window.parent()
+
+            if main_window and hasattr(main_window, 'navigation'):
+                # Если есть главное окно с навигацией, используем его
+                if hasattr(main_window.navigation, 'pages'):
+                    profile_page = main_window.navigation.get_profile_page()
+                    profile_page.employee_id = employee_id
+                    profile_page.current_user = employee_data
+                    profile_page.load_employee()
+                    if hasattr(profile_page, 'chart_widget'):
+                        profile_page.chart_widget.load_data(employee_id)
+                    main_window.contentStack.setCurrentWidget(profile_page)
+            else:
+                # Создаем отдельное окно профиля
+                from windows.profile.profile_page import ProfilePage
+                profile_dialog = ProfilePage(
+                    employee_id=employee_id,
+                    current_user=employee_data,
+                    parent=self
+                )
+                profile_dialog.setWindowTitle(f"Профиль: {employee_data.get('name', 'Сотрудник')}")
+                profile_dialog.resize(800, 600)
+                profile_dialog.show()
+        except Exception as e:
+            print(f"❌ Ошибка открытия профиля: {e}")
+            QMessageBox.warning(self, "Ошибка", f"Не удалось открыть профиль: {e}")
+
+    def _on_employee_card_clicked(self, employee_id: int):
+        """Обработчик клика по карточке сотрудника"""
+        self._open_employee_profile(employee_id)
+
     def _display_rating_employees(self, employees_data: List[Dict]):
         """Отображает сотрудников в рейтинге с сортировкой по КПД"""
+        print(f"\n🎯 _display_rating_employees: получено {len(employees_data)} сотрудников")
+
         if not hasattr(self, 'rating_layout'):
             print("❌ rating_layout не найден")
             return
@@ -592,20 +743,24 @@ class AnalyticsPage(QWidget):
             self._show_empty_layout_message(self.rating_layout, "Нет данных за выбранный период")
             return
 
-        # Сортируем по КПД (от большего к меньшему)
         sorted_employees = sorted(employees_data, key=lambda x: x.get('kpd_percent', 0), reverse=True)
+
+        print("   Отсортированный рейтинг:")
+        for i, emp in enumerate(sorted_employees):
+            print(f"      {i + 1}. {emp.get('name', '?')}: КПД={emp.get('kpd_percent', 0):.1f}%")
 
         for position, emp_data in enumerate(sorted_employees):
             try:
                 card = RatingEmployeeCard(emp_data, position=position, parent=None)
                 card.setMinimumHeight(80)
-                card.clicked.connect(self._on_employee_clicked)
+                # ИСПРАВЛЕНО: вызываем _open_employee_profile вместо _on_employee_clicked
+                card.clicked.connect(self._open_employee_profile)
                 self.rating_layout.addWidget(card)
             except Exception as e:
                 print(f"   ❌ Ошибка при создании карточки рейтинга для {emp_data.get('name')}: {e}")
 
         self.rating_layout.addStretch()
-        print(f"✅ Отображено {len(sorted_employees)} сотрудников в рейтинге")
+        print(f"✅ Отображено {len(sorted_employees)} сотрудников в рейтинге\n")
 
     def _setup_rating_tab(self):
         """Настраивает вкладку рейтинга сотрудников"""
@@ -769,11 +924,9 @@ class AnalyticsPage(QWidget):
         tab_layout = QVBoxLayout(tab)
         tab_layout.setContentsMargins(15, 15, 15, 15)
 
-        # Для вкладки рейтинга добавляем фильтры
         if title == "Рейтинг":
             filter_layout = QHBoxLayout()
 
-            # Фильтр периода
             self.period_filter = QComboBox()
             self.period_filter.setObjectName("periodFilter")
             self.period_filter.setMinimumHeight(41)
@@ -801,7 +954,6 @@ class AnalyticsPage(QWidget):
             self.period_filter.currentTextChanged.connect(self._on_period_filter_changed)
             filter_layout.addWidget(self.period_filter)
 
-            # Фильтр отдела для рейтинга
             self.rating_department_filter = QComboBox()
             self.rating_department_filter.setObjectName("departmentFilter")
             self.rating_department_filter.setMinimumHeight(41)
@@ -890,6 +1042,9 @@ class AnalyticsPage(QWidget):
             self._employees_raw_data = self.service.get_all_employees_with_stats()
             self._employees_data = self._employees_raw_data.copy()
             print(f"📊 Загружено сотрудников: {len(self._employees_data)}")
+            print("📊 Данные сотрудников:")
+            for emp in self._employees_raw_data:
+                print(f"   - {emp.get('name')}: КПД={emp.get('kpd_percent', 0)}%, задач={emp.get('total_tasks', 0)}")
 
             self._themes_data = self.service.get_themes_stats()
             print(f"📊 Загружено тем: {len(self._themes_data)}")
@@ -921,15 +1076,23 @@ class AnalyticsPage(QWidget):
         self._display_employees(self._employees_data)
 
     def populate_rating_tab(self):
+        """Заполняет вкладку рейтинга - применяет фильтр периода при первом показе"""
         if not hasattr(self, 'rating_layout'):
             print("❌ rating_layout не найден")
             return
-        self._display_rating_employees(self._employees_data)
 
+        print("\n🌟 populate_rating_tab: первая загрузка рейтинга")
+
+        if self._current_period_filter != "all":
+            print(f"   Применяем фильтр периода '{self._current_period_filter}' при загрузке")
+            self._apply_all_rating_filters()
+        else:
+            print("   Отображаем рейтинг без фильтра (Все время)")
+            self._display_rating_employees(self._employees_data)
+
+    # Удалите этот метод или измените его:
     def _on_employee_clicked(self, employee_id: int):
-        if hasattr(self, 'tabWidget') and self.tabWidget.count() > 1:
-            self.tabWidget.setCurrentIndex(1)
-        QMessageBox.information(self, "Сотрудник", f"Выбран сотрудник ID: {employee_id}")
+        self._open_employee_profile(employee_id)  # теперь вызывает открытие профиля
 
     def populate_themes_tab(self):
         if not hasattr(self, 'themesGrid'):

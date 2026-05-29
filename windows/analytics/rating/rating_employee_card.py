@@ -1,3 +1,5 @@
+# windows/analytics/rating/rating_employee_card.py
+
 from PyQt6.QtWidgets import QFrame, QLabel, QHBoxLayout, QVBoxLayout, QProgressBar, QSizePolicy
 from PyQt6.QtCore import Qt, pyqtSignal, QPoint, QTimer
 from PyQt6.QtGui import QColor, QPalette
@@ -54,12 +56,15 @@ class RatingEmployeeCard(QFrame):
         self._hide_timer.setSingleShot(True)
         self._hide_timer.timeout.connect(self._hide_tooltip)
 
+        # Делаем карточку кликабельной
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+
         # Загружаем UI из файла
         self._load_ui()
         # Заполняем данными
         self._setup_dynamic_ui()
 
-        # Включаем отслеживание мыши
+        # Включаем отслеживание мыши для тултипа
         self.setMouseTracking(True)
 
     def _load_ui(self):
@@ -85,7 +90,6 @@ class RatingEmployeeCard(QFrame):
         """Создание UI программно - единый стиль (fallback)"""
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
         self.setMinimumHeight(70)
-        self.setCursor(Qt.CursorShape.PointingHandCursor)
 
         # Основной layout
         main_layout = QHBoxLayout(self)
@@ -386,9 +390,10 @@ class RatingEmployeeCard(QFrame):
         super().leaveEvent(event)
 
     def mousePressEvent(self, event):
-        """Клик по карточке"""
+        """Клик по карточке - отправляем сигнал"""
         self._hide_tooltip()
-        self.clicked.emit(self.employee_id)
+        if self.employee_id:
+            self.clicked.emit(self.employee_id)
         super().mousePressEvent(event)
 
     def update_data(self, employee_data, position=0):

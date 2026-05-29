@@ -1,13 +1,15 @@
 # windows/analytics/employees/employee_card.py
 
 from PyQt6 import uic
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtWidgets import QFrame, QSizePolicy, QTableWidget, QTableWidgetItem, QHeaderView, QVBoxLayout, QLabel, \
     QPushButton, QHBoxLayout
 import os
 
 
 class EmployeeCard(QFrame):
+    clicked = pyqtSignal(int)
+
     def __init__(self, emp_data, parent=None):
         super().__init__(parent)
 
@@ -56,6 +58,14 @@ class EmployeeCard(QFrame):
 
         self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
         self.setMinimumHeight(200)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+
+    def mousePressEvent(self, event):
+        """Обработчик клика по карточке"""
+        employee_id = self.emp_data.get('id')
+        if employee_id:
+            self.clicked.emit(employee_id)
+        super().mousePressEvent(event)
 
     def _remove_old_ui_panels(self):
         """Удаляет старые панели из UI файла"""
