@@ -31,14 +31,14 @@
    </property>
    <item>
     <widget class="QLabel" name="titleLabel">
-     <property name="text">
-      <string>Аналитика / Навыки</string>
-     </property>
      <property name="styleSheet">
       <string notr="true">font-size: 24px;
 font-weight: bold;
 color: #1B232A;
 padding: 10px 0;</string>
+     </property>
+     <property name="text">
+      <string>Аналитика / Навыки</string>
      </property>
     </widget>
    </item>
@@ -93,6 +93,64 @@ QTabWidget::pane {
         <number>15</number>
        </property>
        <item>
+        <layout class="QHBoxLayout" name="horizontalLayout_2">
+         <item>
+          <widget class="QComboBox" name="departmentFilter_2">
+           <property name="minimumSize">
+            <size>
+             <width>186</width>
+             <height>41</height>
+            </size>
+           </property>
+           <property name="maximumSize">
+            <size>
+             <width>16777215</width>
+             <height>41</height>
+            </size>
+           </property>
+           <property name="styleSheet">
+            <string notr="true">
+QComboBox {
+    border: 2px solid #E0E0E0;
+    border-radius: 8px;
+    padding: 8px 16px;
+    font-size: 14px;
+    background-color: white;
+    min-width: 150px;
+	color: black;
+}
+QComboBox:hover {
+    border: 2px solid #ccab6e;
+}
+QComboBox::drop-down {
+    border: none;
+}
+         </string>
+           </property>
+           <property name="editable">
+            <bool>true</bool>
+           </property>
+           <property name="placeholderText" stdset="0">
+            <string>Все исполнители</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <spacer name="horizontalSpacer_2">
+           <property name="orientation">
+            <enum>Qt::Horizontal</enum>
+           </property>
+           <property name="sizeHint" stdset="0">
+            <size>
+             <width>40</width>
+             <height>20</height>
+            </size>
+           </property>
+          </spacer>
+         </item>
+        </layout>
+       </item>
+       <item>
         <widget class="QScrollArea" name="employeesScroll">
          <property name="styleSheet">
           <string notr="true">border: none; background-color: transparent;</string>
@@ -105,18 +163,15 @@ QTabWidget::pane {
            <rect>
             <x>0</x>
             <y>0</y>
-            <width>724</width>
-            <height>486</height>
+            <width>728</width>
+            <height>384</height>
            </rect>
           </property>
           <property name="styleSheet">
            <string notr="true">background-color: transparent;</string>
           </property>
           <layout class="QGridLayout" name="employeesGrid">
-           <property name="horizontalSpacing">
-            <number>15</number>
-           </property>
-           <property name="verticalSpacing">
+           <property name="spacing">
             <number>15</number>
            </property>
           </layout>
@@ -143,6 +198,105 @@ QTabWidget::pane {
         <number>15</number>
        </property>
        <item>
+        <layout class="QHBoxLayout" name="horizontalLayout">
+         <item>
+          <widget class="QComboBox" name="periodFilter">
+           <property name="minimumSize">
+            <size>
+             <width>186</width>
+             <height>41</height>
+            </size>
+           </property>
+           <property name="maximumSize">
+            <size>
+             <width>16777215</width>
+             <height>41</height>
+            </size>
+           </property>
+           <property name="styleSheet">
+            <string notr="true">
+QComboBox {
+    border: 2px solid #E0E0E0;
+    border-radius: 8px;
+    padding: 8px 16px;
+    font-size: 14px;
+    background-color: white;
+    min-width: 150px;
+	color: black;
+}
+QComboBox:hover {
+    border: 2px solid #ccab6e;
+}
+QComboBox::drop-down {
+    border: none;
+}
+         </string>
+           </property>
+           <property name="editable">
+            <bool>true</bool>
+           </property>
+           <property name="placeholderText" stdset="0">
+            <string>Все проекты</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QComboBox" name="departmentFilter">
+           <property name="minimumSize">
+            <size>
+             <width>186</width>
+             <height>41</height>
+            </size>
+           </property>
+           <property name="maximumSize">
+            <size>
+             <width>16777215</width>
+             <height>41</height>
+            </size>
+           </property>
+           <property name="styleSheet">
+            <string notr="true">
+QComboBox {
+    border: 2px solid #E0E0E0;
+    border-radius: 8px;
+    padding: 8px 16px;
+    font-size: 14px;
+    background-color: white;
+    min-width: 150px;
+	color: black;
+}
+QComboBox:hover {
+    border: 2px solid #ccab6e;
+}
+QComboBox::drop-down {
+    border: none;
+}
+         </string>
+           </property>
+           <property name="editable">
+            <bool>true</bool>
+           </property>
+           <property name="placeholderText" stdset="0">
+            <string>Все исполнители</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <spacer name="horizontalSpacer">
+           <property name="orientation">
+            <enum>Qt::Horizontal</enum>
+           </property>
+           <property name="sizeHint" stdset="0">
+            <size>
+             <width>40</width>
+             <height>20</height>
+            </size>
+           </property>
+          </spacer>
+         </item>
+        </layout>
+       </item>
+       <item>
         <widget class="QScrollArea" name="ratingScroll">
          <property name="styleSheet">
           <string notr="true">border: none; background-color: transparent;</string>
@@ -155,8 +309,8 @@ QTabWidget::pane {
            <rect>
             <x>0</x>
             <y>0</y>
-            <width>724</width>
-            <height>486</height>
+            <width>728</width>
+            <height>384</height>
            </rect>
           </property>
           <property name="styleSheet">
@@ -179,14 +333,11 @@ QTabWidget::pane {
       <layout class="QVBoxLayout" name="verticalLayout_3">
        <item>
         <widget class="QLabel" name="themesPlaceholder">
-         <property name="text">
-          <string>Здесь будет аналитика по темам</string>
-         </property>
-         <property name="alignment">
-          <set>Qt::AlignCenter</set>
-         </property>
          <property name="styleSheet">
           <string notr="true">font-size: 18px; color: #666;</string>
+         </property>
+         <property name="text">
+          <string>Здесь будет аналитика по темам</string>
          </property>
         </widget>
        </item>
@@ -199,14 +350,11 @@ QTabWidget::pane {
       <layout class="QVBoxLayout" name="verticalLayout_4">
        <item>
         <widget class="QLabel" name="projectsPlaceholder">
-         <property name="text">
-          <string>Здесь будет аналитика по проектам</string>
-         </property>
-         <property name="alignment">
-          <set>Qt::AlignCenter</set>
-         </property>
          <property name="styleSheet">
           <string notr="true">font-size: 18px; color: #666;</string>
+         </property>
+         <property name="text">
+          <string>Здесь будет аналитика по проектам</string>
          </property>
         </widget>
        </item>

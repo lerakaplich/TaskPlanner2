@@ -19,6 +19,12 @@ def main():
 
     app = QApplication(sys.argv)
 
+    app.setStyleSheet("""
+            QToolTip {
+                background-color: white;
+            }
+        """)
+
     # Запускаем подключение к сокет-серверу
     socket_client = get_socket_client()
     socket_client.connect_to_server("http://localhost:8081")

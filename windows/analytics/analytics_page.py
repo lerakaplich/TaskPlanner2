@@ -1,12 +1,12 @@
 # windows/analytics/analytics_page.py
 
 import os
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from PyQt6 import uic
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import (
     QWidget, QTabWidget, QGridLayout, QScrollArea,
-    QVBoxLayout, QLabel, QFrame, QSizePolicy, QMessageBox
+    QVBoxLayout, QLabel, QFrame, QSizePolicy, QMessageBox, QComboBox, QHBoxLayout
 )
 
 from services.analytics_service.analytics_service import AnalyticsService
@@ -43,6 +43,10 @@ class AnalyticsPage(QWidget):
         self._employees_data = []
         self._themes_data = []
         self._projects_data = []
+        self._departments = []  # Список отделов для фильтра
+        self._current_department_filter = "all"  # Текущий выбранный отдел
+        self.department_filter = None  # Ссылка на комбобокс фильтра
+        self._is_loading = False  # Флаг загрузки для предотвращения рекурсии
 
         # Загружаем данные
         if self.service:
@@ -52,11 +56,12 @@ class AnalyticsPage(QWidget):
 
     def _setup_ui_from_file(self):
         """Настраивает UI из загруженного файла"""
+        # Сначала настраиваем фильтры для сотрудников
+        self._setup_employee_filters()
 
         # Переупорядочиваем вкладки - делаем Рейтинг первой
         if hasattr(self, 'tabWidget'):
             # Получаем текущий порядок вкладок
-            # Сначала Рейтинг, потом остальные
             rating_widget = None
             employees_widget = None
             themes_widget = None
@@ -65,7 +70,6 @@ class AnalyticsPage(QWidget):
             # Сохраняем существующие вкладки
             for i in range(self.tabWidget.count()):
                 tab_text = self.tabWidget.tabText(i)
-                # Исправлено: ищем "Рейтинг сотрудников"
                 if tab_text == "Рейтинг сотрудников":
                     rating_widget = self.tabWidget.widget(i)
                 elif tab_text == "Сотрудники":
@@ -112,11 +116,232 @@ class AnalyticsPage(QWidget):
             # Создаем принудительно
             self._create_employees_container()
 
-        # Для вкладки Темы - создаем контейнер принудительно, так как в UI его нет
+        # Для вкладки Темы - создаем контейнер принудительно
         self._setup_tab_container_force('themesTab', 'themesContainer', 'themesGrid')
 
         # Для вкладки Проекты - создаем контейнер принудительно
         self._setup_tab_container_force('projectsTab', 'projectsContainer', 'projectsGrid')
+
+        # Настройка плейсхолдеров для фильтров
+        self._setup_filters_placeholder()
+
+    def _setup_filters_placeholder(self) -> None:
+        """Настройка плейсхолдеров для фильтров"""
+        if self.department_filter:
+            self.department_filter.setEditable(True)
+            self.department_filter.setEditText("Все отделы")
+            line_edit = self.department_filter.lineEdit()
+            if line_edit:
+                line_edit.setPlaceholderText("Все отделы")
+                line_edit.setReadOnly(False)
+                line_edit.setSelection(0, 0)
+
+    def _setup_employee_filters(self):
+        """Настраивает фильтры для вкладки сотрудников"""
+        # Просто берем существующий departmentFilter_2 из UI
+        if hasattr(self, 'departmentFilter_2'):
+            self.department_filter = self.departmentFilter_2
+            print("✅ Найден departmentFilter_2 в UI")
+
+            # Временно отключаем сигнал, чтобы не сработал при инициализации
+            self.department_filter.blockSignals(True)
+
+            # Настраиваем комбобокс - пока только "Все отделы"
+            self.department_filter.clear()
+            self.department_filter.addItem("Все отделы", "all")
+            self.department_filter.setEditable(True)
+
+            # Подключаем сигнал (только после настройки)
+            self.department_filter.currentTextChanged.connect(self._on_department_filter_changed)
+
+            self.department_filter.blockSignals(False)
+
+            print("✅ Настроен фильтр по отделам для сотрудников")
+        else:
+            print("❌ departmentFilter_2 не найден в UI")
+            self.department_filter = None
+
+    def _load_departments(self):
+        """Загружает список отделов из БД и заполняет фильтр"""
+        print("🔍 _load_departments: начало загрузки...")
+
+        if not self.service or not self.service.base:
+            print("❌ Сервис или база не доступны")
+            return
+
+        if not self.department_filter:
+            print("❌ Фильтр по отделам не инициализирован")
+            # Пробуем найти фильтр еще раз
+            if hasattr(self, 'departmentFilter_2'):
+                self.department_filter = self.departmentFilter_2
+                print("✅ Найден departmentFilter_2 повторно")
+            else:
+                print("❌ departmentFilter_2 не найден")
+                return
+
+        try:
+            from models.employees import Department
+
+            # Получаем сессию для employees
+            employees_session = self.service.base.employees_session
+            departments = employees_session.query(Department).order_by(Department.name).all()
+
+            print(f"📊 Найдено отделов в БД: {len(departments)}")
+
+            # Блокируем сигналы при обновлении
+            self.department_filter.blockSignals(True)
+
+            # Сохраняем текущий выбранный текст для восстановления
+            current_text = self.department_filter.currentText()
+            if current_text == "" or current_text == "Все отделы":
+                current_text = "all"
+
+            # Очищаем и заполняем
+            self.department_filter.clear()
+            self.department_filter.addItem("Все отделы", "all")
+
+            self._departments = []
+            for dept in departments:
+                self.department_filter.addItem(dept.name, f"dept_{dept.id}")
+                self._departments.append({
+                    "id": dept.id,
+                    "name": dept.name
+                })
+                print(f"   - Добавлен отдел: {dept.name} (ID: {dept.id})")
+
+            # Восстанавливаем выбор
+            self._restore_department_filter_selection(current_text)
+
+            self.department_filter.blockSignals(False)
+            print(f"✅ Загружено отделов: {len(self._departments)}")
+            print(f"📋 Теперь в фильтре {self.department_filter.count()} элементов")
+
+        except Exception as e:
+            print(f"❌ Ошибка загрузки отделов: {e}")
+            import traceback
+            traceback.print_exc()
+
+    def _restore_department_filter_selection(self, current_value: str) -> None:
+        """Восстанавливает выбранный фильтр отделов"""
+        print(f"🔄 Восстановление выбора: current_value={current_value}")
+        for i in range(self.department_filter.count()):
+            item_text = self.department_filter.itemText(i)
+            item_data = self.department_filter.itemData(i)
+            print(f"   Элемент {i}: text='{item_text}', data={item_data}")
+
+            if current_value == "all" and item_data == "all":
+                self.department_filter.setCurrentIndex(i)
+                print(f"   ✅ Выбран элемент {i} (Все отделы)")
+                break
+            elif item_text == current_value:
+                self.department_filter.setCurrentIndex(i)
+                print(f"   ✅ Выбран элемент {i} по тексту")
+                break
+            elif item_data == current_value:
+                self.department_filter.setCurrentIndex(i)
+                print(f"   ✅ Выбран элемент {i} по данным")
+                break
+
+    def _on_department_filter_changed(self, text: str) -> None:
+        """Обработчик изменения фильтра по отделам"""
+        # Пропускаем обработку во время загрузки
+        if not hasattr(self, '_is_loading') or self._is_loading:
+            print(f"⏭️ Пропуск обработки фильтра (is_loading={getattr(self, '_is_loading', 'no_attr')})")
+            return
+
+        if not self.department_filter:
+            return
+
+        print(f"🔄 Фильтр изменен: '{text}'")
+
+        current_data = self.department_filter.currentData()
+        print(f"   current_data={current_data}")
+
+        # Определяем выбранное значение
+        if current_data is None or current_data == "all":
+            if text == "Все отделы" or text == "":
+                self._current_department_filter = "all"
+                print(f"   Выбран 'Все отделы'")
+            else:
+                # Ищем по тексту
+                for i in range(self.department_filter.count()):
+                    if self.department_filter.itemText(i) == text:
+                        self._current_department_filter = self.department_filter.itemData(i)
+                        print(f"   Найдено по тексту: {self._current_department_filter}")
+                        break
+        else:
+            self._current_department_filter = current_data
+            print(f"   Выбрано по данным: {self._current_department_filter}")
+
+        # Применяем фильтр (только если данные уже загружены)
+        if self._employees_data:
+            self._apply_department_filter()
+
+    def _apply_department_filter(self) -> None:
+        """Применяет фильтр по отделам к отображаемым сотрудникам"""
+        if not self._employees_data:
+            return
+
+        # Получаем отфильтрованные данные
+        filtered_data = self._get_filtered_employees()
+
+        print(f"📊 Фильтр по отделу '{self._current_department_filter}': "
+              f"{len(filtered_data)}/{len(self._employees_data)} сотрудников")
+
+        # Отображаем отфильтрованных сотрудников
+        self._display_employees(filtered_data)
+
+    def _get_filtered_employees(self) -> List[Dict]:
+        """Возвращает отфильтрованный список сотрудников"""
+        if self._current_department_filter == "all":
+            return self._employees_data
+
+        # Извлекаем ID отдела из данных фильтра
+        department_id = None
+        if isinstance(self._current_department_filter, str) and self._current_department_filter.startswith("dept_"):
+            department_id = int(self._current_department_filter.split("_")[1])
+        elif isinstance(self._current_department_filter, int):
+            department_id = self._current_department_filter
+
+        if department_id:
+            return [
+                emp for emp in self._employees_data
+                if emp.get("department_id") == department_id
+            ]
+
+        return self._employees_data
+
+    def _display_employees(self, employees_data: List[Dict]):
+        """Отображает сотрудников в grid"""
+        if not hasattr(self, 'employees_grid'):
+            print("❌ employees_grid не найден")
+            return
+
+        self._clear_grid(self.employees_grid)
+
+        if not employees_data:
+            self._show_empty_message(self.employees_grid, "Нет сотрудников в выбранном отделе")
+            return
+
+        row, col, max_cols = 0, 0, 3
+        for emp_data in employees_data:
+            try:
+                card = EmployeeCard(emp_data)
+                card.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
+                self.employees_grid.addWidget(card, row, col, alignment=Qt.AlignmentFlag.AlignTop)
+                col += 1
+                if col >= max_cols:
+                    col = 0
+                    row += 1
+            except Exception as e:
+                print(f"   ❌ Ошибка при создании карточки для {emp_data.get('name')}: {e}")
+
+        # Принудительно обновляем контейнер
+        if hasattr(self, 'employeesContainer'):
+            self.employeesContainer.update()
+            self.employeesContainer.repaint()
+
+        print(f"✅ Отображено {len(employees_data)} сотрудников")
 
     def _setup_rating_tab(self):
         """Настраивает вкладку рейтинга сотрудников"""
@@ -259,7 +484,7 @@ class AnalyticsPage(QWidget):
         setattr(self, grid_name, grid)
 
     def _create_ui_programmatically(self):
-        """Создает UI программно"""
+        """Создает UI программно (только если UI файл не найден)"""
         self.setObjectName("AnalyticsPage")
 
         layout = QVBoxLayout(self)
@@ -297,6 +522,34 @@ class AnalyticsPage(QWidget):
         tab = QWidget()
         tab_layout = QVBoxLayout(tab)
         tab_layout.setContentsMargins(15, 15, 15, 15)
+
+        # Для вкладки сотрудников добавляем горизонтальный layout с фильтром
+        if title == "Сотрудники":
+            filter_layout = QHBoxLayout()
+            self.department_filter = QComboBox()
+            self.department_filter.setObjectName("departmentFilter_2")
+            self.department_filter.setMinimumHeight(41)
+            self.department_filter.setStyleSheet("""
+                QComboBox {
+                    border: 2px solid #E0E0E0;
+                    border-radius: 8px;
+                    padding: 8px 16px;
+                    font-size: 14px;
+                    background-color: white;
+                    min-width: 150px;
+                    color: black;
+                }
+                QComboBox:hover {
+                    border: 2px solid #ccab6e;
+                }
+            """)
+            self.department_filter.addItem("Все отделы", "all")
+            self.department_filter.setEditable(True)
+            self.department_filter.setPlaceholderText("Все отделы")
+            self.department_filter.currentTextChanged.connect(self._on_department_filter_changed)
+            filter_layout.addWidget(self.department_filter)
+            filter_layout.addStretch()
+            tab_layout.addLayout(filter_layout)
 
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
@@ -358,6 +611,8 @@ class AnalyticsPage(QWidget):
         if not self.service:
             return
 
+        self._is_loading = True  # Устанавливаем флаг загрузки
+
         try:
             self._employees_data = self.service.get_all_employees_with_stats()
             print(f"📊 Загружено сотрудников: {len(self._employees_data)}")
@@ -367,6 +622,9 @@ class AnalyticsPage(QWidget):
 
             self._projects_data = self.service.get_projects_stats()
             print(f"📊 Загружено проектов: {len(self._projects_data)}")
+
+            # Загружаем список отделов для фильтра (после загрузки сотрудников)
+            self._load_departments()
 
             # Убеждаемся, что рейтинговая вкладка настроена перед заполнением
             if not hasattr(self, 'rating_layout'):
@@ -381,6 +639,8 @@ class AnalyticsPage(QWidget):
             print(f"❌ Ошибка загрузки: {e}")
             import traceback
             traceback.print_exc()
+        finally:
+            self._is_loading = False  # Снимаем флаг загрузки
 
     def populate_employees_tab(self):
         """Заполняет вкладку сотрудников"""
@@ -388,41 +648,8 @@ class AnalyticsPage(QWidget):
             print("❌ employees_grid не найден")
             return
 
-        self._clear_grid(self.employees_grid)
-
-        if not self._employees_data:
-            print("❌ self._employees_data пуст")
-            self._show_empty_message(self.employees_grid, "Нет данных о сотрудниках")
-            return
-
-        print(f"📊 Попытка отобразить {len(self._employees_data)} сотрудников")
-
-        # Выводим первых несколько для проверки
-        for i, emp_data in enumerate(self._employees_data[:3]):
-            print(f"   Сотрудник {i}: {emp_data.get('name')} - {emp_data.get('position')}")
-
-        row, col, max_cols = 0, 0, 3
-        for emp_data in self._employees_data:
-            try:
-                card = EmployeeCard(emp_data)
-                card.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
-                self.employees_grid.addWidget(card, row, col, alignment=Qt.AlignmentFlag.AlignTop)
-                print(f"   ✅ Добавлена карточка для {emp_data.get('name')}")
-                col += 1
-                if col >= max_cols:
-                    col = 0
-                    row += 1
-            except Exception as e:
-                print(f"   ❌ Ошибка при создании карточки для {emp_data.get('name')}: {e}")
-                import traceback
-                traceback.print_exc()
-
-        # Принудительно обновляем контейнер
-        if hasattr(self, 'employeesContainer'):
-            self.employeesContainer.update()
-            self.employeesContainer.repaint()
-
-        print(f"✅ Отображено {len(self._employees_data)} сотрудников")
+        # Отображаем всех сотрудников (фильтр по умолчанию - "Все отделы")
+        self._display_employees(self._employees_data)
 
     def populate_rating_tab(self):
         """Заполняет вкладку рейтинга сотрудников (сортировка по КПД)"""
