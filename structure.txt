@@ -101,6 +101,8 @@
 |  |  +-- projects
 |  |  |  +-- employee_project_card.ui
 |  |  |  +-- project_card_analytics.ui
+|  |  +-- rating
+|  |  |  +-- rating_employee_card.ui
 |  |  +-- theme
 |  |  |  +-- theme_card.ui
 |  +-- archive

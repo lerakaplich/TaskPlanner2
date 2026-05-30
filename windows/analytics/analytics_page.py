@@ -43,7 +43,6 @@ class AnalyticsPage(QWidget):
         self._is_loading = False
         self._departments_loaded = False
 
-        # Загружаем UI
         ui_path = os.path.join(
             os.path.dirname(__file__),
             "..", "..",

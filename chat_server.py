@@ -13,7 +13,7 @@ from services.employee_service.employee_service import EmployeeService
 # Удаляем импорт sync_service
 # from sync_service import sync_service
 from shared_state import pending_registrations
-from telegram_bot import telegram_bot, start_bot
+from telegram_bot.bot import telegram_bot, start_bot
 
 user_sid_map = {}  # {user_id: sid}
 
