@@ -2,19 +2,21 @@
 
 from typing import List, Dict, Any, Optional
 from sqlalchemy import select, or_
-from datetime import datetime
+from datetime import datetime, timedelta
 from models.tasks import Task
 from models.projects import Project, EmployeeProject
-from models.employees import Employee, EmployeeData
+from models.employees import Employee, EmployeeData, Department, EmployeeNote
 from .analytics_base_service import AnalyticsBaseService
 from .kpd_calculator import KPDCalculator
 
 
 class EmployeesAnalytics(AnalyticsBaseService):
-    """Аналитика по сотрудникам"""
+    """Аналитика по сотрудникам - вся бизнес-логика здесь"""
 
     def __init__(self, session):
         super().__init__(session)
+
+    # ==================== ОСНОВНЫЕ МЕТОДЫ ====================
 
     def get_employee_card_data(self, employee_id: int) -> Dict[str, Any]:
         """Получить данные сотрудника для карточки EmployeeCard"""
@@ -35,10 +37,10 @@ class EmployeesAnalytics(AnalyticsBaseService):
             "division_id": emp.division_id,
             "department": self._get_department_name(emp.department_id),
             "subdivision": self._get_division_name(emp.division_id),
-            "active_projects": stats["active_projects"],  # Список проектов
-            "completed_projects": stats["completed_projects"],  # Список проектов
-            "active_projects_count": len(stats["active_projects"]),  # Количество
-            "completed_projects_count": len(stats["completed_projects"]),  # Количество
+            "active_projects": stats["active_projects"],
+            "completed_projects": stats["completed_projects"],
+            "active_projects_count": len(stats["active_projects"]),
+            "completed_projects_count": len(stats["completed_projects"]),
             "active_tasks": stats["active_tasks"],
             "completed_tasks": stats["completed_tasks"],
             "overdue_tasks": stats["overdue_tasks"],
@@ -46,7 +48,10 @@ class EmployeesAnalytics(AnalyticsBaseService):
             "tag_analytics": stats["tag_analytics"],
             "kpd": stats["kpd"],
             "kpd_percent": stats.get("kpd_percent", 0),
-            "overtime_hours": stats["overtime_hours"]
+            "weighted_kpd": stats.get("weighted_kpd", 0),
+            "overtime_hours": stats["overtime_hours"],
+            "kpd_rating": stats.get("kpd_rating", 0),
+            "on_time_rate": stats.get("on_time_rate", 0)
         }
 
     def get_all_employees_for_cards(self, active_only: bool = True) -> List[Dict[str, Any]]:
@@ -76,9 +81,159 @@ class EmployeesAnalytics(AnalyticsBaseService):
     def get_employees_rating(self) -> List[Dict[str, Any]]:
         """Получить список сотрудников, отсортированный по КПД"""
         employees = self.get_all_employees_with_stats()
-        # Сортируем по КПД
         employees.sort(key=lambda x: x.get('kpd_percent', 0), reverse=True)
         return employees
+
+    # ==================== ФИЛЬТРАЦИЯ ПО ПЕРИОДАМ ====================
+
+    def _get_date_range_for_period(self, period: str) -> tuple:
+        """Возвращает начальную и конечную дату для выбранного периода"""
+        now = datetime.now()
+
+        if period == "all":
+            return None, None
+        elif period == "year":
+            return datetime(now.year, 1, 1), now
+        elif period == "quarter":
+            quarter = (now.month - 1) // 3 + 1
+            start_month = (quarter - 1) * 3 + 1
+            return datetime(now.year, start_month, 1), now
+        elif period == "month":
+            return datetime(now.year, now.month, 1), now
+        elif period == "last_30_days":
+            return now - timedelta(days=30), now
+        elif period == "last_90_days":
+            return now - timedelta(days=90), now
+        return None, None
+
+    def get_employees_rating_by_period(self, period: str) -> List[Dict[str, Any]]:
+        """Получить рейтинг сотрудников за указанный период"""
+        print(f"\n📊 EmployeesAnalytics.get_employees_rating_by_period: period={period}")
+
+        if period == "all":
+            return self.get_employees_rating()
+
+        start_date, end_date = self._get_date_range_for_period(period)
+        if start_date is None:
+            return self.get_employees_rating()
+
+        print(f"   Диапазон: {start_date.strftime('%d.%m.%Y')} - {end_date.strftime('%d.%m.%Y')}")
+
+        all_employees = self.get_all_employees_with_stats()
+        tasks_by_employee = self._get_tasks_for_period(start_date, end_date)
+
+        result = []
+        for emp in all_employees:
+            emp_id = emp.get("id")
+            tasks_info = tasks_by_employee.get(emp_id, {
+                "completed": 0, "total": 0, "kpd_percent": 0, "weighted_kpd": 0, "overtime": 0
+            })
+
+            emp_copy = emp.copy()
+            emp_copy["completed_tasks"] = tasks_info["completed"]
+            emp_copy["total_tasks"] = tasks_info["total"]
+            emp_copy["kpd_percent"] = tasks_info["kpd_percent"]
+            emp_copy["weighted_kpd"] = tasks_info["weighted_kpd"]
+            emp_copy["kpd"] = tasks_info["kpd_percent"] / 100 if tasks_info["kpd_percent"] > 0 else 0
+            emp_copy["overtime_hours"] = tasks_info.get("overtime", 0)
+            result.append(emp_copy)
+
+        result.sort(key=lambda x: x.get('kpd_percent', 0), reverse=True)
+        print(f"   Обработано сотрудников: {len(result)}")
+        return result
+
+    def _get_tasks_for_period(self, start_date: datetime, end_date: datetime) -> Dict:
+        """Получает задачи сотрудников за период и рассчитывает КПД"""
+        try:
+            # Завершенные задачи за период
+            completed_tasks = self.session.query(Task).filter(
+                Task.completed == True,
+                Task.completed_at >= start_date,
+                Task.completed_at <= end_date
+            ).all()
+
+            # Активные задачи, созданные в период
+            active_tasks = self.session.query(Task).filter(
+                Task.completed == False,
+                Task.created_at >= start_date,
+                Task.created_at <= end_date
+            ).all()
+
+            all_tasks = completed_tasks + active_tasks
+
+            # Группируем по сотрудникам
+            result = {}
+            for task in all_tasks:
+                if not task.assigned_to:
+                    continue
+
+                emp_id = task.assigned_to
+                if emp_id not in result:
+                    result[emp_id] = {
+                        "tasks": [], "completed_count": 0, "total_count": 0, "overtime": 0.0
+                    }
+
+                result[emp_id]["tasks"].append(task)
+                result[emp_id]["total_count"] += 1
+                if task.completed:
+                    result[emp_id]["completed_count"] += 1
+
+            # Рассчитываем КПД
+            for emp_id, data in result.items():
+                if data["tasks"]:
+                    kpd_result = KPDCalculator.calculate_employee_kpd(data["tasks"])
+                    data["kpd_percent"] = kpd_result["total_kpd"]
+                    data["weighted_kpd"] = kpd_result["weighted_kpd"]
+                    data["completed"] = data["completed_count"]
+                    data["total"] = data["total_count"]
+                else:
+                    data["kpd_percent"] = 0
+                    data["weighted_kpd"] = 0
+                    data["completed"] = 0
+                    data["total"] = 0
+
+            # Переработки за период
+            overtimes = self.employees_session.query(EmployeeNote).filter(
+                EmployeeNote.overtime_date >= start_date.date(),
+                EmployeeNote.overtime_date <= end_date.date()
+            ).all()
+
+            for ot in overtimes:
+                emp_id = ot.employee_id
+                if emp_id not in result:
+                    result[emp_id] = {
+                        "tasks": [], "completed_count": 0, "total_count": 0, "overtime": 0.0,
+                        "kpd_percent": 0, "weighted_kpd": 0, "completed": 0, "total": 0
+                    }
+
+                if ot.overtime_start and ot.overtime_end:
+                    start = datetime.combine(ot.overtime_date, ot.overtime_start)
+                    end = datetime.combine(ot.overtime_date, ot.overtime_end)
+                    if end < start:
+                        end = end.replace(day=end.day + 1)
+                    hours = (end - start).total_seconds() / 3600
+                    result[emp_id]["overtime"] += hours
+
+            return result
+
+        except Exception as e:
+            print(f"❌ Ошибка получения задач за период: {e}")
+            return {}
+
+    # ==================== ФИЛЬТРАЦИЯ ПО ОТДЕЛАМ ====================
+
+    def filter_employees_by_department(self, employees_data: List[Dict], department_id: Optional[int]) -> List[Dict]:
+        """Фильтрует сотрудников по отделу"""
+        if not department_id or department_id == 0:
+            return employees_data
+        return [emp for emp in employees_data if emp.get("department_id") == department_id]
+
+    def get_departments_list(self) -> List[Dict[str, Any]]:
+        """Получить список всех отделов"""
+        departments = self.employees_session.query(Department).order_by(Department.name).all()
+        return [{"id": dept.id, "name": dept.name} for dept in departments]
+
+    # ==================== ДРУГИЕ МЕТОДЫ ====================
 
     def filter_employees_by_name(self, employees_data: List[Dict], search_text: str) -> List[Dict]:
         """Фильтрует сотрудников по имени"""
@@ -92,7 +247,6 @@ class EmployeesAnalytics(AnalyticsBaseService):
         ]
 
     def get_empty_employee_stats(self) -> Dict:
-        """Возвращает пустые данные для статистики сотрудников"""
         return {
             "employee_name": "Нет данных",
             "avg_kpi": 0,
@@ -103,11 +257,13 @@ class EmployeesAnalytics(AnalyticsBaseService):
             "critical": 0
         }
 
+    # ==================== ВНУТРЕННИЕ МЕТОДЫ ====================
+
     def _get_employee_stats(self, employee_id: int) -> Dict[str, Any]:
         """Получить статистику сотрудника с расчетом КПД"""
         from sqlalchemy import select, or_
 
-        # 1. Проекты сотрудника - получаем списки, а не количество
+        # Проекты сотрудника
         projects_stmt = select(Project).join(
             EmployeeProject, Project.id == EmployeeProject.project_id
         ).where(EmployeeProject.employee_id == employee_id)
@@ -125,7 +281,6 @@ class EmployeesAnalytics(AnalyticsBaseService):
                 "tasks_done": 0,
                 "is_archived": p.is_archived
             }
-            # Получаем задачи проекта для статистики
             project_tasks = self.session.scalars(
                 select(Task).where(Task.project_id == p.id)
             ).all()
@@ -138,7 +293,7 @@ class EmployeesAnalytics(AnalyticsBaseService):
             else:
                 active_projects.append(proj_dict)
 
-        # 2. Задачи сотрудника
+        # Задачи сотрудника
         tasks_stmt = select(Task).where(
             or_(
                 Task.assigned_to == employee_id,
@@ -147,7 +302,6 @@ class EmployeesAnalytics(AnalyticsBaseService):
         )
         all_tasks = list(self.session.scalars(tasks_stmt))
 
-        # Подсчет статистики
         active_tasks = 0
         completed_tasks = 0
         overdue_tasks = 0
@@ -157,27 +311,20 @@ class EmployeesAnalytics(AnalyticsBaseService):
                 completed_tasks += 1
             else:
                 active_tasks += 1
-
             if task.is_overdue:
                 overdue_tasks += 1
 
-        # 3. Часы переработок
         overtime_hours = self._get_employee_overtime_hours(employee_id)
-
-        # 4. Расчет КПД
         kpd_result = KPDCalculator.calculate_employee_kpd(all_tasks)
-
-        # 5. Аналитика по тегам
         tag_analytics = self._get_employee_tag_analytics(employee_id, all_tasks)
 
-        # 6. Данные из EmployeeData
         employee_data = self.session.query(EmployeeData).filter(
             EmployeeData.employee_id == employee_id
         ).first()
 
         return {
-            "active_projects": active_projects,  # Список, а не число
-            "completed_projects": completed_projects,  # Список, а не число
+            "active_projects": active_projects,
+            "completed_projects": completed_projects,
             "active_tasks": active_tasks,
             "completed_tasks": completed_tasks,
             "overdue_tasks": overdue_tasks,
@@ -188,40 +335,21 @@ class EmployeesAnalytics(AnalyticsBaseService):
             "weighted_kpd": kpd_result["weighted_kpd"],
             "overtime_hours": overtime_hours,
             "kpd_rating": employee_data.kpd_rating if employee_data else 0,
-            "kpd_level": employee_data.kpd_level if employee_data else "Нет данных",
             "on_time_rate": employee_data.on_time_rate if employee_data else 0,
-            "tasks_completed_total": employee_data.tasks_completed_total if employee_data else 0,
-            "tasks_completed_on_time": employee_data.tasks_completed_on_time if employee_data else 0,
-            "avg_task_completion_days": employee_data.avg_task_completion_days if employee_data else 0,
-            "kpd_details": {
-                "completed_count": completed_tasks,
-                "total_count": len(all_tasks),
-                "weighted_score": kpd_result["weighted_kpd"],
-            }
         }
 
     def _get_employee_tag_analytics(self, employee_id: int, tasks: List[Task]) -> List[Dict]:
-        """Получить аналитику по тегам для сотрудника"""
         from repositories.tag_repo import TagRepo
         tag_repo = TagRepo(self.session)
 
         tag_stats = {}
-
         for task in tasks:
             task_tags = tag_repo.get_task_tags(task.id)
-
             for tag in task_tags:
                 tag_name = tag.name
                 if tag_name not in tag_stats:
-                    tag_stats[tag_name] = {
-                        "tag": tag_name,
-                        "count": 0,
-                        "completed": 0,
-                        "kpd": 0.0
-                    }
-
+                    tag_stats[tag_name] = {"tag": tag_name, "count": 0, "completed": 0, "kpd": 0.0}
                 tag_stats[tag_name]["count"] += 1
-
                 if task.completed:
                     tag_stats[tag_name]["completed"] += 1
 
@@ -232,11 +360,8 @@ class EmployeesAnalytics(AnalyticsBaseService):
         return sorted(tag_stats.values(), key=lambda x: x["count"], reverse=True)
 
     def _get_employee_overtime_hours(self, employee_id: int) -> float:
-        """Получить общее количество часов переработок сотрудника"""
         try:
             from database import get_tasks_session
-            from models.employees import EmployeeNote
-
             overtime_session = get_tasks_session()
             if overtime_session is None:
                 return 0.0
@@ -258,5 +383,5 @@ class EmployeesAnalytics(AnalyticsBaseService):
             overtime_session.close()
             return round(total_hours, 1)
         except Exception as e:
-            print(f"❌ Ошибка при получении переработок для сотрудника {employee_id}: {e}")
+            print(f"❌ Ошибка получения переработок: {e}")
             return 0.0

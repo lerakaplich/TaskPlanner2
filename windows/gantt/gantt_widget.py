@@ -162,6 +162,16 @@ class GanttWidget(QWidget):
             gantt_layout.addWidget(self.gantt_canvas)
             self.ganttScrollArea.setWidget(self.gantt_canvas)
 
+        # Скрываем вкладку "Календарь" (оставляем возможность вернуть)
+        if hasattr(self, 'tabWidget'):
+            for i in range(self.tabWidget.count()):
+                if self.tabWidget.tabText(i) == "Календарь":
+                    # Способ 1: удалить вкладку
+                    self.tabWidget.removeTab(i)
+                    # Способ 2: скрыть (если поддерживается версией Qt)
+                    # self.tabWidget.setTabVisible(i, False)
+                    break
+
         print("✅ UI загружен")
 
     def _setup_priorities(self) -> None:
@@ -219,8 +229,6 @@ class GanttWidget(QWidget):
         layout.addStretch()
         container.updateGeometry()
 
-    # ==================== ПОДКЛЮЧЕНИЕ СИГНАЛОВ ====================
-
     def _connect_signals(self) -> None:
         """Подключение сигналов UI к методам"""
         self.addTaskButton.clicked.connect(self._on_add_task)
@@ -234,8 +242,6 @@ class GanttWidget(QWidget):
         if hasattr(self, 'gantt_canvas'):
             self.gantt_canvas.task_moved_signal.connect(self._on_task_moved)
             self.gantt_canvas.link_created_signal.connect(self._on_link_created)
-
-    # ==================== ЗАГРУЗКА ДАННЫХ ====================
 
     def _load_initial_data(self) -> None:
         """Начальная загрузка данных"""

@@ -15,14 +15,12 @@ class ToolTipWidget(QFrame):
         self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
         self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
 
-        # Устанавливаем белый фон через палитру (надёжнее чем QSS)
         palette = self.palette()
         palette.setColor(QPalette.ColorRole.Window, QColor(255, 255, 255))
         palette.setColor(QPalette.ColorRole.WindowText, QColor(27, 35, 42))
         self.setPalette(palette)
         self.setAutoFillBackground(True)
 
-        # Дополнительно QSS для надёжности
         self.setStyleSheet("""
             QFrame {
                 background-color: white;
@@ -36,73 +34,54 @@ class ToolTipWidget(QFrame):
 
 
 class RatingEmployeeCard(QFrame):
-    """Карточка сотрудника для рейтинга с КПД - единый дизайн для БД"""
+    """Карточка сотрудника для рейтинга с КПД - только UI"""
 
-    clicked = pyqtSignal(int)  # Сигнал при клике на карточку
+    clicked = pyqtSignal(int)
 
     def __init__(self, employee_data, position=0, parent=None):
-        """
-        Args:
-            employee_data: dict с данными сотрудника из БД
-            position: int (0-based) позиция в рейтинге
-            parent: родительский виджет
-        """
         super().__init__(parent)
+
         self.employee_data = employee_data
         self.employee_id = employee_data.get('id')
         self.position = position
+
+        # UI элементы
+        self.position_label = None
+        self.name_label = None
+        self.dept_label = None
+        self.stats_label = None
+        self.kpd_label = None
+        self.weighted_label = None
+        self.progress_bar = None
+        self.overtime_label = None
+
         self.tooltip_widget = None
         self._hide_timer = QTimer(self)
         self._hide_timer.setSingleShot(True)
         self._hide_timer.timeout.connect(self._hide_tooltip)
 
-        # Делаем карточку кликабельной
         self.setCursor(Qt.CursorShape.PointingHandCursor)
-
-        # Загружаем UI из файла
-        self._load_ui()
-        # Заполняем данными
-        self._setup_dynamic_ui()
-
-        # Включаем отслеживание мыши для тултипа
         self.setMouseTracking(True)
 
-    def _load_ui(self):
-        """Загрузка UI из .ui файла"""
-        ui_file_path = r"../../../ui/analytics/rating/rating_employee_card.ui"
+        self._setup_ui()
+        self._update_display()
 
-        if os.path.exists(ui_file_path):
-            loadUi(ui_file_path, self)
-            # Получаем ссылки на виджеты после загрузки UI
-            self.position_label = self.findChild(QLabel, "positionLabel")
-            self.name_label = self.findChild(QLabel, "nameLabel")
-            self.dept_label = self.findChild(QLabel, "deptLabel")
-            self.stats_label = self.findChild(QLabel, "statsLabel")
-            self.kpd_label = self.findChild(QLabel, "kpdLabel")
-            self.weighted_label = self.findChild(QLabel, "weightedLabel")
-            self.progress_bar = self.findChild(QProgressBar, "progressBar")
-            self.overtime_label = self.findChild(QLabel, "overtimeLabel")
-        else:
-            # Если UI файл не найден, создаем UI программно
-            self._init_ui()
-
-    def _init_ui(self):
-        """Создание UI программно - единый стиль (fallback)"""
+    def _setup_ui(self):
+        """Создание UI карточки"""
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
         self.setMinimumHeight(70)
 
-        # Основной layout
         main_layout = QHBoxLayout(self)
         main_layout.setContentsMargins(15, 12, 15, 12)
         main_layout.setSpacing(15)
 
-        # === ПОЗИЦИЯ ===
+        # Позиция
         self.position_label = QLabel()
         self.position_label.setFixedSize(50, 50)
         self.position_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         main_layout.addWidget(self.position_label)
 
-        # === ИНФОРМАЦИЯ ===
+        # Информация
         info_layout = QVBoxLayout()
         info_layout.setSpacing(5)
 
@@ -122,7 +101,7 @@ class RatingEmployeeCard(QFrame):
 
         main_layout.addLayout(info_layout, stretch=1)
 
-        # === КПД ===
+        # КПД блок
         kpd_layout = QVBoxLayout()
         kpd_layout.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
 
@@ -150,10 +129,11 @@ class RatingEmployeeCard(QFrame):
 
         main_layout.addLayout(kpd_layout)
 
-    def _setup_dynamic_ui(self):
-        """Заполнение карточки данными из БД"""
+    def _update_display(self):
+        """Обновляет отображение данных"""
+        data = self.employee_data
 
-        # === ПОЗИЦИЯ ===
+        # Позиция
         colors = {0: "#FFD700", 1: "#C0C0C0", 2: "#CD7F32"}
         color = colors.get(self.position, "#E0E0E0")
         font_size = "24px" if self.position < 3 else "18px"
@@ -168,39 +148,36 @@ class RatingEmployeeCard(QFrame):
             color: {text_color};
         """)
 
-        # === ИМЯ ===
-        self.name_label.setText(self.employee_data.get('name', 'Без имени'))
+        # Имя
+        self.name_label.setText(data.get('name', 'Без имени'))
 
-        # === ДОЛЖНОСТЬ И ОТДЕЛ ===
+        # Должность и отдел
         parts = []
-        if self.employee_data.get('position'):
-            parts.append(self.employee_data['position'])
-        if self.employee_data.get('department'):
-            parts.append(self.employee_data['department'])
-        if self.employee_data.get('subdivision'):
-            parts.append(self.employee_data['subdivision'])
-
+        if data.get('position'):
+            parts.append(data['position'])
+        if data.get('department'):
+            parts.append(data['department'])
+        if data.get('subdivision'):
+            parts.append(data['subdivision'])
         self.dept_label.setText(' · '.join(parts) if parts else '—')
 
-        # === СТАТИСТИКА ===
-        completed = self.employee_data.get('completed_tasks', 0)
-        total = self.employee_data.get('total_tasks', 0)
-        on_time = self.employee_data.get('on_time_rate', 0)
+        # Статистика
+        completed = data.get('completed_tasks', 0)
+        total = data.get('total_tasks', 0)
+        on_time = data.get('on_time_rate', 0)
 
         stats = f"📊 Задач: {completed} из {total}"
         if on_time > 0:
             stats += f" · В срок: {on_time:.0f}%"
         self.stats_label.setText(stats)
 
-        # === КПД ===
-        kpd = self.employee_data.get('kpd_percent', 0)
-        if kpd == 0:
-            kpd = self.employee_data.get('kpd_rating', 0)
+        # КПД
+        kpd = data.get('kpd_percent', 0)
         if kpd == 0 and total > 0:
-            kpd = (completed / total * 100)
+            kpd = (completed / total * 100) if total > 0 else 0
 
-        weighted = self.employee_data.get('weighted_kpd', 0)
-        overtime = self.employee_data.get('overtime_hours', 0)
+        weighted = data.get('weighted_kpd', 0)
+        overtime = data.get('overtime_hours', 0)
 
         # Цвет КПД
         if kpd >= 80:
@@ -268,19 +245,12 @@ class RatingEmployeeCard(QFrame):
         }
 
     def _create_tooltip(self):
-        """Создаём кастомный тултип"""
+        """Создаёт тултип"""
         if self.tooltip_widget:
             self._clear_tooltip()
 
         self.tooltip_widget = ToolTipWidget()
-
         data = self._tooltip_data
-        kpd = data['kpd']
-        weighted = data['weighted']
-        overtime = data['overtime']
-        completed = data['completed']
-        total = data['total']
-        on_time = data['on_time']
 
         # Имя
         name_label = QLabel(f"👤 {self.employee_data.get('name', '—')}")
@@ -292,7 +262,7 @@ class RatingEmployeeCard(QFrame):
         position_label.setStyleSheet("color: #666; font-size: 12px;")
         self.tooltip_widget.layout.addWidget(position_label)
 
-        # Отдел (если есть)
+        # Отдел
         dept = self.employee_data.get('department', '')
         if dept:
             dept_label = QLabel(f"🏢 {dept}")
@@ -307,24 +277,21 @@ class RatingEmployeeCard(QFrame):
 
         # Статистика
         stats = [
-            f"✅ Выполнено: {completed} из {total}",
-            f"🎯 В срок: {on_time:.1f}%",
+            f"✅ Выполнено: {data['completed']} из {data['total']}",
+            f"🎯 В срок: {data['on_time']:.1f}%",
         ]
 
         # КПД с цветом
-        if kpd >= 80:
+        if data['kpd'] >= 80:
             kpd_color = "#2ecc71"
-        elif kpd >= 60:
+        elif data['kpd'] >= 60:
             kpd_color = "#f1c40f"
-        elif kpd >= 40:
+        elif data['kpd'] >= 40:
             kpd_color = "#e67e22"
         else:
             kpd_color = "#e74c3c"
 
-        kpd_label = QLabel(f"⚡️ КПД: {kpd:.1f}%")
-        kpd_label.setStyleSheet(f"color: #555; font-size: 12px;")
-        # Для выделения КПД цветом используем HTML в QLabel
-        kpd_label.setText(f'<span style="color: #555;">⚡️ КПД: </span><b style="color: {kpd_color};">{kpd:.1f}%</b>')
+        kpd_label = QLabel(f'⚡️ КПД: <b style="color: {kpd_color};">{data["kpd"]:.1f}%</b>')
         kpd_label.setTextFormat(Qt.TextFormat.RichText)
         self.tooltip_widget.layout.addWidget(kpd_label)
 
@@ -333,21 +300,19 @@ class RatingEmployeeCard(QFrame):
             stat_label.setStyleSheet("color: #555; font-size: 12px;")
             self.tooltip_widget.layout.addWidget(stat_label)
 
-        if weighted > 0:
-            w_label = QLabel(f"🎯 Взвешенный: {weighted:.1f}%")
+        if data['weighted'] > 0:
+            w_label = QLabel(f"🎯 Взвешенный: {data['weighted']:.1f}%")
             w_label.setStyleSheet("color: #555; font-size: 12px;")
             self.tooltip_widget.layout.addWidget(w_label)
 
-        if overtime > 0:
-            if overtime > 40:
+        if data['overtime'] > 0:
+            if data['overtime'] > 40:
                 ot_color = "#e74c3c"
-            elif overtime > 20:
+            elif data['overtime'] > 20:
                 ot_color = "#e67e22"
             else:
                 ot_color = "#2ecc71"
-
-            ot_label = QLabel(
-                f'<span style="color: #555;">⏱️ Переработки: </span><b style="color: {ot_color};">{overtime:.1f} ч</b>')
+            ot_label = QLabel(f'⏱️ Переработки: <b style="color: {ot_color};">{data["overtime"]:.1f} ч</b>')
             ot_label.setTextFormat(Qt.TextFormat.RichText)
             self.tooltip_widget.layout.addWidget(ot_label)
 
@@ -356,7 +321,6 @@ class RatingEmployeeCard(QFrame):
     def _clear_tooltip(self):
         """Очистка тултипа"""
         if self.tooltip_widget:
-            # Удаляем все дочерние виджеты из layout
             while self.tooltip_widget.layout.count():
                 item = self.tooltip_widget.layout.takeAt(0)
                 if item.widget():
@@ -366,8 +330,6 @@ class RatingEmployeeCard(QFrame):
         """Показать тултип"""
         if not self.tooltip_widget:
             self._create_tooltip()
-
-        # Позиционируем под карточкой
         pos = self.mapToGlobal(QPoint(10, self.height() + 5))
         self.tooltip_widget.move(pos)
         self.tooltip_widget.show()
@@ -378,19 +340,16 @@ class RatingEmployeeCard(QFrame):
             self.tooltip_widget.hide()
 
     def enterEvent(self, event):
-        """Показываем тултип при наведении"""
         self._hide_timer.stop()
         if hasattr(self, '_tooltip_data'):
             self._show_tooltip()
         super().enterEvent(event)
 
     def leaveEvent(self, event):
-        """Скрываем тултип с небольшой задержкой"""
-        self._hide_timer.start(100)  # 100ms задержка
+        self._hide_timer.start(100)
         super().leaveEvent(event)
 
     def mousePressEvent(self, event):
-        """Клик по карточке - отправляем сигнал"""
         self._hide_tooltip()
         if self.employee_id:
             self.clicked.emit(self.employee_id)
@@ -401,15 +360,13 @@ class RatingEmployeeCard(QFrame):
         self.employee_data = employee_data
         self.employee_id = employee_data.get('id')
         self.position = position
-        # Сбрасываем тултип, чтобы он пересоздался с новыми данными
         if self.tooltip_widget:
             self.tooltip_widget.hide()
             self.tooltip_widget.deleteLater()
             self.tooltip_widget = None
-        self._setup_dynamic_ui()
+        self._update_display()
 
     def closeEvent(self, event):
-        """Очистка при закрытии"""
         if self.tooltip_widget:
             self.tooltip_widget.deleteLater()
             self.tooltip_widget = None
