@@ -1,6 +1,8 @@
 from aiogram import types
 from aiogram.fsm.context import FSMContext
 from datetime import datetime
+
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from sqlalchemy import text
 from database import get_employees_session, get_tasks_session
 from models.employees import Employee, EmployeeData
@@ -107,8 +109,88 @@ def register_callback_handlers(dp, bot_instance):
 
     @dp.callback_query(lambda c: c.data == "tags_done")
     async def process_tags_done(callback: types.CallbackQuery, state: FSMContext):
+        data = await state.get_data()
+        selected_tags = data.get('selected_tags', [])
+
         await callback.message.edit_text("✅ Выбор тегов завершен")
+
+        print(f"🏷️ Выбраны теги: {selected_tags}")
+
+        # Получаем предложение исполнителя на основе выбранных тегов
+        if selected_tags and hasattr(bot_instance.task_service, 'suggest_executor_for_tags'):
+            try:
+                suggestion = await bot_instance.task_service.suggest_executor_for_tags(selected_tags)
+                print(f"🎯 Предложение исполнителя: {suggestion}")
+
+                if suggestion:
+                    # Сохраняем предложенного исполнителя в состояние
+                    await state.update_data(suggested_executor=suggestion)
+
+                    # Спрашиваем, назначить ли предложенного исполнителя
+                    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                        [InlineKeyboardButton(text=f"✅ Назначить {suggestion['employee_name']}",
+                                              callback_data="accept_suggested_executor")],
+                        [InlineKeyboardButton(text="👤 Выбрать другого",
+                                              callback_data="select_executor_manual")],
+                        [InlineKeyboardButton(text="⏩ Пропустить",
+                                              callback_data="select_executor|skip")]
+                    ])
+
+                    await callback.message.answer(
+                        suggestion['explanation'],
+                        parse_mode="Markdown",
+                        reply_markup=keyboard
+                    )
+                    return
+                else:
+                    print("⚠️ Нет предложения исполнителя (suggestion is None)")
+            except Exception as e:
+                print(f"❌ Ошибка при получении предложения исполнителя: {e}")
+                import traceback
+                traceback.print_exc()
+
+        # Если нет тегов или нет предложения - показываем обычный выбор
         await bot_instance.finish_task_creation(callback, state, callback.from_user.id)
+        await callback.answer()
+
+    @dp.callback_query(lambda c: c.data == "select_executor_manual")
+    async def select_executor_manual(callback: types.CallbackQuery, state: FSMContext):
+        """Показать полный список исполнителей для ручного выбора"""
+        employees = await bot_instance.user_service.get_employees_list()
+
+        if employees:
+            buttons = []
+            for emp in employees[:20]:
+                buttons.append([InlineKeyboardButton(text=emp['name'], callback_data=f"select_executor|{emp['id']}")])
+            buttons.append([InlineKeyboardButton(text="👤 Назначить себя", callback_data="select_executor|self")])
+            buttons.append([InlineKeyboardButton(text="⏩ Пропустить", callback_data="select_executor|skip")])
+
+            reply_markup = InlineKeyboardMarkup(inline_keyboard=buttons)
+            await callback.message.edit_text(
+                "👤 *Выберите исполнителя:*",
+                parse_mode="Markdown",
+                reply_markup=reply_markup
+            )
+        else:
+            await callback.message.edit_text("⚠️ Нет доступных исполнителей")
+            await bot_instance.ask_priority(callback.message, state)
+
+        await callback.answer()
+
+    @dp.callback_query(lambda c: c.data == "accept_suggested_executor")
+    async def accept_suggested_executor(callback: types.CallbackQuery, state: FSMContext):
+        """Принять предложенного исполнителя"""
+        data = await state.get_data()
+        suggestion = data.get('suggested_executor')
+
+        if suggestion:
+            await state.update_data(assigned_to=suggestion['employee_id'])
+            await callback.message.edit_text(f"✅ Исполнитель: {suggestion['employee_name']} (рекомендованный)")
+            await bot_instance.ask_priority(callback.message, state)
+        else:
+            await bot_instance.ask_priority(callback.message, state)
+
+        await callback.answer()
 
     @dp.callback_query(lambda c: c.data.startswith("approve|"))
     async def approve_registration(callback: types.CallbackQuery):

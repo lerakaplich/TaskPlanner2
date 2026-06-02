@@ -83,6 +83,7 @@
 |  |  +-- __pycache__
 |  |  +-- tasks_bulk_service.py
 |  |  +-- tasks_crud_service.py
+|  |  +-- tasks_executor_suggestion_service.py
 |  |  +-- tasks_filter_service.py
 |  |  +-- tasks_kanban_service.py
 |  |  +-- tasks_move_service.py
@@ -92,7 +93,25 @@
 +-- shared_state.py
 +-- structure.txt
 +-- taskplanner.zip
-+-- telegram_bot.py
++-- telegram_bot
+|  +-- __pycache__
+|  +-- bot.py
+|  +-- handlers
+|  |  +-- __pycache__
+|  |  +-- auth.py
+|  |  +-- callbacks.py
+|  |  +-- overtime.py
+|  |  +-- registration.py
+|  |  +-- support.py
+|  |  +-- tasks.py
+|  +-- keyboards.py
+|  +-- services
+|  |  +-- __pycache__
+|  |  +-- notification_service.py
+|  |  +-- task_service.py
+|  |  +-- user_service.py
+|  +-- states.py
+|  +-- utils.py
 +-- ui
 |  +-- analytics
 |  |  +-- analytics_page.ui
@@ -161,7 +180,6 @@
 |  +-- error_handler.py
 |  +-- socket_manager.py
 +-- windows
-|  +-- 1.png
 |  +-- analytics
 |  |  +-- __pycache__
 |  |  +-- analytics_page.py
@@ -200,6 +218,7 @@
 |  |  +-- employee_selection_dialog.py
 |  +-- gantt
 |  |  +-- __pycache__
+|  |  +-- export_dialog.py
 |  |  +-- gantt_canvas.py
 |  |  +-- gantt_widget.py
 |  |  +-- link_dialog.py

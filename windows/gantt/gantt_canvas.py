@@ -25,8 +25,8 @@ class GanttCanvas(QWidget):
     def __init__(self, gantt_service: GanttService, parent=None):
         super().__init__(parent)
         self._service = gantt_service
-        self._start_date: datetime = datetime.now().replace(day=1)
-        self._end_date: datetime = datetime.now().replace(day=28) + timedelta(days=30)
+        self._start_date: datetime = datetime.now().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        self._end_date: datetime = self._start_date + timedelta(days=60)
         self._day_width: int = GanttService.DAY_WIDTH
         self._row_height: int = GanttService.ROW_HEIGHT
         self._header_height: int = GanttService.HEADER_HEIGHT

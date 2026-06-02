@@ -257,6 +257,12 @@ class TaskDialog(QDialog):
                 self.tags_popup.setFixedWidth(self.comboTags.width())
                 self.tags_popup.show()
                 return True
+
+        # Добавляем обработку закрытия popup
+        elif event.type() == QEvent.Type.WindowDeactivate:
+            if obj == self.tags_popup or (hasattr(self.tags_popup, 'isVisible') and not self.tags_popup.isVisible()):
+                self.tags_popup_closed()
+
         return super().eventFilter(obj, event)
 
     def update_tag_checkboxes_visibility(self):
@@ -511,6 +517,52 @@ class TaskDialog(QDialog):
 
         # НЕ ДОБАВЛЯЕМ created_by здесь - он будет добавлен в process_form_data
         return data
+
+    def suggest_executor(self):
+        """Предлагает исполнителя на основе выбранных тегов"""
+        selected_tags = self.get_selected_tags()
+
+        if not selected_tags or not self.service:
+            return None
+
+        try:
+            suggestion = self.service.suggest_executor_for_tags(selected_tags)
+            if suggestion:
+                return suggestion
+        except Exception as e:
+            print(f"⚠️ Ошибка при предложении исполнителя: {e}")
+        return None
+
+    def auto_fill_executor(self):
+        """Автоматически заполняет поле исполнителя на основе тегов"""
+        suggestion = self.suggest_executor()
+
+        if suggestion and hasattr(self, 'comboBoxAssignee'):
+            # Находим индекс предложенного исполнителя в комбобоксе
+            suggested_id = suggestion['employee_id']
+            for i in range(self.comboBoxAssignee.count()):
+                if self.comboBoxAssignee.itemData(i) == suggested_id:
+                    self.comboBoxAssignee.setCurrentIndex(i)
+
+                    # Показываем уведомление пользователю
+                    QMessageBox.information(
+                        self,
+                        "Рекомендация исполнителя",
+                        f"{suggestion['explanation']}\n\n"
+                        f"Исполнитель автоматически назначен. Вы можете изменить его при необходимости."
+                    )
+                    return True
+        return False
+
+    def tags_popup_closed(self):
+        """Вызывается, когда popup с тегами закрыт"""
+        self.update_tags_button_text()
+
+        # Автоматически предлагаем исполнителя
+        if self.mode == "create":  # Только для создания новой задачи
+            from PyQt6.QtCore import QTimer
+            # Небольшая задержка, чтобы UI успел обновиться
+            QTimer.singleShot(100, self.auto_fill_executor)
 
     def validate_and_save(self):
         print("\n=== ОТЛАДКА: Диалог сохранения задачи ===")

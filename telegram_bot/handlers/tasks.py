@@ -1,10 +1,12 @@
 from datetime import datetime
+from sqlalchemy import text  # добавьте эту строку
 
 from aiogram import types
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
+from database import get_employees_session
 from ..states import RegistrationStates
 from ..keyboards import get_main_keyboard, get_priority_keyboard, get_difficulty_keyboard
 
@@ -95,15 +97,14 @@ def register_tasks_handlers(dp, bot_instance):
         class FakeMessage:
             def __init__(self, callback_obj):
                 self.chat = callback_obj.message.chat
-                self.from_user = callback_obj.from_user  # Важно! Берем from_user из callback
+                self.from_user = callback_obj.from_user
 
             async def answer(self, text, **kwargs):
-                # Отвечаем через callback.message
                 await callback.message.answer(text, **kwargs)
 
         fake_msg = FakeMessage(callback)
         await bot_instance.show_my_tasks(fake_msg, page)
-        await callback.answer()  # Обязательно!
+        await callback.answer()
 
     @dp.message(RegistrationStates.waiting_for_task_title)
     async def process_task_title(message: types.Message, state: FSMContext):
@@ -121,8 +122,6 @@ def register_tasks_handlers(dp, bot_instance):
             parse_mode="Markdown"
         )
         await state.set_state(RegistrationStates.waiting_for_task_description)
-
-
 
     @dp.message(RegistrationStates.waiting_for_task_description)
     async def process_task_description(message: types.Message, state: FSMContext):
@@ -149,3 +148,30 @@ def register_tasks_handlers(dp, bot_instance):
         else:
             await state.update_data(assigned_to=None)
             await bot_instance.ask_priority(message, state)
+
+    @dp.message(Command("stats"))
+    async def cmd_stats(message: types.Message, state: FSMContext):
+        """Показать статистику пользователя по тегам"""
+        chat_id = message.chat.id
+
+        with get_employees_session() as emp_session:
+            select_stmt = text("SELECT id FROM public.employees WHERE chat_id = :chat_id")
+            employee = emp_session.execute(select_stmt, {'chat_id': chat_id}).first()
+            if not employee:
+                await message.answer("❌ Вы не авторизованы.")
+                return
+            user_id = employee[0]
+
+        performance = await bot_instance.task_service.suggestion_service.get_employee_performance_by_tag(user_id)
+
+        if not performance:
+            await message.answer("📊 У вас пока нет выполненных задач для анализа")
+            return
+
+        stats_text = "📊 *Ваша статистика по темам*\n\n"
+        for tag_name, data in sorted(performance.items(), key=lambda x: x[1]['avg_kpd'], reverse=True):
+            stats_text += f"🏷️ *{tag_name}*\n"
+            stats_text += f"   📈 Средний КПД: {data['avg_kpd']}%\n"
+            stats_text += f"   📋 Выполнено задач: {data['tasks_count']}\n\n"
+
+        await message.answer(stats_text, parse_mode="Markdown")

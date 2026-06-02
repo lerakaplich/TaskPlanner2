@@ -1,9 +1,13 @@
 # services/projects_service/projects_notification_service.py
 
 import asyncio
+import logging
 from typing import List, Optional, Dict
 from sqlalchemy import text
-from telegram_bot import telegram_bot
+
+from telegram_bot.bot import telegram_bot
+
+logger = logging.getLogger(__name__)
 
 
 class ProjectsNotificationService:

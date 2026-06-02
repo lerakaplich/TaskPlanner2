@@ -1,4 +1,5 @@
 # services/projects_service/projects_crud_service.py
+import logging
 from datetime import datetime
 from typing import List, Optional, Dict, Any
 
@@ -7,7 +8,8 @@ from sqlalchemy import select
 from models.schemas.projects_dto import ProjectWithMembersDTO, ProjectCardDTO
 from repositories.employee_repo import EmployeeRepo
 from repositories.project_repo import ProjectRepo
-from telegram_bot import logger
+
+logger = logging.getLogger(__name__)
 
 
 def _send_notification_sync(chat_id: int, project_name: str, manager_name: str, description: str, role: str):
@@ -99,6 +101,61 @@ class ProjectsCrudService:
 
         return dto
 
+    def create_project_with_chat(self, project_data: dict, creator_id: int) -> Optional[Dict]:
+        """
+        Создаёт проект и автоматически создаёт для него чат.
+
+        Args:
+            project_data: данные проекта
+            creator_id: ID создателя
+
+        Returns:
+            Optional[Dict]: данные созданного проекта или None
+        """
+        from services.chat_service import ChatService
+        from database import get_tasks_session
+
+        # Создаём проект
+        new_project = self.create_new_project(project_data, creator_id)
+
+        if not new_project:
+            print(f"❌ Не удалось создать проект")
+            return None
+
+        # Создаём чат для проекта
+        try:
+            chat_session = get_tasks_session()
+            if chat_session:
+                chat_service = ChatService(chat_session)
+
+                # Собираем участников
+                participants = self._extract_participant_ids(project_data)
+                admins = self._extract_admin_ids(project_data)
+                manager_id = project_data.get('manager_id')
+
+                chat_id = chat_service.create_project_chat(
+                    project_id=new_project.id,
+                    project_name=new_project.name,
+                    creator_id=creator_id,
+                    participant_ids=participants,
+                    admin_ids=admins,
+                    manager_id=manager_id
+                )
+
+                if chat_id:
+                    print(f"✅ Чат для проекта {new_project.id} создан (ID: {chat_id})")
+                else:
+                    print(f"⚠️ Проект создан, но чат не создан")
+
+                chat_session.close()
+            else:
+                print(f"⚠️ Нет подключения к БД чатов")
+
+        except Exception as e:
+            print(f"⚠️ Ошибка при создании чата: {e}")
+
+        return new_project
+
     def archive_project(self, project_id: int) -> bool:
         """Архивировать проект"""
         try:
@@ -162,6 +219,48 @@ class ProjectsCrudService:
             self.session.rollback()
             print(f"❌ Ошибка при создании проекта: {e}")
             return None
+
+    def _extract_participant_ids(self, project_data: dict) -> List[int]:
+        """Извлекает ID участников из данных проекта"""
+        participants = []
+
+        # Из participants_ids
+        participants_ids_str = project_data.get('participants_ids', '')
+        if participants_ids_str:
+            for pid in participants_ids_str.split(','):
+                if pid.strip():
+                    participants.append(int(pid.strip()))
+
+        # Из participants
+        if 'participants' in project_data:
+            for p in project_data['participants']:
+                if isinstance(p, dict) and p.get('id'):
+                    participants.append(p['id'])
+                elif isinstance(p, int):
+                    participants.append(p)
+
+        return list(set(participants))
+
+    def _extract_admin_ids(self, project_data: dict) -> List[int]:
+        """Извлекает ID администраторов из данных проекта"""
+        admins = []
+
+        # Из admins_ids
+        admins_ids_str = project_data.get('admins_ids', '')
+        if admins_ids_str:
+            for aid in admins_ids_str.split(','):
+                if aid.strip():
+                    admins.append(int(aid.strip()))
+
+        # Из admins
+        if 'admins' in project_data:
+            for a in project_data['admins']:
+                if isinstance(a, dict) and a.get('id'):
+                    admins.append(a['id'])
+                elif isinstance(a, int):
+                    admins.append(a)
+
+        return list(set(admins))
 
     def _send_project_notifications(self, project_id: int, project_name: str,
                                     raw_data: Dict[str, Any], creator_id: int):

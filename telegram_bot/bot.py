@@ -46,8 +46,6 @@ class TelegramBot:
         self._reminder_task = None
         self._setup_handlers()
 
-    # ==================== Публичные методы ====================
-
     async def send_registration_to_admins(self, request_id: str, registration_data: dict):
         """Отправляет заявку на одобрение администраторам"""
         with get_employees_session() as emp_session:
@@ -299,13 +297,11 @@ class TelegramBot:
         reply_markup = InlineKeyboardMarkup(inline_keyboard=keyboard_buttons) if keyboard_buttons else None
         await message.answer(tasks_text, parse_mode="Markdown", reply_markup=reply_markup)
 
-    # ==================== Внутренние методы ====================
-
     async def start_reminder_scheduler(self):
         async def send_daily_reminders():
             while True:
                 now = datetime.now()
-                next_run = datetime(now.year, now.month, now.day, 9, 0, 0)
+                next_run = datetime(now.year, now.month, now.day, 11, 0, 5)
                 if now >= next_run:
                     next_run = next_run + timedelta(days=1)
                 await asyncio.sleep((next_run - now).total_seconds())
@@ -327,7 +323,7 @@ class TelegramBot:
         await self.start_reminder_scheduler()
         await self.dp.start_polling(self.bot)
 
-
+  
 telegram_bot = TelegramBot()
 
 async def start_bot():

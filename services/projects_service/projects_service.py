@@ -42,9 +42,18 @@ class ProjectsService:
     def set_current_user(self, user):
         self.current_user = user
 
-    # =====================================================
-    # Прокси для CRUD операций
-    # =====================================================
+    def create_project_with_chat(self, project_data: dict, creator_id: int):
+        """
+        Создаёт проект и автоматически создаёт для него чат.
+
+        Args:
+            project_data: данные проекта
+            creator_id: ID создателя
+
+        Returns:
+            Optional[Dict]: данные созданного проекта или None
+        """
+        return self.crud.create_project_with_chat(project_data, creator_id)
 
     def get_project_for_edit(self, project_id: int):
         return self.crud.get_project_for_edit(project_id)

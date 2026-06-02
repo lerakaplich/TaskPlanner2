@@ -2,11 +2,12 @@
 
 import os
 import sys
-from typing import List, Dict, Optional, Set
 from functools import partial
+from typing import List, Dict
+
 from PyQt6 import uic
-from PyQt6.QtWidgets import QDialog, QCheckBox, QLabel
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal
+from PyQt6.QtWidgets import QDialog, QCheckBox, QLabel
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
@@ -138,6 +139,7 @@ class EmployeeSelectorDialog(QDialog):
 
         self.sort_employees()
         self.display_employees()
+        self._update_select_all_state()  # Добавить обновление состояния после отображения
 
     def sort_employees(self):
         """Сортировка через сервис"""
@@ -166,16 +168,21 @@ class EmployeeSelectorDialog(QDialog):
         self.checkboxes.clear()
         self.employee_checkbox_map.clear()
 
-        self.selectAllCheckBox.setChecked(False)
+        # Убираем блокировку сигналов
+        self.selectAllCheckBox.blockSignals(True)
         self.selectAllCheckBox.setEnabled(True)
+        self.selectAllCheckBox.blockSignals(False)
 
         if not self.filtered_employees:
             label = QLabel("Сотрудники не найдены")
             label.setAlignment(Qt.AlignmentFlag.AlignCenter)
             label.setStyleSheet("color: #B8B8B5; font-size: 14px; padding: 40px;")
             layout.addWidget(label)
+            self.selectAllCheckBox.blockSignals(True)
             self.selectAllCheckBox.setEnabled(False)
+            self.selectAllCheckBox.blockSignals(False)
             self.update_selected_count()
+            self._update_select_all_state()
             return
 
         # Разделяем на выбранных и остальных
@@ -223,6 +230,7 @@ class EmployeeSelectorDialog(QDialog):
 
         layout.addStretch()
         self.update_selected_count()
+        self._update_select_all_state()
 
     def _create_checkbox(self, emp: Dict) -> QCheckBox:
         """Создает чекбокс для сотрудника"""
@@ -263,35 +271,55 @@ class EmployeeSelectorDialog(QDialog):
         elif state == Qt.CheckState.Unchecked.value:
             self.selected_employees.discard(emp_id)
 
-        self.sort_employees()
-        self.display_employees()
         self.update_selected_count()
         self._update_select_all_state()
 
-    def _update_select_all_state(self):
-        """Обновление состояния чекбокса 'Выбрать всех'"""
-        if len(self.selected_employees) == len(self.filtered_employees) and len(self.filtered_employees) > 0:
-            self.selectAllCheckBox.setCheckState(Qt.CheckState.Checked)
-        elif self.selectAllCheckBox.checkState() == Qt.CheckState.Checked:
-            self.selectAllCheckBox.setCheckState(Qt.CheckState.Unchecked)
-
     def on_select_all_changed(self, state):
         """Обработка изменения состояния чекбокса 'Выбрать всех'"""
-        if state == Qt.CheckState.Checked:
+        # Блокируем сигналы, чтобы избежать рекурсии
+        self.selectAllCheckBox.blockSignals(True)
+
+        if state == Qt.CheckState.Checked.value:
             for emp in self.filtered_employees:
                 self.selected_employees.add(emp['id'])
-        elif state == Qt.CheckState.Unchecked:
+        elif state == Qt.CheckState.Unchecked.value:
             for emp in self.filtered_employees:
                 self.selected_employees.discard(emp['id'])
 
-        self.sort_employees()
-        self.display_employees()
+        # Обновляем состояние всех чекбоксов без полной перерисовки
+        self._update_checkboxes_state()
         self.update_selected_count()
+
+        # Восстанавливаем сигналы
+        self.selectAllCheckBox.blockSignals(False)
+
+        # Сохраняем состояние для следующей сортировки
+        self.sort_employees()
 
     def update_selected_count(self):
         """Обновление счетчика выбранных сотрудников"""
         count = len(self.selected_employees)
-        self.selectedCountLabel.setText(f"Выбрано: {count}")
+        # Проверяем, существует ли виджет selectedCountLabel
+        if hasattr(self, 'selectedCountLabel'):
+            self.selectedCountLabel.setText(f"Выбрано: {count}")
+
+    def _update_checkboxes_state(self):
+        """Обновляет состояние всех существующих чекбоксов"""
+        for checkbox, emp_id in self.employee_checkbox_map.items():
+            checkbox.blockSignals(True)
+            checkbox.setChecked(emp_id in self.selected_employees)
+            checkbox.blockSignals(False)
+
+    def _update_select_all_state(self):
+        """Обновление состояния чекбокса 'Выбрать всех'"""
+        self.selectAllCheckBox.blockSignals(True)
+
+        if len(self.filtered_employees) > 0 and len(self.selected_employees) == len(self.filtered_employees):
+            self.selectAllCheckBox.setCheckState(Qt.CheckState.Checked)
+        elif len(self.selected_employees) < len(self.filtered_employees):
+            self.selectAllCheckBox.setCheckState(Qt.CheckState.Unchecked)
+
+        self.selectAllCheckBox.blockSignals(False)
 
     def get_selected_employees(self) -> List[Dict]:
         """Получение списка выбранных сотрудников с полной информацией"""

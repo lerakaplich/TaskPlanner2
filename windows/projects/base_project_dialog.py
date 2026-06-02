@@ -204,6 +204,7 @@ class BaseProjectDialog(QDialog):
         try:
             from windows.projects.employee_selector import EmployeeSelectorDialog
 
+            # ВАЖНО: передаем service в диалог
             dialog = EmployeeSelectorDialog(self, service=self.service, mode="participants")
 
             if self.participants:
@@ -213,13 +214,17 @@ class BaseProjectDialog(QDialog):
             if dialog.exec() == QDialog.DialogCode.Accepted:
                 self.participants = dialog.get_selected_employees()
                 self.update_participants_button_text()
+                print(f"✅ Выбрано участников: {len(self.participants)}")
         except Exception as e:
             QMessageBox.warning(self, "Ошибка", f"Ошибка при выборе участников: {e}")
+            import traceback
+            traceback.print_exc()
 
     def select_admins(self):
         try:
             from windows.projects.employee_selector import EmployeeSelectorDialog
 
+            # ВАЖНО: передаем service в диалог
             dialog = EmployeeSelectorDialog(self, service=self.service, mode="admins")
 
             if self.admins:
@@ -229,8 +234,11 @@ class BaseProjectDialog(QDialog):
             if dialog.exec() == QDialog.DialogCode.Accepted:
                 self.admins = dialog.get_selected_employees()
                 self.update_admins_button_text()
+                print(f"✅ Выбрано администраторов: {len(self.admins)}")
         except Exception as e:
             QMessageBox.warning(self, "Ошибка", f"Ошибка при выборе администраторов: {e}")
+            import traceback
+            traceback.print_exc()
 
     def update_participants_button_text(self):
         """Обновить текст на кнопке участников"""

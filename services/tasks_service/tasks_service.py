@@ -4,6 +4,7 @@ from typing import Dict, Optional, List
 
 from services.employee_service import column_service
 from services.tasks_service.tasks_crud_service import TasksCrudService
+from services.tasks_service.tasks_executor_suggestion_service import TasksExecutorSuggestionService
 from services.tasks_service.tasks_move_service import TasksMoveService
 from services.tasks_service.tasks_filter_service import TasksFilterService
 from services.tasks_service.tasks_tag_service import TasksTagService
@@ -17,6 +18,8 @@ class TasksService:
     Главный сервис для работы с задачами.
     Объединяет все функциональные модули через композицию.
     """
+
+    # В методе __init__ класса TasksService:
 
     def __init__(self, db_session, current_user=None, mode="all", column_service=None):
         self.crud = TasksCrudService(db_session, current_user, mode, column_service)
@@ -35,9 +38,17 @@ class TasksService:
         # Сохраняем ссылку на метод конвертации
         self._task_to_dict = self.crud._task_to_dict
 
-    # ==========================================================
-    # Прокси для CRUD операций
-    # ==========================================================
+        # Исправленная инициализация suggestion_service
+        from database import get_employees_session
+        self.suggestion_service = TasksExecutorSuggestionService(
+            db_session,  # передаём сессию напрямую, не как фабрику
+            get_employees_session  # фабрика для employees
+        )
+
+    def suggest_executor_for_tags(self, tag_names: List[str], creator_id: int = None) -> Optional[Dict]:
+        """Предлагает исполнителя для задачи на основе тегов"""
+        return self.suggestion_service.suggest_executor_for_new_task(tag_names, creator_id)
+
     @property
     def repo(self):
         return self.crud.repo

@@ -97,8 +97,9 @@ class ProjectViewHandler:
                 self.refresh_projects_view()
                 QMessageBox.information(self.main, "Успех", "Проект обновлен")
 
+
     def create_project(self):
-        """Создание нового проекта"""
+        """Создание нового проекта с автоматическим созданием чата"""
         dialog = ProjectCreationDialog(
             parent=self.main,
             service=self.main.project_service,
@@ -107,16 +108,28 @@ class ProjectViewHandler:
 
         if dialog.exec() == QDialog.DialogCode.Accepted:
             raw_data = dialog.get_project_data()
-            new_project_dto = self.main.project_service.create_new_project(raw_data,
-                                                                           creator_id=self.main.current_user_id)
+
+            # Используем новый метод с автоматическим созданием чата
+            new_project_dto = self.main.project_service.create_project_with_chat(
+                raw_data,
+                creator_id=self.main.current_user_id
+            )
 
             if new_project_dto:
                 self.refresh_projects_view()
-                QMessageBox.information(self.main, "Успех", f"Проект '{new_project_dto.name}' успешно создан!")
+
+                # Обновляем список чатов, если чат-страница уже создана
+                if 'chat' in self.main.pages:
+                    self.main.pages['chat'].load_chat_list()
+
+                QMessageBox.information(
+                    self.main,
+                    "Успех",
+                    f"Проект '{new_project_dto.name}' успешно создан!\n"
+                    f"Автоматически создан чат для обсуждения проекта."
+                )
             else:
                 QMessageBox.critical(self.main, "Ошибка", "Не удалось создать проект в базе данных.")
-
-        # windows/projects/main_window_handlers.py
 
     def archive_project(self, project_id):
         """Архивация проекта"""

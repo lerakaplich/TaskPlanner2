@@ -33,6 +33,71 @@ class ChatService:
         participant = self.chat_repo.get_participant(chat_id, user_id)
         return participant.is_admin if participant else False
 
+    def create_project_chat(self, project_id: int, project_name: str, creator_id: int,
+                            participant_ids: List[int], admin_ids: List[int], manager_id: int = None) -> Optional[int]:
+        """
+        Создаёт групповой чат для проекта со всеми участниками.
+
+        Args:
+            project_id: ID проекта
+            project_name: Название проекта
+            creator_id: ID создателя чата
+            participant_ids: Список ID всех участников проекта
+            admin_ids: Список ID администраторов проекта
+            manager_id: ID куратора проекта (если есть)
+
+        Returns:
+            Optional[int]: ID созданного чата или None при ошибке
+        """
+        try:
+            # Формируем название чата
+            chat_title = f"Проект: {project_name}"
+
+            # Собираем всех участников (уникальные)
+            all_participants = set(participant_ids)
+            all_participants.add(creator_id)
+
+            # Добавляем куратора, если он есть и не в списке
+            if manager_id and manager_id not in all_participants:
+                all_participants.add(manager_id)
+
+            # Добавляем администраторов (они уже могут быть в участниках)
+            for admin_id in admin_ids:
+                all_participants.add(admin_id)
+
+            # Создаём чат
+            new_chat = self.chat_repo.create_chat(
+                title=chat_title,
+                chat_type=ChatType.project.value,
+                project_id=project_id
+            )
+
+            if not new_chat:
+                print(f"❌ Не удалось создать чат для проекта {project_id}")
+                return None
+
+            # Добавляем всех участников
+            for user_id in all_participants:
+                is_admin = user_id in admin_ids or user_id == creator_id
+                self.chat_repo.add_participant(new_chat.id, user_id, is_admin=is_admin)
+
+            # Добавляем куратора как админа, если его ещё нет в админах
+            if manager_id and manager_id not in admin_ids and manager_id != creator_id:
+                self.chat_repo.update_participant_role(new_chat.id, manager_id, is_admin=True)
+
+            self.session.commit()
+            print(f"✅ Создан чат '{chat_title}' для проекта {project_id} (ID чата: {new_chat.id})")
+            print(f"   Участников: {len(all_participants)}, Админов: {len(admin_ids) + (1 if manager_id else 0) + 1}")
+
+            return new_chat.id
+
+        except Exception as e:
+            self.session.rollback()
+            print(f"❌ Ошибка при создании чата для проекта: {e}")
+            import traceback
+            traceback.print_exc()
+            return None
+
     def get_user_chats(self, user_id: int) -> List[ChatReadDTO]:
         """Загружает список чатов для отображения в левой панели"""
         chats = self.chat_repo.get_chats_for_user(user_id)

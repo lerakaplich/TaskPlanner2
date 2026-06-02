@@ -3,11 +3,11 @@
 import os
 from datetime import datetime, timedelta
 from typing import Optional, List
-from PyQt6.QtCore import Qt, QTimer
+from PyQt6.QtCore import Qt, QTimer, QDate
 from PyQt6.QtGui import QColor, QFont
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QTreeWidgetItem,
-    QDialog, QMessageBox, QPushButton, QComboBox, QFrame, QGroupBox, QScrollArea
+    QDialog, QMessageBox, QPushButton, QComboBox, QFrame, QGroupBox, QScrollArea, QApplication
 )
 from PyQt6 import uic
 
@@ -36,8 +36,6 @@ class GanttWidget(QWidget):
         self._setup_ui()
         self._connect_signals()
         self._load_initial_data()
-
-    # ==================== ИНИЦИАЛИЗАЦИЯ UI ====================
 
     def _setup_ui(self) -> None:
         """Загрузка UI из файла или создание программно"""
@@ -145,7 +143,9 @@ class GanttWidget(QWidget):
     def _setup_loaded_ui(self) -> None:
         """Настройка загруженного UI"""
         from windows.gantt.gantt_canvas import GanttCanvas
+        from windows.gantt.calendar_widget import CalendarWidget
 
+        # Настройка диаграммы Ганта
         self.gantt_canvas = GanttCanvas(self._service)
 
         if hasattr(self, 'ganttScrollArea'):
@@ -162,15 +162,34 @@ class GanttWidget(QWidget):
             gantt_layout.addWidget(self.gantt_canvas)
             self.ganttScrollArea.setWidget(self.gantt_canvas)
 
-        # Скрываем вкладку "Календарь" (оставляем возможность вернуть)
-        if hasattr(self, 'tabWidget'):
-            for i in range(self.tabWidget.count()):
-                if self.tabWidget.tabText(i) == "Календарь":
-                    # Способ 1: удалить вкладку
-                    self.tabWidget.removeTab(i)
-                    # Способ 2: скрыть (если поддерживается версией Qt)
-                    # self.tabWidget.setTabVisible(i, False)
-                    break
+        # Настройка календаря
+        self.calendar_widget = CalendarWidget(self._service)
+
+        # Находим вкладку календаря и очищаем её
+        calendar_tab = self.findChild(QWidget, "calendarTab")
+        if calendar_tab:
+            # Получаем или создаём layout для вкладки
+            tab_layout = calendar_tab.layout()
+            if tab_layout is None:
+                tab_layout = QVBoxLayout(calendar_tab)
+                tab_layout.setContentsMargins(0, 0, 0, 0)
+                tab_layout.setSpacing(0)
+                calendar_tab.setLayout(tab_layout)
+            else:
+                # Очищаем существующий layout
+                while tab_layout.count():
+                    item = tab_layout.takeAt(0)
+                    if item.widget():
+                        item.widget().deleteLater()
+
+            # Добавляем календарь прямо во вкладку
+            tab_layout.addWidget(self.calendar_widget)
+
+        # Удаляем calendarPlaceholder если он существует
+        placeholder = self.findChild(QLabel, "calendarPlaceholder")
+        if placeholder:
+            placeholder.hide()
+            placeholder.deleteLater()
 
         print("✅ UI загружен")
 
@@ -238,10 +257,202 @@ class GanttWidget(QWidget):
         self.executorFilter.currentTextChanged.connect(self._on_executor_filter_changed)
         self.projectsTree.itemClicked.connect(self._on_project_item_clicked)
 
+        # Добавьте эту строку для кнопки экспорта
+        self.btnExport.clicked.connect(self._on_export_clicked)
+
         # Сигналы от холста
         if hasattr(self, 'gantt_canvas'):
             self.gantt_canvas.task_moved_signal.connect(self._on_task_moved)
             self.gantt_canvas.link_created_signal.connect(self._on_link_created)
+
+        # Сигналы от календаря
+        if hasattr(self, 'calendar_widget'):
+            self.calendar_widget.task_clicked.connect(self._on_calendar_task_clicked)
+
+    def _on_calendar_task_clicked(self, task_id: int) -> None:
+        """Обработчик клика по задаче в календаре"""
+        task = self._service.get_task_by_id(task_id)
+        if task:
+            self._show_task_info(task)
+
+    def _on_export_clicked(self) -> None:
+        """Обработчик нажатия кнопки экспорта"""
+        from windows.gantt.export_dialog import ExportDialog
+        from windows.gantt.period_dialog import PeriodDialog
+
+        if not hasattr(self, 'gantt_canvas') or self.gantt_canvas is None:
+            QMessageBox.warning(self, "Экспорт", "Нет данных для экспорта")
+            return
+
+        # Проверяем, есть ли задачи для отображения
+        all_tasks = self._service.get_filtered_tasks(
+            self._current_project_filter,
+            self._current_executor_filter
+        )
+        if not all_tasks:
+            QMessageBox.warning(self, "Экспорт", "Нет задач для экспорта")
+            return
+
+        # Сначала выбираем формат экспорта
+        dialog = ExportDialog(self)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+
+        selected_format = dialog.get_selected_format()
+
+        # Затем выбираем период для экспорта
+        period_dialog = PeriodDialog(self)
+        period_dialog.setWindowTitle("Выбор периода для экспорта")
+
+        # Устанавливаем диапазон по задачам как предустановленный
+        start_default, end_default = self._service.get_date_range_for_tasks(all_tasks, padding_days=0)
+        period_dialog.start_edit.setDate(QDate(start_default.year, start_default.month, start_default.day))
+        period_dialog.end_edit.setDate(QDate(end_default.year, end_default.month, end_default.day))
+
+        if period_dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+
+        start_date, end_date = period_dialog.get_dates()
+
+        # Фильтруем задачи по выбранному периоду
+        filtered_tasks = []
+        for task in all_tasks:
+            # Задача попадает в экспорт, если она пересекается с выбранным периодом
+            if (task.start_date <= end_date and task.end_date >= start_date):
+                filtered_tasks.append(task)
+
+        if not filtered_tasks:
+            QMessageBox.warning(
+                self,
+                "Экспорт",
+                f"Нет задач в выбранном периоде\n{start_date.strftime('%d.%m.%Y')} - {end_date.strftime('%d.%m.%Y')}"
+            )
+            return
+
+        # Показываем курсор ожидания
+        QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
+
+        try:
+            saved_path = None
+
+            if selected_format == "image":
+                # Для PNG: создаём временный холст с отфильтрованными задачами и периодом
+                saved_path = self._export_to_image_with_period(filtered_tasks, start_date, end_date)
+
+            elif selected_format == "excel":
+                # Экспорт в Excel с выбранным периодом
+                saved_path = self._service.export_to_excel(filtered_tasks, start_date, end_date)
+
+            elif selected_format == "docx":
+                # Экспорт в Word с выбранным периодом
+                saved_path = self._service.export_to_docx(filtered_tasks, start_date, end_date)
+
+            if saved_path:
+                QMessageBox.information(
+                    self,
+                    "Экспорт завершён",
+                    f"Диаграмма Ганта успешно сохранена:\n{saved_path}\n\n"
+                    f"Период: {start_date.strftime('%d.%m.%Y')} - {end_date.strftime('%d.%m.%Y')}\n"
+                    f"Задач: {len(filtered_tasks)}"
+                )
+
+        except Exception as e:
+            QMessageBox.critical(
+                self,
+                "Ошибка экспорта",
+                f"Не удалось экспортировать диаграмму:\n{str(e)}"
+            )
+            print(f"❌ Ошибка экспорта: {e}")
+            import traceback
+            traceback.print_exc()
+
+        finally:
+            QApplication.restoreOverrideCursor()
+
+    def _export_to_image_with_period(self, tasks: List, start_date: datetime, end_date: datetime) -> Optional[str]:
+        """
+        Экспортирует диаграмму Ганта в PNG с заданным периодом.
+
+        Args:
+            tasks: список задач для отображения
+            start_date: начало периода
+            end_date: конец периода
+
+        Returns:
+            Optional[str]: путь к сохранённому файлу или None
+        """
+        from PyQt6.QtWidgets import QFileDialog
+        from PyQt6.QtGui import QPixmap
+        from datetime import datetime
+
+        # Сохраняем текущее состояние
+        original_tasks = self.gantt_canvas._tasks.copy()
+        original_start = self.gantt_canvas._start_date
+        original_end = self.gantt_canvas._end_date
+        original_links = self.gantt_canvas._links.copy()
+
+        try:
+            # Устанавливаем новые данные
+            self.gantt_canvas.set_tasks(tasks)
+            self.gantt_canvas.set_date_range(start_date, end_date)
+
+            # Фильтруем связи
+            task_ids = {t.id for t in tasks}
+            filtered_links = {}
+            all_links = self._service.get_all_links()
+            for from_id, to_ids in all_links.items():
+                if from_id in task_ids:
+                    filtered_to_ids = [tid for tid in to_ids if tid in task_ids]
+                    if filtered_to_ids:
+                        filtered_links[from_id] = filtered_to_ids
+            self.gantt_canvas.set_links(filtered_links)
+
+            # Принудительно обновляем геометрию и перерисовываем
+            self.gantt_canvas.updateGeometry()
+            self.gantt_canvas.update()
+
+            # Ждём завершения отрисовки
+            for _ in range(10):
+                QApplication.processEvents()
+
+            # Диалог сохранения
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            default_name = f"gantt_chart_{timestamp}.png"
+
+            file_path, _ = QFileDialog.getSaveFileName(
+                self,
+                "Сохранить диаграмму Ганта",
+                default_name,
+                "PNG Image (*.png);;JPEG Image (*.jpg *.jpeg);;All Files (*.*)"
+            )
+
+            if not file_path:
+                return None
+
+            # Сохраняем изображение
+            pixmap = self.gantt_canvas.grab()
+            success = pixmap.save(file_path)
+
+            if success:
+                print(f"✅ PNG экспортирован с периодом: {start_date.date()} - {end_date.date()}")
+                return file_path
+            else:
+                print(f"❌ Ошибка сохранения PNG")
+                return None
+
+        except Exception as e:
+            print(f"❌ Ошибка экспорта PNG: {e}")
+            import traceback
+            traceback.print_exc()
+            return None
+
+        finally:
+            # Восстанавливаем исходное состояние
+            self.gantt_canvas.set_tasks(original_tasks)
+            self.gantt_canvas.set_date_range(original_start, original_end)
+            self.gantt_canvas.set_links(original_links)
+            self.gantt_canvas.update()
+            QApplication.processEvents()
 
     def _load_initial_data(self) -> None:
         """Начальная загрузка данных"""
@@ -254,13 +465,16 @@ class GanttWidget(QWidget):
         self._update_projects_tree()
         self._update_filters()
         self._apply_filters()
-        self._update_canvas_date_range()
+        self._update_canvas_date_range()  # Это должно быть после _apply_filters
 
         if hasattr(self, 'gantt_canvas'):
             self.gantt_canvas.set_links(self._service.get_all_links())
             self.gantt_canvas.update()
 
-    # ==================== ОБНОВЛЕНИЕ UI КОМПОНЕНТОВ ====================
+        # Принудительно обновляем календарь после загрузки
+        if hasattr(self, 'calendar_widget'):
+            self.calendar_widget.update()
+            self.calendar_widget.repaint()
 
     def _update_projects_tree(self) -> None:
         """Обновление дерева проектов"""
@@ -331,7 +545,17 @@ class GanttWidget(QWidget):
         else:
             tasks = self._service.get_all_tasks()
 
-        start, end = self._service.get_date_range_for_tasks(tasks)
+        if not tasks:
+            # Если задач нет, показываем текущий месяц
+            today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+            start = today.replace(day=1)
+            if start.month == 12:
+                end = start.replace(year=start.year + 1, month=1, day=1) - timedelta(days=1)
+            else:
+                end = start.replace(month=start.month + 1, day=1) - timedelta(days=1)
+        else:
+            # Получаем диапазон дат с небольшим отступом
+            start, end = self._service.get_date_range_for_tasks(tasks, padding_days=5)
 
         if hasattr(self, 'gantt_canvas'):
             self.gantt_canvas.set_date_range(start, end)
@@ -391,8 +615,6 @@ class GanttWidget(QWidget):
                 line_edit.setReadOnly(False)
                 line_edit.setSelection(0, 0)
 
-    # ==================== ОБРАБОТЧИКИ СОБЫТИЙ UI ====================
-
     def _on_project_filter_changed(self, text: str) -> None:
         """Обработка изменения фильтра проектов"""
         current_data = self.projectFilter.currentData()
@@ -436,6 +658,12 @@ class GanttWidget(QWidget):
 
         if hasattr(self, 'gantt_canvas'):
             self.gantt_canvas.set_tasks(filtered_tasks)
+
+        # Обновляем календарь
+        if hasattr(self, 'calendar_widget'):
+            self.calendar_widget.set_tasks(filtered_tasks)
+            self.calendar_widget.update()
+            self.calendar_widget.repaint()
 
         self._update_tree_visibility()
 

@@ -99,4 +99,25 @@ class ProjectCreationDialog(BaseProjectDialog):
             'columns_display_names': {col['col_key']: col['name'] for col in self.selected_columns_data}
         })
 
+        # Добавляем информацию о кураторе
+        manager_id = self.get_manager_id()
+        if manager_id:
+            prepared_data['manager_id'] = manager_id
+            prepared_data['manager_name'] = self.get_manager_name()
+
+        # Добавляем списки ID участников и администраторов для создания чата
+        participants_ids = []
+        for p in self.participants:
+            emp_id = p.get('id') if isinstance(p, dict) else p
+            if emp_id:
+                participants_ids.append(emp_id)
+        prepared_data['participants_ids_list'] = participants_ids
+
+        admins_ids = []
+        for a in self.admins:
+            emp_id = a.get('id') if isinstance(a, dict) else a
+            if emp_id:
+                admins_ids.append(emp_id)
+        prepared_data['admins_ids_list'] = admins_ids
+
         return prepared_data
