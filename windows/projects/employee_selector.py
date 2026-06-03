@@ -33,6 +33,11 @@ class EmployeeSelectorDialog(QDialog):
         # Данные для фильтров
         self.divisions_list = []
         self.departments_list = []
+        self.departments_dict = {}  # name -> id
+        self.divisions_dict = {}  # name -> id
+        self.department_to_divisions = {}  # department_id -> set(division_ids)
+        self.division_to_departments = {}  # division_id -> set(department_ids)
+        self.updating_filters = False  # Флаг для предотвращения рекурсии
 
         # Загрузка UI
         ui_path = os.path.join(os.path.dirname(__file__), "..", "..", "ui", "projects")
@@ -41,7 +46,7 @@ class EmployeeSelectorDialog(QDialog):
         # Подключение сигналов
         self.searchInput.textChanged.connect(self.on_search_text_changed)
         self.departmentFilter.currentTextChanged.connect(self.on_department_changed)
-        self.subDepartmentFilter.currentTextChanged.connect(self.apply_filters)
+        self.subDepartmentFilter.currentTextChanged.connect(self.on_sub_department_changed)
         self.selectAllCheckBox.stateChanged.connect(self.on_select_all_changed)
         self.selectBtn.clicked.connect(self.accept)
 
@@ -53,52 +58,166 @@ class EmployeeSelectorDialog(QDialog):
         QTimer.singleShot(0, self.apply_filters)
 
     def load_initial_data(self):
-        """Загружает данные через сервис"""
+        """Загружает данные через сервис и строит связи между отделами и подразделениями"""
         if self.service:
             data = self.service.load_employee_selector_data()
             self.all_employees = data.get('employees', [])
-            self.divisions_list = data.get('divisions', [])
-            self.departments_list = data.get('departments', [])
-            # selected_employees не загружаем - они будут установлены через set_preselected
+            self.divisions_list = data.get('divisions', [])  # Список кортежей (id, name)
+            self.departments_list = data.get('departments', [])  # Список кортежей (id, name)
+
+            # Создаем словари для быстрого поиска ID по названию
+            self.departments_dict = {}  # name -> id
+            for dept_id, dept_name in self.departments_list:
+                self.departments_dict[dept_name] = dept_id
+
+            self.divisions_dict = {}  # name -> id
+            for div_id, div_name in self.divisions_list:
+                self.divisions_dict[div_name] = div_id
+
+            # Строим связи между отделами и подразделениями на основе сотрудников
+            self.department_to_divisions = {}  # department_id -> set(division_ids)
+            self.division_to_departments = {}  # division_id -> set(department_ids)
+
+            for emp in self.all_employees:
+                dept_id = emp.get('department_id')
+                div_id = emp.get('division_id')
+
+                if dept_id and div_id:
+                    # department -> divisions
+                    if dept_id not in self.department_to_divisions:
+                        self.department_to_divisions[dept_id] = set()
+                    self.department_to_divisions[dept_id].add(div_id)
+
+                    # division -> departments
+                    if div_id not in self.division_to_departments:
+                        self.division_to_departments[div_id] = set()
+                    self.division_to_departments[div_id].add(dept_id)
+
+            print(f"📊 Загружено отделов: {len(self.departments_dict)}")
+            print(f"📊 Загружено подразделений: {len(self.divisions_dict)}")
+            print(f"🔍 departments_dict: {self.departments_dict}")
+            print(f"🔍 divisions_dict: {self.divisions_dict}")
+            print(f"🔍 department_to_divisions: {self.department_to_divisions}")
+            print(f"🔍 division_to_departments: {self.division_to_departments}")
         else:
             print("⚠️ Сервис не передан, данные не загружены")
             self.all_employees = []
             self.divisions_list = []
             self.departments_list = []
+            self.departments_dict = {}
+            self.divisions_dict = {}
 
     def setup_filters(self):
         """Настройка фильтров отделов и подразделений"""
-        # Настройка фильтра отделов
+        # Настройка фильтра отделов (используем названия)
         self.departmentFilter.blockSignals(True)
         self.departmentFilter.clear()
         self.departmentFilter.addItem("Все отделы")
-        for dept in sorted(self.departments_list):
-            self.departmentFilter.addItem(dept)
+        for dept_id, dept_name in sorted(self.departments_list, key=lambda x: x[1]):
+            self.departmentFilter.addItem(dept_name)
         self.departmentFilter.setCurrentIndex(0)
         self.departmentFilter.blockSignals(False)
 
-        # Настройка фильтра подразделений
+        # Настройка фильтра подразделений (используем названия)
         self.subDepartmentFilter.blockSignals(True)
         self.subDepartmentFilter.clear()
         self.subDepartmentFilter.addItem("Все подразделения")
-        for div in sorted(self.divisions_list):
-            self.subDepartmentFilter.addItem(div)
+        for div_id, div_name in sorted(self.divisions_list, key=lambda x: x[1]):
+            self.subDepartmentFilter.addItem(div_name)
         self.subDepartmentFilter.setCurrentIndex(0)
         self.subDepartmentFilter.blockSignals(False)
 
         self.subDepartmentFilter.setEnabled(len(self.divisions_list) > 0)
+
+    def _update_departments_filter(self, division_name):
+        """Обновляет список отделов в зависимости от выбранного подразделения"""
+        if self.updating_filters:
+            return
+
+        self.updating_filters = True
+
+        self.departmentFilter.blockSignals(True)
+        self.departmentFilter.clear()
+        self.departmentFilter.addItem("Все отделы")
+
+        if division_name and division_name != "Все подразделения":
+            division_id = self.divisions_dict.get(division_name)
+
+            if division_id:
+                # Получаем уникальные отделы для выбранного подразделения
+                dept_ids = self.division_to_departments.get(division_id, set())
+
+                for dept_id in sorted(dept_ids):
+                    # Находим название отдела по ID
+                    for d_id, d_name in self.departments_list:
+                        if d_id == dept_id:
+                            self.departmentFilter.addItem(d_name)
+                            break
+
+                print(f"🔍 Для подразделения '{division_name}' (ID={division_id}) найдено отделов: {len(dept_ids)}")
+            else:
+                print(f"⚠️ Не найден ID для подразделения '{division_name}'")
+        else:
+            # Если выбрано "Все подразделения", показываем все отделы
+            for dept_id, dept_name in sorted(self.departments_list, key=lambda x: x[1]):
+                self.departmentFilter.addItem(dept_name)
+
+        self.departmentFilter.setEnabled(self.departmentFilter.count() > 1)
+        self.departmentFilter.blockSignals(False)
+        self.updating_filters = False
+
+    def _update_sub_departments_filter(self, department_name):
+        """Обновляет список подразделений в зависимости от выбранного отдела,
+        НЕ ограничивая список (показываем все подразделения)"""
+        if self.updating_filters:
+            return
+
+        self.updating_filters = True
+
+        # Запоминаем текущее выбранное подразделение
+        current_division = self.subDepartmentFilter.currentText()
+
+        self.subDepartmentFilter.blockSignals(True)
+        self.subDepartmentFilter.clear()
+        self.subDepartmentFilter.addItem("Все подразделения")
+
+        new_divisions = []
+
+        # ВСЕГДА показываем все подразделения, независимо от выбранного отдела
+        for div_id, div_name in sorted(self.divisions_list, key=lambda x: x[1]):
+            self.subDepartmentFilter.addItem(div_name)
+            new_divisions.append(div_name)
+
+        print(f"🔍 Для отдела '{department_name}' показываем все {len(new_divisions)} подразделений")
+
+        # Пытаемся восстановить выбранное подразделение
+        if current_division in new_divisions:
+            index = self.subDepartmentFilter.findText(current_division)
+            if index >= 0:
+                self.subDepartmentFilter.setCurrentIndex(index)
+        else:
+            self.subDepartmentFilter.setCurrentIndex(0)
+
+        self.subDepartmentFilter.setEnabled(self.subDepartmentFilter.count() > 1)
+        self.subDepartmentFilter.blockSignals(False)
+        self.updating_filters = False
 
     def showEvent(self, event):
         """Срабатывает каждый раз при открытии диалога"""
         super().showEvent(event)
         self.searchInput.clear()
         # Сбрасываем фильтры
+        self.updating_filters = True
+
         self.departmentFilter.blockSignals(True)
         self.departmentFilter.setCurrentIndex(0)
         self.departmentFilter.blockSignals(False)
+
         self.subDepartmentFilter.blockSignals(True)
         self.subDepartmentFilter.setCurrentIndex(0)
         self.subDepartmentFilter.blockSignals(False)
+
+        self.updating_filters = False
         QTimer.singleShot(0, self._refresh_filters)
 
     def _refresh_filters(self):
@@ -111,35 +230,70 @@ class EmployeeSelectorDialog(QDialog):
             self.selected_employees = selected_ids
         self.apply_filters()
 
-    def on_department_changed(self, department):
-        """Обработка изменения выбранного отдела"""
-        self.apply_filters()
-
     def on_search_text_changed(self, text):
         """Запуск таймера поиска при вводе текста"""
         self.search_timer.start(300)
 
+    def on_department_changed(self, department):
+        """Обработка изменения выбранного отдела"""
+        # Обновляем список подразделений (показываем все)
+        self._update_sub_departments_filter(department)
+        self.apply_filters()
+
+    def on_sub_department_changed(self, sub_department):
+        """Обработка изменения выбранного подразделения"""
+        # Обновляем список отделов в зависимости от выбранного подразделения
+        self._update_departments_filter(sub_department)
+        self.apply_filters()
+
     def apply_filters(self):
-        """Применение всех фильтров"""
+        """Применяет все фильтры к списку сотрудников"""
+        department_name = self.departmentFilter.currentText()
+        division_name = self.subDepartmentFilter.currentText()
         search_text = self.searchInput.text()
 
-        # Фильтрация через сервис
-        if self.service:
-            self.filtered_employees = self.service.filter_employees_by_search(self.all_employees, search_text)
-        else:
-            # Fallback если нет сервиса
-            if not search_text:
-                self.filtered_employees = self.all_employees.copy()
-            else:
-                search_lower = search_text.lower().strip()
-                self.filtered_employees = []
-                for emp in self.all_employees:
-                    if search_lower in emp['full_name'].lower():
-                        self.filtered_employees.append(emp)
+        # Начинаем со всех сотрудников
+        filtered = self.all_employees.copy()
 
+        # Фильтр по отделу
+        if department_name and department_name != "Все отделы":
+            department_id = self.departments_dict.get(department_name)
+            if department_id:
+                filtered = [emp for emp in filtered if emp.get('department_id') == department_id]
+            else:
+                filtered = []
+                print(f"⚠️ Не найден ID для отдела '{department_name}'")
+
+        # Фильтр по подразделению
+        if division_name and division_name != "Все подразделения" and filtered:
+            division_id = self.divisions_dict.get(division_name)
+            if division_id:
+                filtered = [emp for emp in filtered if emp.get('division_id') == division_id]
+            else:
+                filtered = []
+                print(f"⚠️ Не найден ID для подразделения '{division_name}'")
+
+        # Фильтр по поиску
+        if search_text and filtered:
+            search_lower = search_text.lower().strip()
+            filtered = [
+                emp for emp in filtered
+                if search_lower in emp.get('full_name', '').lower()
+                   or search_lower in emp.get('last_name', '').lower()
+                   or search_lower in emp.get('first_name', '').lower()
+                   or search_lower in emp.get('position', '').lower()
+            ]
+
+        self.filtered_employees = filtered
         self.sort_employees()
         self.display_employees()
-        self._update_select_all_state()  # Добавить обновление состояния после отображения
+
+        print(f"🔍 Применяем фильтры:")
+        print(f"   Всего сотрудников: {len(self.all_employees)}")
+        print(f"   Выбран отдел: {department_name}")
+        print(f"   Выбрано подразделение: {division_name}")
+        print(f"   Поиск: {search_text if search_text else 'нет'}")
+        print(f"   Итоговое количество: {len(self.filtered_employees)}")
 
     def sort_employees(self):
         """Сортировка через сервис"""
@@ -148,7 +302,6 @@ class EmployeeSelectorDialog(QDialog):
                 self.filtered_employees, self.selected_employees
             )
         else:
-            # Fallback
             def get_sort_key(emp):
                 is_selected = emp['id'] in self.selected_employees
                 return (0 if is_selected else 1, -emp.get('usage_count', 0))
@@ -237,7 +390,6 @@ class EmployeeSelectorDialog(QDialog):
         display_text = emp['full_name']
         checkbox = QCheckBox(display_text)
 
-        # Tooltip с дополнительной информацией
         tooltip_lines = []
         if emp.get('position'):
             tooltip_lines.append(f"Должность: {emp['position']}")
@@ -276,7 +428,6 @@ class EmployeeSelectorDialog(QDialog):
 
     def on_select_all_changed(self, state):
         """Обработка изменения состояния чекбокса 'Выбрать всех'"""
-        # Блокируем сигналы, чтобы избежать рекурсии
         self.selectAllCheckBox.blockSignals(True)
 
         if state == Qt.CheckState.Checked.value:
@@ -286,20 +437,15 @@ class EmployeeSelectorDialog(QDialog):
             for emp in self.filtered_employees:
                 self.selected_employees.discard(emp['id'])
 
-        # Обновляем состояние всех чекбоксов без полной перерисовки
         self._update_checkboxes_state()
         self.update_selected_count()
 
-        # Восстанавливаем сигналы
         self.selectAllCheckBox.blockSignals(False)
-
-        # Сохраняем состояние для следующей сортировки
         self.sort_employees()
 
     def update_selected_count(self):
         """Обновление счетчика выбранных сотрудников"""
         count = len(self.selected_employees)
-        # Проверяем, существует ли виджет selectedCountLabel
         if hasattr(self, 'selectedCountLabel'):
             self.selectedCountLabel.setText(f"Выбрано: {count}")
 
