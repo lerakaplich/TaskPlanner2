@@ -1,0 +1,875 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>ColorPickerDialog</class>
+ <widget class="QDialog" name="ColorPickerDialog">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>450</width>
+    <height>350</height>
+   </rect>
+  </property>
+  <property name="minimumSize">
+   <size>
+    <width>450</width>
+    <height>350</height>
+   </size>
+  </property>
+  <property name="maximumSize">
+   <size>
+    <width>450</width>
+    <height>350</height>
+   </size>
+  </property>
+  <property name="windowTitle">
+   <string>Выбор цвета тега</string>
+  </property>
+  <property name="styleSheet">
+   <string notr="true">
+    QDialog {
+        background-color: #F8F9FA;
+    }
+   </string>
+  </property>
+  <layout class="QVBoxLayout" name="mainLayout">
+   <property name="spacing">
+    <number>15</number>
+   </property>
+   <property name="leftMargin">
+    <number>20</number>
+   </property>
+   <property name="topMargin">
+    <number>20</number>
+   </property>
+   <property name="rightMargin">
+    <number>20</number>
+   </property>
+   <property name="bottomMargin">
+    <number>20</number>
+   </property>
+   <item>
+    <widget class="QLabel" name="titleLabel">
+     <property name="styleSheet">
+      <string notr="true">font-size: 16px; font-weight: bold; color: #212529;</string>
+     </property>
+     <property name="text">
+      <string>Выберите цвет тега</string>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <widget class="QFrame" name="preview_frame">
+     <property name="minimumSize">
+      <size>
+       <width>0</width>
+       <height>50</height>
+      </size>
+     </property>
+     <property name="maximumSize">
+      <size>
+       <width>16777215</width>
+       <height>50</height>
+      </size>
+     </property>
+     <property name="styleSheet">
+      <string notr="true">
+        QFrame {
+            background-color: #CCAB6E;
+            border-radius: 8px;
+            border: 2px solid #E0E0E0;
+        }
+      </string>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <widget class="QLabel" name="presetsLabel">
+     <property name="styleSheet">
+      <string notr="true">font-size: 13px; font-weight: 600; color: #6C757D;</string>
+     </property>
+     <property name="text">
+      <string>Предустановленные цвета:</string>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <widget class="QWidget" name="presetsWidget" native="true">
+     <layout class="QGridLayout" name="presetsGridLayout">
+      <property name="leftMargin">
+       <number>0</number>
+      </property>
+      <property name="topMargin">
+       <number>0</number>
+      </property>
+      <property name="rightMargin">
+       <number>0</number>
+      </property>
+      <property name="bottomMargin">
+       <number>0</number>
+      </property>
+      <property name="spacing">
+       <number>8</number>
+      </property>
+      <item row="0" column="0">
+       <widget class="QPushButton" name="preset_color_btn_0">
+        <property name="minimumSize">
+         <size>
+          <width>32</width>
+          <height>32</height>
+         </size>
+        </property>
+        <property name="maximumSize">
+         <size>
+          <width>32</width>
+          <height>32</height>
+         </size>
+        </property>
+        <property name="cursor">
+         <cursorShape>PointingHandCursor</cursorShape>
+        </property>
+        <property name="styleSheet">
+         <string notr="true">
+            QPushButton {
+                background-color: #ccab6e;
+                border-radius: 16px;
+                border: 2px solid #E0E0E0;
+            }
+            QPushButton:hover {
+                border: 3px solid #7A6A50;
+            }
+         </string>
+        </property>
+        <property name="text">
+         <string/>
+        </property>
+       </widget>
+      </item>
+      <item row="0" column="1">
+       <widget class="QPushButton" name="preset_color_btn_1">
+        <property name="minimumSize">
+         <size>
+          <width>32</width>
+          <height>32</height>
+         </size>
+        </property>
+        <property name="maximumSize">
+         <size>
+          <width>32</width>
+          <height>32</height>
+         </size>
+        </property>
+        <property name="cursor">
+         <cursorShape>PointingHandCursor</cursorShape>
+        </property>
+        <property name="styleSheet">
+         <string notr="true">
+            QPushButton {
+                background-color: #ff6b6b;
+                border-radius: 16px;
+                border: 2px solid #E0E0E0;
+            }
+            QPushButton:hover {
+                border: 3px solid #CC0000;
+            }
+         </string>
+        </property>
+        <property name="text">
+         <string/>
+        </property>
+       </widget>
+      </item>
+      <item row="0" column="2">
+       <widget class="QPushButton" name="preset_color_btn_2">
+        <property name="minimumSize">
+         <size>
+          <width>32</width>
+          <height>32</height>
+         </size>
+        </property>
+        <property name="maximumSize">
+         <size>
+          <width>32</width>
+          <height>32</height>
+         </size>
+        </property>
+        <property name="cursor">
+         <cursorShape>PointingHandCursor</cursorShape>
+        </property>
+        <property name="styleSheet">
+         <string notr="true">
+            QPushButton {
+                background-color: #4ecdc4;
+                border-radius: 16px;
+                border: 2px solid #E0E0E0;
+            }
+            QPushButton:hover {
+                border: 3px solid #2A9D8F;
+            }
+         </string>
+        </property>
+        <property name="text">
+         <string/>
+        </property>
+       </widget>
+      </item>
+      <item row="0" column="3">
+       <widget class="QPushButton" name="preset_color_btn_3">
+        <property name="minimumSize">
+         <size>
+          <width>32</width>
+          <height>32</height>
+         </size>
+        </property>
+        <property name="maximumSize">
+         <size>
+          <width>32</width>
+          <height>32</height>
+         </size>
+        </property>
+        <property name="cursor">
+         <cursorShape>PointingHandCursor</cursorShape>
+        </property>
+        <property name="styleSheet">
+         <string notr="true">
+            QPushButton {
+                background-color: #45b7d1;
+                border-radius: 16px;
+                border: 2px solid #E0E0E0;
+            }
+            QPushButton:hover {
+                border: 3px solid #2E86AB;
+            }
+         </string>
+        </property>
+        <property name="text">
+         <string/>
+        </property>
+       </widget>
+      </item>
+      <item row="0" column="4">
+       <widget class="QPushButton" name="preset_color_btn_4">
+        <property name="minimumSize">
+         <size>
+          <width>32</width>
+          <height>32</height>
+         </size>
+        </property>
+        <property name="maximumSize">
+         <size>
+          <width>32</width>
+          <height>32</height>
+         </size>
+        </property>
+        <property name="cursor">
+         <cursorShape>PointingHandCursor</cursorShape>
+        </property>
+        <property name="styleSheet">
+         <string notr="true">
+            QPushButton {
+                background-color: #96ceb4;
+                border-radius: 16px;
+                border: 2px solid #E0E0E0;
+            }
+            QPushButton:hover {
+                border: 3px solid #5A9E7C;
+            }
+         </string>
+        </property>
+        <property name="text">
+         <string/>
+        </property>
+       </widget>
+      </item>
+      <item row="0" column="5">
+       <widget class="QPushButton" name="preset_color_btn_5">
+        <property name="minimumSize">
+         <size>
+          <width>32</width>
+          <height>32</height>
+         </size>
+        </property>
+        <property name="maximumSize">
+         <size>
+          <width>32</width>
+          <height>32</height>
+         </size>
+        </property>
+        <property name="cursor">
+         <cursorShape>PointingHandCursor</cursorShape>
+        </property>
+        <property name="styleSheet">
+         <string notr="true">
+            QPushButton {
+                background-color: #f9ca24;
+                border-radius: 16px;
+                border: 2px solid #E0E0E0;
+            }
+            QPushButton:hover {
+                border: 3px solid #D4A90E;
+            }
+         </string>
+        </property>
+        <property name="text">
+         <string/>
+        </property>
+       </widget>
+      </item>
+      <item row="0" column="6">
+       <widget class="QPushButton" name="preset_color_btn_6">
+        <property name="minimumSize">
+         <size>
+          <width>32</width>
+          <height>32</height>
+         </size>
+        </property>
+        <property name="maximumSize">
+         <size>
+          <width>32</width>
+          <height>32</height>
+         </size>
+        </property>
+        <property name="cursor">
+         <cursorShape>PointingHandCursor</cursorShape>
+        </property>
+        <property name="styleSheet">
+         <string notr="true">
+            QPushButton {
+                background-color: #f0932b;
+                border-radius: 16px;
+                border: 2px solid #E0E0E0;
+            }
+            QPushButton:hover {
+                border: 3px solid #C77A1E;
+            }
+         </string>
+        </property>
+        <property name="text">
+         <string/>
+        </property>
+       </widget>
+      </item>
+      <item row="0" column="7">
+       <widget class="QPushButton" name="preset_color_btn_7">
+        <property name="minimumSize">
+         <size>
+          <width>32</width>
+          <height>32</height>
+         </size>
+        </property>
+        <property name="maximumSize">
+         <size>
+          <width>32</width>
+          <height>32</height>
+         </size>
+        </property>
+        <property name="cursor">
+         <cursorShape>PointingHandCursor</cursorShape>
+        </property>
+        <property name="styleSheet">
+         <string notr="true">
+            QPushButton {
+                background-color: #eb4d4b;
+                border-radius: 16px;
+                border: 2px solid #E0E0E0;
+            }
+            QPushButton:hover {
+                border: 3px solid #C0392B;
+            }
+         </string>
+        </property>
+        <property name="text">
+         <string/>
+        </property>
+       </widget>
+      </item>
+      <item row="0" column="8">
+       <widget class="QPushButton" name="preset_color_btn_8">
+        <property name="minimumSize">
+         <size>
+          <width>32</width>
+          <height>32</height>
+         </size>
+        </property>
+        <property name="maximumSize">
+         <size>
+          <width>32</width>
+          <height>32</height>
+         </size>
+        </property>
+        <property name="cursor">
+         <cursorShape>PointingHandCursor</cursorShape>
+        </property>
+        <property name="styleSheet">
+         <string notr="true">
+            QPushButton {
+                background-color: #6ab04c;
+                border-radius: 16px;
+                border: 2px solid #E0E0E0;
+            }
+            QPushButton:hover {
+                border: 3px solid #4A8C32;
+            }
+         </string>
+        </property>
+        <property name="text">
+         <string/>
+        </property>
+       </widget>
+      </item>
+      <item row="0" column="9">
+       <widget class="QPushButton" name="preset_color_btn_9">
+        <property name="minimumSize">
+         <size>
+          <width>32</width>
+          <height>32</height>
+         </size>
+        </property>
+        <property name="maximumSize">
+         <size>
+          <width>32</width>
+          <height>32</height>
+         </size>
+        </property>
+        <property name="cursor">
+         <cursorShape>PointingHandCursor</cursorShape>
+        </property>
+        <property name="styleSheet">
+         <string notr="true">
+            QPushButton {
+                background-color: #7ed6df;
+                border-radius: 16px;
+                border: 2px solid #E0E0E0;
+            }
+            QPushButton:hover {
+                border: 3px solid #5CADB8;
+            }
+         </string>
+        </property>
+        <property name="text">
+         <string/>
+        </property>
+       </widget>
+      </item>
+      <item row="1" column="0">
+       <widget class="QPushButton" name="preset_color_btn_10">
+        <property name="minimumSize">
+         <size>
+          <width>32</width>
+          <height>32</height>
+         </size>
+        </property>
+        <property name="maximumSize">
+         <size>
+          <width>32</width>
+          <height>32</height>
+         </size>
+        </property>
+        <property name="cursor">
+         <cursorShape>PointingHandCursor</cursorShape>
+        </property>
+        <property name="styleSheet">
+         <string notr="true">
+            QPushButton {
+                background-color: #e056fd;
+                border-radius: 16px;
+                border: 2px solid #E0E0E0;
+            }
+            QPushButton:hover {
+                border: 3px solid #B83FD0;
+            }
+         </string>
+        </property>
+        <property name="text">
+         <string/>
+        </property>
+       </widget>
+      </item>
+      <item row="1" column="1">
+       <widget class="QPushButton" name="preset_color_btn_11">
+        <property name="minimumSize">
+         <size>
+          <width>32</width>
+          <height>32</height>
+         </size>
+        </property>
+        <property name="maximumSize">
+         <size>
+          <width>32</width>
+          <height>32</height>
+         </size>
+        </property>
+        <property name="cursor">
+         <cursorShape>PointingHandCursor</cursorShape>
+        </property>
+        <property name="styleSheet">
+         <string notr="true">
+            QPushButton {
+                background-color: #686de0;
+                border-radius: 16px;
+                border: 2px solid #E0E0E0;
+            }
+            QPushButton:hover {
+                border: 3px solid #4A4FBF;
+            }
+         </string>
+        </property>
+        <property name="text">
+         <string/>
+        </property>
+       </widget>
+      </item>
+      <item row="1" column="2">
+       <widget class="QPushButton" name="preset_color_btn_12">
+        <property name="minimumSize">
+         <size>
+          <width>32</width>
+          <height>32</height>
+         </size>
+        </property>
+        <property name="maximumSize">
+         <size>
+          <width>32</width>
+          <height>32</height>
+         </size>
+        </property>
+        <property name="cursor">
+         <cursorShape>PointingHandCursor</cursorShape>
+        </property>
+        <property name="styleSheet">
+         <string notr="true">
+            QPushButton {
+                background-color: #30336b;
+                border-radius: 16px;
+                border: 2px solid #E0E0E0;
+            }
+            QPushButton:hover {
+                border: 3px solid #1B1C4A;
+            }
+         </string>
+        </property>
+        <property name="text">
+         <string/>
+        </property>
+       </widget>
+      </item>
+      <item row="1" column="3">
+       <widget class="QPushButton" name="preset_color_btn_13">
+        <property name="minimumSize">
+         <size>
+          <width>32</width>
+          <height>32</height>
+         </size>
+        </property>
+        <property name="maximumSize">
+         <size>
+          <width>32</width>
+          <height>32</height>
+         </size>
+        </property>
+        <property name="cursor">
+         <cursorShape>PointingHandCursor</cursorShape>
+        </property>
+        <property name="styleSheet">
+         <string notr="true">
+            QPushButton {
+                background-color: #95afc0;
+                border-radius: 16px;
+                border: 2px solid #E0E0E0;
+            }
+            QPushButton:hover {
+                border: 3px solid #6C8A9E;
+            }
+         </string>
+        </property>
+        <property name="text">
+         <string/>
+        </property>
+       </widget>
+      </item>
+      <item row="1" column="4">
+       <widget class="QPushButton" name="preset_color_btn_14">
+        <property name="minimumSize">
+         <size>
+          <width>32</width>
+          <height>32</height>
+         </size>
+        </property>
+        <property name="maximumSize">
+         <size>
+          <width>32</width>
+          <height>32</height>
+         </size>
+        </property>
+        <property name="cursor">
+         <cursorShape>PointingHandCursor</cursorShape>
+        </property>
+        <property name="styleSheet">
+         <string notr="true">
+            QPushButton {
+                background-color: #22a6b3;
+                border-radius: 16px;
+                border: 2px solid #E0E0E0;
+            }
+            QPushButton:hover {
+                border: 3px solid #1A7F8A;
+            }
+         </string>
+        </property>
+        <property name="text">
+         <string/>
+        </property>
+       </widget>
+      </item>
+      <item row="1" column="5">
+       <widget class="QPushButton" name="preset_color_btn_15">
+        <property name="minimumSize">
+         <size>
+          <width>32</width>
+          <height>32</height>
+         </size>
+        </property>
+        <property name="maximumSize">
+         <size>
+          <width>32</width>
+          <height>32</height>
+         </size>
+        </property>
+        <property name="cursor">
+         <cursorShape>PointingHandCursor</cursorShape>
+        </property>
+        <property name="styleSheet">
+         <string notr="true">
+            QPushButton {
+                background-color: #ff9ff3;
+                border-radius: 16px;
+                border: 2px solid #E0E0E0;
+            }
+            QPushButton:hover {
+                border: 3px solid #D07AC8;
+            }
+         </string>
+        </property>
+        <property name="text">
+         <string/>
+        </property>
+       </widget>
+      </item>
+      <item row="1" column="6">
+       <widget class="QPushButton" name="preset_color_btn_16">
+        <property name="minimumSize">
+         <size>
+          <width>32</width>
+          <height>32</height>
+         </size>
+        </property>
+        <property name="maximumSize">
+         <size>
+          <width>32</width>
+          <height>32</height>
+         </size>
+        </property>
+        <property name="cursor">
+         <cursorShape>PointingHandCursor</cursorShape>
+        </property>
+        <property name="styleSheet">
+         <string notr="true">
+            QPushButton {
+                background-color: #feca57;
+                border-radius: 16px;
+                border: 2px solid #E0E0E0;
+            }
+            QPushButton:hover {
+                border: 3px solid #D4A31E;
+            }
+         </string>
+        </property>
+        <property name="text">
+         <string/>
+        </property>
+       </widget>
+      </item>
+      <item row="1" column="7">
+       <widget class="QPushButton" name="preset_color_btn_17">
+        <property name="minimumSize">
+         <size>
+          <width>32</width>
+          <height>32</height>
+         </size>
+        </property>
+        <property name="maximumSize">
+         <size>
+          <width>32</width>
+          <height>32</height>
+         </size>
+        </property>
+        <property name="cursor">
+         <cursorShape>PointingHandCursor</cursorShape>
+        </property>
+        <property name="styleSheet">
+         <string notr="true">
+            QPushButton {
+                background-color: #ff6b6b;
+                border-radius: 16px;
+                border: 2px solid #E0E0E0;
+            }
+            QPushButton:hover {
+                border: 3px solid #CC0000;
+            }
+         </string>
+        </property>
+        <property name="text">
+         <string/>
+        </property>
+       </widget>
+      </item>
+      <item row="1" column="8">
+       <widget class="QPushButton" name="preset_color_btn_18">
+        <property name="minimumSize">
+         <size>
+          <width>32</width>
+          <height>32</height>
+         </size>
+        </property>
+        <property name="maximumSize">
+         <size>
+          <width>32</width>
+          <height>32</height>
+         </size>
+        </property>
+        <property name="cursor">
+         <cursorShape>PointingHandCursor</cursorShape>
+        </property>
+        <property name="styleSheet">
+         <string notr="true">
+            QPushButton {
+                background-color: #48dbfb;
+                border-radius: 16px;
+                border: 2px solid #E0E0E0;
+            }
+            QPushButton:hover {
+                border: 3px solid #2FB5D5;
+            }
+         </string>
+        </property>
+        <property name="text">
+         <string/>
+        </property>
+       </widget>
+      </item>
+      <item row="1" column="9">
+       <widget class="QPushButton" name="preset_color_btn_19">
+        <property name="minimumSize">
+         <size>
+          <width>32</width>
+          <height>32</height>
+         </size>
+        </property>
+        <property name="maximumSize">
+         <size>
+          <width>32</width>
+          <height>32</height>
+         </size>
+        </property>
+        <property name="cursor">
+         <cursorShape>PointingHandCursor</cursorShape>
+        </property>
+        <property name="styleSheet">
+         <string notr="true">
+            QPushButton {
+                background-color: #1dd1a1;
+                border-radius: 16px;
+                border: 2px solid #E0E0E0;
+            }
+            QPushButton:hover {
+                border: 3px solid #15A07A;
+            }
+         </string>
+        </property>
+        <property name="text">
+         <string/>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <item>
+    <widget class="QPushButton" name="custom_btn">
+     <property name="minimumSize">
+      <size>
+       <width>0</width>
+       <height>35</height>
+      </size>
+     </property>
+     <property name="cursor">
+      <cursorShape>PointingHandCursor</cursorShape>
+     </property>
+     <property name="styleSheet">
+      <string notr="true">
+        QPushButton {
+            background-color: white;
+            color: #6C757D;
+            border: 1px dashed #CED4DA;
+            border-radius: 8px;
+            font-size: 13px;
+            font-weight: 500;
+        }
+        QPushButton:hover {
+            border: 1px solid #CCAB6E;
+            color: #CCAB6E;
+            background-color: #FDFBF7;
+        }
+      </string>
+     </property>
+     <property name="text">
+      <string>🎨 Выбрать свой цвет...</string>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <layout class="QHBoxLayout" name="buttonsLayout">
+     <property name="spacing">
+      <number>10</number>
+     </property>
+     <item>
+      <widget class="QPushButton" name="ok_btn">
+       <property name="minimumSize">
+        <size>
+         <width>100</width>
+         <height>35</height>
+        </size>
+       </property>
+       <property name="cursor">
+        <cursorShape>PointingHandCursor</cursorShape>
+       </property>
+       <property name="styleSheet">
+        <string notr="true">
+            QPushButton {
+                background-color: #CCAB6E;
+                color: white;
+                border: none;
+                border-radius: 8px;
+                font-size: 13px;
+                font-weight: 600;
+            }
+            QPushButton:hover {
+                background-color: #998664;
+            }
+            QPushButton:pressed {
+                background-color: #7A6A50;
+            }
+        </string>
+       </property>
+       <property name="text">
+        <string>Выбрать</string>
+       </property>
+      </widget>
+     </item>
+    </layout>
+   </item>
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>
