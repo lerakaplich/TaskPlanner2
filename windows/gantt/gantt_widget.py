@@ -37,6 +37,12 @@ class GanttWidget(QWidget):
         self._connect_signals()
         self._load_initial_data()
 
+    def showEvent(self, event):
+        """Срабатывает при каждом показе страницы"""
+        super().showEvent(event)
+        print("📊 GanttWidget.showEvent - обновляем содержимое")
+        QTimer.singleShot(100, self._refresh_ui)
+
     def _setup_ui(self) -> None:
         """Загрузка UI из файла или создание программно"""
         current_dir = os.path.dirname(os.path.abspath(__file__))

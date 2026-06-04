@@ -4,7 +4,7 @@ import os
 from typing import Dict
 
 from PyQt6 import uic
-from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtCore import Qt, pyqtSignal, QTimer
 from PyQt6.QtGui import QDragEnterEvent, QDropEvent, QDragMoveEvent
 from PyQt6.QtWidgets import QWidget, QScrollArea, QHBoxLayout, QMessageBox, QSizePolicy
 
@@ -22,8 +22,10 @@ class MyTasksPage(QWidget):
     def __init__(self, db_session, current_user, parent=None, column_service=None):
         super().__init__(parent)
 
-        self._is_loading = False  # Флаг для предотвращения повторной загрузки
-        self._is_refreshing = False  # Флаг для обновления колонок
+        self._is_loading = False
+        self._is_refreshing = False
+        self._loaded = False
+        self._first_show = True
 
         ui_path = os.path.join(
             os.path.dirname(__file__),
@@ -36,7 +38,7 @@ class MyTasksPage(QWidget):
             db_session=db_session,
             current_user=current_user,
             mode="my",
-            column_service=column_service  # <-- ПЕРЕДАЁМ
+            column_service=column_service
         )
 
         self.columns = {}
@@ -44,7 +46,7 @@ class MyTasksPage(QWidget):
         self.current_user = current_user
 
         self.setup_board()
-        self.load_tasks()
+        # Не загружаем задачи при создании, только при первом показе
 
         # Drag & Drop
         self.setAcceptDrops(True)
@@ -52,17 +54,21 @@ class MyTasksPage(QWidget):
         # Фильтры
         self.priorityFilter.currentTextChanged.connect(self._on_filter_changed)
 
+    def showEvent(self, event):
+        """Показываем задачи только при первом отображении страницы"""
+        super().showEvent(event)
+        if self._first_show:
+            self._first_show = False
+            # Откладываем загрузку, чтобы UI успел отрисоваться
+            QTimer.singleShot(10, self.load_tasks)
+
     def setup_board(self):
         """Создает колонки канбан-доски"""
+        # Очищаем существующий layout
         self.clear_layout(self.kanbanLayout)
 
         column_data = self.service.get_columns_for_board()
-        print(f"🔧 setup_board: получено {len(column_data)} колонок из сервиса")
-        for col in column_data:
-            print(f"   - {col['name']} (id={col.get('id')}, позиция={col.get('position')})")
-
         if not column_data:
-            print("⚠️ Нет колонок для отображения")
             return
 
         # Горизонтальный скролл
@@ -90,27 +96,20 @@ class MyTasksPage(QWidget):
         columns_layout = QHBoxLayout(columns_container)
         columns_layout.setSpacing(16)
         columns_layout.setContentsMargins(10, 10, 10, 10)
-        # ВАЖНО: НЕ используем растяжение, колонки будут следовать друг за другом
-        # и при необходимости появится горизонтальный скролл
         columns_layout.setAlignment(Qt.AlignmentFlag.AlignLeft)
 
         self.columns.clear()
         self.column_widgets.clear()
 
         for col in sorted(column_data, key=lambda x: x["position"]):
-            print(f"📦 Создаем колонку: {col['name']}")
             column_widget = KanbanColumn(col)
-            # НЕ УСТАНАВЛИВАЕМ политику размера - колонка сама управляет
             self.columns[col["name"]] = column_widget
             self.column_widgets.append(column_widget)
             columns_layout.addWidget(column_widget)
-
-            # === ПОДКЛЮЧЕНИЕ СИГНАЛА ===
             column_widget.task_dropped.connect(self._on_task_dropped)
 
         scroll_area.setWidget(columns_container)
 
-        # Вертикальный скролл
         vertical_scroll = QScrollArea()
         vertical_scroll.setWidgetResizable(True)
         vertical_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
@@ -134,8 +133,6 @@ class MyTasksPage(QWidget):
         vertical_scroll.setWidget(scroll_area)
         self.kanbanLayout.addWidget(vertical_scroll)
 
-        print(f"✅ Создано {len(self.column_widgets)} колонок")
-
     def clear_layout(self, layout):
         """Очищает layout"""
         if layout:
@@ -148,44 +145,51 @@ class MyTasksPage(QWidget):
                     self.clear_layout(item.layout())
 
     def load_tasks(self):
-        """Загружает и отображает задачи с защитой от повторных вызовов"""
-        if self._is_loading:
-            print("⚠️ Загрузка задач уже выполняется, пропускаем")
+        if self._is_loading or self._loaded:
             return
 
         self._is_loading = True
 
         try:
-            # Очищаем все колонки перед загрузкой
             self.clear_all_columns()
-
             tasks = self.service.get_tasks_for_board()
 
-            print(f"\n📊 Загрузка моих задач: {len(tasks)}")
-            for task in tasks:
-                print(f"  - {task.get('title')} (проект: {task.get('project_name')}, статус: {task.get('status')})")
+            # ОТКЛЮЧАЕМ ОБНОВЛЕНИЯ UI
+            self.setUpdatesEnabled(False)
+
+            for column in self.column_widgets:
+                column.setUpdatesEnabled(False)
 
             for task in tasks:
-                # НЕ передаём parent=None - пусть parent будет колонка при добавлении
-                task_card = TaskCard(task)  # parent=None - нормально, но колонка установит parent при add_task
+                column_name = task.get("status")
+                if not column_name or column_name not in self.columns:
+                    continue
+
+                task_card = TaskCard(task)
                 self._connect_task_card_signals(task_card)
 
-                column_name = task.get("status")
-                if column_name in self.columns:
-                    column = self.columns[column_name]
-                    column.add_task(task_card)  # здесь будет установлен parent
-                    print(f"  ✅ Добавлена задача '{task.get('title')}' в колонку '{column_name}'")
-                else:
-                    # Если колонки нет, не создаём карточку
-                    task_card.deleteLater()
-                    print(f"  ⚠️ Колонка '{column_name}' не найдена")
+                # Карточка уже скрыта внутри __init__
+                column = self.columns[column_name]
+                column.add_task(task_card)  # Здесь карточка покажется
+
+            # ВКЛЮЧАЕМ ОБНОВЛЕНИЯ
+            for column in self.column_widgets:
+                column.setUpdatesEnabled(True)
+            self.setUpdatesEnabled(True)
+
+            # ОДИН РАЗ обновляем геометрию
+            self.updateGeometry()
+            if self.parent():
+                self.parent().updateGeometry()
 
             self.update_statistics()
+            self._loaded = True
 
         except Exception as e:
             print(f"❌ Ошибка при загрузке задач: {e}")
-            import traceback
-            traceback.print_exc()
+            self.setUpdatesEnabled(True)
+            for column in self.column_widgets:
+                column.setUpdatesEnabled(True)
         finally:
             self._is_loading = False
 
@@ -446,8 +450,6 @@ class MyTasksPage(QWidget):
             traceback.print_exc()
 
         print(f"🔍 [DEBUG] _on_progress_changed: конец\n")
-
-    # windows/my_tasks/my_tasks_page.py
 
     def update_task_card(self, updated_task: Dict):
         """Обновляет карточку задачи в UI после перемещения"""

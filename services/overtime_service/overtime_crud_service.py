@@ -1,6 +1,7 @@
 # services/overtime_service/overtime_crud_service.py
 
 from datetime import date, time
+import re
 from typing import List, Dict, Optional, Tuple
 from PyQt6.QtCore import QDate, QTime
 from sqlalchemy.orm import Session
@@ -44,10 +45,75 @@ class OvertimeCrudService:
             print(f"❌ Ошибка при загрузке сотрудников: {e}")
             return []
 
-    def get_projects(self) -> List[Dict]:
-        """Получает список всех проектов"""
-        projects = self.project_repo.get_all()
-        return sorted([{'id': p.id, 'name': p.name} for p in projects], key=lambda x: x['name'])
+    def get_projects(self, only_active: bool = True) -> List[Dict]:
+        """Получает список всех активных проектов из базы проектов"""
+        try:
+            # Получаем проекты из репозитория проектов
+            # Используем существующий метод get_all с параметром exclude_archived
+            projects = self.project_repo.get_all(exclude_archived=only_active)
+
+            result = []
+            for project in projects:
+                result.append({
+                    'id': project.id,
+                    'name': project.name
+                })
+
+            print(f"[DEBUG] Загружено проектов из БД: {len(result)}")
+            return sorted(result, key=lambda x: x['name'])
+        except Exception as e:
+            print(f"❌ Ошибка при загрузке проектов: {e}")
+            return []
+
+    def get_tasks_for_project(self, project_id: int) -> List[Dict]:
+        """Получает список задач для проекта из базы задач"""
+        try:
+            # Проверяем, что project_id - это число
+            if not isinstance(project_id, int):
+                print(
+                    f"[DEBUG] get_tasks_for_project: project_id должен быть int, получен {type(project_id)}: {project_id}")
+                return []
+
+            # Получаем задачи из репозитория задач
+            tasks = self.task_repo.get_by_project(project_id)
+
+            result = []
+            for task in tasks:
+                result.append({
+                    'id': task.id,
+                    'title': task.title
+                })
+
+            print(f"[DEBUG] Загружено задач для проекта {project_id}: {len(result)}")
+            return sorted(result, key=lambda x: x['title'])
+        except Exception as e:
+            print(f"❌ Ошибка при загрузке задач: {e}")
+            return []
+
+    def get_tasks_for_project_by_name(self, project_name: str) -> List[Dict]:
+        """Получает список задач для проекта по названию проекта"""
+        try:
+            # Сначала находим проект по названию
+            projects = self.project_repo.get_all(exclude_archived=True)
+            project = None
+            for p in projects:
+                if p.name == project_name:
+                    project = p
+                    break
+
+            if not project:
+                print(f"[DEBUG] Проект с названием '{project_name}' не найден")
+                return []
+
+            # Проверяем, что project.id - это число
+            if not isinstance(project.id, int):
+                print(f"[DEBUG] project.id не является int: {project.id}")
+                return []
+
+            return self.get_tasks_for_project(project.id)
+        except Exception as e:
+            print(f"❌ Ошибка при загрузке задач: {e}")
+            return []
 
     def get_overtime_by_id(self, overtime_id: int) -> Optional[Dict]:
         """Получает переработку по ID"""
@@ -71,15 +137,26 @@ class OvertimeCrudService:
             py_start = time(start_time.hour(), start_time.minute())
             py_end = time(end_time.hour(), end_time.minute())
 
-            full_description = description
+            # Получаем названия проекта и задачи по ID
+            project_name = None
+            task_title = None
+
             if project_id:
                 project = self.project_repo.get_by_id(project_id)
                 if project:
-                    full_description = f"[Проект: {project.name}] {description}"
-                    if task_id:
-                        task = self.task_repo.get_by_id(task_id)
-                        if task:
-                            full_description = f"[Проект: {project.name}] [Задача: {task.title}] {description}"
+                    project_name = project.name
+
+            if task_id:
+                task = self.task_repo.get_by_id(task_id)
+                if task:
+                    task_title = task.title
+
+            # Формируем полное описание
+            full_description = description
+            if project_name:
+                full_description = f"[Проект: {project_name}] {description}"
+                if task_title:
+                    full_description = f"[Проект: {project_name}] [Задача: {task_title}] {description}"
 
             # Обновляем запись
             note = self.overtime_repo.update(
@@ -114,11 +191,6 @@ class OvertimeCrudService:
             print(f"❌ Ошибка при удалении переработки: {e}")
             return False
 
-    def get_tasks_for_project(self, project_id: int) -> List[Dict]:
-        """Получает список задач для проекта"""
-        tasks = self.task_repo.get_by_project(project_id)
-        return sorted([{'id': t.id, 'title': t.title} for t in tasks], key=lambda x: x['title'])
-
     def load_overtimes(self, current_user_id: int) -> Tuple[List[Dict], List[Dict]]:
         """Загружает переработки из БД"""
         my_notes = self.overtime_repo.get_by_employee(current_user_id)
@@ -150,17 +222,21 @@ class OvertimeCrudService:
         task_title = None
         description = note.note_text or "Без описания"
 
-        if description.startswith("[Проект:"):
-            import re
+        # Регулярное выражение для извлечения проекта и задачи
+        if description and description != "Без описания":
             project_match = re.search(r'\[Проект: (.*?)\]', description)
             if project_match:
-                project_name = project_match.group(1)
+                project_name = project_match.group(1).strip()
             task_match = re.search(r'\[Задача: (.*?)\]', description)
             if task_match:
-                task_title = task_match.group(1)
+                task_title = task_match.group(1).strip()
+
+            # Удаляем маркеры из описания для отображения
             description = re.sub(r'\[Проект: .*?\]\s*', '', description)
             description = re.sub(r'\[Задача: .*?\]\s*', '', description)
             description = description.strip()
+            if not description:
+                description = "Без описания"
 
         return {
             "id": note.id,
@@ -195,15 +271,27 @@ class OvertimeCrudService:
             py_start = time(start_time.hour(), start_time.minute())
             py_end = time(end_time.hour(), end_time.minute())
 
-            full_description = description
+            # Получаем названия проекта и задачи по ID
+            project_name = None
+            task_title = None
+
             if project_id:
                 project = self.project_repo.get_by_id(project_id)
                 if project:
-                    full_description = f"[Проект: {project.name}] {description}"
-                    if task_id:
-                        task = self.task_repo.get_by_id(task_id)
-                        if task:
-                            full_description = f"[Проект: {project.name}] [Задача: {task.title}] {description}"
+                    project_name = project.name
+
+            if task_id:
+                task = self.task_repo.get_by_id(task_id)
+                if task:
+                    task_title = task.title
+
+            full_description = description
+            if project_name:
+                full_description = f"[Проект: {project_name}] {description}"
+                if task_title:
+                    full_description = f"[Проект: {project_name}] [Задача: {task_title}] {description}"
+
+            print(f"[DEBUG] Создание переработки с описанием: {full_description}")
 
             note = self.overtime_repo.create(
                 employee_id=employee_id,
@@ -294,12 +382,15 @@ class OvertimeCrudService:
         filtered = overtimes.copy()
 
         project_name = filters.get('project_name')
-        if project_name and project_name != "Все переработки":
-            filtered = [ot for ot in filtered if ot.get('project') == project_name]
+        if project_name and project_name != "Все проекты":
+            # Сравниваем без учёта регистра и пробелов
+            filtered = [ot for ot in filtered
+                        if ot.get('project') and ot.get('project').strip().lower() == project_name.strip().lower()]
 
         task_title = filters.get('task_title')
         if task_title and task_title != "Все задачи":
-            filtered = [ot for ot in filtered if ot.get('task') == task_title]
+            filtered = [ot for ot in filtered
+                        if ot.get('task') and ot.get('task').strip().lower() == task_title.strip().lower()]
 
         start_date = filters.get('start_date')
         end_date = filters.get('end_date')

@@ -57,7 +57,7 @@ class AddOvertimeDialog(QDialog):
         self.comboProject.clear()
         self.comboProject.addItem("Выберите проект", None)
         if self.service:
-            projects = self.service.get_projects()
+            projects = self.service.get_projects(only_active=True)
             for project in projects:
                 self.comboProject.addItem(project['name'], project['id'])
         self.comboProject.addItem("Без проекта", -1)

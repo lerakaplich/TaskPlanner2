@@ -27,6 +27,7 @@ class ArchivePage(QWidget):
         self.current_filter_type = "projects"  # "projects" или "tasks"
         self.current_search_text = ""
         self.current_project_id = None
+        self._is_initialized = False  # Флаг инициализации
 
         # Загрузка UI
         ui_path = os.path.join(
@@ -40,8 +41,20 @@ class ArchivePage(QWidget):
         self.back_button.clicked.connect(self.show_projects_list)
         self.filterCombo.currentTextChanged.connect(self.on_filter_changed)
 
+        # Подключаем поиск если есть
+        if hasattr(self, "search_input"):
+            self.search_input.textChanged.connect(self.on_search)
+
         # Инициализация
         self.show_projects_list()
+        self._is_initialized = True
+
+    def showEvent(self, event):
+        """Срабатывает при каждом показе страницы"""
+        super().showEvent(event)
+        print("📂 ArchivePage.showEvent - обновляем содержимое")
+        # Принудительно обновляем при каждом показе
+        self.refresh_current_view()
 
     # ==========================================================
     # Фильтрация
@@ -64,10 +77,16 @@ class ArchivePage(QWidget):
         """Показывает список архивированных проектов"""
         self.current_project_id = None
         self.current_search_text = ""
+
+        # Блокируем сигналы, чтобы не вызывать лишние обновления
+        self.filterCombo.blockSignals(True)
         self.filterCombo.setCurrentText("Проекты")
+        self.filterCombo.blockSignals(False)
 
         if hasattr(self, "search_input"):
+            self.search_input.blockSignals(True)
             self.search_input.clear()
+            self.search_input.blockSignals(False)
 
         self.section_title.setText("Архивированные проекты")
         self.back_button.hide()
@@ -79,10 +98,16 @@ class ArchivePage(QWidget):
         """Показывает все архивированные задачи"""
         self.current_project_id = None
         self.current_search_text = ""
+
+        # Блокируем сигналы
+        self.filterCombo.blockSignals(True)
         self.filterCombo.setCurrentText("Задачи")
+        self.filterCombo.blockSignals(False)
 
         if hasattr(self, "search_input"):
+            self.search_input.blockSignals(True)
             self.search_input.clear()
+            self.search_input.blockSignals(False)
 
         self.section_title.setText("Все архивированные задачи")
         self.back_button.show()
@@ -92,17 +117,17 @@ class ArchivePage(QWidget):
 
     def refresh_current_view(self):
         """Обновляет текущее представление (для вызова из навигации)"""
-        print("🔄 ArchivePage.refresh_current_view вызван")
+        print(f"🔄 ArchivePage.refresh_current_view")
         print(f"   - current_filter_type: {self.current_filter_type}")
         print(f"   - current_project_id: {self.current_project_id}")
 
-        # Обновляем в зависимости от текущего состояния
+        # Принудительно очищаем и пересоздаем виджеты
         if self.current_filter_type == "projects":
-            self._update_projects_view()
+            self._update_projects_view(force=True)
         elif self.current_project_id is not None:
-            self._update_tasks_view()
+            self._update_tasks_view(force=True)
         else:
-            self._update_all_tasks_view()
+            self._update_all_tasks_view(force=True)
 
     def _on_restore_task(self, task_id: int):
         """Восстановление задачи"""
@@ -150,19 +175,27 @@ class ArchivePage(QWidget):
         self.current_search_text = ""
 
         if hasattr(self, "search_input"):
+            self.search_input.blockSignals(True)
             self.search_input.clear()
+            self.search_input.blockSignals(False)
 
         project_name = self.archive_service.get_project_name(project_id)
         self.section_title.setText(f"Архивированные задачи: {project_name}")
         self.back_button.show()
         self.projects_widget.hide()
         self.tasks_widget.show()
-        self._update_tasks_view()
+        self._update_tasks_view(force=True)
 
-    def _update_projects_view(self):
+    def _update_projects_view(self, force=False):
         """Обновляет отображение проектов"""
+        print(f"📋 _update_projects_view (force={force})")
+
+        # Принудительная очистка
         self._clear_projects()
+
         projects = self.archive_service.search_projects(self.current_search_text)
+
+        print(f"   - Найдено проектов: {len(projects) if projects else 0}")
 
         if not projects:
             self.empty_label.setText("Нет архивированных проектов")
@@ -171,6 +204,8 @@ class ArchivePage(QWidget):
             return
 
         self.empty_label.hide()
+        self.projects_widget.show()
+
         from windows.archive.archived_project_card import ArchivedProjectCard
 
         columns = self._calculate_columns()
@@ -186,10 +221,15 @@ class ArchivePage(QWidget):
 
         self._add_bottom_spacer(projects, columns)
 
-    def _update_tasks_view(self):
+    def _update_tasks_view(self, force=False):
         """Обновляет отображение задач конкретного проекта"""
+        print(f"📋 _update_tasks_view (force={force}, project_id={self.current_project_id})")
+
         self._clear_tasks()
+
         tasks = self.archive_service.search_tasks(self.current_project_id, self.current_search_text)
+
+        print(f"   - Найдено задач: {len(tasks) if tasks else 0}")
 
         if not tasks:
             self._show_empty_tasks_message("В этом проекте нет архивированных задач")
@@ -197,10 +237,15 @@ class ArchivePage(QWidget):
 
         self._display_tasks(tasks)
 
-    def _update_all_tasks_view(self):
+    def _update_all_tasks_view(self, force=False):
         """Обновляет отображение всех архивированных задач"""
+        print(f"📋 _update_all_tasks_view (force={force})")
+
         self._clear_tasks()
+
         tasks = self.archive_service.search_all_archived_tasks(self.current_search_text)
+
+        print(f"   - Найдено задач: {len(tasks) if tasks else 0}")
 
         if not tasks:
             self._show_empty_tasks_message("Нет архивированных задач")
@@ -211,6 +256,8 @@ class ArchivePage(QWidget):
     def _display_tasks(self, tasks):
         """Отображает список задач"""
         self.empty_label.hide()
+        self.tasks_widget.show()
+
         from windows.archive.archived_task_card import ArchivedTaskCard
 
         columns = self._calculate_columns()
@@ -234,6 +281,7 @@ class ArchivePage(QWidget):
 
     def _show_empty_tasks_message(self, message: str):
         """Показывает сообщение об отсутствии задач"""
+        self._clear_tasks()
         label = QLabel(message)
         label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         label.setStyleSheet("color: #999999; font-size: 18px; padding: 50px;")
@@ -298,6 +346,9 @@ class ArchivePage(QWidget):
             item = self.projects_layout.takeAt(0)
             if item.widget():
                 item.widget().deleteLater()
+            elif item.spacerItem():
+                # Удаляем спейсеры
+                pass
 
     def _clear_tasks(self):
         """Очищает список задач"""
@@ -305,6 +356,8 @@ class ArchivePage(QWidget):
             item = self.tasks_layout.takeAt(0)
             if item.widget():
                 item.widget().deleteLater()
+            elif item.spacerItem():
+                pass
 
     def _calculate_columns(self) -> int:
         """Рассчитывает количество колонок в зависимости от ширины окна"""
@@ -326,9 +379,11 @@ class ArchivePage(QWidget):
     def resizeEvent(self, event):
         """Обработчик изменения размера окна"""
         super().resizeEvent(event)
-        if self.current_filter_type == "projects":
-            self._update_projects_view()
-        elif self.current_project_id is not None:
-            self._update_tasks_view()
-        else:
-            self._update_all_tasks_view()
+        # Используем QTimer для отложенного обновления (избегаем множественных вызовов)
+        from PyQt6.QtCore import QTimer
+        if hasattr(self, '_resize_timer'):
+            self._resize_timer.stop()
+        self._resize_timer = QTimer()
+        self._resize_timer.setSingleShot(True)
+        self._resize_timer.timeout.connect(lambda: self.refresh_current_view())
+        self._resize_timer.start(100)

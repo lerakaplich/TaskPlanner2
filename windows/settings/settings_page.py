@@ -2,7 +2,7 @@
 
 from PyQt6 import uic
 from PyQt6.QtWidgets import QWidget, QMessageBox, QTabWidget
-from PyQt6.QtCore import pyqtSignal
+from PyQt6.QtCore import pyqtSignal, QTimer
 import os
 
 from services.employee_service.employee_service import EmployeeService
@@ -41,6 +41,24 @@ class SettingsPage(QWidget):
         uic.loadUi(ui_path, self)
 
         self.setup_tabs()
+
+    def showEvent(self, event):
+        """Срабатывает при каждом показе страницы"""
+        super().showEvent(event)
+        QTimer.singleShot(100, self._refresh_all_tabs)
+
+    def _refresh_all_tabs(self):
+        """Обновляет все вкладки настроек"""
+        if hasattr(self, 'employees_tab') and hasattr(self.employees_tab, 'load_employees'):
+            self.employees_tab.load_employees()
+        if hasattr(self, 'departments_tab') and hasattr(self.departments_tab, 'load_departments'):
+            self.departments_tab.load_departments()
+        if hasattr(self, 'divisions_tab') and hasattr(self.divisions_tab, 'load_divisions'):
+            self.divisions_tab.load_divisions()
+        if hasattr(self, 'columns_tab') and hasattr(self.columns_tab, 'load_columns'):
+            self.columns_tab.load_columns()
+        if hasattr(self, 'tags_tab') and hasattr(self.tags_tab, 'load_tags'):
+            self.tags_tab.load_tags()
 
     def setup_tabs(self):
         """Создание и настройка всех вкладок"""

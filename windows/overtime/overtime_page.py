@@ -3,7 +3,7 @@
 import os
 from typing import List, Dict, Optional
 
-from PyQt6.QtCore import QDate, Qt
+from PyQt6.QtCore import QDate, Qt, QTimer
 from PyQt6.QtWidgets import QWidget, QMessageBox, QFileDialog, QProgressDialog, QApplication
 from PyQt6 import uic
 
@@ -33,11 +33,15 @@ class OvertimePage(QWidget):
 
         self.my_overtimes: List[Dict] = []
         self.all_overtimes: List[Dict] = []
+        self._cards_cache = {}  # Кэш карточек
 
         self.current_project_filter: Optional[str] = None
         self.current_task_filter: Optional[str] = None
         self.current_start_date: Optional[QDate] = None
         self.current_end_date: Optional[QDate] = None
+
+        # Флаг для предотвращения лишних обновлений
+        self._updating = False
 
         self.btnAddOvertime.clicked.connect(self.show_add_overtime)
         self.btnExport.clicked.connect(self.show_export_dialog)
@@ -52,88 +56,75 @@ class OvertimePage(QWidget):
         self.init_filters()
         self.load_overtimes()
 
+    def showEvent(self, event):
+        """Срабатывает при каждом показе страницы"""
+        super().showEvent(event)
+        print("⏱️ OvertimePage.showEvent - обновляем содержимое")
+        QTimer.singleShot(100, self.load_overtimes)
+
     def load_overtimes(self):
-        if self.service:
-            self.my_overtimes, self.all_overtimes = self.service.load_overtimes()
-            self.display_overtimes()
-            self._update_total_hours()
+        """Загрузка переработок с оптимизацией"""
+        if self.service and not self._updating:
+            self._updating = True
+            try:
+                self.my_overtimes, self.all_overtimes = self.service.load_overtimes()
+                self.init_filters()
+                self.display_overtimes()
+                self._update_total_hours()
+            finally:
+                self._updating = False
 
     def _update_total_hours(self):
         if hasattr(self, 'totalHoursValue') and self.service:
             total = self.service.crud.get_total_hours(self.my_overtimes)
             self.totalHoursValue.setText(f"{total:.1f}")
 
-    def show_import_dialog(self):
-        file_path, _ = QFileDialog.getOpenFileName(
-            self, "Выберите файл для импорта переработок", "", "Excel files (*.xlsx *.xls)"
-        )
-        if not file_path:
-            return
-
-        progress = QProgressDialog("Импорт переработок...", "Отмена", 0, 100, self)
-        progress.setWindowModality(Qt.WindowModality.WindowModal)
-        progress.setAutoClose(True)
-        progress.show()
-
-        def update_progress(value, text):
-            progress.setValue(value)
-            progress.setLabelText(text)
-            QApplication.processEvents()
-
-        try:
-            result = self.service.import_overtimes_from_file(file_path, update_progress)
-            progress.setValue(100)
-
-            if result['imported'] > 0:
-                QMessageBox.information(self, "Импорт завершён",
-                                        f"✅ Импортировано: {result['imported']}\n"
-                                        f"⚠️ Дубликатов: {result['duplicates']}\n"
-                                        f"⏭️ Пропущено: {result['skipped']}\n"
-                                        f"❌ Ошибок: {result['errors']}")
-                self.load_overtimes()
-            else:
-                error_msg = "\n".join(result['error_details'][:5])
-                QMessageBox.warning(self, "Импорт не выполнен", error_msg)
-        except Exception as e:
-            QMessageBox.critical(self, "Ошибка", str(e))
-        finally:
-            progress.close()
-
     def init_filters(self):
+        """Инициализация фильтров (с оптимизацией блокировки сигналов)"""
+        self.comboProject.blockSignals(True)
         self.comboProject.clear()
-        self.comboProject.addItem("Все переработки", None)
+        self.comboProject.addItem("Все проекты", None)
         if self.service:
             projects = self.service.get_projects()
             for project in projects:
                 self.comboProject.addItem(project['name'], project['name'])
         self.comboProject.setCurrentIndex(0)
+        self.comboProject.blockSignals(False)
 
+        self.comboTask.blockSignals(True)
         self.comboTask.clear()
         self.comboTask.addItem("Все задачи", None)
         self.comboTask.setEnabled(False)
+        self.comboTask.blockSignals(False)
 
     def on_project_changed(self, index):
+        """Обработчик изменения проекта (с оптимизацией)"""
         project_name = self.comboProject.currentData()
         if project_name is None:
-            self.comboTask.setEnabled(False)
+            self.comboTask.blockSignals(True)
             self.comboTask.clear()
             self.comboTask.addItem("Все задачи", None)
+            self.comboTask.setEnabled(False)
+            self.comboTask.blockSignals(False)
             return
-        self.load_project_tasks(project_name)
 
-    def load_project_tasks(self, project_name: str):
+        self.comboTask.blockSignals(True)
         self.comboTask.clear()
         self.comboTask.addItem("Все задачи", None)
-        tasks = set()
-        for ot in self.all_overtimes:
-            if ot.get('project') == project_name and ot.get('task'):
-                tasks.add(ot['task'])
-        for task in sorted(tasks):
-            self.comboTask.addItem(task, task)
-        self.comboTask.setEnabled(True)
-        self.comboTask.setCurrentIndex(0)
+
+        if self.service:
+            project_id = self.service.get_project_id_by_name(project_name)
+            if project_id:
+                tasks = self.service.get_tasks_for_project(project_id)
+                for task in tasks:
+                    self.comboTask.addItem(task['title'], task['title'])
+
+        self.comboTask.setEnabled(self.comboTask.count() > 1)
+        self.comboTask.blockSignals(False)
 
     def update_tasks_from_all(self):
+        """Обновляет список задач из всех переработок (для отображения в фильтре)"""
+        self.comboTask.blockSignals(True)
         self.comboTask.clear()
         self.comboTask.addItem("Все задачи", None)
         tasks = set()
@@ -142,24 +133,60 @@ class OvertimePage(QWidget):
                 tasks.add(ot['task'])
         for task in sorted(tasks):
             self.comboTask.addItem(task, task)
+        self.comboTask.setEnabled(self.comboTask.count() > 1)
+        self.comboTask.blockSignals(False)
 
     def clear_filters(self):
-        self.comboProject.setCurrentIndex(0)
-        self.comboTask.clear()
-        self.comboTask.addItem("Все задачи", None)
-        self.comboTask.setEnabled(False)
-        self.current_start_date = None
-        self.current_end_date = None
-        self.display_overtimes()
-        self._update_total_hours()
+        """Сброс фильтров с оптимизацией"""
+        if self._updating:
+            return
+
+        self._updating = True
+        try:
+            # Сбрасываем проект на "Все проекты"
+            self.comboProject.blockSignals(True)
+            self.comboProject.setCurrentIndex(0)
+            self.comboProject.blockSignals(False)
+
+            # Сбрасываем задачу - очищаем и делаем неактивным
+            self.comboTask.blockSignals(True)
+            self.comboTask.clear()
+            self.comboTask.addItem("Все задачи", None)
+            self.comboTask.setEnabled(False)
+            self.comboTask.blockSignals(False)
+
+            # Сбрасываем переменные фильтров
+            self.current_project_filter = None
+            self.current_task_filter = None
+            self.current_start_date = None
+            self.current_end_date = None
+
+            # Обновляем отображение
+            self._display_tab_optimized(self.gridLayoutMy, self.my_overtimes)
+            self._display_tab_optimized(self.gridLayoutAll, self.all_overtimes)
+            self._update_total_hours()
+
+            print("[DEBUG] Фильтры сброшены")
+        finally:
+            self._updating = False
 
     def apply_filters(self):
-        self.current_project_filter = self.comboProject.currentData()
-        self.current_task_filter = self.comboTask.currentData() if self.comboTask.isEnabled() else None
-        self.display_overtimes()
-        self._update_total_hours()
+        """Применение фильтров с оптимизацией"""
+        if self._updating:
+            return
+
+        self._updating = True
+        try:
+            self.current_project_filter = self.comboProject.currentData()
+            self.current_task_filter = self.comboTask.currentData() if self.comboTask.isEnabled() else None
+            print(f"[DEBUG] Применяем фильтры: project={self.current_project_filter}, task={self.current_task_filter}")
+            self.display_overtimes()
+            self._update_total_hours()
+        finally:
+            self._updating = False
 
     def display_overtimes(self):
+        """Отображение переработок с фильтрацией"""
         filters = {}
         if self.current_project_filter:
             filters['project_name'] = self.current_project_filter
@@ -173,8 +200,8 @@ class OvertimePage(QWidget):
         filtered_all = self.service.filter_overtimes(self.all_overtimes,
                                                      **filters) if self.service else self.all_overtimes
 
-        self._display_tab(self.gridLayoutMy, filtered_my)
-        self._display_tab(self.gridLayoutAll, filtered_all)
+        self._display_tab_optimized(self.gridLayoutMy, filtered_my)
+        self._display_tab_optimized(self.gridLayoutAll, filtered_all)
         self._update_total_hours_display(filtered_my)
 
     def _update_total_hours_display(self, overtimes: List[Dict]):
@@ -182,20 +209,43 @@ class OvertimePage(QWidget):
             total = self.service.crud.get_total_hours(overtimes)
             self.totalHoursValue.setText(f"{total:.1f}")
 
-    def _display_tab(self, layout, overtimes):
+    def _display_tab_optimized(self, layout, overtimes):
+        """Оптимизированное отображение карточек с переиспользованием виджетов"""
+        # Сохраняем существующие карточки для переиспользования
+        existing_widgets = {}
         while layout.count():
             item = layout.takeAt(0)
             if item.widget():
-                item.widget().deleteLater()
+                widget = item.widget()
+                # Сохраняем виджет для возможного переиспользования
+                if hasattr(widget, 'overtime_id'):
+                    existing_widgets[widget.overtime_id] = widget
+                else:
+                    widget.deleteLater()
 
+        # Создаём или переиспользуем карточки
         for i, ot in enumerate(overtimes):
-            card = OvertimeCard(ot)
-            card.edit_clicked.connect(self.show_edit_overtime)
-            card.add_details_clicked.connect(self.show_add_details_overtime)
-            card.delete_clicked.connect(self.delete_overtime)
+            ot_id = ot.get('id')
+            if ot_id in existing_widgets:
+                # Переиспользуем существующую карточку, обновляя данные
+                card = existing_widgets[ot_id]
+                card.overtime_data = ot
+                card.setup_data()
+                del existing_widgets[ot_id]
+            else:
+                # Создаём новую карточку
+                card = OvertimeCard(ot)
+                card.edit_clicked.connect(self.show_edit_overtime)
+                card.add_details_clicked.connect(self.show_add_details_overtime)
+                card.delete_clicked.connect(self.delete_overtime)
+
             row = i // 2
             col = i % 2
             layout.addWidget(card, row, col)
+
+        # Удаляем оставшиеся неиспользуемые виджеты
+        for widget in existing_widgets.values():
+            widget.deleteLater()
 
     def show_add_details_overtime(self, overtime_id: int):
         overtime = self.service.get_overtime_by_id(overtime_id)
@@ -242,8 +292,8 @@ class OvertimePage(QWidget):
                 end_time=data['end_time'],
                 description=data['description'],
                 employee_id=data['employee_id'],
-                project_id=data['project_id'],
-                task_id=data['task_id']
+                project_id=data.get('project_id'),
+                task_id=data.get('task_id')
             )
             if new_ot:
                 self.load_overtimes()
@@ -251,6 +301,64 @@ class OvertimePage(QWidget):
                 QMessageBox.information(self, "Успех", "Переработка добавлена")
             else:
                 QMessageBox.critical(self, "Ошибка", "Не удалось добавить переработку")
+
+    def select_period(self):
+        dialog = PeriodDialog(self, employee_service=self.employee_service)
+        if dialog.exec():
+            self.current_start_date, self.current_end_date = dialog.get_period()
+            self.display_overtimes()
+            self._update_total_hours()
+
+    def show_import_dialog(self):
+        file_path, _ = QFileDialog.getOpenFileName(
+            self, "Выберите файл для импорта переработок", "", "Excel files (*.xlsx *.xls)"
+        )
+        if not file_path:
+            return
+
+        progress = QProgressDialog("Импорт переработок...", "Отмена", 0, 100, self)
+        progress.setWindowModality(Qt.WindowModality.WindowModal)
+        progress.setAutoClose(True)
+        progress.show()
+
+        def update_progress(value, text):
+            progress.setValue(value)
+            progress.setLabelText(text)
+            QApplication.processEvents()
+
+        try:
+            result = self.service.import_overtimes_from_file(file_path, update_progress)
+            progress.setValue(100)
+
+            if result['imported'] > 0:
+                QMessageBox.information(self, "Импорт завершён",
+                                        f"✅ Импортировано: {result['imported']}\n"
+                                        f"⚠️ Дубликатов: {result['duplicates']}\n"
+                                        f"⏭️ Пропущено: {result['skipped']}\n"
+                                        f"❌ Ошибок: {result['errors']}")
+                self.load_overtimes()
+            else:
+                error_msg = "\n".join(result['error_details'][:5])
+                QMessageBox.warning(self, "Импорт не выполнен", error_msg)
+        except Exception as e:
+            QMessageBox.critical(self, "Ошибка", str(e))
+        finally:
+            progress.close()
+
+    def _display_tab(self, layout, overtimes):
+        while layout.count():
+            item = layout.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+
+        for i, ot in enumerate(overtimes):
+            card = OvertimeCard(ot)
+            card.edit_clicked.connect(self.show_edit_overtime)
+            card.add_details_clicked.connect(self.show_add_details_overtime)
+            card.delete_clicked.connect(self.delete_overtime)
+            row = i // 2
+            col = i % 2
+            layout.addWidget(card, row, col)
 
     def show_export_dialog(self):
         dialog = PeriodDialog(self, employee_service=self.employee_service)
@@ -281,10 +389,3 @@ class OvertimePage(QWidget):
                                             f"Общее количество часов: {total_hours:.1f}")
                 except Exception as e:
                     QMessageBox.critical(self, "Ошибка экспорта", f"Не удалось сохранить файл:\n{str(e)}")
-
-    def select_period(self):
-        dialog = PeriodDialog(self, employee_service=self.employee_service)
-        if dialog.exec():
-            self.current_start_date, self.current_end_date = dialog.get_period()
-            self.display_overtimes()
-            self._update_total_hours()

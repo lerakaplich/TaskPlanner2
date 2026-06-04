@@ -41,11 +41,28 @@ class OvertimeService:
     def get_all_employees(self) -> List[Dict]:
         return self.crud.get_all_employees()
 
-    def get_projects(self) -> List[Dict]:
-        return self.crud.get_projects()
+    def get_projects(self, only_active: bool = True) -> List[Dict]:
+        return self.crud.get_projects(only_active)
 
     def get_tasks_for_project(self, project_id: int) -> List[Dict]:
+        """Получить задачи по ID проекта"""
         return self.crud.get_tasks_for_project(project_id)
+
+    def get_tasks_for_project_by_name(self, project_name: str) -> List[Dict]:
+        """Получить задачи по названию проекта"""
+        return self.crud.get_tasks_for_project_by_name(project_name)
+
+    def get_project_id_by_name(self, project_name: str) -> Optional[int]:
+        """Получить ID проекта по названию"""
+        try:
+            projects = self.crud.get_projects(only_active=True)
+            for project in projects:
+                if project['name'] == project_name:
+                    return project['id']
+            return None
+        except Exception as e:
+            print(f"❌ Ошибка при поиске ID проекта: {e}")
+            return None
 
     def load_overtimes(self) -> Tuple[List[Dict], List[Dict]]:
         if not self.current_user_id:
@@ -57,7 +74,7 @@ class OvertimeService:
                      project_id: Optional[int] = None,
                      task_id: Optional[int] = None) -> Optional[Dict]:
         return self.crud.add_overtime(date, start_time, end_time, description,
-                                       self.current_user_id, employee_id, project_id, task_id)
+                                      self.current_user_id, employee_id, project_id, task_id)
 
     def filter_overtimes(self, overtimes: List[Dict], **filters) -> List[Dict]:
         return self.crud.filter_overtimes(overtimes, **filters)
@@ -96,7 +113,7 @@ class OvertimeService:
                          file_path: str, department: Optional[str] = None,
                          division: Optional[str] = None) -> str:
         return self.exporter.export_overtimes(overtimes, start_date, end_date,
-                                               file_path, department, division)
+                                              file_path, department, division)
 
     def generate_filename(self, start_date: QDate, end_date: QDate,
                           department: Optional[str] = None,

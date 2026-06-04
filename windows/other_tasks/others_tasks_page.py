@@ -130,9 +130,7 @@ class OthersTasksPage(QWidget):
         self.column_widgets.clear()
 
         for col in sorted(column_data, key=lambda x: x["position"]):
-            print(f"📦 Создаем колонку: {col['name']}")
             column_widget = KanbanColumn(col)
-            # НЕ УСТАНАВЛИВАЕМ политику размера
             self.columns[col["name"]] = column_widget
             self.column_widgets.append(column_widget)
             columns_layout.addWidget(column_widget)
@@ -144,7 +142,6 @@ class OthersTasksPage(QWidget):
         main_scroll.setWidget(horizontal_scroll)
         self.kanbanLayout.addWidget(main_scroll)
 
-        print(f"✅ Создано {len(self.column_widgets)} колонок")
 
     def clear_layout(self, layout):
         """Очищает layout."""
@@ -166,22 +163,43 @@ class OthersTasksPage(QWidget):
         self._is_loading = True
 
         try:
-            # Принудительно сбрасываем кэш в сервисе
             if hasattr(self.service.crud, '_column_cache'):
                 self.service.crud._column_cache = None
 
-            # Очищаем все колонки перед загрузкой
             self.clear_all_columns()
 
             tasks = self.service.load_tasks()
 
             print(f"\n📊 Загрузка чужих задач: {len(tasks)}")
-            for task in tasks:
-                print(f"  - {task.get('title')} (проект: {task.get('project_name')}, "
-                      f"статус: {task.get('status')}, автор: {task.get('created_by_name')})")
+
+            # === ОТКЛЮЧАЕМ ОБНОВЛЕНИЯ UI ===
+            self.setUpdatesEnabled(False)
+            for column in self.column_widgets:
+                column.setUpdatesEnabled(False)
 
             for task in tasks:
-                self.add_task_card(task)
+                column_name = task.get("status")
+                if column_name not in self.columns:
+                    print(f"  ❌ Колонка '{column_name}' не найдена!")
+                    continue
+
+                card = self.create_task_card(task)
+                self.connect_task_card_signals(card)
+
+                column = self.columns[column_name]
+                if card.parent() != column.tasks_container:
+                    card.setParent(column.tasks_container)
+                column.add_task(card)
+
+            # === ВКЛЮЧАЕМ ОБНОВЛЕНИЯ ОБРАТНО ===
+            for column in self.column_widgets:
+                column.setUpdatesEnabled(True)
+            self.setUpdatesEnabled(True)
+
+            # ОДИН РАЗ обновляем геометрию
+            self.updateGeometry()
+            if self.parent():
+                self.parent().updateGeometry()
 
             self.update_statistics()
 
@@ -189,6 +207,9 @@ class OthersTasksPage(QWidget):
             print(f"❌ Ошибка при загрузке задач: {e}")
             import traceback
             traceback.print_exc()
+            self.setUpdatesEnabled(True)
+            for column in self.column_widgets:
+                column.setUpdatesEnabled(True)
         finally:
             self._is_loading = False
 
@@ -236,7 +257,6 @@ class OthersTasksPage(QWidget):
 
     def add_task_card(self, task_data: Dict):
         """Добавляет карточку задачи в колонку."""
-        print(f"📋 Добавляем задачу в колонку: {task_data.get('title')} -> {task_data.get('status')}")
 
         card = self.create_task_card(task_data)
         self.connect_task_card_signals(card)

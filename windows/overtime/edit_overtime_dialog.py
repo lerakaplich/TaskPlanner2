@@ -17,6 +17,8 @@ class EditOvertimeDialog(QDialog):
         self.service = service
         self.overtime_data = overtime_data
         self.overtime_id = overtime_data.get('id') if overtime_data else None
+        self.current_project_id = None
+        self.current_task_id = None
 
         ui_path = os.path.join(os.path.dirname(__file__), "..", "..", "ui", "overtime")
         uic.loadUi(os.path.join(ui_path, "add_overtime_dialog.ui"), self)
@@ -58,18 +60,10 @@ class EditOvertimeDialog(QDialog):
         self.comboProject.clear()
         self.comboProject.addItem("Выберите проект", None)
         if self.service:
-            projects = self.service.get_projects()
+            projects = self.service.get_projects(only_active=True)
             for project in projects:
                 self.comboProject.addItem(project['name'], project['id'])
         self.comboProject.addItem("Без проекта", -1)
-
-        if self.overtime_data:
-            project = self.overtime_data.get('project')
-            if project:
-                for i in range(self.comboProject.count()):
-                    if self.comboProject.itemText(i) == project:
-                        self.comboProject.setCurrentIndex(i)
-                        break
 
     def _load_overtime_data(self):
         if not self.overtime_data:
@@ -94,40 +88,43 @@ class EditOvertimeDialog(QDialog):
                 self.timeEnd.setTime(QTime(int(parts[0]), int(parts[1])))
 
         description = self.overtime_data.get('description', '')
-        if description and description.startswith("[Проект:"):
+
+        # Извлекаем проект и задачу из описания
+        project_name = None
+        task_title = None
+
+        if description:
             project_match = re.search(r'\[Проект: (.*?)\]', description)
             if project_match:
                 project_name = project_match.group(1)
-                for i in range(self.comboProject.count()):
-                    if self.comboProject.itemText(i) == project_name:
-                        self.comboProject.setCurrentIndex(i)
-                        break
-
             task_match = re.search(r'\[Задача: (.*?)\]', description)
             if task_match:
                 task_title = task_match.group(1)
-                project_id = self.comboProject.currentData()
-                if project_id and project_id != -1:
-                    self._load_tasks(project_id)
-                    for i in range(self.comboTask.count()):
-                        if self.comboTask.itemText(i) == task_title:
-                            self.comboTask.setCurrentIndex(i)
-                            break
 
+            # Очищаем описание от маркеров
             clean_description = re.sub(r'\[Проект: .*?\]\s*', '', description)
             clean_description = re.sub(r'\[Задача: .*?\]\s*', '', clean_description)
             self.textDescription.setPlainText(clean_description.strip())
         else:
             self.textDescription.setPlainText(description)
 
+        # Устанавливаем проект в комбобокс
+        if project_name:
+            for i in range(self.comboProject.count()):
+                if self.comboProject.itemText(i) == project_name:
+                    self.comboProject.setCurrentIndex(i)
+                    self.current_project_id = self.comboProject.itemData(i)
+                    break
+
+        # Загружаем задачи и устанавливаем выбранную задачу
         project_id = self.comboProject.currentData()
         if project_id and project_id != -1:
             self._load_tasks(project_id)
-            task_title = self.overtime_data.get('task')
             if task_title:
                 for i in range(self.comboTask.count()):
                     if self.comboTask.itemText(i) == task_title:
                         self.comboTask.setCurrentIndex(i)
+                        self.current_task_id = self.comboTask.itemData(i)
                         break
 
     def _on_project_changed(self, index):
@@ -177,6 +174,7 @@ class EditOvertimeDialog(QDialog):
             return
 
         data = self.get_overtime_data()
+
         success = self.service.update_overtime(
             overtime_id=data['id'],
             date=data['date'],

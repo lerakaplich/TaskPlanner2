@@ -3,7 +3,7 @@
 import os
 from typing import Dict
 from PyQt6.QtWidgets import QWidget, QFrame, QHBoxLayout, QLabel, QPushButton, QScrollArea, QVBoxLayout, QMessageBox
-from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtCore import Qt, pyqtSignal, QTimer
 from PyQt6 import uic
 
 from windows.other_tasks.others_task_card import OthersTaskCard
@@ -76,6 +76,11 @@ class ProjectViewPage(QWidget):
 
         # Загружаем задачи
         self.load_tasks()
+
+    def showEvent(self, event):
+        """Срабатывает при каждом показе страницы"""
+        super().showEvent(event)
+        QTimer.singleShot(100, self.load_tasks)
 
     def _get_default_project_data(self):
         """Возвращает данные проекта по умолчанию"""

@@ -578,7 +578,7 @@ QScrollBar::add-line, QScrollBar::sub-line {
      </widget>
      <widget class="QWidget" name="tabAll">
       <attribute name="title">
-       <string>Все переработки</string>
+       <string>Все проекты</string>
       </attribute>
       <layout class="QVBoxLayout" name="verticalLayout_4">
        <item>

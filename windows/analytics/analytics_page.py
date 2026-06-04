@@ -42,6 +42,7 @@ class AnalyticsPage(QWidget):
         self.period_filter = None
         self._is_loading = False
         self._departments_loaded = False
+        self._is_initialized = False  # Флаг инициализации
 
         ui_path = os.path.join(
             os.path.dirname(__file__),
@@ -60,6 +61,15 @@ class AnalyticsPage(QWidget):
             self.load_all_data()
         else:
             self._show_placeholder()
+
+        self._is_initialized = True
+
+    def showEvent(self, event):
+        """Срабатывает при каждом показе страницы"""
+        super().showEvent(event)
+        print("📊 AnalyticsPage.showEvent - обновляем содержимое")
+        # Принудительно обновляем при каждом показе
+        QTimer.singleShot(100, self.refresh)
 
     def _setup_ui_from_file(self):
         """Настраивает UI из загруженного файла"""
@@ -346,7 +356,7 @@ class AnalyticsPage(QWidget):
                 Task.completed_at >= start_date,
                 Task.completed_at <= end_date
             ).all()
-            # В _get_tasks_for_period после получения completed_tasks
+
             print(f"📋 Завершенных задач в период: {len(completed_tasks)}")
             for task in completed_tasks:
                 print(
@@ -431,7 +441,6 @@ class AnalyticsPage(QWidget):
             print(f"⏱️ ПЕРЕРАБОТКИ ЗА ПЕРИОД")
             print(f"{'─' * 40}")
 
-            # ИСПРАВЛЕНО: используем overtime_date вместо created_at
             overtimes = employees_session.query(EmployeeNote).filter(
                 EmployeeNote.overtime_date >= start_date.date(),
                 EmployeeNote.overtime_date <= end_date.date()
@@ -448,11 +457,9 @@ class AnalyticsPage(QWidget):
                     }
 
                 if ot.overtime_start and ot.overtime_end:
-                    # Используем overtime_date для создания datetime
                     start = datetime.combine(ot.overtime_date, ot.overtime_start)
                     end = datetime.combine(ot.overtime_date, ot.overtime_end)
                     if end < start:
-                        # Если время окончания меньше времени начала, добавляем день
                         end = end.replace(day=end.day + 1)
                     hours = (end - start).total_seconds() / 3600
                     result[emp_id]["overtime"] += hours
@@ -515,15 +522,10 @@ class AnalyticsPage(QWidget):
 
     def _on_period_filter_changed(self, text: str) -> None:
         """Обработчик изменения фильтра периода для рейтинга"""
-        # Проверяем существование атрибута
-        if not hasattr(self, '_is_loading'):
+        if not hasattr(self, '_is_loading') or self._is_loading:
             return
 
         print(f"\n🔄 _on_period_filter_changed: text='{text}', _is_loading={self._is_loading}")
-
-        if self._is_loading:
-            print("   ⏭️ Пропуск: идет загрузка")
-            return
 
         if not self.period_filter:
             print("   ❌ period_filter is None")
@@ -661,7 +663,7 @@ class AnalyticsPage(QWidget):
             try:
                 card = EmployeeCard(emp_data)
                 card.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
-                card.clicked.connect(self._open_employee_profile)  # Подключаем сигнал
+                card.clicked.connect(self._open_employee_profile)
                 self.employees_grid.addWidget(card, row, col, alignment=Qt.AlignmentFlag.AlignTop)
                 col += 1
                 if col >= max_cols:
@@ -724,10 +726,6 @@ class AnalyticsPage(QWidget):
             print(f"❌ Ошибка открытия профиля: {e}")
             QMessageBox.warning(self, "Ошибка", f"Не удалось открыть профиль: {e}")
 
-    def _on_employee_card_clicked(self, employee_id: int):
-        """Обработчик клика по карточке сотрудника"""
-        self._open_employee_profile(employee_id)
-
     def _display_rating_employees(self, employees_data: List[Dict]):
         """Отображает сотрудников в рейтинге с сортировкой по КПД"""
         print(f"\n🎯 _display_rating_employees: получено {len(employees_data)} сотрудников")
@@ -752,7 +750,6 @@ class AnalyticsPage(QWidget):
             try:
                 card = RatingEmployeeCard(emp_data, position=position, parent=None)
                 card.setMinimumHeight(80)
-                # ИСПРАВЛЕНО: вызываем _open_employee_profile вместо _on_employee_clicked
                 card.clicked.connect(self._open_employee_profile)
                 self.rating_layout.addWidget(card)
             except Exception as e:
@@ -851,42 +848,6 @@ class AnalyticsPage(QWidget):
 
         self.employeesContainer = container
         print("✅ Контейнер для сотрудников создан принудительно")
-
-    def _setup_tab_container(self, tab_name, container_name, grid_name):
-        """Настраивает контейнер для вкладки"""
-        tab = getattr(self, tab_name, None)
-        if not tab:
-            return
-
-        old_layout = tab.layout()
-        if old_layout:
-            while old_layout.count():
-                item = old_layout.takeAt(0)
-                if item.widget():
-                    item.widget().deleteLater()
-        else:
-            layout = QVBoxLayout(tab)
-            layout.setContentsMargins(15, 15, 15, 15)
-            tab.setLayout(layout)
-
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        scroll.setStyleSheet("border: none; background-color: transparent;")
-        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-
-        container = QWidget()
-        container.setStyleSheet("background-color: transparent;")
-
-        grid = QGridLayout(container)
-        grid.setHorizontalSpacing(15)
-        grid.setVerticalSpacing(15)
-        grid.setAlignment(Qt.AlignmentFlag.AlignTop)
-
-        scroll.setWidget(container)
-        tab.layout().addWidget(scroll)
-
-        setattr(self, container_name, container)
-        setattr(self, grid_name, grid)
 
     def _create_ui_programmatically(self):
         """Создает UI программно (только если UI файл не найден)"""
@@ -1069,6 +1030,7 @@ class AnalyticsPage(QWidget):
             self._is_loading = False
 
     def populate_employees_tab(self):
+        """Заполняет вкладку сотрудников"""
         if not hasattr(self, 'employees_grid'):
             print("❌ employees_grid не найден")
             return
@@ -1080,20 +1042,18 @@ class AnalyticsPage(QWidget):
             print("❌ rating_layout не найден")
             return
 
-        print("\n🌟 populate_rating_tab: первая загрузка рейтинга")
+        print("\n🌟 populate_rating_tab: обновление рейтинга")
 
+        # Принудительно пересчитываем с текущим фильтром
         if self._current_period_filter != "all":
-            print(f"   Применяем фильтр периода '{self._current_period_filter}' при загрузке")
+            print(f"   Применяем фильтр периода '{self._current_period_filter}'")
             self._apply_all_rating_filters()
         else:
             print("   Отображаем рейтинг без фильтра (Все время)")
             self._display_rating_employees(self._employees_data)
 
-    # Удалите этот метод или измените его:
-    def _on_employee_clicked(self, employee_id: int):
-        self._open_employee_profile(employee_id)  # теперь вызывает открытие профиля
-
     def populate_themes_tab(self):
+        """Заполняет вкладку тем"""
         if not hasattr(self, 'themesGrid'):
             return
 
@@ -1118,6 +1078,7 @@ class AnalyticsPage(QWidget):
         print(f"✅ Отображено {len(self._themes_data)} тем")
 
     def populate_projects_tab(self):
+        """Заполняет вкладку проектов"""
         if not hasattr(self, 'projectsGrid'):
             return
 
@@ -1157,5 +1118,7 @@ class AnalyticsPage(QWidget):
         layout.addWidget(label)
 
     def refresh(self):
+        """Обновляет все данные страницы"""
+        print("🔄 AnalyticsPage.refresh вызван")
         if self.service:
             self.load_all_data()

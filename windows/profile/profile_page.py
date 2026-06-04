@@ -4,7 +4,7 @@ import os
 from PyQt6 import uic
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QTableWidgetItem,
                              QMessageBox, QFrame, QLabel, QProgressBar, QHBoxLayout)
-from PyQt6.QtCore import Qt, pyqtSignal, QDate
+from PyQt6.QtCore import Qt, pyqtSignal, QDate, QTimer
 
 from services.analytics_service.analytics_service import AnalyticsService
 from services.profile_service import ProfileService
@@ -46,6 +46,13 @@ class ProfilePage(QWidget):
 
         if self.employee_id:
             self.load_employee()
+
+    def showEvent(self, event):
+        """Срабатывает при каждом показе страницы"""
+        super().showEvent(event)
+        print("👤 ProfilePage.showEvent - обновляем содержимое")
+        if self.employee_id:
+            QTimer.singleShot(100, self.load_employee)
 
     def load_employee(self):
         """Загружает данные через сервис и обновляет UI"""

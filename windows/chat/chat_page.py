@@ -83,6 +83,13 @@ class ChatPage(QWidget):
         # Первичная загрузка
         self.load_chat_list()
 
+    def showEvent(self, event):
+        """Срабатывает при каждом показе страницы"""
+        super().showEvent(event)
+        QTimer.singleShot(100, self.load_chat_list)
+        if self.current_chat_id:
+            QTimer.singleShot(200, self.refresh_messages)
+
     def on_socket_message(self, data):
         try:
             msg_dto = MessageReadDTO.model_validate(data)

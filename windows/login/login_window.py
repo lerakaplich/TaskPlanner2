@@ -10,6 +10,7 @@ from PyQt6.QtWidgets import (
 )
 
 from services.auth_service import AuthService
+from services.employee_service.employee_service import EmployeeService
 
 
 class LoginWindow(QDialog):
@@ -33,11 +34,6 @@ class LoginWindow(QDialog):
         self.setup_ui()
         self.setup_signals()
         self.setup_password_eye()
-        self._try_auto_login()
-
-    # ==========================================================
-    # Настройка UI
-    # ==========================================================
 
     def setup_ui(self):
         """Настройка UI элементов"""
@@ -89,7 +85,7 @@ class LoginWindow(QDialog):
 
         image_configs = [
             ("checkbox.png", self.checkboxImageLabel, 150),
-            ("qr.jpg", self.qrImageLabel, 250),
+            ("qr.png", self.qrImageLabel, 250),
             ("clock.png", self.clockImageLabel, 150),
             ("gear.png", self.gearImageLabel, 150),
         ]
@@ -146,21 +142,13 @@ class LoginWindow(QDialog):
         self.phoneInput.returnPressed.connect(self._on_login_clicked)
         self.passwordInput.returnPressed.connect(self._on_login_clicked)
 
-    # ==========================================================
-    # Автологин
-    # ==========================================================
-
     def _try_auto_login(self):
         """Попытка автоматического входа по сохраненной сессии"""
         user_data = self.auth_service.load_session()
         if user_data:
             self.auth_service.set_current_user(user_data)
             self.login_success.emit(user_data)
-            QTimer.singleShot(100, self.accept)
-
-    # ==========================================================
-    # Обработчики действий
-    # ==========================================================
+            QTimer.singleShot(50, self.accept)
 
     def _on_login_clicked(self):
         """Обработчик нажатия кнопки входа"""
@@ -200,8 +188,9 @@ class LoginWindow(QDialog):
             else:
                 self.auth_service.clear_session(user_data.get('id'))
 
+            # Эмитируем сигнал и ЗАКРЫВАЕМ окно (но не вызываем accept здесь отдельно)
             self.login_success.emit(user_data)
-            self.accept()
+            self.accept()  # Это закроет окно и вернёт управление в main.py
         else:
             QMessageBox.warning(self, "Ошибка", "Неверный номер телефона или пароль")
             self._login_in_progress = False
@@ -237,9 +226,7 @@ class LoginWindow(QDialog):
         try:
             from database import get_tasks_session
             from windows.settings.employees.employee_dialog import EmployeeDialog
-            from services.employee_service import EmployeeService  # Добавить импорт
 
-            # Создаем сервис сотрудников вместо передачи сессии напрямую
             employee_service = EmployeeService()
 
             dialog = EmployeeDialog(
@@ -309,10 +296,6 @@ class LoginWindow(QDialog):
         except Exception as e:
             QMessageBox.critical(self, "Ошибка", f"Не удалось отправить заявку: {e}")
 
-    # ==========================================================
-    # Публичные методы
-    # ==========================================================
-
     def logout(self):
         """Выход из системы"""
         user_id = self.auth_service.get_current_user().get('id') if self.auth_service.get_current_user() else None
@@ -327,10 +310,6 @@ class LoginWindow(QDialog):
     def get_authenticated_user(self):
         """Возвращает данные авторизованного пользователя"""
         return self.auth_service.get_current_user()
-
-    # ==========================================================
-    # Обработчики событий
-    # ==========================================================
 
     def resizeEvent(self, event):
         super().resizeEvent(event)

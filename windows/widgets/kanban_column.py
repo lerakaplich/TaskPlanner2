@@ -125,8 +125,6 @@ class KanbanColumn(QFrame):
         self.tasks_container = QWidget()
         self.tasks_container.setStyleSheet("background-color: transparent;")
 
-        # КРИТИЧЕСКИ ВАЖНО: контейнер должен иметь минимальную высоту по содержимому
-        # и НЕ РАСТЯГИВАТЬСЯ
         self.tasks_container.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
 
         self.tasks_layout = QVBoxLayout(self.tasks_container)
@@ -134,34 +132,31 @@ class KanbanColumn(QFrame):
         self.tasks_layout.setContentsMargins(12, 8, 12, 8)
         self.tasks_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
 
-        # НЕ ДОБАВЛЯЕМ stretch!
-
         scroll.setWidget(self.tasks_container)
 
-        # КЛЮЧЕВОЕ ИСПРАВЛЕНИЕ: запрещаем scroll area растягивать контейнер
-        # Устанавливаем политику размера для scroll area
         scroll.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
 
         parent_layout.addWidget(scroll)
-
-    # ==========================================================
-    # Управление карточками
-    # ==========================================================
 
     def add_task(self, task_card):
         """Добавляет карточку задачи в колонку"""
         if task_card is None:
             return
 
+        # Убеждаемся, что карточка скрыта и не вызывает обновлений
+        task_card.blockSignals(True)
+        task_card.setUpdatesEnabled(False)
+
         # Добавляем в layout
         self.tasks_layout.addWidget(task_card)
         self.task_cards.append(task_card)
 
-        # Принудительно обновляем
-        task_card.show()
-        task_card.updateGeometry()
+        # Включаем обновления и показываем только сейчас
+        task_card.setUpdatesEnabled(True)
+        task_card.setVisible(True)
+        task_card.blockSignals(False)
 
-        # ВАЖНО: обновляем размер контейнера, чтобы scroll area корректно работал
+        # Обновляем размеры
         self.tasks_container.adjustSize()
         self.tasks_container.updateGeometry()
         self.updateGeometry()

@@ -4,6 +4,7 @@ from PyQt6.QtWidgets import QMessageBox, QDialog, QSizePolicy, QSpacerItem
 from PyQt6.QtCore import QObject, pyqtSignal, QTimer
 
 from services.employee_service.employee_service import EmployeeService
+from windows.other_tasks.others_tasks_page import OthersTasksPage
 from windows.projects.project_card import ProjectCard
 from windows.projects.project_edit_dialog import ProjectEditDialog
 from windows.projects.project_creation_dialog import ProjectCreationDialog
@@ -438,79 +439,37 @@ class NavigationHandler(QObject):
             self.switch_page(pending)
 
     def get_my_tasks_page(self):
-        """Возвращает страницу моих задач с подключенными сигналами"""
-        print("   🚀 get_my_tasks_page вызван")
-
+        """Возвращает страницу моих задач"""
         if 'my_tasks' not in self.pages:
             from windows.my_tasks.my_tasks_page import MyTasksPage
 
-            self.main.contentStack.setUpdatesEnabled(False)
-
-            try:
-                print("   🏗️ Создаём экземпляр MyTasksPage...")
-                self.pages['my_tasks'] = MyTasksPage(
-                    db_session=self.main.session,
-                    current_user={"id": self.main.current_user_id, "last_name": "", "first_name": ""},
-                    column_service=self.main.column_service
-                )
-                print("   🔗 Подключаем сигнал open_project_requested...")
-                self.pages['my_tasks'].open_project_requested.connect(self.open_project_by_id)
-
-                print(f"   📌 Вставляем в contentStack на позицию {self.PAGE_MY_TASKS}")
-                self.main.contentStack.insertWidget(self.PAGE_MY_TASKS, self.pages['my_tasks'])
-                print("   ✅ MyTasksPage создана и вставлена")
-
-            except Exception as e:
-                print(f"   ❌ Ошибка создания MyTasksPage: {e}")
-                import traceback
-                traceback.print_exc()
-            finally:
-                self.main.contentStack.setUpdatesEnabled(True)
+            self.pages['my_tasks'] = MyTasksPage(
+                db_session=self.main.session,
+                current_user={"id": self.main.current_user_id, "last_name": "", "first_name": ""},
+                column_service=self.main.column_service
+            )
+            self.pages['my_tasks'].open_project_requested.connect(self.open_project_by_id)
+            self.main.contentStack.insertWidget(self.PAGE_MY_TASKS, self.pages['my_tasks'])
 
         return self.pages['my_tasks']
 
     def get_other_tasks_page(self):
-        """Возвращает страницу чужих задач с подключенными сигналами"""
-        print("   🚀 get_other_tasks_page вызван")
-
+        """Возвращает страницу чужих задач"""
         if 'other_tasks' not in self.pages:
-            from windows.other_tasks.others_tasks_page import OthersTasksPage
-
-            self.main.contentStack.setUpdatesEnabled(False)
-
-            try:
-                print("   🏗️ Создаём экземпляр OthersTasksPage...")
-                # Передаём полного пользователя
-                current_user = self.main.current_user if self.main.current_user else {
-                    "id": self.main.current_user_id,
-                    "last_name": "",
-                    "first_name": "",
-                    "middle_name": ""
-                }
-                self.pages['other_tasks'] = OthersTasksPage(
-                    parent=self.main,
-                    current_user=current_user,
-                    project_id=2,
-                    column_service=self.main.column_service
-                )
-                print("   🔗 Подключаем сигнал open_project_requested...")
-                self.pages['other_tasks'].open_project_requested.connect(self.open_project_by_id)
-
-                print(f"   📌 Вставляем в contentStack на позицию {self.PAGE_OTHER_TASKS}")
-                self.main.contentStack.insertWidget(self.PAGE_OTHER_TASKS, self.pages['other_tasks'])
-                print("   ✅ OthersTasksPage создана и вставлена")
-
-            except Exception as e:
-                print(f"   ❌ Ошибка создания OthersTasksPage: {e}")
-                import traceback
-                traceback.print_exc()
-            finally:
-                self.main.contentStack.setUpdatesEnabled(True)
-        else:
-            # Если страница уже существует, принудительно перезагружаем задачи
-            print("   🔄 Страница уже в кэше, перезагружаем задачи...")
-            if hasattr(self.pages['other_tasks'], 'load_tasks'):
-                self.pages['other_tasks'].load_tasks()
+            current_user = self.main.current_user if self.main.current_user else {
+                "id": self.main.current_user_id,
+                "last_name": "",
+                "first_name": "",
+                "middle_name": ""
+            }
+            self.pages['other_tasks'] = OthersTasksPage(
+                parent=self.main,
+                current_user=current_user,
+                project_id=2,
+                column_service=self.main.column_service
+            )
+            self.pages['other_tasks'].open_project_requested.connect(self.open_project_by_id)
+            self.main.contentStack.insertWidget(self.PAGE_OTHER_TASKS, self.pages['other_tasks'])
 
         return self.pages['other_tasks']
 
@@ -622,12 +581,24 @@ class NavigationHandler(QObject):
         return self.pages['gantt']
 
     def get_analytics_page(self):
+        """Возвращает страницу аналитики - принудительно пересоздаем для свежих данных"""
         from windows.analytics.analytics_page import AnalyticsPage
-        return self._get_or_create_page(
-            'analytics',
-            lambda: AnalyticsPage(session=self.main.session),
-            self.PAGE_ANALYTICS
-        )
+
+        # Принудительно пересоздаем страницу аналитики при каждом запросе
+        if 'analytics' in self.pages:
+            # Удаляем старую страницу
+            old_page = self.pages['analytics']
+            index = self.main.contentStack.indexOf(old_page)
+            if index >= 0:
+                self.main.contentStack.removeWidget(old_page)
+            old_page.deleteLater()
+            del self.pages['analytics']
+
+        # Создаем новую страницу
+        self.pages['analytics'] = AnalyticsPage(session=self.main.session)
+        self.main.contentStack.insertWidget(self.PAGE_ANALYTICS, self.pages['analytics'])
+
+        return self.pages['analytics']
 
     def get_chat_page(self):
         from windows.chat.chat_page import ChatPage
@@ -666,12 +637,24 @@ class NavigationHandler(QObject):
         )
 
     def get_archive_page(self):
+        """Возвращает страницу архива - всегда пересоздаем для свежих данных"""
         from windows.archive.archive_page import ArchivePage
-        return self._get_or_create_page(
-            'archive',
-            lambda: ArchivePage(service=self.main.archive_service),
-            self.PAGE_ARCHIVE
-        )
+
+        # ВАЖНО: принудительно пересоздаем страницу архива при каждом запросе
+        if 'archive' in self.pages:
+            # Удаляем старую страницу
+            old_page = self.pages['archive']
+            index = self.main.contentStack.indexOf(old_page)
+            if index >= 0:
+                self.main.contentStack.removeWidget(old_page)
+            old_page.deleteLater()
+            del self.pages['archive']
+
+        # Создаем новую страницу
+        self.pages['archive'] = ArchivePage(service=self.main.archive_service)
+        self.main.contentStack.insertWidget(self.PAGE_ARCHIVE, self.pages['archive'])
+
+        return self.pages['archive']
 
     def get_profile_page(self):
         if 'profile' not in self.pages:

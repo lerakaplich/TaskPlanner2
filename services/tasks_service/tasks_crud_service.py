@@ -391,27 +391,19 @@ class TasksCrudService:
             if self.mode == "my":
                 if task.assigned_to == user_id:
                     include = True
-                    print(f"   ✅ Моя задача (исполнитель) {task.id}: '{task.title}' (исполнитель={task.assigned_to})")
-                else:
-                    print(f"   ❌ Не моя задача {task.id}: '{task.title}' (исполнитель={task.assigned_to})")
 
             # Для режима "others" - задачи, где пользователь НЕ является исполнителем
             elif self.mode == "others":
                 if task.assigned_to != user_id:
                     include = True
-                    print(f"   ✅ Чужая задача {task.id}: '{task.title}' (исполнитель={task.assigned_to})")
-                else:
-                    print(f"   ❌ Не чужая задача {task.id}: '{task.title}' (исполнитель={task.assigned_to})")
 
             # Для режима "all" - все задачи
             else:
                 include = True
-                print(f"   ✅ Все задачи: {task.id}: '{task.title}'")
 
             if include:
                 filtered_tasks.append(task)
 
-        print(f"🔍 [DEBUG] Отфильтровано задач для режима '{self.mode}': {len(filtered_tasks)}\n")
         return [self._task_to_dict(task) for task in filtered_tasks]
 
     def is_deadline_overdue(self, deadline_str: str, completed: bool) -> bool:
@@ -437,14 +429,11 @@ class TasksCrudService:
 
         # 1. Получаем шаблонные колонки через переданный сервис
         if self._column_service:
-            print("   - Получаем шаблонные колонки из ColumnService")
             template_columns = self._column_service.get_template_columns()
         else:
-            print("   - ColumnService не передан, создаём временный")
             temp_service = ColumnService(self.db_session)
             template_columns = temp_service.get_template_columns()
 
-        print(f"   - Найдено шаблонных колонок: {len(template_columns)}")
         for col in template_columns:
             columns_by_name[col["name"]] = {
                 "id": col["id"],
@@ -458,7 +447,6 @@ class TasksCrudService:
         # 2. Получаем колонки из проектов (если есть)
         stmt = select(BoardColumn).order_by(BoardColumn.position)
         project_columns = self.db_session.scalars(stmt).all()
-        print(f"   - Найдено колонок в проектах: {len(project_columns)}")
 
         for col in project_columns:
             if col.name not in columns_by_name:
@@ -474,7 +462,6 @@ class TasksCrudService:
         # Сортируем по позиции
         result = sorted(columns_by_name.values(), key=lambda x: x["position"])
 
-        print(f"📊 Загружено колонок: {len(result)}")
         for col in result:
             print(f"  - {col['name']} (позиция: {col['position']}, шаблон: {col.get('is_template', False)})")
 
@@ -539,7 +526,6 @@ class TasksCrudService:
                 for task_tag in task.tags:
                     if task_tag.tag:
                         tag_names.append(task_tag.tag.name)
-            print(f"🏷️ Загружены теги для задачи {task.id}: {tag_names}")
         except Exception as e:
             print(f"⚠️ Ошибка загрузки тегов: {e}")
 
