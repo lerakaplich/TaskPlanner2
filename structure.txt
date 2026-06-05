@@ -1,7 +1,48 @@
 ﻿+-- .dockerignore
 +-- __pycache__
++-- build
+|  +-- main
+|  |  +-- Analysis-00.toc
+|  |  +-- base_library.zip
+|  |  +-- COLLECT-00.toc
+|  |  +-- EXE-00.toc
+|  |  +-- localpycs
+|  |  +-- main.exe
+|  |  +-- main.pkg
+|  |  +-- PKG-00.toc
+|  |  +-- PYZ-00.pyz
+|  |  +-- PYZ-00.toc
+|  |  +-- warn-main.txt
+|  |  +-- xref-main.html
+|  +-- ServerApp
+|  |  +-- Analysis-00.toc
+|  |  +-- base_library.zip
+|  |  +-- EXE-00.toc
+|  |  +-- localpycs
+|  |  +-- PKG-00.toc
+|  |  +-- PYZ-00.pyz
+|  |  +-- PYZ-00.toc
+|  |  +-- ServerApp.pkg
+|  |  +-- warn-ServerApp.txt
+|  |  +-- xref-ServerApp.html
+|  +-- TasksServer
+|  |  +-- Analysis-00.toc
+|  |  +-- base_library.zip
+|  |  +-- EXE-00.toc
+|  |  +-- localpycs
+|  |  +-- PKG-00.toc
+|  |  +-- PYZ-00.pyz
+|  |  +-- PYZ-00.toc
+|  |  +-- TasksServer.pkg
+|  |  +-- warn-TasksServer.txt
+|  |  +-- xref-TasksServer.html
 +-- chat_server.py
++-- convert_png_ico.py
 +-- database.py
++-- dist
+|  +-- main
+|  |  +-- main.exe
+|  +-- TasksServer.exe
 +-- doc_2026-05-21_11-21-18.dockerignore
 +-- Dockerfile.txt
 +-- images
@@ -11,9 +52,11 @@
 |  +-- eye_open.png
 |  +-- gear.png
 |  +-- logo.png
-|  +-- qr.jpg
-|  +-- Untitled@1-1920x953 (7).png
+|  +-- qr.png
+|  +-- taskplanner.ico
+|  +-- taskplanner.png
 +-- main.py
++-- main.spec
 +-- models
 |  +-- __pycache__
 |  +-- chat.py
@@ -38,6 +81,8 @@
 |  +-- project_repo.py
 |  +-- tag_repo.py
 |  +-- task_repo.py
++-- script.iss
++-- ServerApp.spec
 +-- services
 |  +-- __pycache__
 |  +-- access_service.py
@@ -93,6 +138,7 @@
 +-- shared_state.py
 +-- structure.txt
 +-- taskplanner.zip
++-- TasksServer.spec
 +-- telegram_bot
 |  +-- __pycache__
 |  +-- bot.py
@@ -175,6 +221,8 @@
 |  |  +-- tags
 |  |  |  +-- tag_card.ui
 |  |  |  +-- tag_dialog.ui
+|  +-- widgets
+|  |  +-- color_picker_dialog.ui
 +-- utils
 |  +-- __pycache__
 |  +-- error_handler.py
@@ -218,6 +266,7 @@
 |  |  +-- employee_selection_dialog.py
 |  +-- gantt
 |  |  +-- __pycache__
+|  |  +-- calendar_widget.py
 |  |  +-- export_dialog.py
 |  |  +-- gantt_canvas.py
 |  |  +-- gantt_widget.py
