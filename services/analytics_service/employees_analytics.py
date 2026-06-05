@@ -1,11 +1,11 @@
 # services/analytics_service/employees_analytics.py
 
-from typing import List, Dict, Any, Optional
-from sqlalchemy import select, or_
 from datetime import datetime, timedelta
-from models.tasks import Task
-from models.projects import Project, EmployeeProject
+from typing import List, Dict, Any, Optional
+
 from models.employees import Employee, EmployeeData, Department, EmployeeNote
+from models.projects import Project, EmployeeProject
+from models.tasks import Task
 from .analytics_base_service import AnalyticsBaseService
 from .kpd_calculator import KPDCalculator
 
@@ -15,8 +15,6 @@ class EmployeesAnalytics(AnalyticsBaseService):
 
     def __init__(self, session):
         super().__init__(session)
-
-    # ==================== ОСНОВНЫЕ МЕТОДЫ ====================
 
     def get_employee_card_data(self, employee_id: int) -> Dict[str, Any]:
         """Получить данные сотрудника для карточки EmployeeCard"""
@@ -83,8 +81,6 @@ class EmployeesAnalytics(AnalyticsBaseService):
         employees = self.get_all_employees_with_stats()
         employees.sort(key=lambda x: x.get('kpd_percent', 0), reverse=True)
         return employees
-
-    # ==================== ФИЛЬТРАЦИЯ ПО ПЕРИОДАМ ====================
 
     def _get_date_range_for_period(self, period: str) -> tuple:
         """Возвращает начальную и конечную дату для выбранного периода"""
@@ -220,7 +216,51 @@ class EmployeesAnalytics(AnalyticsBaseService):
             print(f"❌ Ошибка получения задач за период: {e}")
             return {}
 
-    # ==================== ФИЛЬТРАЦИЯ ПО ОТДЕЛАМ ====================
+    def _get_employee_subordinates_kpd(self, employee_id: int) -> Dict[str, Any]:
+        """
+        Рассчитывает суммарный КПД подчинённых сотрудника.
+        Возвращает словарь с aggregated_kpd и списком подчинённых.
+        """
+        from services.employee_service.employee_base_service import EmployeeBaseService
+
+        emp_base = EmployeeBaseService(self.employees_session)
+        subordinates_ids = emp_base.get_subordinates(employee_id)
+
+        if not subordinates_ids:
+            return {
+                "total_kpd": 0,
+                "weighted_kpd": 0,
+                "subordinates_count": 0,
+                "subordinates": []
+            }
+
+        total_kpd = 0
+        total_weighted_kpd = 0
+        subordinates_data = []
+
+        for sub_id in subordinates_ids:
+            # Получаем КПД подчинённого (без учёта его подчинённых, чтобы избежать рекурсии)
+            sub_stats = self._get_employee_stats(sub_id, include_subordinates=False)
+            sub_kpd = sub_stats.get("kpd_percent", 0)
+            sub_weighted = sub_stats.get("weighted_kpd", 0)
+
+            total_kpd += sub_kpd
+            total_weighted_kpd += sub_weighted
+
+            sub_emp = self.employees_session.get(Employee, sub_id)
+            subordinates_data.append({
+                "id": sub_id,
+                "name": self._format_employee_name(sub_emp) if sub_emp else f"ID:{sub_id}",
+                "kpd_percent": sub_kpd,
+                "weighted_kpd": sub_weighted
+            })
+
+        return {
+            "total_kpd": total_kpd,
+            "weighted_kpd": total_weighted_kpd,
+            "subordinates_count": len(subordinates_ids),
+            "subordinates": subordinates_data
+        }
 
     def filter_employees_by_department(self, employees_data: List[Dict], department_id: Optional[int]) -> List[Dict]:
         """Фильтрует сотрудников по отделу"""
@@ -232,8 +272,6 @@ class EmployeesAnalytics(AnalyticsBaseService):
         """Получить список всех отделов"""
         departments = self.employees_session.query(Department).order_by(Department.name).all()
         return [{"id": dept.id, "name": dept.name} for dept in departments]
-
-    # ==================== ДРУГИЕ МЕТОДЫ ====================
 
     def filter_employees_by_name(self, employees_data: List[Dict], search_text: str) -> List[Dict]:
         """Фильтрует сотрудников по имени"""
@@ -257,10 +295,11 @@ class EmployeesAnalytics(AnalyticsBaseService):
             "critical": 0
         }
 
-    # ==================== ВНУТРЕННИЕ МЕТОДЫ ====================
-
-    def _get_employee_stats(self, employee_id: int) -> Dict[str, Any]:
-        """Получить статистику сотрудника с расчетом КПД"""
+    def _get_employee_stats(self, employee_id: int, include_subordinates: bool = True) -> Dict[str, Any]:
+        """
+        Получить статистику сотрудника с расчётом КПД.
+        Если include_subordinates=True, включает КПД подчинённых.
+        """
         from sqlalchemy import select, or_
 
         # Проекты сотрудника
@@ -322,6 +361,33 @@ class EmployeesAnalytics(AnalyticsBaseService):
             EmployeeData.employee_id == employee_id
         ).first()
 
+        # Получаем КПД подчинённых
+        subordinates_kpd = {"total_kpd": 0, "weighted_kpd": 0, "subordinates_count": 0}
+        if include_subordinates:
+            subordinates_kpd = self._get_employee_subordinates_kpd(employee_id)
+
+        kpd_result = KPDCalculator.calculate_employee_kpd(all_tasks)
+
+        # ИТОГОВЫЙ КПД РУКОВОДИТЕЛЯ = собственный КПД * 0.5 + КПД подчинённых * 0.5
+        own_kpd = kpd_result["total_kpd"]
+        own_weighted = kpd_result["weighted_kpd"]
+
+        if subordinates_kpd["subordinates_count"] > 0:
+            # Если есть подчинённые - усредняем их КПД
+            avg_sub_kpd = subordinates_kpd["total_kpd"] / subordinates_kpd["subordinates_count"]
+            avg_sub_weighted = subordinates_kpd["weighted_kpd"] / subordinates_kpd["subordinates_count"]
+
+            # Вес: 50% собственный, 50% подчинённые
+            final_kpd = (own_kpd * 0.5) + (avg_sub_kpd * 0.5)
+            final_weighted = (own_weighted * 0.5) + (avg_sub_weighted * 0.5)
+        else:
+            final_kpd = own_kpd
+            final_weighted = own_weighted
+
+        employee_data = self.session.query(EmployeeData).filter(
+            EmployeeData.employee_id == employee_id
+        ).first()
+
         return {
             "active_projects": active_projects,
             "completed_projects": completed_projects,
@@ -330,9 +396,13 @@ class EmployeesAnalytics(AnalyticsBaseService):
             "overdue_tasks": overdue_tasks,
             "total_tasks": len(all_tasks),
             "tag_analytics": tag_analytics,
-            "kpd": kpd_result["total_kpd"] / 100 if kpd_result["total_kpd"] > 0 else 0,
-            "kpd_percent": kpd_result["total_kpd"],
-            "weighted_kpd": kpd_result["weighted_kpd"],
+            "kpd": final_kpd / 100 if final_kpd > 0 else 0,
+            "kpd_percent": final_kpd,
+            "weighted_kpd": final_weighted,
+            "own_kpd_percent": own_kpd,  # Сохраняем собственный КПД для отладки
+            "subordinates_count": subordinates_kpd["subordinates_count"],
+            "subordinates_kpd_avg": (subordinates_kpd["total_kpd"] / subordinates_kpd["subordinates_count"]) if
+            subordinates_kpd["subordinates_count"] > 0 else 0,
             "overtime_hours": overtime_hours,
             "kpd_rating": employee_data.kpd_rating if employee_data else 0,
             "on_time_rate": employee_data.on_time_rate if employee_data else 0,

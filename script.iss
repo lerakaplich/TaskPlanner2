@@ -5,7 +5,8 @@
 #define MyAppVersion "1.0"
 #define MyAppPublisher "МАЗ"
 #define MyAppURL "https://maz.by/"
-#define MyAppExeName "TaskPlanner.exe"
+#define MyAppExeName "main.exe"
+#define MyAppServerName "TasksServer.exe"
 #define MyAppAssocName MyAppName + " File"
 #define MyAppAssocExt ".taskplanner"
 #define MyAppAssocKey StringChange(MyAppAssocName, " ", "") + MyAppAssocExt
@@ -40,19 +41,17 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
+Name: "servericon"; Description: "Создать ярлык для сервера"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
 
 [Files]
-; === ВАЖНО: Укажите правильный путь к вашему EXE файлу ===
-; Если вы использовали PyInstaller --onedir:
-Source: "C:\TaskPlanner\dist\TaskPlanner\{#MyAppExeName}"; DestDir: "{app}"; Flags: ignoreversion
-; Все остальные файлы из папки dist
-Source: "C:\TaskPlanner\dist\TaskPlanner\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+; === КЛИЕНТСКОЕ ПРИЛОЖЕНИЕ (PyInstaller --onedir) ===
+; Основной исполняемый файл
+Source: "C:\TaskPlanner\dist\main\main.exe"; DestDir: "{app}"; Flags: ignoreversion
+; Все остальные файлы из папки main
+Source: "C:\TaskPlanner\dist\main\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
-; Если вы использовали PyInstaller --onefile (один файл):
-; Source: "C:\TaskPlanner\dist\{#MyAppExeName}"; DestDir: "{app}"; Flags: ignoreversion
-
-; Документация (если есть)
-; Source: "C:\TaskPlanner\docs\*"; DestDir: "{app}\docs"; Flags: ignoreversion recursesubdirs createallsubdirs
+; === СЕРВЕР (PyInstaller --onefile) ===
+Source: "C:\TaskPlanner\dist\TasksServer.exe"; DestDir: "{app}"; Flags: ignoreversion
 
 ; NOTE: Don't use "Flags: ignoreversion" on any shared system files
 
@@ -65,6 +64,8 @@ Root: HKA; Subkey: "Software\Classes\{#MyAppAssocKey}\shell\open\command"; Value
 [Icons]
 Name: "{autoprograms}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
 Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
+Name: "{autodesktop}\TaskPlanner Server"; Filename: "{app}\{#MyAppServerName}"; Tasks: servericon
+Name: "{autoprograms}\TaskPlanner Server"; Filename: "{app}\{#MyAppServerName}"; Tasks: servericon
 
 [Run]
 Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent
