@@ -92,12 +92,18 @@ QLabel:hover {
         </property>
        </widget>
       </item>
-      <item alignment="Qt::AlignVCenter">
-       <widget class="QLabel" name="completedTasksLabel">
+      <item>
+       <widget class="QLabel" name="inProgressLabel">
         <property name="minimumSize">
          <size>
           <width>186</width>
-          <height>0</height>
+          <height>41</height>
+         </size>
+        </property>
+        <property name="maximumSize">
+         <size>
+          <width>16777215</width>
+          <height>41</height>
          </size>
         </property>
         <property name="styleSheet">
@@ -114,7 +120,7 @@ QLabel:hover {
 }</string>
         </property>
         <property name="text">
-         <string>✅ Выполнено: 0</string>
+         <string>🔧 В работе: 0</string>
         </property>
         <property name="alignment">
          <set>Qt::AlignCenter</set>
@@ -222,6 +228,12 @@ QComboBox::drop-down {
           <horstretch>1</horstretch>
           <verstretch>0</verstretch>
          </sizepolicy>
+        </property>
+        <property name="minimumSize">
+         <size>
+          <width>0</width>
+          <height>41</height>
+         </size>
         </property>
         <property name="styleSheet">
          <string notr="true">QProgressBar {

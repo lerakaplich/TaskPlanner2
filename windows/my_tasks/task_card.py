@@ -32,7 +32,7 @@ class TaskCard(QFrame):
         self._updating_progress = False
 
         # КРИТИЧЕСКИ ВАЖНО: отключаем все обновления и скрываем
-        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
+        # self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
         self.setWindowFlags(Qt.WindowType.FramelessWindowHint)
         self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating, True)
 
@@ -72,7 +72,7 @@ class TaskCard(QFrame):
         self.difficulty_layout.setSpacing(5)
 
         self.difficulty_label = QLabel("Сложность:")
-        self.difficulty_label.setStyleSheet("font-size: 11px; color: #666;")
+        self.difficulty_label.setStyleSheet("font-size: 11px; color: #666; border: none;")
 
         self.difficulty_value_label = QLabel("0⭐")
         self.difficulty_value_label.setStyleSheet("""
@@ -80,6 +80,7 @@ class TaskCard(QFrame):
             font-weight: bold;
             padding: 2px 6px;
             border-radius: 8px;
+            border: none;
         """)
 
         self.difficulty_layout.addWidget(self.difficulty_label)
@@ -197,7 +198,7 @@ class TaskCard(QFrame):
 
         created_text = self.task_data.get("created_text", "")
         if created_text:
-            self.createdLabel.setText(f"📅 Создана: {created_text}")
+            self.createdLabel.setText(f"Создана: {created_text}")
             self.createdLabel.show()
         else:
             self.createdLabel.hide()
@@ -205,31 +206,31 @@ class TaskCard(QFrame):
         updated_text = self.task_data.get("updated_text", "")
         created_text_simple = self.task_data.get("created_text", "")
         if updated_text and updated_text != created_text_simple:
-            self.updatedLabel.setText(f"🔄 Обновление: {updated_text}")
+            self.updatedLabel.setText(f"Обновление: {updated_text}")
             self.updatedLabel.show()
         else:
             self.updatedLabel.hide()
 
         author = self.task_data.get("author_text", "")
         if author:
-            self.authorLabel.setText(f"👤 Автор: {author}")
+            self.authorLabel.setText(f"Автор: {author}")
             self.authorLabel.show()
         else:
             self.authorLabel.hide()
 
         executor = self.task_data.get("executor_text", "")
         if executor:
-            self.executorLabel.setText(f"👥 Исполнитель: {executor}")
+            self.executorLabel.setText(f"Исполнитель: {executor}")
             self.executorLabel.show()
         else:
             self.executorLabel.hide()
 
         deadline_text = self.task_data.get("deadline_text", "")
         if deadline_text:
-            self.deadlineLabel.setText(f"⏰ {deadline_text}")
+            self.deadlineLabel.setText(f"Срок выполнения: {deadline_text}")
             deadline_color = self.task_data.get('deadline_color', '#666')
             self.deadlineLabel.setStyleSheet(
-                f"font-size: 11px; color: {deadline_color}; font-weight: bold;"
+                f"font-size: 11px; color: {deadline_color}; font-weight: bold; border: none;"
             )
             self.deadlineLabel.show()
         else:
@@ -362,7 +363,6 @@ class TaskCard(QFrame):
                 pause_action = menu.addAction("Возобновить")
             else:
                 pause_action = menu.addAction("Пауза")
-            menu.addSeparator()
 
         archive_action = menu.addAction("Архивировать")
         delete_action = menu.addAction("Удалить")
@@ -407,7 +407,7 @@ class TaskCard(QFrame):
         drag.setMimeData(mime)
 
         pixmap = QPixmap(self.size())
-        pixmap.fill(Qt.GlobalColor.transparent)
+        """pixmap.fill(Qt.GlobalColor.transparent)"""
 
         painter = QPainter(pixmap)
         painter.setOpacity(0.7)
@@ -431,7 +431,7 @@ class TaskCard(QFrame):
 
         if is_paused:
             if not pause_indicator:
-                pause_indicator = QLabel("⏸️ ПАУЗА")
+                pause_indicator = QLabel("ПАУЗА")
                 pause_indicator.is_pause_indicator = True
                 pause_indicator.setStyleSheet("""
                     background-color: #FF9800;
@@ -449,7 +449,7 @@ class TaskCard(QFrame):
     def _setup_pause_indicator(self):
         is_paused = self.task_data.get("is_paused", False)
         if is_paused:
-            pause_indicator = QLabel("⏸️ ПАУЗА")
+            pause_indicator = QLabel("ПАУЗА")
             pause_indicator.is_pause_indicator = True
             pause_indicator.setStyleSheet("""
                 background-color: #FF9800;

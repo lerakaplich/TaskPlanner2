@@ -38,7 +38,7 @@ class KanbanColumn(QFrame):
 
         # Колонка с фиксированной шириной
         self.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Expanding)
-        self.setFixedWidth(360)
+        self.setFixedWidth(350)
         self.setMinimumHeight(300)
 
         main_layout = QVBoxLayout()
@@ -75,6 +75,7 @@ class KanbanColumn(QFrame):
                 font-weight: bold;
                 font-family: 'Segoe UI', Arial;
                 padding: 5px;
+                border: none;
             }
         """)
         self.title_label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)

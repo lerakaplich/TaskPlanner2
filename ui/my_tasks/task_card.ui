@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>300</width>
-    <height>200</height>
+    <width>350</width>
+    <height>312</height>
    </rect>
   </property>
   <property name="sizePolicy">
@@ -18,32 +18,30 @@
   </property>
   <property name="minimumSize">
    <size>
-    <width>280</width>
+    <width>350</width>
     <height>0</height>
    </size>
   </property>
   <property name="maximumSize">
    <size>
-    <width>320</width>
+    <width>350</width>
     <height>16777215</height>
    </size>
   </property>
   <property name="styleSheet">
    <string notr="true">QFrame#TaskCard {
     background-color: white;
-    border-radius: 10px;
+    border-radius: 12px;
     border: 1px solid #E0E0E0;
-    padding: 12px;
+    padding: 15px;
 }
 QFrame#TaskCard:hover {
-    border: 2px solid #D22730;
+    border: 2px solid #ccab6e;
+    background-color: #FFFDF6;
 }</string>
   </property>
   <property name="frameShape">
-   <enum>QFrame::Shape::StyledPanel</enum>
-  </property>
-  <property name="frameShadow">
-   <enum>QFrame::Shadow::Raised</enum>
+   <enum>QFrame::NoFrame</enum>
   </property>
   <layout class="QVBoxLayout" name="verticalLayout">
    <property name="spacing">
@@ -76,13 +74,11 @@ QFrame#TaskCard:hover {
     font-size: 14px;
     font-weight: bold;
     color: #1B232A;
+ border: none;
 }</string>
        </property>
        <property name="text">
         <string>Название задачи</string>
-       </property>
-       <property name="alignment">
-        <set>Qt::AlignmentFlag::AlignLeading|Qt::AlignmentFlag::AlignLeft|Qt::AlignmentFlag::AlignTop</set>
        </property>
        <property name="wordWrap">
         <bool>true</bool>
@@ -110,6 +106,7 @@ QFrame#TaskCard:hover {
     color: #666;
     font-size: 18px;
     font-weight: bold;
+ border: none;
 }
 QPushButton:hover {
     color: #D22730;
@@ -126,10 +123,23 @@ QPushButton:hover {
     <layout class="QHBoxLayout" name="labelsLayout">
      <item>
       <widget class="QLabel" name="projectLabel">
+       <property name="minimumSize">
+        <size>
+         <width>0</width>
+         <height>20</height>
+        </size>
+       </property>
+       <property name="maximumSize">
+        <size>
+         <width>16777215</width>
+         <height>20</height>
+        </size>
+       </property>
        <property name="styleSheet">
         <string notr="true">QLabel {
     font-size: 10px;
     color: #666;
+ border: none;
 }</string>
        </property>
        <property name="text">
@@ -138,9 +148,9 @@ QPushButton:hover {
       </widget>
      </item>
      <item>
-      <spacer name="horizontalSpacer_2">
+      <spacer name="horizontalSpacer">
        <property name="orientation">
-        <enum>Qt::Orientation::Horizontal</enum>
+        <enum>Qt::Horizontal</enum>
        </property>
        <property name="sizeHint" stdset="0">
         <size>
@@ -152,10 +162,23 @@ QPushButton:hover {
      </item>
      <item>
       <widget class="QLabel" name="priorityLabel">
+       <property name="minimumSize">
+        <size>
+         <width>0</width>
+         <height>20</height>
+        </size>
+       </property>
+       <property name="maximumSize">
+        <size>
+         <width>16777215</width>
+         <height>20</height>
+        </size>
+       </property>
        <property name="styleSheet">
         <string notr="true">QLabel {
     font-size: 10px;
     color: #666;
+ border: none;
 }</string>
        </property>
        <property name="text">
@@ -231,7 +254,7 @@ QPushButton:hover {
         </size>
        </property>
        <property name="layoutDirection">
-        <enum>Qt::LayoutDirection::LeftToRight</enum>
+        <enum>Qt::LeftToRight</enum>
        </property>
        <property name="styleSheet">
         <string notr="true">QLabel {
@@ -247,9 +270,6 @@ QPushButton:hover {
        </property>
        <property name="text">
         <string>Низкий</string>
-       </property>
-       <property name="alignment">
-        <set>Qt::AlignmentFlag::AlignCenter</set>
        </property>
       </widget>
      </item>
@@ -284,22 +304,25 @@ QTextEdit:focus {
      <property name="readOnly">
       <bool>true</bool>
      </property>
-     <property name="html">
-      <string>&lt;!DOCTYPE HTML PUBLIC &quot;-//W3C//DTD HTML 4.0//EN&quot; &quot;http://www.w3.org/TR/REC-html40/strict.dtd&quot;&gt;
-&lt;html&gt;&lt;head&gt;&lt;meta name=&quot;qrichtext&quot; content=&quot;1&quot; /&gt;&lt;meta charset=&quot;utf-8&quot; /&gt;&lt;style type=&quot;text/css&quot;&gt;
-p, li { white-space: pre-wrap; }
-hr { height: 1px; border-width: 0; }
-li.unchecked::marker { content: &quot;\2610&quot;; }
-li.checked::marker { content: &quot;\2612&quot;; }
-&lt;/style&gt;&lt;/head&gt;&lt;body style=&quot; font-family:'Segoe UI'; font-size:11px; font-weight:400; font-style:normal;&quot;&gt;
-&lt;p style=&quot; margin-top:0px; margin-bottom:0px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;&quot;&gt;Описание задачи&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
-     </property>
     </widget>
    </item>
    <item>
     <layout class="QHBoxLayout" name="tagsLayout">
      <property name="spacing">
       <number>4</number>
+     </property>
+     <property name="contentsMargins" stdset="0">
+      <number>0</number>
+     </property>
+    </layout>
+   </item>
+   <item>
+    <layout class="QVBoxLayout" name="difficultyLayout">
+     <property name="spacing">
+      <number>2</number>
+     </property>
+     <property name="contentsMargins" stdset="0">
+      <number>0</number>
      </property>
     </layout>
    </item>
@@ -349,10 +372,23 @@ QProgressBar::chunk {
     <layout class="QHBoxLayout" name="createdLayout">
      <item>
       <widget class="QLabel" name="createdLabel">
+       <property name="minimumSize">
+        <size>
+         <width>0</width>
+         <height>20</height>
+        </size>
+       </property>
+       <property name="maximumSize">
+        <size>
+         <width>16777215</width>
+         <height>20</height>
+        </size>
+       </property>
        <property name="styleSheet">
         <string notr="true">QLabel {
     font-size: 10px;
     color: #666;
+border: none;
 }</string>
        </property>
        <property name="text">
@@ -361,24 +397,24 @@ QProgressBar::chunk {
       </widget>
      </item>
      <item>
-      <spacer name="horizontalSpacer_3">
-       <property name="orientation">
-        <enum>Qt::Orientation::Horizontal</enum>
-       </property>
-       <property name="sizeHint" stdset="0">
+      <widget class="QLabel" name="authorLabel">
+       <property name="minimumSize">
         <size>
-         <width>40</width>
+         <width>0</width>
          <height>20</height>
         </size>
        </property>
-      </spacer>
-     </item>
-     <item>
-      <widget class="QLabel" name="authorLabel">
+       <property name="maximumSize">
+        <size>
+         <width>16777215</width>
+         <height>20</height>
+        </size>
+       </property>
        <property name="styleSheet">
         <string notr="true">QLabel {
     font-size: 10px;
     color: #666;
+border: none;
 }</string>
        </property>
        <property name="text">
@@ -394,6 +430,7 @@ QProgressBar::chunk {
       <string notr="true">QLabel {
     font-size: 10px;
     color: #666;
+ border: none;
 }</string>
      </property>
      <property name="text">
@@ -406,8 +443,8 @@ QProgressBar::chunk {
      <property name="styleSheet">
       <string notr="true">QLabel {
     font-size: 10px;
-    color: #4CAF50;
     font-weight: bold;
+ border: none;
 }</string>
      </property>
      <property name="text">
@@ -421,6 +458,7 @@ QProgressBar::chunk {
       <string notr="true">QLabel {
     font-size: 10px;
     color: #999;
+ border: none;
 }</string>
      </property>
      <property name="text">

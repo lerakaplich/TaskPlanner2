@@ -63,6 +63,42 @@
       <property name="bottomMargin">
        <number>15</number>
       </property>
+      <item>
+       <widget class="QPushButton" name="back_button">
+        <property name="minimumSize">
+         <size>
+          <width>0</width>
+          <height>41</height>
+         </size>
+        </property>
+        <property name="maximumSize">
+         <size>
+          <width>230</width>
+          <height>41</height>
+         </size>
+        </property>
+        <property name="styleSheet">
+         <string notr="true">QPushButton {
+    background-color: #1B232A;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    padding: 10px 15px;
+    font-size: 14px;
+    font-weight: bold;
+    text-align: left;
+    max-width: 200px;
+}
+QPushButton:hover {
+    background-color: #D9D9D6;
+    color: black;
+}</string>
+        </property>
+        <property name="text">
+         <string>← Назад к проектам</string>
+        </property>
+       </widget>
+      </item>
       <item alignment="Qt::AlignVCenter">
        <widget class="QLabel" name="totalTasksLabel">
         <property name="minimumSize">
@@ -186,31 +222,6 @@ QComboBox::drop-down {
         <item>
          <property name="text">
           <string>Низкий</string>
-         </property>
-        </item>
-       </widget>
-      </item>
-      <item alignment="Qt::AlignVCenter">
-       <widget class="QComboBox" name="projectFilter">
-        <property name="styleSheet">
-         <string notr="true">QComboBox {
-    border: 2px solid #E0E0E0;
-    border-radius: 8px;
-    padding: 8px 16px;
-    font-size: 14px;
-    background-color: white;
-    min-width: 150px;
-}
-QComboBox:hover {
-    border: 2px solid #ccab6e;
-}
-QComboBox::drop-down {
-    border: none;
-}</string>
-        </property>
-        <item>
-         <property name="text">
-          <string>Все проекты</string>
          </property>
         </item>
        </widget>

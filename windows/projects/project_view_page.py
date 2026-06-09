@@ -28,12 +28,10 @@ class ProjectViewPage(QWidget):
         self.all_tasks = []
 
         # Загружаем UI
-        ui_path = os.path.join(os.path.dirname(__file__), "..", "..", "ui", "other_tasks")
-        uic.loadUi(os.path.join(ui_path, "others_tasks_page.ui"), self)
+        ui_path = os.path.join(os.path.dirname(__file__), "..", "..", "ui", "projects")
+        uic.loadUi(os.path.join(ui_path, "project_page.ui"), self)
 
-        # Скрываем кнопку создания задачи
-        if hasattr(self, 'btnCreateTask'):
-            self.btnCreateTask.hide()
+
 
         # Получаем данные проекта через сервис
         if service and project_id:
@@ -72,7 +70,6 @@ class ProjectViewPage(QWidget):
 
         # Настройка UI
         self.setup_kanban()
-        self.setup_project_ui()
 
         # Загружаем задачи
         self.load_tasks()

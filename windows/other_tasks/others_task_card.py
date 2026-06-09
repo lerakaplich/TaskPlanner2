@@ -105,6 +105,7 @@ class OthersTaskCard(TaskCard):
                     font-size: 11px;
                     color: #D22730;
                     font-weight: bold;
+                    border: none;
                 }
             """)
 
@@ -150,51 +151,47 @@ class OthersTaskCard(TaskCard):
 
         # ===== РЕДАКТИРОВАНИЕ (только для создателя) =====
         if self.is_creator:
-            edit_action = QAction("✏️ Редактировать", self)
+            edit_action = QAction("Редактировать", self)
             edit_action.triggered.connect(
                 lambda: self.editRequested.emit(self.task_data["id"])
             )
             menu.addAction(edit_action)
 
-            delete_action = QAction("🗑️ Удалить", self)
+            delete_action = QAction("Удалить", self)
             delete_action.triggered.connect(
                 lambda: self.deleteRequested.emit(self.task_data["id"])
             )
             menu.addAction(delete_action)
-            menu.addSeparator()
 
         # ===== ДУБЛИРОВАНИЕ (доступно всем) =====
-        duplicate_action = QAction("📋 Дублировать", self)
+        duplicate_action = QAction("Дублировать", self)
         duplicate_action.triggered.connect(
             lambda: self.duplicateRequested.emit(self.task_data["id"])
         )
         menu.addAction(duplicate_action)
-        menu.addSeparator()
 
         # ===== ПАУЗА/ВОЗОБНОВЛЕНИЕ (для активных задач) =====
         if not is_completed:
             if is_paused:
-                pause_action = QAction("▶️ Возобновить", self)
+                pause_action = QAction("Возобновить", self)
                 pause_action.triggered.connect(
                     lambda: self.resumeRequested.emit(self.task_data["id"])
                 )
             else:
-                pause_action = QAction("⏸️ Пауза", self)
+                pause_action = QAction("Пауза", self)
                 pause_action.triggered.connect(
                     lambda: self.pauseRequested.emit(self.task_data["id"])
                 )
             menu.addAction(pause_action)
-            menu.addSeparator()
 
         # ===== ОТМЕТИТЬ ВЫПОЛНЕННОЙ (если не в Done колонке) =====
         if status != "Готово" and not is_completed:
-            done_action = QAction("✅ Отметить выполненной", self)
+            done_action = QAction("Отметить выполненной", self)
             done_action.triggered.connect(self.mark_as_done)
             menu.addAction(done_action)
-            menu.addSeparator()
 
         # ===== АРХИВИРОВАНИЕ =====
-        archive_action = QAction("📦 Архивировать", self)
+        archive_action = QAction("Архивировать", self)
         archive_action.triggered.connect(
             lambda: self.archiveRequested.emit(self.task_data["id"])
         )

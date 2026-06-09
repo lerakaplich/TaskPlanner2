@@ -171,6 +171,10 @@ class RatingEmployeeCard(QFrame):
             stats += f" · В срок: {on_time:.0f}%"
         self.stats_label.setText(stats)
 
+        sub_count = data.get('subordinates_count', 0)
+        if sub_count > 0:
+            self.stats_label.setText(f"📊 Задач: {completed} из {total} · 👥 {sub_count} подчинённых")
+
         # КПД
         kpd = data.get('kpd_percent', 0)
         if kpd == 0 and total > 0:
@@ -188,6 +192,7 @@ class RatingEmployeeCard(QFrame):
             kpd_color = "#e67e22"
         else:
             kpd_color = "#e74c3c"
+
 
         self.kpd_label.setText(f"{kpd:.1f}%")
         self.kpd_label.setStyleSheet(f"font-size: 22px; font-weight: bold; color: {kpd_color};")
