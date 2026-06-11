@@ -110,7 +110,7 @@
    <item>
     <widget class="QLabel" name="titleLabel">
      <property name="styleSheet">
-      <string notr="true">font-size: 24px; font-weight: bold; color: black; margin-bottom: 15px;</string>
+      <string notr="true">font-size: 24px; font-weight: bold; color: black; margin-bottom: 15px; background-color: transparent;</string>
      </property>
      <property name="text">
       <string>Создание новой задачи</string>
@@ -172,7 +172,7 @@
      <item>
       <widget class="QLabel" name="labelDifficulty">
        <property name="styleSheet">
-        <string notr="true">font-weight: bold; font-size: 14px; color: #D22730; margin-right: 10px;</string>
+        <string notr="true">font-weight: bold; font-size: 14px; color: #D22730; margin-right: 10px; background-color: transparent;</string>
        </property>
        <property name="text">
         <string>Сложность:</string>
@@ -185,6 +185,7 @@
         <string notr="true">QLabel {
     font-size: 28px;
     color: #D3D3D3;
+background-color: transparent;
 }</string>
        </property>
        <property name="text">
@@ -198,6 +199,7 @@
         <string notr="true">QLabel {
     font-size: 28px;
     color: #D3D3D3;
+background-color: transparent;
 }</string>
        </property>
        <property name="text">
@@ -211,6 +213,7 @@
         <string notr="true">QLabel {
     font-size: 28px;
     color: #D3D3D3;
+background-color: transparent;
 }</string>
        </property>
        <property name="text">
@@ -224,6 +227,7 @@
         <string notr="true">QLabel {
     font-size: 28px;
     color: #D3D3D3;
+background-color: transparent;
 }</string>
        </property>
        <property name="text">
@@ -237,6 +241,7 @@
         <string notr="true">QLabel {
     font-size: 28px;
     color: #D3D3D3;
+background-color: transparent;
 }</string>
        </property>
        <property name="text">
@@ -247,7 +252,7 @@
      <item>
       <widget class="QLabel" name="labelDifficultyValue">
        <property name="styleSheet">
-        <string notr="true">color: #2c3e50; font-size: 14px; font-weight: bold; margin-left: 10px;</string>
+        <string notr="true">color: #2c3e50; font-size: 14px; font-weight: bold; margin-left: 10px; background-color: transparent;</string>
        </property>
        <property name="text">
         <string>Не выбрана</string>
@@ -256,6 +261,9 @@
      </item>
      <item>
       <spacer name="horizontalSpacerDiff">
+       <property name="orientation">
+        <enum>Qt::Vertical</enum>
+       </property>
        <property name="sizeHint" stdset="0">
         <size>
          <width>40</width>
@@ -279,7 +287,7 @@
        <item>
         <widget class="QLabel" name="labelPriority">
          <property name="styleSheet">
-          <string notr="true">font-weight: bold; font-size: 14px; color: #D22730; margin-left: 5px;</string>
+          <string notr="true">font-weight: bold; font-size: 14px; color: #D22730; margin-left: 5px; background-color: transparent;</string>
          </property>
          <property name="text">
           <string>Приоритет</string>
@@ -320,7 +328,7 @@
        <item>
         <widget class="QLabel" name="labelStatus">
          <property name="styleSheet">
-          <string notr="true">font-weight: bold; font-size: 14px; color: #D22730; margin-left: 5px;</string>
+          <string notr="true">font-weight: bold; font-size: 14px; color: #D22730; margin-left: 5px; background-color: transparent;</string>
          </property>
          <property name="text">
           <string>Статус</string>
@@ -361,7 +369,7 @@
        <item>
         <widget class="QLabel" name="labelDeadline">
          <property name="styleSheet">
-          <string notr="true">font-weight: bold; font-size: 14px; color: #D22730; margin-left: 5px;</string>
+          <string notr="true">font-weight: bold; font-size: 14px; color: #D22730; margin-left: 5px; background-color: transparent;</string>
          </property>
          <property name="text">
           <string>Срок выполнения</string>
@@ -394,7 +402,7 @@
      <item>
       <widget class="QLabel" name="createdByLabel">
        <property name="styleSheet">
-        <string notr="true">color: #2c3e50; font-size: 13px; font-style: italic;</string>
+        <string notr="true">color: #2c3e50; font-size: 13px; font-style: italic; background-color: transparent;</string>
        </property>
        <property name="text">
         <string>Создатель: Иванов И.И.</string>
@@ -404,7 +412,7 @@
      <item>
       <widget class="QLabel" name="createdAtLabel">
        <property name="styleSheet">
-        <string notr="true">color: #2c3e50; font-size: 13px; font-style: italic; </string>
+        <string notr="true">color: #2c3e50; font-size: 13px; font-style: italic;  background-color: transparent;</string>
        </property>
        <property name="text">
         <string>Создано: 20.01.2026</string>
@@ -414,7 +422,7 @@
      <item>
       <widget class="QLabel" name="updatedAtLabel">
        <property name="styleSheet">
-        <string notr="true">color: #2c3e50; font-size: 13px; font-style: italic; </string>
+        <string notr="true">color: #2c3e50; font-size: 13px; font-style: italic;  background-color: transparent;</string>
        </property>
        <property name="text">
         <string>Изменено: 25.01.2026</string>
@@ -423,6 +431,9 @@
      </item>
      <item>
       <spacer name="horizontalSpacer">
+       <property name="orientation">
+        <enum>Qt::Vertical</enum>
+       </property>
        <property name="sizeHint" stdset="0">
         <size>
          <width>40</width>

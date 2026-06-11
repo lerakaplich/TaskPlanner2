@@ -1,6 +1,6 @@
 # windows/analytics/projects/employee_project_card.py
 
-from PyQt6.QtWidgets import QFrame, QHBoxLayout, QLabel, QSizePolicy, QVBoxLayout
+from PyQt6.QtWidgets import QFrame, QHBoxLayout, QLabel, QSizePolicy, QVBoxLayout, QLineEdit
 from PyQt6.QtCore import Qt
 
 
@@ -26,7 +26,6 @@ class EmployeeProjectCard(QFrame):
         layout = QHBoxLayout(self)
         layout.setContentsMargins(8, 8, 8, 8)
         layout.setSpacing(8)
-
         # Информация о сотруднике
         info_layout = QVBoxLayout()
         info_layout.setSpacing(2)

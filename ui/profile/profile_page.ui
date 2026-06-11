@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>1200</width>
-    <height>800</height>
+    <height>804</height>
    </rect>
   </property>
   <property name="styleSheet">
@@ -102,7 +102,7 @@ QTableWidget {
 QTableWidget::item {
     padding: 8px;
     border-bottom: 1px solid #F0F0F0;
-    min-height: 30px;  /* Добавлена минимальная высота для элементов таблицы */
+    min-height: 30px;
 }
 
 QTableWidget::item:selected {
@@ -117,7 +117,7 @@ QHeaderView::section {
     border-bottom: 2px solid #E0E0E0;
     font-weight: bold;
     color: #1B232A;
-    min-height: 30px;  /* Добавлена минимальная высота для заголовков */
+    min-height: 30px;
 }
 
 /* Скроллбары */
@@ -155,6 +155,9 @@ QScrollBar::add-line, QScrollBar::sub-line {
   <layout class="QVBoxLayout" name="verticalLayout">
    <item>
     <layout class="QHBoxLayout" name="horizontalLayout_2">
+     <property name="sizeConstraint">
+      <enum>QLayout::SizeConstraint::SetFixedSize</enum>
+     </property>
      <item>
       <widget class="QLabel" name="label_3">
        <property name="styleSheet">
@@ -165,29 +168,22 @@ QScrollBar::add-line, QScrollBar::sub-line {
 }</string>
        </property>
        <property name="text">
-        <string>👤 Профиль сотрудника</string>
+        <string>Профиль сотрудника</string>
        </property>
       </widget>
-     </item>
-     <item>
-      <spacer name="horizontalSpacer_3">
-       <property name="orientation">
-        <enum>Qt::Orientation::Horizontal</enum>
-       </property>
-       <property name="sizeHint" stdset="0">
-        <size>
-         <width>40</width>
-         <height>20</height>
-        </size>
-       </property>
-      </spacer>
      </item>
      <item>
       <widget class="QPushButton" name="btnEditProfile">
        <property name="minimumSize">
         <size>
          <width>0</width>
-         <height>35</height>
+         <height>40</height>
+        </size>
+       </property>
+       <property name="maximumSize">
+        <size>
+         <width>220</width>
+         <height>40</height>
         </size>
        </property>
        <property name="styleSheet">
@@ -209,7 +205,43 @@ QPushButton:pressed {
 }</string>
        </property>
        <property name="text">
-        <string>✏️ Редактировать профиль</string>
+        <string>Редактировать профиль</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QPushButton" name="btnExit">
+       <property name="minimumSize">
+        <size>
+         <width>0</width>
+         <height>40</height>
+        </size>
+       </property>
+       <property name="maximumSize">
+        <size>
+         <width>180</width>
+         <height>40</height>
+        </size>
+       </property>
+       <property name="styleSheet">
+        <string notr="true">QPushButton {
+    background-color: #D22730;
+    color: white;
+    border-radius: 10px;
+    font-weight: bold;
+    font-size: 14px;
+    border: none;
+    padding: 10px 20px;
+}
+QPushButton:hover {
+    background-color: #862633;
+}
+QPushButton:pressed {
+    background-color: #6a1e29;
+}</string>
+       </property>
+       <property name="text">
+        <string>Выйти из профиля</string>
        </property>
       </widget>
      </item>
@@ -225,18 +257,15 @@ QPushButton:pressed {
        <rect>
         <x>0</x>
         <y>0</y>
-        <width>1163</width>
-        <height>900</height>
+        <width>1174</width>
+        <height>1265</height>
        </rect>
       </property>
       <layout class="QVBoxLayout" name="verticalLayout_2">
        <item>
         <widget class="QFrame" name="frameBasicInfo">
          <property name="frameShape">
-          <enum>QFrame::Shape::StyledPanel</enum>
-         </property>
-         <property name="frameShadow">
-          <enum>QFrame::Shadow::Raised</enum>
+          <enum>QFrame::Shape::NoFrame</enum>
          </property>
          <layout class="QHBoxLayout" name="horizontalLayout_3">
           <item>
@@ -292,8 +321,11 @@ QPushButton:pressed {
                </property>
                <property name="font">
                 <font>
-                 <pointsize>27</pointsize>
+                 <pointsize>-1</pointsize>
                 </font>
+               </property>
+               <property name="layoutDirection">
+                <enum>Qt::LayoutDirection::RightToLeft</enum>
                </property>
                <property name="styleSheet">
                 <string notr="true">QLabel#labelPhoto {
@@ -322,7 +354,7 @@ QPushButton:pressed {
              <widget class="QLabel" name="labelFullName">
               <property name="styleSheet">
                <string notr="true">QLabel {
-    font-size: 32px;
+    font-size: 24px;
     font-weight: bold;
     color: #1B232A;
 }</string>
@@ -396,6 +428,14 @@ QPushButton:pressed {
              <layout class="QHBoxLayout" name="horizontalLayout_4">
               <item>
                <widget class="QLabel" name="labelRating">
+                <property name="styleSheet">
+                 <string notr="true">QLabel {
+    font-size: 16px;
+    color: #1B232A;
+    padding: 2px 0px;
+    padding-bottom: 8px;
+}</string>
+                </property>
                 <property name="text">
                  <string>Рейтинг эффективности:</string>
                 </property>
@@ -412,6 +452,9 @@ QPushButton:pressed {
                 <property name="text">
                  <string>★</string>
                 </property>
+                <property name="alignment">
+                 <set>Qt::AlignmentFlag::AlignHCenter|Qt::AlignmentFlag::AlignTop</set>
+                </property>
                </widget>
               </item>
               <item>
@@ -424,6 +467,9 @@ QPushButton:pressed {
                 </property>
                 <property name="text">
                  <string>★</string>
+                </property>
+                <property name="alignment">
+                 <set>Qt::AlignmentFlag::AlignHCenter|Qt::AlignmentFlag::AlignTop</set>
                 </property>
                </widget>
               </item>
@@ -438,6 +484,9 @@ QPushButton:pressed {
                 <property name="text">
                  <string>★</string>
                 </property>
+                <property name="alignment">
+                 <set>Qt::AlignmentFlag::AlignHCenter|Qt::AlignmentFlag::AlignTop</set>
+                </property>
                </widget>
               </item>
               <item>
@@ -451,6 +500,9 @@ QPushButton:pressed {
                 <property name="text">
                  <string>★</string>
                 </property>
+                <property name="alignment">
+                 <set>Qt::AlignmentFlag::AlignHCenter|Qt::AlignmentFlag::AlignTop</set>
+                </property>
                </widget>
               </item>
               <item>
@@ -463,6 +515,9 @@ QPushButton:pressed {
                 </property>
                 <property name="text">
                  <string>★</string>
+                </property>
+                <property name="alignment">
+                 <set>Qt::AlignmentFlag::AlignHCenter|Qt::AlignmentFlag::AlignTop</set>
                 </property>
                </widget>
               </item>
@@ -479,20 +534,10 @@ QPushButton:pressed {
                 <property name="text">
                  <string>КПД: 0.00</string>
                 </property>
+                <property name="alignment">
+                 <set>Qt::AlignmentFlag::AlignLeading|Qt::AlignmentFlag::AlignLeft|Qt::AlignmentFlag::AlignVCenter</set>
+                </property>
                </widget>
-              </item>
-              <item>
-               <spacer name="horizontalSpacer_4">
-                <property name="orientation">
-                 <enum>Qt::Orientation::Horizontal</enum>
-                </property>
-                <property name="sizeHint" stdset="0">
-                 <size>
-                  <width>40</width>
-                  <height>20</height>
-                 </size>
-                </property>
-               </spacer>
               </item>
              </layout>
             </item>
@@ -504,7 +549,7 @@ QPushButton:pressed {
              <widget class="QLabel" name="label_4">
               <property name="styleSheet">
                <string notr="true">QLabel {
-    font-size: 18px;
+    font-size: 24px;
     font-weight: bold;
     color: #1B232A;
     padding-bottom: 5px;
@@ -605,17 +650,14 @@ QPushButton:pressed {
 }</string>
              </property>
              <property name="text">
-              <string>📊 Анализ по темам</string>
+              <string>Анализ по темам</string>
              </property>
             </widget>
            </item>
            <item>
             <widget class="QFrame" name="frameSkills">
              <property name="frameShape">
-              <enum>QFrame::Shape::StyledPanel</enum>
-             </property>
-             <property name="frameShadow">
-              <enum>QFrame::Shadow::Raised</enum>
+              <enum>QFrame::Shape::NoFrame</enum>
              </property>
              <layout class="QVBoxLayout" name="verticalLayout_5">
               <item>
@@ -662,7 +704,7 @@ QPushButton:pressed {
 }</string>
              </property>
              <property name="text">
-              <string>🚀 Активные проекты</string>
+              <string>Активные проекты</string>
              </property>
             </widget>
            </item>
@@ -681,10 +723,7 @@ QPushButton:pressed {
               </size>
              </property>
              <property name="frameShape">
-              <enum>QFrame::Shape::StyledPanel</enum>
-             </property>
-             <property name="frameShadow">
-              <enum>QFrame::Shadow::Raised</enum>
+              <enum>QFrame::Shape::NoFrame</enum>
              </property>
              <layout class="QVBoxLayout" name="verticalLayout_8">
               <item>
@@ -700,8 +739,8 @@ QPushButton:pressed {
                   <rect>
                    <x>0</x>
                    <y>0</y>
-                   <width>524</width>
-                   <height>254</height>
+                   <width>512</width>
+                   <height>371</height>
                   </rect>
                  </property>
                  <layout class="QVBoxLayout" name="verticalLayout_9">
@@ -745,7 +784,7 @@ QPushButton:pressed {
               <item>
                <layout class="QHBoxLayout" name="horizontalLayout_9">
                 <item>
-                 <spacer name="horizontalSpacer_8">
+                 <spacer name="horizontalSpacer">
                   <property name="orientation">
                    <enum>Qt::Orientation::Horizontal</enum>
                   </property>
@@ -802,7 +841,7 @@ QPushButton:pressed {
 }</string>
          </property>
          <property name="text">
-          <string>📈 График эффективности по темам</string>
+          <string>График эффективности по темам</string>
          </property>
         </widget>
        </item>
@@ -821,10 +860,7 @@ QPushButton:pressed {
           </size>
          </property>
          <property name="frameShape">
-          <enum>QFrame::Shape::StyledPanel</enum>
-         </property>
-         <property name="frameShadow">
-          <enum>QFrame::Shadow::Raised</enum>
+          <enum>QFrame::Shape::NoFrame</enum>
          </property>
          <layout class="QVBoxLayout" name="verticalLayout_12">
           <property name="leftMargin">
@@ -849,10 +885,7 @@ QPushButton:pressed {
 }</string>
             </property>
             <property name="text">
-             <string>[График эффективности по темам]</string>
-            </property>
-            <property name="alignment">
-             <set>Qt::AlignmentFlag::AlignCenter</set>
+             <string/>
             </property>
            </widget>
           </item>

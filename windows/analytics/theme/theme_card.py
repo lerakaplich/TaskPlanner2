@@ -164,8 +164,8 @@ class ThemeCard(QFrame):
         panel.setStyleSheet("background-color: #FAFAFA; border-radius: 6px;")
         panel.setMinimumHeight(100)
 
-        # Создаем виджет проектов
-        self.projects_view = ThemeProjectsView(self)
+        # Создаем виджет проектов с передачей analytics_service
+        self.projects_view = ThemeProjectsView(self, analytics_service=self.analytics_service)
         self.projects_view.display_data(project_stats)
 
         panel_layout = QVBoxLayout(panel)

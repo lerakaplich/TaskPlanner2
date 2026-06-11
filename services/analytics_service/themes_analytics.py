@@ -68,7 +68,7 @@ class ThemesAnalytics(AnalyticsBaseService):
         }
 
     def _get_project_stats_for_tag(self, tasks: List[Task]) -> Dict:
-        """Получить статистику по проектам для тега"""
+        """Получить статистику по проектам для тега с задачами"""
         project_stats = {}
         for task in tasks:
             project = self.session.get(Project, task.project_id)
@@ -77,10 +77,16 @@ class ThemesAnalytics(AnalyticsBaseService):
                 if project_name not in project_stats:
                     project_stats[project_name] = {
                         "project_name": project_name,
+                        "project_id": project.id,
                         "task_count": 0,
-                        "completed_count": 0
+                        "completed_count": 0,
+                        "tasks": []  # Добавляем список задач
                     }
                 project_stats[project_name]["task_count"] += 1
+
+                # Добавляем задачу в список
+                task_dto = self._task_to_analytics_dto(task, "to_do", False)
+                project_stats[project_name]["tasks"].append(task_dto)
 
                 is_completed = False
                 if task.column:
@@ -163,19 +169,34 @@ class ThemesAnalytics(AnalyticsBaseService):
         return result
 
     def _prepare_theme_project_stats(self, project_stats: List[Dict]) -> List[Dict]:
-        """Подготавливает статистику проектов для отображения"""
+        """Подготавливает статистику проектов для отображения с задачами"""
         result = []
         for stat in project_stats:
             if not isinstance(stat, dict):
                 continue
 
+            tasks = stat.get("tasks", [])
+            prepared_tasks = []
+
+            # Подготавливаем каждую задачу для TaskCard
+            for task in tasks:
+                if isinstance(task, dict):
+                    task_card_data = self.get_task_card_data(task)
+                else:
+                    # Если это объект Task, преобразуем в DTO
+                    task_dto = self._task_to_analytics_dto(task, "to_do", False)
+                    task_card_data = self.get_task_card_data(task_dto)
+                prepared_tasks.append(task_card_data)
+
             result.append({
                 "project_name": stat.get("project_name", "Без названия"),
+                "project_id": stat.get("project_id"),
                 "task_count": stat.get("task_count", 0),
                 "completed_count": stat.get("completed_count", 0),
                 "completion_percent": (
-                    stat.get("completed_count", 0) / stat.get("task_count", 1) * 100) if stat.get(
-                    "task_count", 0) > 0 else 0
+                        stat.get("completed_count", 0) / stat.get("task_count", 1) * 100) if stat.get(
+                    "task_count", 0) > 0 else 0,
+                "tasks": prepared_tasks  # Добавляем подготовленные задачи
             })
 
         result.sort(key=lambda x: x.get("task_count", 0), reverse=True)

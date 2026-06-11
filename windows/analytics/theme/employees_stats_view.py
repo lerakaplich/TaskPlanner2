@@ -17,11 +17,6 @@ class EmployeesStatsView(QWidget):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(10, 10, 10, 10)
 
-        self.search_edit = QLineEdit()
-        self.search_edit.setPlaceholderText("🔍 Поиск по сотруднику...")
-        self.search_edit.textChanged.connect(self._on_search)
-        layout.addWidget(self.search_edit)
-
         self.table = QTableWidget()
         self.table.setColumnCount(7)
         self.table.setHorizontalHeaderLabels([

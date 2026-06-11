@@ -183,18 +183,24 @@ class ProjectsService:
         if isinstance(admins_ids, list):
             admins_ids = ','.join(str(id) for id in admins_ids)
 
-        prepared['participants_ids'] = participants_ids
-        prepared['admins_ids'] = admins_ids
-
-        participant_list = [str(creator_id)]
+        # Парсим участников
+        participant_list = set()
         if participants_ids:
-            participant_list.extend([p for p in participants_ids.split(',') if p and p != str(creator_id)])
-        prepared['participants_ids'] = ','.join(participant_list)
+            participant_list.update([int(p) for p in participants_ids.split(',') if p])
 
-        admin_list = [str(creator_id)]
+        # Парсим администраторов
+        admin_list = set()
         if admins_ids:
-            admin_list.extend([a for a in admins_ids.split(',') if a and a != str(creator_id)])
-        prepared['admins_ids'] = ','.join(admin_list)
+            admin_list.update([int(a) for a in admins_ids.split(',') if a])
+
+        # Добавляем создателя в участники (всегда)
+        participant_list.add(creator_id)
+
+        # Если создателя добавили в администраторы - он будет администратором
+        # Если нет - просто участником/создателем
+
+        prepared['participants_ids'] = ','.join(str(id) for id in participant_list)
+        prepared['admins_ids'] = ','.join(str(id) for id in admin_list)
 
         return prepared
 

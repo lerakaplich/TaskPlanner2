@@ -1,28 +1,35 @@
 # windows/analytics/theme/theme_projects_view.py
 
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QPushButton, QFrame,
-                             QLabel, QSizePolicy)
+                             QLabel, QSizePolicy, QScrollArea)
 from PyQt6.QtCore import Qt
+
+from windows.analytics.task_card_analytics import TaskCard
 
 
 class ThemeProjectsView(QWidget):
     """Виджет для отображения проектов по теме - только UI"""
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, analytics_service=None):
         super().__init__(parent)
         self._projects_data = []
-        self._project_widgets = {}  # {project_name: (button, panel)}
+        self._project_widgets = {}  # {project_name: (button, panel, tasks_container)}
+        self.analytics_service = analytics_service
 
-        # ← ВАЖНО: создаем layout
+        # Создаем layout
         self._layout = QVBoxLayout(self)
         self._layout.setContentsMargins(10, 10, 10, 10)
         self._layout.setSpacing(10)
+
+    def set_analytics_service(self, service):
+        """Устанавливает сервис аналитики"""
+        self.analytics_service = service
 
     def display_data(self, projects_data: list):
         """
         Отображает данные проектов.
         projects_data - список словарей с ключами:
-        - project_name, task_count, completed_count
+        - project_name, task_count, completed_count, tasks (список задач)
         """
         self._projects_data = projects_data
         self._build_ui()
@@ -44,6 +51,7 @@ class ThemeProjectsView(QWidget):
             task_count = project_item.get("task_count", 0)
             completed_count = project_item.get("completed_count", 0)
             completion_percent = project_item.get("completion_percent", 0)
+            tasks = project_item.get("tasks", [])  # Список задач проекта
 
             # Заголовок проекта
             project_btn = QPushButton(f"▶ {project_name} ({task_count} задач)", self)
@@ -71,17 +79,57 @@ class ThemeProjectsView(QWidget):
             project_panel = QFrame()
             project_panel.setVisible(False)
             project_panel.setStyleSheet("background-color: #f5f5f5; border-radius: 4px;")
+            project_panel.setMinimumHeight(100)
+
             panel_layout = QVBoxLayout(project_panel)
             panel_layout.setContentsMargins(10, 10, 10, 10)
             panel_layout.setSpacing(8)
 
-            # Информация о проекте
-            info_label = QLabel(
-                f"📊 Задач: {task_count} | ✅ Выполнено: {completed_count} | "
-                f"📈 Выполнено: {completion_percent:.1f}%"
-            )
-            info_label.setStyleSheet("color: #555; font-size: 11px;")
-            panel_layout.addWidget(info_label)
+            if tasks:
+                if len(tasks) > 5:
+                    tasks_scroll = QScrollArea()
+                    tasks_scroll.setWidgetResizable(True)
+                    tasks_scroll.setMaximumHeight(400)
+                    tasks_scroll.setStyleSheet("border: none; background-color: transparent;")
+
+                    tasks_container = QWidget()
+                    tasks_container.setStyleSheet("background-color: transparent;")
+                    tasks_container_layout = QVBoxLayout(tasks_container)
+                    tasks_container_layout.setContentsMargins(0, 0, 0, 0)
+                    tasks_container_layout.setSpacing(4)
+
+                    for task in tasks:
+                        try:
+                            task_card = TaskCard(
+                                task_data=task,
+                                compact=True,
+                                show_theme=False,
+                                show_project=False
+                            )
+                            tasks_container_layout.addWidget(task_card)
+                        except Exception as e:
+                            print(f"❌ Ошибка создания карточки задачи: {e}")
+
+                    tasks_scroll.setWidget(tasks_container)
+                    panel_layout.addWidget(tasks_scroll)
+                else:
+                    # Просто добавляем задачи без скролла
+                    for task in tasks:
+                        try:
+                            task_card = TaskCard(
+                                task_data=task,
+                                compact=True,
+                                show_theme=False,
+                                show_project=False
+                            )
+                            panel_layout.addWidget(task_card)
+                        except Exception as e:
+                            print(f"❌ Ошибка создания карточки задачи: {e}")
+            else:
+                no_tasks_label = QLabel("📭 Нет задач в этом проекте")
+                no_tasks_label.setStyleSheet("color: #999; font-size: 11px; padding: 8px;")
+                no_tasks_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+                panel_layout.addWidget(no_tasks_label)
 
             self._layout.addWidget(project_panel)
 

@@ -1,4 +1,5 @@
 # services/projects_service/projects_crud_service.py
+import asyncio
 import logging
 from datetime import datetime
 from typing import List, Optional, Dict, Any
@@ -8,37 +9,38 @@ from sqlalchemy import select
 from models.schemas.projects_dto import ProjectWithMembersDTO, ProjectCardDTO
 from repositories.employee_repo import EmployeeRepo
 from repositories.project_repo import ProjectRepo
+from telegram_bot.bot import telegram_bot
 
 logger = logging.getLogger(__name__)
 
 
 def _send_notification_sync(chat_id: int, project_name: str, manager_name: str, description: str, role: str):
-        """Синхронная обёртка для отправки уведомления (запускается в отдельном потоке)"""
-        try:
-            import asyncio
-            from telegram_bot import telegram_bot
-
-            # Создаём новый event loop для этого потока
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-
-            try:
-                loop.run_until_complete(
-                    telegram_bot.send_project_notification(
-                        chat_id, project_name, manager_name, description, role
-                    )
+    """Синхронная обёртка для отправки уведомления"""
+    try:
+        # Используем asyncio.run() для создания нового цикла
+        asyncio.run(
+            telegram_bot.send_project_notification(
+                chat_id, project_name, manager_name, description, role
+            )
+        )
+    except RuntimeError as e:
+        if "already running" in str(e):
+            # Если цикл уже запущен, используем текущий
+            loop = asyncio.get_running_loop()
+            loop.create_task(
+                telegram_bot.send_project_notification(
+                    chat_id, project_name, manager_name, description, role
                 )
-            finally:
-                loop.close()
-        except Exception as e:
+            )
+        else:
             logger.error(f"❌ Ошибка при отправке уведомления: {e}")
+    except Exception as e:
+        logger.error(f"❌ Ошибка при отправке уведомления: {e}")
+
 
 def _send_update_notification_sync(chat_id: int, project_name: str):
     """Синхронная обёртка для отправки уведомления об обновлении"""
     try:
-        import asyncio
-        from telegram_bot import telegram_bot
-
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
 
@@ -50,6 +52,7 @@ def _send_update_notification_sync(chat_id: int, project_name: str):
             loop.close()
     except Exception as e:
         logger.error(f"❌ Ошибка при отправке уведомления об обновлении: {e}")
+
 
 class ProjectsCrudService:
     """CRUD операции с проектами"""
@@ -272,38 +275,45 @@ class ProjectsCrudService:
             from models.employees import Employee
             import threading
 
-            # Получаем список ID участников, администраторов и куратора
-            member_ids = set()
-
-            # Добавляем участников
-            participants_ids = raw_data.get('participants_ids', '')
-            if participants_ids:
-                for pid in participants_ids.split(','):
-                    if pid and pid.strip():
-                        member_ids.add(int(pid.strip()))
-
-            # Добавляем администраторов
-            admins_ids = raw_data.get('admins_ids', '')
-            if admins_ids:
-                for aid in admins_ids.split(','):
-                    if aid and aid.strip():
-                        member_ids.add(int(aid.strip()))
-
-            # Добавляем куратора
+            # Получаем списки ID
+            participants_ids_str = raw_data.get('participants_ids', '')
+            admins_ids_str = raw_data.get('admins_ids', '')
             manager_id = raw_data.get('manager_id')
-            if manager_id:
-                member_ids.add(int(manager_id))
 
-            # Добавляем создателя (если его нет в списке)
-            member_ids.add(creator_id)
+            # Парсим ID участников (все, кто добавлен в проект)
+            participant_ids = set()
+            if participants_ids_str:
+                for pid in participants_ids_str.split(','):
+                    if pid and pid.strip():
+                        participant_ids.add(int(pid.strip()))
+
+            # Парсим ID администраторов
+            admin_ids = set()
+            if admins_ids_str:
+                for aid in admins_ids_str.split(','):
+                    if aid and aid.strip():
+                        admin_ids.add(int(aid.strip()))
+
+            # ВАЖНО: Добавляем куратора в список участников для уведомлений
+            if manager_id:
+                manager_id_int = int(manager_id) if isinstance(manager_id, str) else manager_id
+                participant_ids.add(manager_id_int)
+
+            # ВАЖНО: Добавляем создателя в список участников для уведомлений
+            participant_ids.add(creator_id)
+
+            # ВАЖНО: Все администраторы также должны получать уведомления
+            for admin_id in admin_ids:
+                participant_ids.add(admin_id)
 
             # Получаем имя куратора
             manager_name = raw_data.get('manager_name', 'Не назначен')
             if not manager_name or manager_name == 'Не назначен':
-                manager_id = raw_data.get('manager_id')
-                if manager_id:
+                manager_id_val = raw_data.get('manager_id')
+                if manager_id_val:
                     with get_employees_session() as emp_session:
-                        employee = emp_session.get(Employee, manager_id)
+                        emp_id = int(manager_id_val) if isinstance(manager_id_val, str) else manager_id_val
+                        employee = emp_session.get(Employee, emp_id)
                         if employee:
                             first_initial = f"{employee.first_name[0]}." if employee.first_name else ""
                             middle_initial = f"{employee.middle_name[0]}." if employee.middle_name else ""
@@ -311,17 +321,21 @@ class ProjectsCrudService:
 
             description = raw_data.get('description', '')
 
-            # Отправляем уведомления в отдельных потоках
+            # Отправляем уведомления ВСЕМ участникам
             with get_employees_session() as emp_session:
-                for emp_id in member_ids:
+                for emp_id in participant_ids:
                     employee = emp_session.get(Employee, emp_id)
                     if employee and employee.chat_id:
                         # Определяем роль пользователя
                         role = 'участник'
-                        if manager_id and emp_id == manager_id:
+
+                        # Куратор имеет высший приоритет
+                        if manager_id and emp_id == (int(manager_id) if isinstance(manager_id, str) else manager_id):
                             role = 'куратор'
-                        elif admins_ids and str(emp_id) in admins_ids.split(','):
+                        # Затем проверяем, является ли пользователь администратором
+                        elif emp_id in admin_ids:
                             role = 'администратор'
+                        # Иначе - обычный участник
 
                         # Запускаем отправку в отдельном потоке
                         thread = threading.Thread(
@@ -330,10 +344,14 @@ class ProjectsCrudService:
                             daemon=True
                         )
                         thread.start()
+                        logger.info(f"📨 Запланировано уведомление для {employee.last_name} (ID={emp_id}, роль: {role})")
 
-            logger.info(f"📨 Отправлены уведомления о проекте '{project_name}' для {len(member_ids)} участников")
+            logger.info(
+                f"📨 Отправлены уведомления о проекте '{project_name}' для {len(participant_ids)} участников: {participant_ids}")
         except Exception as e:
             logger.error(f"❌ Ошибка при отправке уведомлений о проекте: {e}")
+            import traceback
+            traceback.print_exc()
 
     def update_project(self, project_id: int, updated_data: Any) -> bool:
         """Обновляет проект и отправляет уведомления о изменениях"""
@@ -470,17 +488,24 @@ class ProjectsCrudService:
 
     def get_projects_for_cards(self, search_query: str = "", status_filter: str = "Все",
                                owner_filter: bool = False) -> List[ProjectCardDTO]:
-        """Получить проекты для карточек"""
+        """Получить проекты для карточек, отсортированные по дате создания (новые сверху)"""
         try:
             all_projects = self.project_repo.get_all(exclude_archived=True)
-            result = []
 
+            # Фильтруем проекты
+            filtered_projects = []
             for proj in all_projects:
                 if owner_filter and proj.owner != self.current_user_id:
                     continue
                 if search_query and search_query.lower() not in proj.name.lower():
                     continue
+                filtered_projects.append(proj)
 
+            # СОРТИРУЕМ ПО ДАТЕ СОЗДАНИЯ (НОВЫЕ СВЕРХУ)
+            filtered_projects.sort(key=lambda p: p.created_at, reverse=True)
+
+            result = []
+            for proj in filtered_projects:
                 from repositories.task_repo import TaskRepo
                 task_repo = TaskRepo(self.session)
                 tasks = task_repo.get_by_project(proj.id)

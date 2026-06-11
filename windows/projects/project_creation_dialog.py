@@ -54,17 +54,34 @@ class ProjectCreationDialog(BaseProjectDialog):
         """
         Получает сырые данные из UI без преобразований
         """
-        participants_ids = []
+        # Собираем всех участников (включая администраторов и куратора)
+        all_participants_ids = set()
+
+        # Участники
         for p in self.participants:
             emp_id = p.get('id') if isinstance(p, dict) else p
             if emp_id:
-                participants_ids.append(str(emp_id))
+                all_participants_ids.add(str(emp_id))
 
-        admins_ids = []
+        # Администраторы (они тоже участники)
         for a in self.admins:
             emp_id = a.get('id') if isinstance(a, dict) else a
             if emp_id:
-                admins_ids.append(str(emp_id))
+                all_participants_ids.add(str(emp_id))
+
+        # Куратор (тоже участник, НО НЕ АДМИНИСТРАТОР!)
+        manager_id = self.get_manager_id()
+        if manager_id:
+            all_participants_ids.add(str(manager_id))
+
+        # Администраторы (только те, кого выбрали как админов)
+        admins_ids = set()
+        for a in self.admins:
+            emp_id = a.get('id') if isinstance(a, dict) else a
+            if emp_id:
+                admins_ids.add(str(emp_id))
+
+        # КУРАТОРА НЕ ДОБАВЛЯЕМ В АДМИНИСТРАТОРЫ
 
         # Получаем ключи выбранных колонок
         selected_column_keys = [col.get('col_key', col.get('name', '').lower().replace(' ', '_'))
@@ -74,11 +91,11 @@ class ProjectCreationDialog(BaseProjectDialog):
             'name': self.nameInput.text(),
             'description': self.descInput.toPlainText(),
             'is_active': self.activeCheckbox.isChecked(),
-            'participants_ids': ','.join(participants_ids),
+            'participants_ids': ','.join(all_participants_ids),
             'admins_ids': ','.join(admins_ids),
-            'selected_columns_data': self.selected_columns_data,  # Данные выбранных колонок
-            'selected_columns': selected_column_keys,  # Ключи выбранных колонок
-            'manager_id': self.get_manager_id(),
+            'selected_columns_data': self.selected_columns_data,
+            'selected_columns': selected_column_keys,
+            'manager_id': manager_id,
         }
 
     def get_project_data(self):

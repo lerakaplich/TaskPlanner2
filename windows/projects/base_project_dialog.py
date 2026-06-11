@@ -373,8 +373,31 @@ class BaseProjectDialog(QDialog):
 
     def get_project_data(self):
         """Получить данные нового проекта"""
-        participants_ids = [str(p.get('id', '')) if isinstance(p, dict) else str(p) for p in self.participants]
-        admins_ids = [str(a.get('id', '')) if isinstance(a, dict) else str(a) for a in self.admins]
+        # Сначала собираем ID участников
+        participants_ids = set()
+        for p in self.participants:
+            emp_id = p.get('id') if isinstance(p, dict) else p
+            if emp_id:
+                participants_ids.add(str(emp_id))
+
+        # ДОБАВЛЯЕМ АДМИНИСТРАТОРОВ в участники
+        for a in self.admins:
+            emp_id = a.get('id') if isinstance(a, dict) else a
+            if emp_id:
+                participants_ids.add(str(emp_id))
+
+        # ДОБАВЛЯЕМ КУРАТОРА в участники (НО НЕ В АДМИНИСТРАТОРЫ)
+        manager_id = self.get_manager_id()
+        if manager_id:
+            participants_ids.add(str(manager_id))
+
+        admins_ids = set()
+        for a in self.admins:
+            emp_id = a.get('id') if isinstance(a, dict) else a
+            if emp_id:
+                admins_ids.add(str(emp_id))
+
+        # КУРАТОРА НЕ ДОБАВЛЯЕМ В АДМИНИСТРАТОРЫ
 
         data = {
             'name': self.nameInput.text(),
@@ -386,9 +409,9 @@ class BaseProjectDialog(QDialog):
             'is_active': self.activeCheckbox.isChecked(),
             'created_date': QDate.currentDate().toString("dd.MM.yyyy"),
             'updated_date': QDate.currentDate().toString("dd.MM.yyyy"),
-            'selected_columns_data': self.selected_columns_data,  # Канбан-колонки для проекта
+            'selected_columns_data': self.selected_columns_data,
             'selected_columns': self.get_selected_column_keys(),
-            'manager_id': self.get_manager_id(),
+            'manager_id': manager_id,
         }
 
         # Если это редактирование, добавляем ID
