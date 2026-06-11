@@ -16,15 +16,25 @@ class TaskRepo:
     def __init__(self, session: Session):
         self.session = session
 
-    # =====================================================
-    # CRUD операции с задачами
-    # =====================================================
-
     def get_by_id(self, task_id: int, load_column: bool = True) -> Optional[Task]:
         query = select(Task).where(Task.id == task_id)
         if load_column:
             query = query.options(joinedload(Task.column))
         return self.session.scalar(query)
+
+    def get_by_project_with_project(self, project_id: int, employee_id: int = None) -> List[Task]:
+        """Получить задачи проекта с загрузкой связанных данных"""
+        query = select(Task).where(
+            Task.project_id == project_id,
+            Task.is_archived == False
+        ).options(
+            joinedload(Task.column)
+        )
+
+        if employee_id:
+            query = query.where(Task.assigned_to == employee_id)
+
+        return list(self.session.scalars(query))
 
     def get_by_column(self, column_id: int) -> List[Task]:
         stmt = select(Task).where(Task.column_id == column_id).order_by(Task.position)

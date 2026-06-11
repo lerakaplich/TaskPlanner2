@@ -24,6 +24,105 @@ class ProfileService:
         self.project_repo = ProjectRepo(self.session)
         self.current_user_id = None
 
+    def get_project_tasks(self, project_id: int, employee_id: int = None) -> List[Dict]:
+        """
+        Получает задачи проекта для отображения в карточках.
+
+        Args:
+            project_id: ID проекта
+            employee_id: ID сотрудника (если указан, возвращает задачи этого сотрудника)
+
+        Returns:
+            List[Dict]: список задач в формате для TaskCard
+        """
+        try:
+            from models.tasks import Task
+            from models.projects import BoardColumn, Project
+            from models.schemas.tasks_dto import TaskPriority
+            from sqlalchemy import and_
+
+            # Получаем название проекта
+            project = self.session.query(Project).filter(Project.id == project_id).first()
+            project_name = project.name if project else ""
+
+            # Базовый запрос
+            query = self.session.query(Task).filter(
+                Task.project_id == project_id,
+                Task.is_archived == False
+            )
+
+            # Если указан сотрудник, фильтруем по исполнителю
+            if employee_id:
+                query = query.filter(Task.assigned_to == employee_id)
+
+            # Получаем задачи
+            tasks = query.all()
+
+            print(f"🔍 get_project_tasks: project_id={project_id}, найдено задач: {len(tasks)}")
+
+            result = []
+            for task in tasks:
+                # Получаем имя исполнителя
+                assignee_name = None
+                if task.assigned_to:
+                    from repositories.employee_repo import EmployeeRepo
+                    emp_repo = EmployeeRepo(self.employees_session)
+                    assignee_name = emp_repo.get_full_name(task.assigned_to)
+
+                # Получаем имя автора
+                author_name = None
+                if task.created_by:
+                    from repositories.employee_repo import EmployeeRepo
+                    emp_repo = EmployeeRepo(self.employees_session)
+                    author_name = emp_repo.get_full_name(task.created_by)
+
+                # Получаем теги
+                tags = []
+                try:
+                    from models.tasks import Tag, TaskTag
+                    # Правильный запрос тегов через связь TaskTag
+                    tags = self.session.query(Tag).join(
+                        TaskTag, Tag.id == TaskTag.tag_id
+                    ).filter(
+                        TaskTag.task_id == task.id
+                    ).all()
+                    tags = [tag.name for tag in tags]
+                    print(f"   Задача '{task.title}': теги={tags}")
+                except Exception as tag_err:
+                    print(f"⚠️ Ошибка загрузки тегов для задачи {task.id}: {tag_err}")
+
+                # Получаем статус
+                column_name = task.column.name if task.column else "to_do"
+
+                result.append({
+                    "id": task.id,
+                    "title": task.title,
+                    "description": task.description or "",
+                    "status": column_name,
+                    "priority": task.priority.value if task.priority else "medium",
+                    "deadline": task.deadline.strftime("%Y-%m-%d") if task.deadline else None,
+                    "created_at": task.created_at.strftime("%Y-%m-%d %H:%M:%S") if task.created_at else None,
+                    "completed_at": task.completed_at.strftime("%Y-%m-%d %H:%M:%S") if task.completed_at else None,
+                    "tags": tags,
+                    "project_name": project_name,
+                    "creator_name": author_name or "",
+                    "assigned_to": task.assigned_to,
+                    "assignee_name": assignee_name or "",
+                    "kpd_score": task.kpd_score if hasattr(task, 'kpd_score') else 0,
+                    "is_archived": task.is_archived if hasattr(task, 'is_archived') else False,
+                    "column_id": task.column_id,
+                    "column_name": column_name,
+                    "is_done": task.column.is_done_column if task.column else False
+                })
+
+            print(f"🔍 get_project_tasks: возвращено {len(result)} задач")
+            return result
+        except Exception as e:
+            print(f"❌ Ошибка получения задач проекта {project_id}: {e}")
+            import traceback
+            traceback.print_exc()
+            return []
+
     def __del__(self):
         try:
             if hasattr(self, 'employees_session') and self.employees_session:
@@ -72,17 +171,20 @@ class ProfileService:
             return self._get_empty_profile(employee_id)
 
     def get_employee_statistics(self, employee_id: int) -> Dict[str, int]:
-        """Получает статистику сотрудника"""
+        """Получает статистику сотрудника (только его задачи)"""
         try:
+            # Количество проектов, где сотрудник участвует
             projects_count = self.session.query(EmployeeProject).filter(
                 EmployeeProject.employee_id == employee_id
             ).count()
 
+            # Количество задач, назначенных на сотрудника
             tasks_count = self.session.query(Task).filter(
                 Task.assigned_to == employee_id,
                 Task.is_archived == False
             ).count()
 
+            # Количество выполненных задач сотрудника
             completed_tasks = self.session.query(Task).filter(
                 Task.assigned_to == employee_id,
                 Task.is_archived == False
@@ -100,7 +202,7 @@ class ProfileService:
             return {"projects_count": 0, "tasks_count": 0, "completed_tasks": 0}
 
     def get_employee_projects(self, employee_id: int) -> List[Dict[str, Any]]:
-        """Получает проекты сотрудника"""
+        """Получает проекты сотрудника с количеством задач, где он исполнитель"""
         try:
             memberships = self.session.query(EmployeeProject).filter(
                 EmployeeProject.employee_id == employee_id
@@ -110,13 +212,23 @@ class ProfileService:
             for membership in memberships:
                 project = self.project_repo.get_by_id(membership.project_id)
                 if project:
+                    # ВАЖНО: считаем только задачи, где сотрудник является исполнителем
                     tasks = self.session.query(Task).filter(
                         Task.project_id == project.id,
+                        Task.assigned_to == employee_id,  # <- ТОЛЬКО задачи сотрудника
                         Task.is_archived == False
                     ).all()
 
+                    # Для завершенных задач считаем также только те, где он исполнитель
+                    completed_tasks = self.session.query(Task).filter(
+                        Task.project_id == project.id,
+                        Task.assigned_to == employee_id,
+                        Task.is_archived == False
+                    ).join(Task.column).filter(
+                        BoardColumn.is_done_column == True
+                    ).count()
+
                     total_tasks = len(tasks)
-                    completed_tasks = sum(1 for t in tasks if t.column and t.column.is_done_column)
 
                     result.append({
                         "id": project.id,

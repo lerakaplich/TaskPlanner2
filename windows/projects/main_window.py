@@ -173,8 +173,6 @@ class MainWindow(QMainWindow):
             self.btnProfile.clicked.connect(self.navigation.show_profile)
         if hasattr(self.leftPanel, 'btnCollapse'):
             self.leftPanel.btnCollapse.clicked.connect(self.ui_handler.toggle_left_panel)
-        if hasattr(self.leftPanel, 'btnLogout'):
-            self.leftPanel.btnLogout.clicked.connect(self.logout)
         if hasattr(self, 'searchInput'):
             self.searchInput.textChanged.connect(self.project_handler.search_projects)
         if hasattr(self, 'filterCombo'):

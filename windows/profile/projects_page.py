@@ -4,7 +4,7 @@ import os
 from typing import List, Dict, Any
 
 from PyQt6 import uic
-from PyQt6.QtWidgets import QWidget, QPushButton, QFrame, QLabel, QVBoxLayout
+from PyQt6.QtWidgets import QWidget, QPushButton, QFrame, QLabel, QVBoxLayout, QScrollArea
 from PyQt6.QtCore import Qt, pyqtSignal
 
 from windows.analytics.task_card_analytics import TaskCard
@@ -26,7 +26,7 @@ class ProjectsPage(QWidget):
         self.profile_service = profile_service
 
         if not self.compact:
-            self.setMinimumSize(800, 600)
+            self.setMinimumSize(800, 4000)
             self.resize(900, 700)
 
         self._setup_ui()
@@ -78,7 +78,7 @@ class ProjectsPage(QWidget):
                            "all": "Нет проектов"}
             label = QLabel(empty_texts.get(self.mode, "Нет проектов"))
             label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            label.setStyleSheet("font-size: 18px; color: #666666; margin: 50px;")
+            label.setStyleSheet("font-size: 18px; color: #666666; margin: 50px; border: none;")
             self.projects_layout.addWidget(label)
         else:
             for project in projects:
@@ -111,11 +111,32 @@ class ProjectsPage(QWidget):
                 filtered.append(project)
         return filtered
 
+    def _load_project_tasks(self, project_id: int) -> List[Dict]:
+        """
+        Загружает задачи проекта через сервис профиля.
+        Возвращает список задач в формате, понятном TaskCard.
+        """
+        try:
+            if self.profile_service and hasattr(self.profile_service, 'get_project_tasks'):
+                tasks = self.profile_service.get_project_tasks(project_id, self.employee_id)
+                if tasks:
+                    return tasks
+            return []
+        except Exception as e:
+            print(f"❌ Ошибка загрузки задач для проекта {project_id}: {e}")
+            import traceback
+            traceback.print_exc()
+            return []
+
     def _add_project_section(self, project: Dict):
-        """Добавляет секцию проекта с задачами"""
+        """Добавляет секцию проекта с задачами, используя TaskCard"""
+        project_id = project.get("id")
         project_name = project.get("name", "Без названия")
         total_tasks = project.get("total_tasks", 0)
         completed_tasks = project.get("completed_tasks", 0)
+
+        # Загружаем задачи проекта
+        tasks = self._load_project_tasks(project_id)
 
         header_style = f"""
             QPushButton {{ background-color: #D22730; color: white; border-radius: {10 if not self.compact else 6}px;
@@ -134,10 +155,53 @@ class ProjectsPage(QWidget):
         panel_layout = QVBoxLayout(project_panel)
         panel_layout.setContentsMargins(10, 10, 10, 10)
 
-        # Информация о проекте
-        info_label = QLabel(f"✅ Выполнено: {completed_tasks}/{total_tasks} задач")
-        info_label.setStyleSheet("color: #666; font-size: 12px; margin-bottom: 5px;")
-        panel_layout.addWidget(info_label)
+        if tasks:
+            if len(tasks) > 5:
+                tasks_scroll = QScrollArea()
+                tasks_scroll.setWidgetResizable(True)
+                tasks_scroll.setMaximumHeight(400)
+                tasks_scroll.setStyleSheet("border: none; background-color: transparent;")
+
+                tasks_container = QWidget()
+                tasks_container.setStyleSheet("background-color: transparent;")
+                tasks_container_layout = QVBoxLayout(tasks_container)
+                tasks_container_layout.setContentsMargins(0, 0, 0, 0)
+                tasks_container_layout.setSpacing(8)
+
+                for task in tasks:
+                    try:
+                        # Преобразуем задачу в формат для TaskCard
+                        task_data = self._format_task_for_card(task)
+                        task_card = TaskCard(
+                            task_data=task_data,
+                            compact=True,
+                            show_theme=True,
+                            show_project=False
+                        )
+                        tasks_container_layout.addWidget(task_card)
+                    except Exception as e:
+                        print(f"❌ Ошибка создания карточки задачи: {e}")
+
+                tasks_scroll.setWidget(tasks_container)
+                panel_layout.addWidget(tasks_scroll)
+            else:
+                for task in tasks:
+                    try:
+                        task_data = self._format_task_for_card(task)
+                        task_card = TaskCard(
+                            task_data=task_data,
+                            compact=True,
+                            show_theme=True,
+                            show_project=False
+                        )
+                        panel_layout.addWidget(task_card)
+                    except Exception as e:
+                        print(f"❌ Ошибка создания карточки задачи: {e}")
+        else:
+            no_tasks_label = QLabel("📭 Нет задач в этом проекте")
+            no_tasks_label.setStyleSheet("color: #999; font-size: 12px; padding: 10px;")
+            no_tasks_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            panel_layout.addWidget(no_tasks_label)
 
         self.projects_layout.addWidget(header_btn)
         self.projects_layout.addWidget(project_panel)
@@ -148,3 +212,83 @@ class ProjectsPage(QWidget):
             header_btn.setText(f"{project_name} ({completed_tasks}/{total_tasks}){arrow}")
 
         header_btn.toggled.connect(toggle_panel)
+
+    def _format_task_for_card(self, task: Dict) -> Dict:
+        """
+        Форматирует задачу для отображения в TaskCard.
+        Приводит к единому формату, который ожидает TaskCard.
+        """
+        # Определяем статус
+        status = task.get("status", "").lower()
+        if not status:
+            if task.get("is_archived", False):
+                status = "archived"
+            elif task.get("completed", False) or task.get("is_done", False):
+                status = "completed"
+            else:
+                status = "in_progress"
+
+        # Определяем просрочена ли задача
+        is_overdue = False
+        deadline = task.get("deadline")
+        if deadline and not task.get("is_done", False):
+            try:
+                from datetime import datetime
+                if isinstance(deadline, str):
+                    deadline = datetime.strptime(deadline, "%Y-%m-%d")
+                if deadline and datetime.now() > deadline:
+                    is_overdue = True
+            except:
+                pass
+
+        # Получаем приоритет
+        priority = task.get("priority", "medium")
+        if isinstance(priority, str):
+            priority = priority.lower()
+
+        # Формируем словарь для TaskCard
+        return {
+            "id": task.get("id"),
+            "title": task.get("title", "Без названия"),
+            "description": task.get("description", ""),
+            "status": status,
+            "priority": priority,
+            "deadline": task.get("deadline"),
+            "created_at": task.get("created_at"),
+            "created_at_str": self._format_date(task.get("created_at")),
+            "completed_at": task.get("completed_at"),
+            "completed_at_str": self._format_date(task.get("completed_at")),
+            "due_date_str": self._format_date(task.get("deadline")),
+            "is_overdue": is_overdue,
+            "tags_list": task.get("tags", []),
+            "project_name": task.get("project_name", ""),
+            "creator_name": task.get("creator_name", ""),
+            "kpi_value": task.get("kpd_score"),
+            "kpd_score": task.get("kpd_score"),
+            "themes": task.get("themes", []),
+            "employee_id": task.get("assigned_to"),
+            "assignee_name": task.get("assignee_name", ""),
+            "is_done": task.get("is_done", False)
+        }
+
+    def _format_date(self, date_value) -> str:
+        """Форматирует дату для отображения"""
+        if not date_value:
+            return "—"
+        try:
+            from datetime import datetime
+            if isinstance(date_value, str):
+                # Пробуем разные форматы
+                for fmt in ["%Y-%m-%d", "%Y-%m-%d %H:%M:%S", "%d.%m.%Y"]:
+                    try:
+                        dt = datetime.strptime(date_value, fmt)
+                        return dt.strftime("%d.%m.%Y")
+                    except:
+                        continue
+                return date_value[:10] if len(date_value) > 10 else date_value
+            elif hasattr(date_value, 'strftime'):
+                return date_value.strftime("%d.%m.%Y")
+            else:
+                return str(date_value)
+        except:
+            return "—"

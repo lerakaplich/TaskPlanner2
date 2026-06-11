@@ -13,10 +13,25 @@ from windows.profile.edit_profile import EditProfileDialog
 from windows.profile.projects_page import ProjectsPage
 
 
+# windows/profile/profile_page.py
+
+from PyQt6 import uic
+from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QTableWidgetItem,
+                             QMessageBox, QFrame, QLabel, QProgressBar, QHBoxLayout)
+from PyQt6.QtCore import Qt, pyqtSignal, QDate, QTimer
+
+from services.analytics_service.analytics_service import AnalyticsService
+from services.profile_service import ProfileService
+from windows.profile.chart_widget import ChartWidget
+from windows.profile.edit_profile import EditProfileDialog
+from windows.profile.projects_page import ProjectsPage
+
+
 class ProfilePage(QWidget):
     """Страница профиля сотрудника (только UI)"""
 
     edit_profile_requested = pyqtSignal()
+    logout_requested = pyqtSignal()  # НОВЫЙ СИГНАЛ ДЛЯ ВЫХОДА
 
     def __init__(self, employee_id=None, parent=None, current_user=None, service=None):
         super().__init__(parent)
@@ -46,6 +61,17 @@ class ProfilePage(QWidget):
 
         if self.employee_id:
             self.load_employee()
+
+    def _connect_signals(self):
+        if hasattr(self, 'btnEditProfile'):
+            self.btnEditProfile.clicked.connect(self._open_edit_profile)
+        if hasattr(self, 'btnCompletedProjects'):
+            self.btnCompletedProjects.clicked.connect(self._show_completed_projects)
+        if hasattr(self, 'btnRefresh'):
+            self.btnRefresh.clicked.connect(self.refresh_data)
+        # НОВАЯ СТРОКА - подключаем кнопку выхода
+        if hasattr(self, 'btnExit'):
+            self.btnExit.clicked.connect(self._on_logout)
 
     def showEvent(self, event):
         """Срабатывает при каждом показе страницы"""
@@ -188,7 +214,7 @@ class ProfilePage(QWidget):
         if not projects:
             label = QLabel("Нет активных проектов")
             label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            label.setStyleSheet("color: #999; padding: 20px;")
+            label.setStyleSheet("color: #999; padding: 20px; border: none;")
             layout.addWidget(label)
             return
 
@@ -202,11 +228,11 @@ class ProfilePage(QWidget):
             v.setSpacing(8)
 
             name = QLabel(project.get("name", "Без названия"))
-            name.setStyleSheet("font-weight: bold; font-size: 14px;")
+            name.setStyleSheet("font-weight: bold; font-size: 14px; border: none;")
 
             progress = project.get("progress", 0)
             percent = QLabel(f"{progress}%")
-            percent.setStyleSheet("color: #ccab6e; font-weight: bold;")
+            percent.setStyleSheet("color: #ccab6e; font-weight: bold; border: none;")
 
             h = QHBoxLayout()
             h.addWidget(name)
@@ -223,7 +249,7 @@ class ProfilePage(QWidget):
             v.addWidget(bar)
 
             tasks_label = QLabel(f"Задачи {project.get('completed_tasks', 0)}/{project.get('total_tasks', 0)}")
-            tasks_label.setStyleSheet("color: #666; font-size: 12px;")
+            tasks_label.setStyleSheet("color: #666; font-size: 12px; border: none;")
             v.addWidget(tasks_label)
 
             layout.addWidget(frame)
@@ -244,13 +270,21 @@ class ProfilePage(QWidget):
         self.chart_widget.set_profile_service(self.profile_service)
         layout.addWidget(self.chart_widget)
 
-    def _connect_signals(self):
-        if hasattr(self, 'btnEditProfile'):
-            self.btnEditProfile.clicked.connect(self._open_edit_profile)
-        if hasattr(self, 'btnCompletedProjects'):
-            self.btnCompletedProjects.clicked.connect(self._show_completed_projects)
-        if hasattr(self, 'btnRefresh'):
-            self.btnRefresh.clicked.connect(self.refresh_data)
+    def _on_logout(self):
+        """Обработчик нажатия кнопки выхода из профиля"""
+        from services.auth_service import AuthService
+
+        reply = QMessageBox.question(
+            self,
+            "Выход",
+            "Вы уверены, что хотите выйти из системы?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No
+        )
+
+        if reply == QMessageBox.StandardButton.Yes:
+            # Эмитируем сигнал выхода
+            self.logout_requested.emit()
 
     def _open_edit_profile(self):
         """Открывает диалог редактирования профиля"""

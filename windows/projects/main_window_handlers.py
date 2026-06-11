@@ -580,6 +580,19 @@ class NavigationHandler(QObject):
 
         return self.pages['gantt']
 
+    def get_profile_page(self):
+        if 'profile' not in self.pages:
+            from windows.profile.profile_page import ProfilePage
+            self.pages['profile'] = ProfilePage(
+                employee_id=self.main.current_user.get('id'),
+                current_user=self.main.current_user,
+                parent=self.main
+            )
+            # ПОДКЛЮЧАЕМ СИГНАЛ ВЫХОДА
+            self.pages['profile'].logout_requested.connect(self.main.logout)
+            self.main.contentStack.addWidget(self.pages['profile'])
+        return self.pages['profile']
+
     def get_analytics_page(self):
         """Возвращает страницу аналитики - принудительно пересоздаем для свежих данных"""
         from windows.analytics.analytics_page import AnalyticsPage
@@ -655,17 +668,6 @@ class NavigationHandler(QObject):
         self.main.contentStack.insertWidget(self.PAGE_ARCHIVE, self.pages['archive'])
 
         return self.pages['archive']
-
-    def get_profile_page(self):
-        if 'profile' not in self.pages:
-            from windows.profile.profile_page import ProfilePage
-            self.pages['profile'] = ProfilePage(
-                employee_id=self.main.current_user.get('id'),
-                current_user=self.main.current_user,
-                parent=self.main
-            )
-            self.main.contentStack.addWidget(self.pages['profile'])
-        return self.pages['profile']
 
     def show_profile(self):
         """Показать страницу профиля"""
