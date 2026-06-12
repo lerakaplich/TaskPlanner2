@@ -1,9 +1,8 @@
 # database.py
+import traceback
+
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
-import urllib.parse
-import time
-import traceback
 
 # ==========================================================
 # Параметры подключения к taskplanner
@@ -13,7 +12,7 @@ DB_TASKS = {
     "user": "postgres",
     "password": "admin",
     "database": "taskplanner",
-    "host": "172.30.3.152",
+    "host": "192.168.43.32",
     "port": 5432,
 }
 
@@ -25,7 +24,7 @@ DB_EMPLOYEES = {
     "user": "postgres",
     "password": "admin",
     "database": "employees",
-    "host": "172.30.3.152",
+    "host": "192.168.43.32",
     "port": 5432,
 }
 

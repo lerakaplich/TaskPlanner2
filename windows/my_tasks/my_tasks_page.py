@@ -26,6 +26,7 @@ class MyTasksPage(QWidget):
         self._is_refreshing = False
         self._loaded = False
         self._first_show = True
+        self._all_projects = []  # Список проектов для фильтра
 
         ui_path = os.path.join(
             os.path.dirname(__file__),
@@ -53,6 +54,31 @@ class MyTasksPage(QWidget):
 
         # Фильтры
         self.priorityFilter.currentTextChanged.connect(self._on_filter_changed)
+        self.projectFilter.currentTextChanged.connect(self._on_project_filter_changed)
+
+        # Загружаем проекты для фильтра
+        self._load_projects_for_filter()
+
+    def _load_projects_for_filter(self):
+        """Загружает проекты для выпадающего списка"""
+        try:
+            from models.projects import Project
+            stmt = select(Project).where(Project.is_archived == False).order_by(Project.name)
+            projects = self.service.db_session.scalars(stmt).all()
+
+            self._all_projects = [{"id": p.id, "name": p.name} for p in projects]
+
+            # Обновляем combo box
+            self.projectFilter.clear()
+            self.projectFilter.addItem("Все проекты", None)
+            for project in self._all_projects:
+                self.projectFilter.addItem(project["name"], project["id"])
+        except Exception as e:
+            print(f"⚠️ Ошибка загрузки проектов для фильтра: {e}")
+
+    def _on_project_filter_changed(self):
+        """Обработчик изменения фильтра по проекту"""
+        self.filter_tasks()
 
     def showEvent(self, event):
         """Показываем задачи только при первом отображении страницы"""
@@ -168,16 +194,14 @@ class MyTasksPage(QWidget):
                 task_card = TaskCard(task)
                 self._connect_task_card_signals(task_card)
 
-                # Карточка уже скрыта внутри __init__
                 column = self.columns[column_name]
-                column.add_task(task_card)  # Здесь карточка покажется
+                column.add_task(task_card)
 
             # ВКЛЮЧАЕМ ОБНОВЛЕНИЯ
             for column in self.column_widgets:
                 column.setUpdatesEnabled(True)
             self.setUpdatesEnabled(True)
 
-            # ОДИН РАЗ обновляем геометрию
             self.updateGeometry()
             if self.parent():
                 self.parent().updateGeometry()
@@ -226,12 +250,9 @@ class MyTasksPage(QWidget):
         try:
             print("🔄 ОБНОВЛЕНИЕ КОЛОНОК на странице Мои задачи")
 
-            # ВАЖНО: Принудительно очищаем кэш колонок в сервисе
-            # Для этого временно создаём новый сервис или вызываем сброс кэша
             if hasattr(self.service.crud, '_column_cache'):
                 self.service.crud._column_cache = None
 
-            # Сохраняем текущие задачи
             all_tasks = []
             for column in self.column_widgets:
                 for card in column.get_tasks():
@@ -239,16 +260,13 @@ class MyTasksPage(QWidget):
 
             print(f"   - Сохранено задач: {len(all_tasks)}")
 
-            # Пересоздаем доску с НОВЫМИ колонками
             self.setup_board()
 
-            # Восстанавливаем задачи в НОВЫЕ колонки
             for task in all_tasks:
                 task_card = TaskCard(task)
                 self._connect_task_card_signals(task_card)
 
                 column_name = task.get("status")
-                # Используем обновленный self.columns
                 if column_name in self.columns:
                     column = self.columns[column_name]
                     column.add_task(task_card)
@@ -302,7 +320,6 @@ class MyTasksPage(QWidget):
         print(f"📋 Дублирование задачи {task_id}")
         new_task = self.service.duplicate_task(task_id)
         if new_task:
-            # Добавляем новую карточку в UI
             task_card = TaskCard(new_task)
             self._connect_task_card_signals(task_card)
             column_name = new_task.get("status")
@@ -316,7 +333,6 @@ class MyTasksPage(QWidget):
         print(f"⏸️ Пауза задачи {task_id}")
         updated_task = self.service.pause_task(task_id)
         if updated_task:
-            # Обновляем карточку без перезагрузки
             self._update_task_card_data(task_id, updated_task)
             self.update_statistics()
             QMessageBox.information(self, "Пауза", f"Задача поставлена на паузу")
@@ -326,7 +342,6 @@ class MyTasksPage(QWidget):
         print(f"▶️ Возобновление задачи {task_id}")
         updated_task = self.service.resume_task(task_id)
         if updated_task:
-            # Обновляем карточку без перезагрузки
             self._update_task_card_data(task_id, updated_task)
             self.update_statistics()
             QMessageBox.information(self, "Возобновление", f"Задача возобновлена")
@@ -336,19 +351,15 @@ class MyTasksPage(QWidget):
         for column in self.column_widgets:
             for card in column.get_tasks():
                 if card.task_id == task_id:
-                    # Обновляем только изменившиеся поля
                     old_paused = card.task_data.get("is_paused", False)
                     new_paused = updated_task.get("is_paused", False)
 
-                    # Обновляем словарь данных
                     for key, value in updated_task.items():
                         card.task_data[key] = value
 
-                    # Обновляем только статус паузы в UI (без пересоздания всей карточки)
                     if old_paused != new_paused:
                         card._update_pause_indicator()
 
-                    # Обновляем прогресс-бар если нужно
                     new_progress = updated_task.get("progress_percent", 0)
                     if card.task_data.get("progress_percent") != new_progress:
                         card.overallProgress.blockSignals(True)
@@ -368,7 +379,6 @@ class MyTasksPage(QWidget):
         )
         if reply == QMessageBox.StandardButton.Yes:
             if self.service.archive_task_by_id(task_id):
-                # Удаляем карточку из UI
                 self._remove_task_card_from_ui(task_id)
                 self.update_statistics()
                 QMessageBox.information(self, "Успех", "Задача архивирована")
@@ -384,10 +394,8 @@ class MyTasksPage(QWidget):
         )
         if reply == QMessageBox.StandardButton.Yes:
             try:
-                # Полное удаление из БД
                 success = self.service.delete_task_by_id(task_id)
                 if success:
-                    # Удаляем карточку из UI
                     self._remove_task_card_from_ui(task_id)
                     self.update_statistics()
                     QMessageBox.information(self, "Успех", "Задача удалена")
@@ -401,13 +409,12 @@ class MyTasksPage(QWidget):
     def _remove_task_card_from_ui(self, task_id: int):
         """Удаляет карточку задачи из UI"""
         for column in self.column_widgets:
-            for card in column.get_tasks()[:]:  # копия списка
+            for card in column.get_tasks()[:]:
                 if card.task_id == task_id:
                     column.remove_task(card)
                     card.deleteLater()
                     print(f"   ✅ Карточка задачи {task_id} удалена из UI")
                     return
-        # Если не нашли карточку, перезагружаем все задачи
         self.load_tasks()
 
     def _on_progress_changed(self, task_id: int, progress_percent: int):
@@ -417,18 +424,13 @@ class MyTasksPage(QWidget):
         print(f"   - progress_percent: {progress_percent}")
 
         try:
-            # Обновляем прогресс через сервис
             updated_task = self.service.update_task_progress(task_id, progress_percent)
 
             if updated_task:
-                # НЕ обновляем карточку - просто обновляем данные в task_data карточки
-                # ищем карточку и обновляем её данные без перерисовки
                 for column in self.column_widgets:
                     for card in column.get_tasks():
                         if card.task_id == task_id:
-                            # Обновляем только прогресс в данных, без вызова fill_ui
                             card.task_data["progress_percent"] = progress_percent
-                            # Обновляем отображение прогресс-бара
                             card.overallProgress.blockSignals(True)
                             card.overallProgress.setValue(progress_percent)
                             card.overallProgress.setFormat(f"Общий прогресс: {progress_percent}%")
@@ -460,10 +462,9 @@ class MyTasksPage(QWidget):
         print(f"   - task_id: {task_id}")
         print(f"   - new_status: {new_status}")
 
-        # Ищем карточку во всех колонках
         found = False
         for column in self.column_widgets:
-            for card in column.get_tasks()[:]:  # копия списка
+            for card in column.get_tasks()[:]:
                 card_id = getattr(card, 'task_id', None)
                 if card_id == task_id:
                     found = True
@@ -474,7 +475,6 @@ class MyTasksPage(QWidget):
                         column.remove_task(card)
                         new_column = self.columns.get(new_status)
                         if new_column:
-                            # Нужно обновить данные карточки перед добавлением
                             card.update_task_data(updated_task)
                             new_column.add_task(card)
                             print(f"     - перемещена в колонку '{new_status}'")
@@ -491,51 +491,96 @@ class MyTasksPage(QWidget):
             print(f"   - ⚠️ карточка НЕ найдена в UI")
             self.load_tasks()
 
-        # Обновляем геометрию
         self.updateGeometry()
         if self.parent():
             self.parent().updateGeometry()
 
     def update_statistics(self):
-        """Обновляет статистику"""
-        stats = self.service.get_statistics_for_display()
-
+        """Обновляет статистику (Всего, В работе, Просрочено, Прогресс)"""
+        all_tasks = []
         for column in self.column_widgets:
-            tasks_in_column = len(column.get_tasks())
-            column.update_count(tasks_in_column)
+            for card in column.get_tasks():
+                all_tasks.append(card.task_data)
 
+        total = len(all_tasks)
+
+        # Подсчёт "В работе" - задачи не в Done колонке
+        in_progress = 0
+        for task in all_tasks:
+            status = task.get("status", "")
+            # Считаем "В работе" все задачи, кроме тех, что в колонке "Готово"/"Done"
+            # Можно также исключать завершённые задачи
+            if status not in ["Готово", "Done", "Выполнено"] and not task.get("completed", False):
+                in_progress += 1
+
+        # Подсчёт просроченных задач (deadline < сегодня, не завершены)
+        from datetime import datetime
+        overdue = 0
+        today = datetime.now().date()
+        for task in all_tasks:
+            deadline_str = task.get("deadline")
+            completed = task.get("completed", False)
+            if deadline_str and not completed:
+                try:
+                    deadline_date = datetime.strptime(deadline_str, "%d.%m.%Y").date()
+                    if deadline_date < today:
+                        overdue += 1
+                except (ValueError, TypeError):
+                    pass
+
+        # Общий прогресс
+        progress = self.service.get_progress_percent()
+
+        # Обновляем UI
         if hasattr(self, 'totalTasksLabel'):
-            self.totalTasksLabel.setText(f"📊 Всего задач: {stats['total']}")
+            self.totalTasksLabel.setText(f"📊 Всего задач: {total}")
 
-        if hasattr(self, 'completedTasksLabel'):
-            self.completedTasksLabel.setText(f"✅ Выполнено: {stats['done']}")
+        if hasattr(self, 'inProgressLabel'):
+            self.inProgressLabel.setText(f"🔧 В работе: {in_progress}")
 
         if hasattr(self, 'overdueTasksLabel'):
-            self.overdueTasksLabel.setText(f"⏰ Просрочено: {stats['overdue']}")
+            self.overdueTasksLabel.setText(f"⏰ Просрочено: {overdue}")
 
         if hasattr(self, 'overallProgress'):
-            self.overallProgress.setValue(self.service.get_progress_percent())
+            self.overallProgress.setValue(progress)
+
+        # Обновляем счетчики в колонках
+        for column in self.column_widgets:
+            tasks_count = len(column.get_tasks())
+            column.update_count(tasks_count)
 
     def _on_drag_started(self, task_data: dict):
         """Начало перетаскивания задачи"""
         print(f"🖱️ Начато перетаскивание задачи {task_data.get('id')}")
 
     def _on_filter_changed(self):
-        """Изменение фильтра"""
+        """Изменение фильтра по приоритету"""
         self.filter_tasks()
 
     def filter_tasks(self):
-        """Фильтрация задач по приоритету"""
+        """Фильтрация задач по приоритету и проекту"""
         priority = self.priorityFilter.currentText()
+        project_id = self.projectFilter.currentData()  # Получаем ID проекта
 
+        # Собираем все задачи из колонок
         all_tasks = []
         for column in self.column_widgets:
             for card in column.get_tasks():
                 all_tasks.append(card.task_data)
 
-        filtered = self.service.filter_tasks_by_priority(all_tasks, priority)
+        filtered = all_tasks
+
+        # Фильтр по приоритету
+        if priority != "Все приоритеты":
+            filtered = self.service.filter_tasks_by_priority(filtered, priority)
+
+        # Фильтр по проекту
+        if project_id:
+            filtered = self.service.filter_tasks_by_project(filtered, project_id)
 
         filtered_ids = {t["id"] for t in filtered}
+
+        # Применяем фильтр к карточкам
         for column in self.column_widgets:
             for card in column.get_tasks():
                 if card.task_id in filtered_ids:
@@ -577,9 +622,8 @@ class MyTasksPage(QWidget):
             self.update_statistics()
             self.task_moved.emit()
 
-            # === КРИТИЧНАЯ СТРАХОВКА ===
             from PyQt6.QtCore import QTimer
-            QTimer.singleShot(150, self.load_tasks)  # перезагружаем UI через 150мс
+            QTimer.singleShot(150, self.load_tasks)
 
             print("✅ Задача успешно перемещена")
         else:
@@ -611,22 +655,18 @@ class MyTasksPage(QWidget):
             event.ignore()
             return
 
-        # === КЛЮЧЕВОЕ ИСПРАВЛЕНИЕ: используем global позицию ===
         global_pos = self.mapToGlobal(event.position().toPoint())
 
         target_column = None
         for column in self.column_widgets:
-            # Преобразуем глобальную позицию в координаты колонки
             column_pos = column.mapFromGlobal(global_pos)
             if column.rect().contains(column_pos):
                 target_column = column
                 break
 
         if not target_column:
-            # Попробуем найти через viewport scroll area (дополнительная страховка)
             for column in self.column_widgets:
                 if column.isVisible():
-                    # Проверяем через parent hierarchy
                     try:
                         if column.geometry().contains(
                                 column.mapFromGlobal(global_pos)
