@@ -23,6 +23,7 @@ class GanttWidget(QWidget):
         self.session = session
         self.current_user_id = current_user_id
         self.project_service = project_service
+        self._first_show = True  # Флаг первого показа
 
         # Импортируем сервис и холст
         from services.gantt_service import GanttService
@@ -35,13 +36,34 @@ class GanttWidget(QWidget):
 
         self._setup_ui()
         self._connect_signals()
-        self._load_initial_data()
+
+        # Не загружаем данные при создании, только при первом показе
+        # self._load_initial_data() - убираем отсюда
 
     def showEvent(self, event):
         """Срабатывает при каждом показе страницы"""
         super().showEvent(event)
-        print("📊 GanttWidget.showEvent - обновляем содержимое")
-        QTimer.singleShot(100, self._refresh_ui)
+        if self._first_show:
+            self._first_show = False
+            # При первом показе - откладываем загрузку
+            QTimer.singleShot(10, self._load_initial_data)
+        else:
+            # При повторном показе - перезагружаем полностью
+            print("🔄 Повторный показ страницы Гант - перезагружаем")
+            QTimer.singleShot(10, self._full_reload)
+
+    def _full_reload(self):
+        """Полная перезагрузка страницы Гант"""
+        print("🔄 Полная перезагрузка страницы Гант")
+
+        # Очищаем кэш сервиса
+        self._service.clear_cache()
+
+        # Загружаем данные заново
+        self._service.load_data()
+
+        # Принудительно обновляем UI
+        self._refresh_ui()
 
     def _setup_ui(self) -> None:
         """Загрузка UI из файла или создание программно"""
@@ -92,8 +114,10 @@ class GanttWidget(QWidget):
 
         self.addTaskButton = QPushButton("➕ Добавить задачу")
         self.createLinkButton = QPushButton("🔗 Создать связь")
+        self.btnExport = QPushButton("📎 Экспорт")
         filters_layout.addWidget(self.addTaskButton)
         filters_layout.addWidget(self.createLinkButton)
+        filters_layout.addWidget(self.btnExport)
 
         left_layout.addWidget(filters_group)
 
@@ -133,13 +157,26 @@ class GanttWidget(QWidget):
         top_bar.addStretch()
         right_layout.addLayout(top_bar)
 
+        # Вкладки
+        self.tabWidget = QTabWidget()
+        self.tabWidget.addTab(QWidget(), "Диаграмма Ганта")
+        self.tabWidget.addTab(QWidget(), "Календарь")
+        right_layout.addWidget(self.tabWidget)
+
         scroll_area = QScrollArea()
         scroll_area.setWidgetResizable(True)
-        right_layout.addWidget(scroll_area)
+        self.tabWidget.widget(0).setLayout(QVBoxLayout())
+        self.tabWidget.widget(0).layout().addWidget(scroll_area)
 
         from windows.gantt.gantt_canvas import GanttCanvas
         self.gantt_canvas = GanttCanvas(self._service)
         scroll_area.setWidget(self.gantt_canvas)
+
+        # Настройка календаря
+        from windows.gantt.calendar_widget import CalendarWidget
+        self.calendar_widget = CalendarWidget(self._service)
+        self.tabWidget.widget(1).setLayout(QVBoxLayout())
+        self.tabWidget.widget(1).layout().addWidget(self.calendar_widget)
 
         main_layout.addWidget(left_panel)
         main_layout.addWidget(right_panel)
@@ -256,15 +293,20 @@ class GanttWidget(QWidget):
 
     def _connect_signals(self) -> None:
         """Подключение сигналов UI к методам"""
-        self.addTaskButton.clicked.connect(self._on_add_task)
-        self.createLinkButton.clicked.connect(self._on_create_link)
-        self.periodFilter.currentTextChanged.connect(self._on_period_changed)
-        self.projectFilter.currentTextChanged.connect(self._on_project_filter_changed)
-        self.executorFilter.currentTextChanged.connect(self._on_executor_filter_changed)
-        self.projectsTree.itemClicked.connect(self._on_project_item_clicked)
-
-        # Добавьте эту строку для кнопки экспорта
-        self.btnExport.clicked.connect(self._on_export_clicked)
+        if hasattr(self, 'addTaskButton'):
+            self.addTaskButton.clicked.connect(self._on_add_task)
+        if hasattr(self, 'createLinkButton'):
+            self.createLinkButton.clicked.connect(self._on_create_link)
+        if hasattr(self, 'periodFilter'):
+            self.periodFilter.currentTextChanged.connect(self._on_period_changed)
+        if hasattr(self, 'projectFilter'):
+            self.projectFilter.currentTextChanged.connect(self._on_project_filter_changed)
+        if hasattr(self, 'executorFilter'):
+            self.executorFilter.currentTextChanged.connect(self._on_executor_filter_changed)
+        if hasattr(self, 'projectsTree'):
+            self.projectsTree.itemClicked.connect(self._on_project_item_clicked)
+        if hasattr(self, 'btnExport'):
+            self.btnExport.clicked.connect(self._on_export_clicked)
 
         # Сигналы от холста
         if hasattr(self, 'gantt_canvas'):
@@ -484,6 +526,8 @@ class GanttWidget(QWidget):
 
     def _update_projects_tree(self) -> None:
         """Обновление дерева проектов"""
+        if not hasattr(self, 'projectsTree'):
+            return
         self.projectsTree.clear()
 
         for project, tasks in self._service.get_tasks_for_tree():
@@ -509,6 +553,9 @@ class GanttWidget(QWidget):
 
     def _update_filters(self) -> None:
         """Обновление фильтров"""
+        if not hasattr(self, 'projectFilter') or not hasattr(self, 'executorFilter'):
+            return
+
         self.projectFilter.blockSignals(True)
         self.executorFilter.blockSignals(True)
 
@@ -532,6 +579,9 @@ class GanttWidget(QWidget):
 
     def _restore_filter_selection(self) -> None:
         """Восстанавливает выбранные фильтры после обновления"""
+        if not hasattr(self, 'projectFilter') or not hasattr(self, 'executorFilter'):
+            return
+
         # Восстанавливаем фильтр проекта
         for i in range(self.projectFilter.count()):
             if self.projectFilter.itemData(i) == self._current_project_filter:
@@ -546,6 +596,9 @@ class GanttWidget(QWidget):
 
     def _update_canvas_date_range(self) -> None:
         """Обновление диапазона дат на холсте"""
+        if not hasattr(self, 'gantt_canvas'):
+            return
+
         if self._current_project_filter != "all":
             tasks = self._service.get_filtered_tasks(self._current_project_filter, "all")
         else:
@@ -563,11 +616,13 @@ class GanttWidget(QWidget):
             # Получаем диапазон дат с небольшим отступом
             start, end = self._service.get_date_range_for_tasks(tasks, padding_days=5)
 
-        if hasattr(self, 'gantt_canvas'):
-            self.gantt_canvas.set_date_range(start, end)
+        self.gantt_canvas.set_date_range(start, end)
 
     def _update_tree_visibility(self) -> None:
         """Обновление видимости элементов в дереве проектов"""
+        if not hasattr(self, 'projectsTree'):
+            return
+
         all_tasks = self._service.get_all_tasks()
         task_dict = {t.id: t for t in all_tasks}
 

@@ -31,7 +31,10 @@ class ProjectViewPage(QWidget):
         ui_path = os.path.join(os.path.dirname(__file__), "..", "..", "ui", "projects")
         uic.loadUi(os.path.join(ui_path, "project_page.ui"), self)
 
-
+        # ===== ПОДКЛЮЧАЕМ КНОПКУ НАЗАД =====
+        if hasattr(self, 'back_button'):
+            self.back_button.clicked.connect(self.go_back_to_projects)
+            print("✅ Кнопка 'Назад к проектам' подключена")
 
         # Получаем данные проекта через сервис
         if service and project_id:
@@ -71,8 +74,50 @@ class ProjectViewPage(QWidget):
         # Настройка UI
         self.setup_kanban()
 
+        # Устанавливаем название проекта в заголовок (если есть)
+        self._setup_project_header()
+
         # Загружаем задачи
         self.load_tasks()
+
+    def _setup_project_header(self):
+        """Настраивает заголовок проекта с названием"""
+        project_name = self.project_data.name if hasattr(self.project_data, 'name') else f"Проект #{self.project_id}"
+
+        # Если есть отдельный label для названия проекта
+        if hasattr(self, 'projectNameLabel'):
+            self.projectNameLabel.setText(f"📋 {project_name}")
+            self.projectNameLabel.show()
+
+        # Обновляем текст кнопки (добавляем название проекта)
+        if hasattr(self, 'back_button'):
+            self.back_button.setText(f"← Назад к проектам")
+            self.back_button.setToolTip(f"Вернуться к списку проектов")
+
+    def go_back_to_projects(self):
+        """Возврат к списку проектов"""
+        print(f"🔙 Возврат к списку проектов из проекта {self.project_id}")
+
+        parent = self.parent()
+        while parent:
+            # Ищем MainWindow по наличию contentStack и switch_page
+            if hasattr(parent, 'contentStack') and hasattr(parent, 'switch_page'):
+                parent.switch_page(0)  # PAGE_PROJECTS = 0
+                break
+            # Также проверяем через navigation
+            if hasattr(parent, 'navigation') and hasattr(parent.navigation, 'switch_page'):
+                parent.navigation.switch_page(0)
+                break
+            parent = parent.parent()
+
+        # Если не нашли MainWindow, пробуем закрыть страницу
+        if parent is None:
+            # Удаляем текущую страницу из стека
+            if self.parent() and hasattr(self.parent(), 'contentStack'):
+                index = self.parent().contentStack.indexOf(self)
+                if index >= 0:
+                    self.parent().contentStack.removeWidget(self)
+            self.deleteLater()
 
     def showEvent(self, event):
         """Срабатывает при каждом показе страницы"""
@@ -261,15 +306,6 @@ class ProjectViewPage(QWidget):
 
             layout.addStretch()
             self.controlLayout.insertWidget(0, project_info)
-
-    def go_back_to_projects(self):
-        """Возврат к списку проектов"""
-        parent = self.parent()
-        while parent:
-            if hasattr(parent, 'contentStack') and hasattr(parent, 'switch_page'):
-                parent.switch_page(0)
-                break
-            parent = parent.parent()
 
     def setup_kanban(self):
         """Создает колонки канбан-доски"""

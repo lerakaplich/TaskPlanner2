@@ -175,6 +175,11 @@ QComboBox::drop-down {
         </item>
         <item>
          <property name="text">
+          <string>Критический</string>
+         </property>
+        </item>
+        <item>
+         <property name="text">
           <string>Высокий</string>
          </property>
         </item>

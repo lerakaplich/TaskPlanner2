@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>350</width>
-    <height>312</height>
+    <width>360</width>
+    <height>314</height>
    </rect>
   </property>
   <property name="sizePolicy">
@@ -18,13 +18,13 @@
   </property>
   <property name="minimumSize">
    <size>
-    <width>350</width>
+    <width>360</width>
     <height>0</height>
    </size>
   </property>
   <property name="maximumSize">
    <size>
-    <width>350</width>
+    <width>360</width>
     <height>16777215</height>
    </size>
   </property>
@@ -249,7 +249,7 @@ QPushButton:hover {
        </property>
        <property name="maximumSize">
         <size>
-         <width>100</width>
+         <width>110</width>
          <height>26</height>
         </size>
        </property>

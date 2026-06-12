@@ -98,7 +98,6 @@ class ProjectViewHandler:
                 self.refresh_projects_view()
                 QMessageBox.information(self.main, "Успех", "Проект обновлен")
 
-
     def create_project(self):
         """Создание нового проекта с автоматическим созданием чата"""
         dialog = ProjectCreationDialog(
@@ -454,22 +453,38 @@ class NavigationHandler(QObject):
         return self.pages['my_tasks']
 
     def get_other_tasks_page(self):
-        """Возвращает страницу чужих задач"""
-        if 'other_tasks' not in self.pages:
-            current_user = self.main.current_user if self.main.current_user else {
-                "id": self.main.current_user_id,
-                "last_name": "",
-                "first_name": "",
-                "middle_name": ""
-            }
-            self.pages['other_tasks'] = OthersTasksPage(
-                parent=self.main,
-                current_user=current_user,
-                project_id=2,
-                column_service=self.main.column_service
-            )
-            self.pages['other_tasks'].open_project_requested.connect(self.open_project_by_id)
-            self.main.contentStack.insertWidget(self.PAGE_OTHER_TASKS, self.pages['other_tasks'])
+        """Возвращает страницу чужих задач - ВСЕГДА ПЕРЕСОЗДАЁМ для свежих данных"""
+        from windows.other_tasks.others_tasks_page import OthersTasksPage
+
+        # ВАЖНО: принудительно пересоздаем страницу чужих задач при каждом запросе
+        # Это решает проблему с белым экраном при повторном переходе
+        if 'other_tasks' in self.pages:
+            # Удаляем старую страницу
+            old_page = self.pages['other_tasks']
+            index = self.main.contentStack.indexOf(old_page)
+            if index >= 0:
+                self.main.contentStack.removeWidget(old_page)
+            old_page.deleteLater()
+            del self.pages['other_tasks']
+            print("   🗑️ Старая страница Чужие задачи удалена")
+
+        # Создаем новую страницу
+        current_user = self.main.current_user if self.main.current_user else {
+            "id": self.main.current_user_id,
+            "last_name": "",
+            "first_name": "",
+            "middle_name": ""
+        }
+
+        self.pages['other_tasks'] = OthersTasksPage(
+            parent=self.main,
+            current_user=current_user,
+            project_id=2,
+            column_service=self.main.column_service
+        )
+        self.pages['other_tasks'].open_project_requested.connect(self.open_project_by_id)
+        self.main.contentStack.insertWidget(self.PAGE_OTHER_TASKS, self.pages['other_tasks'])
+        print("   ✅ Новая страница Чужие задачи создана и вставлена")
 
         return self.pages['other_tasks']
 
@@ -564,19 +579,30 @@ class NavigationHandler(QObject):
                 self.main.contentStack.setCurrentWidget(self.pages[page_name])
 
     def get_gantt_page(self):
-        """Возвращает страницу диаграммы Ганта"""
+        """Возвращает страницу диаграммы Ганта - ВСЕГДА ПЕРЕСОЗДАЁМ для свежих данных"""
         from windows.gantt.gantt_widget import GanttWidget
 
-        if 'gantt' not in self.pages:
-            print("   🏗️ Создаём GanttWidget...")
-            self.pages['gantt'] = GanttWidget(
-                session=self.main.session,
-                current_user_id=self.main.current_user_id,
-                project_service=self.main.project_service
-            )
-            print(f"   📌 Вставляем в contentStack на позицию {self.PAGE_GANTT}")
-            self.main.contentStack.insertWidget(self.PAGE_GANTT, self.pages['gantt'])
-            print("   ✅ GanttWidget создан и вставлен")
+        # ВАЖНО: принудительно пересоздаем страницу Ганта при каждом запросе
+        if 'gantt' in self.pages:
+            # Удаляем старую страницу
+            old_page = self.pages['gantt']
+            index = self.main.contentStack.indexOf(old_page)
+            if index >= 0:
+                self.main.contentStack.removeWidget(old_page)
+            old_page.deleteLater()
+            del self.pages['gantt']
+            print("   🗑️ Старая страница Ганта удалена")
+
+        # Создаем новую страницу
+        print("   🏗️ Создаём GanttWidget...")
+        self.pages['gantt'] = GanttWidget(
+            session=self.main.session,
+            current_user_id=self.main.current_user_id,
+            project_service=self.main.project_service
+        )
+        print(f"   📌 Вставляем в contentStack на позицию {self.PAGE_GANTT}")
+        self.main.contentStack.insertWidget(self.PAGE_GANTT, self.pages['gantt'])
+        print("   ✅ GanttWidget создан и вставлен")
 
         return self.pages['gantt']
 

@@ -1,12 +1,13 @@
 # windows/my_tasks/my_tasks_page.py
 
 import os
-from typing import Dict
+from typing import Dict, List
 
 from PyQt6 import uic
 from PyQt6.QtCore import Qt, pyqtSignal, QTimer
 from PyQt6.QtGui import QDragEnterEvent, QDropEvent, QDragMoveEvent
-from PyQt6.QtWidgets import QWidget, QScrollArea, QHBoxLayout, QMessageBox, QSizePolicy
+from PyQt6.QtWidgets import QWidget, QScrollArea, QHBoxLayout, QMessageBox
+from sqlalchemy import select
 
 from services.tasks_service.tasks_service import TasksService
 from windows.my_tasks.task_card import TaskCard
@@ -27,6 +28,7 @@ class MyTasksPage(QWidget):
         self._loaded = False
         self._first_show = True
         self._all_projects = []  # Список проектов для фильтра
+        self._current_project_id = None  # Текущий выбранный проект
 
         ui_path = os.path.join(
             os.path.dirname(__file__),
@@ -60,41 +62,191 @@ class MyTasksPage(QWidget):
         self._load_projects_for_filter()
 
     def _load_projects_for_filter(self):
-        """Загружает проекты для выпадающего списка"""
+        """Загружает проекты для выпадающего списка (только где пользователь участник/админ/куратор/создатель)"""
         try:
-            from models.projects import Project
-            stmt = select(Project).where(Project.is_archived == False).order_by(Project.name)
-            projects = self.service.db_session.scalars(stmt).all()
+            from sqlalchemy import select
+            from models.projects import Project, EmployeeProject
+
+            user_id = self.current_user.get("id") if self.current_user else None
+            if not user_id:
+                print("⚠️ Не удалось получить ID пользователя")
+                return
+
+            db_session = self.service.crud.db_session
+
+            # Получаем ID проектов, где пользователь является участником (EmployeeProject)
+            # или создателем проекта (Project.created_by)
+            stmt = select(Project).where(
+                (Project.is_archived == False) & (
+                        (Project.id.in_(
+                            select(EmployeeProject.project_id).where(EmployeeProject.employee_id == user_id)
+                        )) |
+                        (Project.created_by == user_id)
+                )
+            ).order_by(Project.name)
+
+            projects = db_session.scalars(stmt).all()
 
             self._all_projects = [{"id": p.id, "name": p.name} for p in projects]
+
+            # Блокируем сигналы
+            self.projectFilter.blockSignals(True)
 
             # Обновляем combo box
             self.projectFilter.clear()
             self.projectFilter.addItem("Все проекты", None)
             for project in self._all_projects:
                 self.projectFilter.addItem(project["name"], project["id"])
+
+            # Восстанавливаем сигналы
+            self.projectFilter.blockSignals(False)
+
+            print(f"📁 Загружено проектов для фильтра (Мои задачи): {len(self._all_projects)}")
+
         except Exception as e:
             print(f"⚠️ Ошибка загрузки проектов для фильтра: {e}")
+            import traceback
+            traceback.print_exc()
 
     def _on_project_filter_changed(self):
-        """Обработчик изменения фильтра по проекту"""
-        self.filter_tasks()
+        """Обработчик изменения фильтра по проекту - перестраиваем доску"""
+        project_id = self.projectFilter.currentData()
+        self._current_project_id = project_id
 
-    def showEvent(self, event):
-        """Показываем задачи только при первом отображении страницы"""
-        super().showEvent(event)
-        if self._first_show:
-            self._first_show = False
-            # Откладываем загрузку, чтобы UI успел отрисоваться
-            QTimer.singleShot(10, self.load_tasks)
+        # Перестраиваем колонки под выбранный проект
+        self._rebuild_board_for_project(project_id)
 
-    def setup_board(self):
-        """Создает колонки канбан-доски"""
+        # Загружаем задачи заново (с учётом фильтра по проекту)
+        self._load_tasks_for_current_project()
+
+    def _load_tasks_for_current_project(self):
+        """Загружает задачи для текущего выбранного проекта"""
+        if self._is_loading:
+            return
+
+        self._is_loading = True
+
+        try:
+            # Очищаем все колонки
+            self.clear_all_columns()
+
+            # Получаем все задачи (с учётом mode=my)
+            all_tasks = self.service.get_tasks_for_board()
+
+            # Фильтруем по проекту, если выбран конкретный проект
+            if self._current_project_id:
+                filtered_tasks = [t for t in all_tasks if t.get("project_id") == self._current_project_id]
+            else:
+                filtered_tasks = all_tasks
+
+            # Отключаем обновления UI
+            self.setUpdatesEnabled(False)
+            for column in self.column_widgets:
+                column.setUpdatesEnabled(False)
+
+            # Добавляем задачи в колонки
+            for task in filtered_tasks:
+                column_name = task.get("status")
+                if column_name and column_name in self.columns:
+                    task_card = TaskCard(task)
+                    self._connect_task_card_signals(task_card)
+                    self.columns[column_name].add_task(task_card)
+
+            # Включаем обновления UI
+            for column in self.column_widgets:
+                column.setUpdatesEnabled(True)
+            self.setUpdatesEnabled(True)
+
+            # Обновляем статистику
+            self.update_statistics()
+
+            # Обновляем геометрию
+            self.updateGeometry()
+            if self.parent():
+                self.parent().updateGeometry()
+
+        except Exception as e:
+            print(f"❌ Ошибка загрузки задач для проекта: {e}")
+            import traceback
+            traceback.print_exc()
+            self.setUpdatesEnabled(True)
+            for column in self.column_widgets:
+                column.setUpdatesEnabled(True)
+        finally:
+            self._is_loading = False
+
+    def _rebuild_board_for_project(self, project_id: int = None):
+        """Перестраивает канбан-доску для выбранного проекта"""
+        print(f"🔄 Перестроение доски для проекта: {project_id}")
+
+        # Сбрасываем кэш колонок в сервисе
+        if hasattr(self.service.crud, '_column_cache'):
+            self.service.crud._column_cache = None
+
+        # Получаем колонки для выбранного проекта
+        if project_id:
+            # Получаем колонки из проекта
+            column_ids = self._get_project_column_ids(project_id)
+            column_data = self._get_columns_by_ids(column_ids)
+        else:
+            # Все проекты - показываем шаблонные колонки
+            column_data = self.service.get_columns_for_board()
+
+        # Перестраиваем UI колонок
+        self._rebuild_columns_ui(column_data)
+
+    def _get_project_column_ids(self, project_id: int) -> List[int]:
+        """Получает ID колонок выбранного проекта"""
+        try:
+            from models.projects import Project
+            from sqlalchemy import select
+
+            db_session = self.service.crud.db_session
+            stmt = select(Project).where(Project.id == project_id)
+            project = db_session.scalar(stmt)
+
+            if project and project.selected_column_ids:
+                # Парсим строку с ID колонок
+                ids_str = project.selected_column_ids
+                if ids_str:
+                    return [int(id_str.strip()) for id_str in ids_str.split(',') if id_str.strip()]
+        except Exception as e:
+            print(f"⚠️ Ошибка получения колонок проекта {project_id}: {e}")
+
+        # Возвращаем ID шаблонных колонок по умолчанию
+        return [24, 25, 26, 27]  # К выполнению, В работе, Проверка, Готово
+
+    def _get_columns_by_ids(self, column_ids: List[int]) -> List[Dict]:
+        """Получает данные колонок по их ID"""
+        try:
+            from models.projects import BoardColumn
+            from sqlalchemy import select
+
+            db_session = self.service.crud.db_session
+            stmt = select(BoardColumn).where(BoardColumn.id.in_(column_ids)).order_by(BoardColumn.position)
+            columns = db_session.scalars(stmt).all()
+
+            result = []
+            for col in columns:
+                result.append({
+                    "id": col.id,
+                    "name": col.name,
+                    "color": col.color,
+                    "position": col.position,
+                    "is_done": col.is_done_column
+                })
+            return result
+        except Exception as e:
+            print(f"⚠️ Ошибка загрузки колонок по ID: {e}")
+            return []
+
+    def _rebuild_columns_ui(self, column_data: List[Dict]):
+        """Перестраивает UI колонок"""
         # Очищаем существующий layout
         self.clear_layout(self.kanbanLayout)
 
-        column_data = self.service.get_columns_for_board()
         if not column_data:
+            print("⚠️ Нет колонок для отображения")
             return
 
         # Горизонтальный скролл
@@ -158,6 +310,20 @@ class MyTasksPage(QWidget):
 
         vertical_scroll.setWidget(scroll_area)
         self.kanbanLayout.addWidget(vertical_scroll)
+
+        print(f"🔧 Перестроено {len(column_data)} колонок")
+
+    def setup_board(self):
+        """Создает колонки канбан-доски (стандартные, для всех проектов)"""
+        self._rebuild_columns_ui(self.service.get_columns_for_board())
+
+    def showEvent(self, event):
+        """Показываем задачи только при первом отображении страницы"""
+        super().showEvent(event)
+        if self._first_show:
+            self._first_show = False
+            # Откладываем загрузку, чтобы UI успел отрисоваться
+            QTimer.singleShot(10, self.load_tasks)
 
     def clear_layout(self, layout):
         """Очищает layout"""
