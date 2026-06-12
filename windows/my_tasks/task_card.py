@@ -282,6 +282,8 @@ class TaskCard(QFrame):
         self.difficulty_widget.setVisible(value > 0)
 
     def _setup_tags(self):
+        """Настраивает отображение тегов с переносом на несколько строк"""
+        # Очищаем существующие виджеты
         for i in reversed(range(self.tagsLayout.count())):
             w = self.tagsLayout.itemAt(i).widget()
             if w:
@@ -290,45 +292,70 @@ class TaskCard(QFrame):
         tags = self.task_data.get("tags", [])
 
         if tags:
-            for tag_name in tags[:3]:
+            # Меняем QHBoxLayout на QGridLayout для автоматического переноса
+            from PyQt6.QtWidgets import QGridLayout
+
+            # Сохраняем родительский виджет
+            tags_widget = self.tagsLayout.parentWidget()
+
+            # Создаём новый GridLayout
+            grid_layout = QGridLayout()
+            grid_layout.setSpacing(4)
+            grid_layout.setContentsMargins(0, 0, 0, 0)
+
+            # Добавляем теги в сетку
+            row = 0
+            col = 0
+            max_cols = 3  # Максимум 3 тега в строке
+
+            for tag_name in tags:
                 tag_button = QPushButton(tag_name)
                 tag_button.setStyleSheet("""
-                    QPushButton{
+                    QPushButton {
                         font-size: 10px;
-                        padding: 2px 8px;
+                        padding: 4px 10px;
                         border-radius: 10px;
                         background: #E8F5E9;
                         color: #2E7D32;
                         border: 1px solid #C8E6C9;
                     }
-                """)
-                tag_button.setCursor(Qt.CursorShape.PointingHandCursor)
-                tag_button.setFixedHeight(22)
-                self.tagsLayout.addWidget(tag_button)
-
-            if len(tags) > 3:
-                more_btn = QPushButton(f"+{len(tags) - 3}")
-                more_btn.setStyleSheet("""
-                    QPushButton{
-                        font-size: 10px;
-                        padding: 2px 8px;
-                        border-radius: 10px;
-                        background: #EEEEEE;
-                        color: #555555;
-                        border: none;
+                    QPushButton:hover {
+                        background: #C8E6C9;
                     }
                 """)
-                self.tagsLayout.addWidget(more_btn)
+                tag_button.setCursor(Qt.CursorShape.PointingHandCursor)
+                tag_button.setFixedHeight(24)
+                tag_button.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Fixed)
 
-            tags_widget = self.tagsLayout.parentWidget()
+                grid_layout.addWidget(tag_button, row, col)
+
+                col += 1
+                if col >= max_cols:
+                    col = 0
+                    row += 1
+
+            # Удаляем старый layout и устанавливаем новый
+            # Очищаем tagsLayout (он QHBoxLayout)
+            while self.tagsLayout.count():
+                item = self.tagsLayout.takeAt(0)
+
+            # Добавляем GridLayout в tagsLayout
+            self.tagsLayout.addLayout(grid_layout)
+
             if tags_widget:
                 tags_widget.show()
+
+            # Обновляем геометрию
+            self.updateGeometry()
+            if self.parent():
+                self.parent().updateGeometry()
         else:
+            # Очищаем tagsLayout
+            while self.tagsLayout.count():
+                item = self.tagsLayout.takeAt(0)
             tags_widget = self.tagsLayout.parentWidget()
             if tags_widget:
                 tags_widget.hide()
-
-        self.tagsLayout.addStretch()
 
     def _show_context_menu(self):
         menu = QMenu(self)

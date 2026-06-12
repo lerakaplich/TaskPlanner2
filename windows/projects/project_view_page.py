@@ -232,15 +232,33 @@ class ProjectViewPage(QWidget):
             column.clear_tasks()
 
     def update_statistics(self):
-        """Обновляет статистику"""
-        total = 0
+        """Обновляет статистику (Всего задач, общий прогресс)"""
+        all_tasks = []
+        for column in self.column_widgets:
+            for card in column.get_tasks():
+                all_tasks.append(card.task_data)
+
+        total = len(all_tasks)
+
+        # Расчёт общего прогресса - среднее арифметическое прогресса всех задач
+        if total > 0:
+            total_progress = sum(task.get("progress_percent", 0) for task in all_tasks)
+            avg_progress = int(total_progress / total)
+        else:
+            avg_progress = 0
+
+        # Обновляем UI
+        if hasattr(self, 'totalTasksLabel'):
+            self.totalTasksLabel.setText(f"📊 Всего задач: {total}")
+
+        if hasattr(self, 'overallProgress'):
+            self.overallProgress.setValue(avg_progress)
+            self.overallProgress.setFormat(f"Общий прогресс: {avg_progress}%")
+
+        # Обновляем счетчики в колонках
         for column in self.column_widgets:
             tasks_count = len(column.get_tasks())
             column.update_count(tasks_count)
-            total += tasks_count
-
-        if hasattr(self, 'totalTasksLabel'):
-            self.totalTasksLabel.setText(f"📊 Всего задач: {total}")
 
     def setup_project_ui(self):
         """Настройка UI для страницы проекта"""

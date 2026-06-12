@@ -889,8 +889,12 @@ class OthersTasksPage(QWidget):
                 except (ValueError, TypeError):
                     pass
 
-        # Общий прогресс
-        progress = self.service.get_progress_percent()
+        # ===== ИСПРАВЛЕНИЕ: расчёт среднего прогресса (сумма прогрессов / количество задач) =====
+        if total > 0:
+            total_progress = sum(task.get("progress_percent", 0) for task in all_tasks)
+            avg_progress = int(total_progress / total)
+        else:
+            avg_progress = 0
 
         # Обновляем UI
         if hasattr(self, 'totalTasksLabel'):
@@ -903,7 +907,8 @@ class OthersTasksPage(QWidget):
             self.overdueTasksLabel.setText(f"⏰ Просрочено: {overdue}")
 
         if hasattr(self, 'overallProgress'):
-            self.overallProgress.setValue(progress)
+            self.overallProgress.setValue(avg_progress)
+            self.overallProgress.setFormat(f"Общий прогресс: {avg_progress}%")
 
         # Обновляем счетчики в колонках
         for column in self.column_widgets:

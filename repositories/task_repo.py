@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import select, func, and_, update, delete
 from datetime import datetime
 
-from models.tasks import Task
+from models.tasks import Task, TaskTag
 
 
 class TaskRepo:
@@ -42,7 +42,9 @@ class TaskRepo:
 
     def get_by_project(self, project_id: int, load_column: bool = True,
                        include_archived: bool = False) -> List[Task]:
-        """Получить задачи проекта"""
+        """Получить задачи проекта с загрузкой тегов"""
+        from sqlalchemy.orm import selectinload
+
         query = select(Task).where(Task.project_id == project_id)
 
         if not include_archived:
@@ -50,6 +52,9 @@ class TaskRepo:
 
         if load_column:
             query = query.options(joinedload(Task.column))
+
+        # ДОБАВИТЬ: загружаем теги
+        query = query.options(selectinload(Task.tags).selectinload(TaskTag.tag))
 
         return list(self.session.scalars(query))
 

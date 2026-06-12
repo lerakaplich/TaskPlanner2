@@ -16,10 +16,17 @@ class ProjectsTasksService:
         self.employees_session = employees_session
         self.employee_repo = employee_repo
 
-    def get_project_tasks_for_view(self, project_id: int, include_archived: bool = False, get_project_name_func=None) -> List[Dict]:
+    # services/projects_service/projects_tasks_service.py
+
+    def get_project_tasks_for_view(self, project_id: int, include_archived: bool = False, get_project_name_func=None) -> \
+    List[Dict]:
         """Возвращает задачи проекта в виде словарей с полной информацией для отображения"""
         task_repo = TaskRepo(self.session)
         tasks = task_repo.get_by_project(project_id, load_column=True, include_archived=include_archived)
+
+        # Загружаем теги для всех задач одним запросом (для производительности)
+        task_ids = [task.id for task in tasks]
+        tags_by_task = self._load_tags_for_tasks(task_ids)
 
         result = []
         for task in tasks:
@@ -65,10 +72,15 @@ class ProjectsTasksService:
             created_text = task.created_at.strftime("%d.%m.%Y") if task.created_at else ""
             updated_text = task.updated_at.strftime("%d.%m.%Y") if task.updated_at else ""
 
-            tags = []
-            if hasattr(task, 'tags') and task.tags:
+            # ===== ИСПРАВЛЕНИЕ: загружаем теги из предварительно загруженного словаря =====
+            tags = tags_by_task.get(task.id, [])
+
+            # Если теги не загрузились через массовый запрос, пробуем через hasattr
+            if not tags and hasattr(task, 'tags') and task.tags:
                 for tag_obj in task.tags:
-                    if hasattr(tag_obj, 'name'):
+                    if hasattr(tag_obj, 'tag') and tag_obj.tag:
+                        tags.append(tag_obj.tag.name)
+                    elif hasattr(tag_obj, 'name'):
                         tags.append(tag_obj.name)
                     elif isinstance(tag_obj, str):
                         tags.append(tag_obj)
@@ -100,14 +112,43 @@ class ProjectsTasksService:
                 "executor_text": assignee_name or "Не назначен",
                 "completed": task.is_archived if hasattr(task, 'is_archived') else False,
                 "difficulty": task.difficulty if hasattr(task, 'difficulty') else 0,
-                "tags": tags,
+                "tags": tags,  # <-- ИСПРАВЛЕНО
                 "project_id": task.project_id,
                 "project_name": get_project_name_func(project_id) if get_project_name_func else f"Проект #{project_id}",
                 "is_archived": task.is_archived if hasattr(task, 'is_archived') else False,
-                "archived_at": archived_at
+                "archived_at": archived_at,
+                # Добавляем поля для совместимости с карточками
+                "priority_color": priority_color,
+                "progress_percent": task.progress_percent if hasattr(task, 'progress_percent') else 0,
+                "is_paused": task.is_paused if hasattr(task, 'is_paused') else False,
+                "total_paused_seconds": task.total_paused_seconds if hasattr(task, 'total_paused_seconds') else 0,
             })
 
         return result
+
+    def _load_tags_for_tasks(self, task_ids: List[int]) -> Dict[int, List[str]]:
+        """Загружает теги для списка задач одним запросом"""
+        if not task_ids:
+            return {}
+
+        from models.tasks import TaskTag, Tag
+        from sqlalchemy import select
+
+        stmt = (
+            select(TaskTag.task_id, Tag.name)
+            .join(Tag, TaskTag.tag_id == Tag.id)
+            .where(TaskTag.task_id.in_(task_ids))
+        )
+
+        result = self.session.execute(stmt).all()
+
+        tags_by_task = {}
+        for task_id, tag_name in result:
+            if task_id not in tags_by_task:
+                tags_by_task[task_id] = []
+            tags_by_task[task_id].append(tag_name)
+
+        return tags_by_task
 
     def get_project_name(self, project_id: int, project_repo) -> str:
         """Возвращает название проекта по ID"""
