@@ -17,8 +17,62 @@ class ProjectViewHandler:
     def __init__(self, main_window):
         self.main = main_window
 
+    def view_project(self, project_id):
+        """Просмотр проекта в режиме только для чтения"""
+        project_dto = self.main.project_service.get_project_for_edit(project_id)
+        if not project_dto:
+            QMessageBox.warning(self.main, "Ошибка", "Проект не найден")
+            return
+
+        # Открываем диалог редактирования в режиме просмотра
+        dialog_data = self.main.project_service.prepare_edit_dialog_data(project_dto)
+        dialog = ProjectEditDialog(dialog_data, parent=self.main, service=self.main.project_service)
+
+        # Передаём сервис прав в диалог
+        dialog.permission_service = self.main.permission_service
+
+        # Настраиваем режим просмотра
+        dialog.setup_edit_mode(project_id)
+
+        # Показываем диалог (кнопка сохранения будет скрыта)
+        dialog.exec()
+
+    def edit_project(self, project_id):
+        """Редактирование проекта с проверкой прав"""
+        project_dto = self.main.project_service.get_project_for_edit(project_id)
+        if not project_dto:
+            QMessageBox.warning(self.main, "Ошибка", "Проект не найден")
+            return
+
+        # Проверяем права
+        if self.main.permission_service and not self.main.permission_service.can_edit_project(project_id):
+            # Если нет прав на редактирование, открываем в режиме просмотра
+            self.view_project(project_id)
+            return
+
+        dialog_data = self.main.project_service.prepare_edit_dialog_data(project_dto)
+        dialog = ProjectEditDialog(dialog_data, parent=self.main, service=self.main.project_service)
+
+        # Передаём сервис прав в диалог
+        dialog.permission_service = self.main.permission_service
+        dialog.setup_edit_mode(project_id)
+
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            raw_results = dialog.get_project_data()
+            updated_dto = self.main.project_service.update_project_from_dialog(project_id, raw_results)
+
+            if updated_dto and self.main.project_service.update_project(project_id, updated_dto):
+                self.refresh_projects_view()
+                QMessageBox.information(self.main, "Успех", "Проект обновлен")
+
     def refresh_projects_view(self):
         """Обновление списка проектов"""
+        print(f"\n🔄 ОБНОВЛЕНИЕ ПРОЕКТОВ")
+        print(f"   permission_service существует: {self.main.permission_service is not None}")
+
+        if self.main.permission_service:
+            print(f"   Роль пользователя: {self.main.permission_service.app_manager.role.value}")
+
         if hasattr(self.main, 'project_cards') and self.main.project_cards:
             for card in self.main.project_cards:
                 self.main.projectsGrid.removeWidget(card)
@@ -31,20 +85,25 @@ class ProjectViewHandler:
                 status_filter=self.main.current_status_filter,
                 owner_filter=self.main.current_owner_filter
             )
+            print(f"   Загружено проектов: {len(projects_dtos)}")
         except Exception as e:
             print(f"Ошибка при загрузке проектов: {e}")
             return
 
         for dto in projects_dtos:
+            print(f"   Создаём карточку для проекта {dto.id}: {dto.name}")
+
             card = ProjectCard(
                 project_id=dto.id,
                 project_data=dto,
                 parent=None,
-                service=self.main.project_service
+                service=self.main.project_service,
+                permission_service=self.main.permission_service  # <-- ЭТО ВАЖНО!
             )
             card.edit_clicked.connect(self.main.edit_project)
             card.open_clicked.connect(self.main.open_project)
             card.archive_clicked.connect(self.main.archive_project)
+            card.view_clicked.connect(self.main.view_project)
             self.main.project_cards.append(card)
 
         self.main.current_columns = -1
@@ -80,24 +139,6 @@ class ProjectViewHandler:
                 last_row, 0, 1, columns
             )
 
-    def edit_project(self, project_id):
-        """Редактирование проекта"""
-        project_dto = self.main.project_service.get_project_for_edit(project_id)
-        if not project_dto:
-            QMessageBox.warning(self.main, "Ошибка", "Проект не найден")
-            return
-
-        dialog_data = self.main.project_service.prepare_edit_dialog_data(project_dto)
-        dialog = ProjectEditDialog(dialog_data, parent=self.main, service=self.main.project_service)
-
-        if dialog.exec() == QDialog.DialogCode.Accepted:
-            raw_results = dialog.get_project_data()
-            updated_dto = self.main.project_service.update_project_from_dialog(project_id, raw_results)
-
-            if updated_dto and self.main.project_service.update_project(project_id, updated_dto):
-                self.refresh_projects_view()
-                QMessageBox.information(self.main, "Успех", "Проект обновлен")
-
     def create_project(self):
         """Создание нового проекта с автоматическим созданием чата"""
         dialog = ProjectCreationDialog(
@@ -132,14 +173,26 @@ class ProjectViewHandler:
                 QMessageBox.critical(self.main, "Ошибка", "Не удалось создать проект в базе данных.")
 
     def archive_project(self, project_id):
-        """Архивация проекта"""
+        """Архивация проекта с проверкой прав"""
         try:
+            # Проверяем права на архивацию
+            if self.main.permission_service and not self.main.permission_service.can_archive_project(project_id):
+                QMessageBox.warning(
+                    self.main,
+                    "Доступ запрещён",
+                    "У вас нет прав на архивацию этого проекта.\n"
+                    "Архивировать проект могут: руководитель проекта, куратор, администратор, суперадминистратор."
+                )
+                return False
+
             project_name = ""
             for card in self.main.project_cards:
                 if card.project_id == project_id:
                     project_name = card.projectTitle.text()
                     break
+
             result = self.main.project_service.archive_project(project_id)
+
             if result:
                 if hasattr(self.main, 'filterCombo'):
                     self.main.filterCombo.blockSignals(True)
@@ -149,9 +202,9 @@ class ProjectViewHandler:
                         self.main.current_status_filter = "Активные"
                         self.main.current_owner_filter = False
                     self.main.filterCombo.blockSignals(False)
+
                 self.refresh_projects_view()
 
-                # Обновляем страницу архива если она открыта
                 if 'archive' in self.main.pages:
                     self.main.pages['archive'].refresh_current_view()
 
@@ -160,6 +213,7 @@ class ProjectViewHandler:
             else:
                 QMessageBox.warning(self.main, "Ошибка", "Не удалось архивировать проект")
                 return False
+
         except Exception as e:
             QMessageBox.critical(self.main, "Ошибка", f"Ошибка при архивации: {str(e)}")
             return False

@@ -21,6 +21,7 @@ class EmployeeSelectorDialog(QDialog):
         super().__init__(parent)
         self.service = service
         self.mode = mode
+        self.readonly_mode = False
         self.all_employees = []
         self.filtered_employees = []
         self.checkboxes = []
@@ -33,11 +34,11 @@ class EmployeeSelectorDialog(QDialog):
         # Данные для фильтров
         self.divisions_list = []
         self.departments_list = []
-        self.departments_dict = {}  # name -> id
-        self.divisions_dict = {}  # name -> id
-        self.department_to_divisions = {}  # department_id -> set(division_ids)
-        self.division_to_departments = {}  # division_id -> set(department_ids)
-        self.updating_filters = False  # Флаг для предотвращения рекурсии
+        self.departments_dict = {}
+        self.divisions_dict = {}
+        self.department_to_divisions = {}
+        self.division_to_departments = {}
+        self.updating_filters = False
 
         # Загрузка UI
         ui_path = os.path.join(os.path.dirname(__file__), "..", "..", "ui", "projects")
@@ -58,58 +59,47 @@ class EmployeeSelectorDialog(QDialog):
         QTimer.singleShot(0, self.apply_filters)
 
     def load_initial_data(self):
-        """Загружает данные через сервис и строит связи между отделами и подразделениями"""
+        """Загружает данные через сервис"""
         if self.service:
             data = self.service.load_employee_selector_data()
             self.all_employees = data.get('employees', [])
-            self.divisions_list = data.get('divisions', [])  # Список кортежей (id, name)
-            self.departments_list = data.get('departments', [])  # Список кортежей (id, name)
+            self.divisions_list = data.get('divisions', [])
+            self.departments_list = data.get('departments', [])
 
-            # Создаем словари для быстрого поиска ID по названию
-            self.departments_dict = {}  # name -> id
+            self.departments_dict = {}
             for dept_id, dept_name in self.departments_list:
                 self.departments_dict[dept_name] = dept_id
 
-            self.divisions_dict = {}  # name -> id
+            self.divisions_dict = {}
             for div_id, div_name in self.divisions_list:
                 self.divisions_dict[div_name] = div_id
 
-            # Строим связи между отделами и подразделениями на основе сотрудников
-            self.department_to_divisions = {}  # department_id -> set(division_ids)
-            self.division_to_departments = {}  # division_id -> set(department_ids)
+            self.department_to_divisions = {}
+            self.division_to_departments = {}
 
             for emp in self.all_employees:
                 dept_id = emp.get('department_id')
                 div_id = emp.get('division_id')
 
                 if dept_id and div_id:
-                    # department -> divisions
                     if dept_id not in self.department_to_divisions:
                         self.department_to_divisions[dept_id] = set()
                     self.department_to_divisions[dept_id].add(div_id)
 
-                    # division -> departments
                     if div_id not in self.division_to_departments:
                         self.division_to_departments[div_id] = set()
                     self.division_to_departments[div_id].add(dept_id)
 
             print(f"📊 Загружено отделов: {len(self.departments_dict)}")
             print(f"📊 Загружено подразделений: {len(self.divisions_dict)}")
-            print(f"🔍 departments_dict: {self.departments_dict}")
-            print(f"🔍 divisions_dict: {self.divisions_dict}")
-            print(f"🔍 department_to_divisions: {self.department_to_divisions}")
-            print(f"🔍 division_to_departments: {self.division_to_departments}")
         else:
             print("⚠️ Сервис не передан, данные не загружены")
             self.all_employees = []
             self.divisions_list = []
             self.departments_list = []
-            self.departments_dict = {}
-            self.divisions_dict = {}
 
     def setup_filters(self):
         """Настройка фильтров отделов и подразделений"""
-        # Настройка фильтра отделов (используем названия)
         self.departmentFilter.blockSignals(True)
         self.departmentFilter.clear()
         self.departmentFilter.addItem("Все отделы")
@@ -118,7 +108,6 @@ class EmployeeSelectorDialog(QDialog):
         self.departmentFilter.setCurrentIndex(0)
         self.departmentFilter.blockSignals(False)
 
-        # Настройка фильтра подразделений (используем названия)
         self.subDepartmentFilter.blockSignals(True)
         self.subDepartmentFilter.clear()
         self.subDepartmentFilter.addItem("Все подразделения")
@@ -128,6 +117,24 @@ class EmployeeSelectorDialog(QDialog):
         self.subDepartmentFilter.blockSignals(False)
 
         self.subDepartmentFilter.setEnabled(len(self.divisions_list) > 0)
+
+    def set_readonly_mode(self, readonly: bool):
+        """Устанавливает режим только для чтения"""
+        self.readonly_mode = readonly
+        if readonly:
+            self.setWindowTitle(f"Просмотр {'участников' if self.mode == 'participants' else 'администраторов'}")
+            # Скрываем кнопку выбора
+            if hasattr(self, 'selectBtn'):
+                self.selectBtn.hide()
+            # Скрываем чекбокс "Выбрать всех"
+            if hasattr(self, 'selectAllCheckBox'):
+                self.selectAllCheckBox.hide()
+            # Поиск и фильтры оставляем включёнными
+        else:
+            if hasattr(self, 'selectBtn'):
+                self.selectBtn.show()
+            if hasattr(self, 'selectAllCheckBox'):
+                self.selectAllCheckBox.show()
 
     def _update_departments_filter(self, division_name):
         """Обновляет список отделов в зависимости от выбранного подразделения"""
@@ -144,21 +151,18 @@ class EmployeeSelectorDialog(QDialog):
             division_id = self.divisions_dict.get(division_name)
 
             if division_id:
-                # Получаем уникальные отделы для выбранного подразделения
                 dept_ids = self.division_to_departments.get(division_id, set())
 
                 for dept_id in sorted(dept_ids):
-                    # Находим название отдела по ID
                     for d_id, d_name in self.departments_list:
                         if d_id == dept_id:
                             self.departmentFilter.addItem(d_name)
                             break
 
-                print(f"🔍 Для подразделения '{division_name}' (ID={division_id}) найдено отделов: {len(dept_ids)}")
+                print(f"🔍 Для подразделения '{division_name}' найдено отделов: {len(dept_ids)}")
             else:
                 print(f"⚠️ Не найден ID для подразделения '{division_name}'")
         else:
-            # Если выбрано "Все подразделения", показываем все отделы
             for dept_id, dept_name in sorted(self.departments_list, key=lambda x: x[1]):
                 self.departmentFilter.addItem(dept_name)
 
@@ -167,31 +171,22 @@ class EmployeeSelectorDialog(QDialog):
         self.updating_filters = False
 
     def _update_sub_departments_filter(self, department_name):
-        """Обновляет список подразделений в зависимости от выбранного отдела,
-        НЕ ограничивая список (показываем все подразделения)"""
+        """Обновляет список подразделений"""
         if self.updating_filters:
             return
 
         self.updating_filters = True
 
-        # Запоминаем текущее выбранное подразделение
         current_division = self.subDepartmentFilter.currentText()
 
         self.subDepartmentFilter.blockSignals(True)
         self.subDepartmentFilter.clear()
         self.subDepartmentFilter.addItem("Все подразделения")
 
-        new_divisions = []
-
-        # ВСЕГДА показываем все подразделения, независимо от выбранного отдела
         for div_id, div_name in sorted(self.divisions_list, key=lambda x: x[1]):
             self.subDepartmentFilter.addItem(div_name)
-            new_divisions.append(div_name)
 
-        print(f"🔍 Для отдела '{department_name}' показываем все {len(new_divisions)} подразделений")
-
-        # Пытаемся восстановить выбранное подразделение
-        if current_division in new_divisions:
+        if current_division in [div_name for _, div_name in self.divisions_list]:
             index = self.subDepartmentFilter.findText(current_division)
             if index >= 0:
                 self.subDepartmentFilter.setCurrentIndex(index)
@@ -205,27 +200,26 @@ class EmployeeSelectorDialog(QDialog):
     def showEvent(self, event):
         """Срабатывает каждый раз при открытии диалога"""
         super().showEvent(event)
-        self.searchInput.clear()
-        # Сбрасываем фильтры
-        self.updating_filters = True
+        if not self.readonly_mode:
+            self.searchInput.clear()
+            self.updating_filters = True
 
-        self.departmentFilter.blockSignals(True)
-        self.departmentFilter.setCurrentIndex(0)
-        self.departmentFilter.blockSignals(False)
+            self.departmentFilter.blockSignals(True)
+            self.departmentFilter.setCurrentIndex(0)
+            self.departmentFilter.blockSignals(False)
 
-        self.subDepartmentFilter.blockSignals(True)
-        self.subDepartmentFilter.setCurrentIndex(0)
-        self.subDepartmentFilter.blockSignals(False)
+            self.subDepartmentFilter.blockSignals(True)
+            self.subDepartmentFilter.setCurrentIndex(0)
+            self.subDepartmentFilter.blockSignals(False)
 
-        self.updating_filters = False
-        QTimer.singleShot(0, self._refresh_filters)
+            self.updating_filters = False
+            QTimer.singleShot(0, self._refresh_filters)
 
     def _refresh_filters(self):
         """Обновляет фильтры и отображение"""
-        if self.service:
+        if self.service and not self.readonly_mode:
             data = self.service.load_employee_selector_data()
             self.all_employees = data.get('employees', self.all_employees)
-            # Сохраняем выбранных сотрудников по ID
             selected_ids = self.selected_employees.copy()
             self.selected_employees = selected_ids
         self.apply_filters()
@@ -236,13 +230,11 @@ class EmployeeSelectorDialog(QDialog):
 
     def on_department_changed(self, department):
         """Обработка изменения выбранного отдела"""
-        # Обновляем список подразделений (показываем все)
         self._update_sub_departments_filter(department)
         self.apply_filters()
 
     def on_sub_department_changed(self, sub_department):
         """Обработка изменения выбранного подразделения"""
-        # Обновляем список отделов в зависимости от выбранного подразделения
         self._update_departments_filter(sub_department)
         self.apply_filters()
 
@@ -252,28 +244,22 @@ class EmployeeSelectorDialog(QDialog):
         division_name = self.subDepartmentFilter.currentText()
         search_text = self.searchInput.text()
 
-        # Начинаем со всех сотрудников
         filtered = self.all_employees.copy()
 
-        # Фильтр по отделу
         if department_name and department_name != "Все отделы":
             department_id = self.departments_dict.get(department_name)
             if department_id:
                 filtered = [emp for emp in filtered if emp.get('department_id') == department_id]
             else:
                 filtered = []
-                print(f"⚠️ Не найден ID для отдела '{department_name}'")
 
-        # Фильтр по подразделению
         if division_name and division_name != "Все подразделения" and filtered:
             division_id = self.divisions_dict.get(division_name)
             if division_id:
                 filtered = [emp for emp in filtered if emp.get('division_id') == division_id]
             else:
                 filtered = []
-                print(f"⚠️ Не найден ID для подразделения '{division_name}'")
 
-        # Фильтр по поиску
         if search_text and filtered:
             search_lower = search_text.lower().strip()
             filtered = [
@@ -288,31 +274,23 @@ class EmployeeSelectorDialog(QDialog):
         self.sort_employees()
         self.display_employees()
 
-        print(f"🔍 Применяем фильтры:")
-        print(f"   Всего сотрудников: {len(self.all_employees)}")
-        print(f"   Выбран отдел: {department_name}")
-        print(f"   Выбрано подразделение: {division_name}")
-        print(f"   Поиск: {search_text if search_text else 'нет'}")
-        print(f"   Итоговое количество: {len(self.filtered_employees)}")
-
     def sort_employees(self):
         """Сортировка через сервис"""
-        if self.service:
+        if self.service and not self.readonly_mode:
             self.filtered_employees = self.service.sort_employees_for_selector(
                 self.filtered_employees, self.selected_employees
             )
         else:
             def get_sort_key(emp):
+                # В режиме просмотра не пересортировываем
                 is_selected = emp['id'] in self.selected_employees
                 return (0 if is_selected else 1, -emp.get('usage_count', 0))
-
             self.filtered_employees.sort(key=get_sort_key)
 
     def display_employees(self):
         """Отображение отфильтрованных сотрудников с чекбоксами"""
         layout = self.scrollAreaWidgetContents.layout()
 
-        # Полная очистка
         while layout.count():
             child = layout.takeAt(0)
             if child.widget():
@@ -321,85 +299,133 @@ class EmployeeSelectorDialog(QDialog):
         self.checkboxes.clear()
         self.employee_checkbox_map.clear()
 
-        # Убираем блокировку сигналов
-        self.selectAllCheckBox.blockSignals(True)
-        self.selectAllCheckBox.setEnabled(True)
-        self.selectAllCheckBox.blockSignals(False)
-
         if not self.filtered_employees:
             label = QLabel("Сотрудники не найдены")
             label.setAlignment(Qt.AlignmentFlag.AlignCenter)
             label.setStyleSheet("color: #B8B8B5; font-size: 14px; padding: 40px;")
             layout.addWidget(label)
-            self.selectAllCheckBox.blockSignals(True)
-            self.selectAllCheckBox.setEnabled(False)
-            self.selectAllCheckBox.blockSignals(False)
             self.update_selected_count()
-            self._update_select_all_state()
             return
 
         # Разделяем на выбранных и остальных
         selected_emps = [emp for emp in self.filtered_employees if emp['id'] in self.selected_employees]
         other_emps = [emp for emp in self.filtered_employees if emp['id'] not in self.selected_employees]
 
-        # Отображаем выбранных сотрудников с разделителем
-        if selected_emps:
-            separator = QLabel("✓ ВЫБРАННЫЕ")
-            separator.setStyleSheet("""
-                QLabel {
-                    font-size: 11px;
-                    font-weight: bold;
-                    color: #D22730;
-                    padding: 8px 0px 4px 0px;
-                    border-bottom: 1px solid #D9D9D6;
-                }
-            """)
-            layout.addWidget(separator)
-
-            for emp in selected_emps:
-                checkbox = self._create_checkbox(emp)
-                layout.addWidget(checkbox)
-                self.checkboxes.append(checkbox)
-
-        # Отображаем остальных с разделителем
-        if other_emps:
+        if self.readonly_mode:
+            # В режиме просмотра показываем всех сотрудников, но чекбоксы отключены
             if selected_emps:
-                separator = QLabel("ВСЕ СОТРУДНИКИ")
+                separator = QLabel("✓ ВЫБРАННЫЕ")
                 separator.setStyleSheet("""
                     QLabel {
                         font-size: 11px;
                         font-weight: bold;
-                        color: #666;
-                        padding: 16px 0px 4px 0px;
+                        color: #D22730;
+                        padding: 8px 0px 4px 0px;
                         border-bottom: 1px solid #D9D9D6;
                     }
                 """)
                 layout.addWidget(separator)
 
-            for emp in other_emps:
-                checkbox = self._create_checkbox(emp)
-                layout.addWidget(checkbox)
-                self.checkboxes.append(checkbox)
+                for emp in selected_emps:
+                    checkbox = self._create_readonly_checkbox(emp)
+                    layout.addWidget(checkbox)
+                    self.checkboxes.append(checkbox)
+
+            if other_emps:
+                if selected_emps:
+                    separator = QLabel("ВСЕ СОТРУДНИКИ")
+                    separator.setStyleSheet("""
+                        QLabel {
+                            font-size: 11px;
+                            font-weight: bold;
+                            color: #666;
+                            padding: 16px 0px 4px 0px;
+                            border-bottom: 1px solid #D9D9D6;
+                        }
+                    """)
+                    layout.addWidget(separator)
+
+                for emp in other_emps:
+                    checkbox = self._create_readonly_checkbox(emp)
+                    layout.addWidget(checkbox)
+                    self.checkboxes.append(checkbox)
+        else:
+            # Режим редактирования
+            if selected_emps:
+                separator = QLabel("✓ ВЫБРАННЫЕ")
+                separator.setStyleSheet("""
+                    QLabel {
+                        font-size: 11px;
+                        font-weight: bold;
+                        color: #D22730;
+                        padding: 8px 0px 4px 0px;
+                        border-bottom: 1px solid #D9D9D6;
+                    }
+                """)
+                layout.addWidget(separator)
+
+                for emp in selected_emps:
+                    checkbox = self._create_checkbox(emp)
+                    layout.addWidget(checkbox)
+                    self.checkboxes.append(checkbox)
+
+            if other_emps:
+                if selected_emps:
+                    separator = QLabel("ВСЕ СОТРУДНИКИ")
+                    separator.setStyleSheet("""
+                        QLabel {
+                            font-size: 11px;
+                            font-weight: bold;
+                            color: #666;
+                            padding: 16px 0px 4px 0px;
+                            border-bottom: 1px solid #D9D9D6;
+                        }
+                    """)
+                    layout.addWidget(separator)
+
+                for emp in other_emps:
+                    checkbox = self._create_checkbox(emp)
+                    layout.addWidget(checkbox)
+                    self.checkboxes.append(checkbox)
 
         layout.addStretch()
         self.update_selected_count()
-        self._update_select_all_state()
 
-    def _create_checkbox(self, emp: Dict) -> QCheckBox:
-        """Создает чекбокс для сотрудника"""
+    def _create_readonly_checkbox(self, emp: Dict) -> QCheckBox:
+        """Создает чекбокс для просмотра (только чтение)"""
         display_text = emp['full_name']
         checkbox = QCheckBox(display_text)
 
         tooltip_lines = []
         if emp.get('position'):
             tooltip_lines.append(f"Должность: {emp['position']}")
-        if emp.get('phone'):
-            tooltip_lines.append(f"Телефон: {emp['phone']}")
         if emp.get('email'):
             tooltip_lines.append(f"Email: {emp['email']}")
-        if emp.get('role'):
-            role_display = {'user': 'Пользователь', 'admin': 'Администратор', 'superadmin': 'Суперадминистратор'}
-            tooltip_lines.append(f"Роль: {role_display.get(emp['role'], emp['role'])}")
+
+        usage_count = emp.get('usage_count', 0)
+        if usage_count > 0:
+            tooltip_lines.append(f"📊 Использован в {usage_count} задачах")
+
+        checkbox.setToolTip("\n".join(tooltip_lines) if tooltip_lines else "Нет дополнительной информации")
+
+        if emp['id'] in self.selected_employees:
+            checkbox.setChecked(True)
+
+        # Отключаем чекбокс (только для просмотра)
+        checkbox.setEnabled(False)
+
+        return checkbox
+
+    def _create_checkbox(self, emp: Dict) -> QCheckBox:
+        """Создает активный чекбокс для редактирования"""
+        display_text = emp['full_name']
+        checkbox = QCheckBox(display_text)
+
+        tooltip_lines = []
+        if emp.get('position'):
+            tooltip_lines.append(f"Должность: {emp['position']}")
+        if emp.get('email'):
+            tooltip_lines.append(f"Email: {emp['email']}")
 
         usage_count = emp.get('usage_count', 0)
         if usage_count > 0:
@@ -418,16 +444,20 @@ class EmployeeSelectorDialog(QDialog):
 
     def _on_checkbox_changed(self, emp_id: int, state):
         """Обработчик изменения состояния чекбокса"""
+        if self.readonly_mode:
+            return
         if state == Qt.CheckState.Checked.value:
             self.selected_employees.add(emp_id)
         elif state == Qt.CheckState.Unchecked.value:
             self.selected_employees.discard(emp_id)
 
         self.update_selected_count()
-        self._update_select_all_state()
 
     def on_select_all_changed(self, state):
         """Обработка изменения состояния чекбокса 'Выбрать всех'"""
+        if self.readonly_mode:
+            return
+
         self.selectAllCheckBox.blockSignals(True)
 
         if state == Qt.CheckState.Checked.value:
@@ -456,17 +486,6 @@ class EmployeeSelectorDialog(QDialog):
             checkbox.setChecked(emp_id in self.selected_employees)
             checkbox.blockSignals(False)
 
-    def _update_select_all_state(self):
-        """Обновление состояния чекбокса 'Выбрать всех'"""
-        self.selectAllCheckBox.blockSignals(True)
-
-        if len(self.filtered_employees) > 0 and len(self.selected_employees) == len(self.filtered_employees):
-            self.selectAllCheckBox.setCheckState(Qt.CheckState.Checked)
-        elif len(self.selected_employees) < len(self.filtered_employees):
-            self.selectAllCheckBox.setCheckState(Qt.CheckState.Unchecked)
-
-        self.selectAllCheckBox.blockSignals(False)
-
     def get_selected_employees(self) -> List[Dict]:
         """Получение списка выбранных сотрудников с полной информацией"""
         selected = []
@@ -487,5 +506,6 @@ class EmployeeSelectorDialog(QDialog):
 
     def accept(self):
         """Переопределяем accept для возврата данных"""
-        self.employees_selected.emit(self.get_selected_employees())
+        if not self.readonly_mode:
+            self.employees_selected.emit(self.get_selected_employees())
         super().accept()

@@ -25,6 +25,7 @@ class ProjectEditDialog(BaseProjectDialog):
         # Подключаем сигнал сохранения
         self.createBtn.clicked.connect(self.validate_and_accept)
 
+
     def setup_edit_ui(self):
         """Настройка UI для режима редактирования"""
         project_name = self.project_data.get('name', '')

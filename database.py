@@ -6,7 +6,7 @@ DB_TASKS = {
     "user": "postgres",
     "password": "admin",
     "database": "taskplanner",
-    "host": "10.126.231.152",
+    "host": "10.174.185.152",
     "port": 5432,
 }
 
@@ -14,7 +14,7 @@ DB_EMPLOYEES = {
     "user": "postgres",
     "password": "admin",
     "database": "employees",
-    "host": "10.126.231.152",
+    "host": "10.174.185.152",
     "port": 5432,
 }
 

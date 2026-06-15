@@ -10,6 +10,7 @@ from services.chat_service import ChatService
 from services.employee_service.column_service import ColumnService
 from services.overtime_service.overtime_service import OvertimeService
 from services.projects_service.projects_service import ProjectsService
+from services.permissions.permission_service import PermissionService
 
 from windows.projects.main_window_handlers import (
     ProjectViewHandler, NavigationHandler, UIHandler, SocketHandler
@@ -17,7 +18,7 @@ from windows.projects.main_window_handlers import (
 
 
 class MainWindow(QMainWindow):
-    """Главное окно приложения - только инициализация и координация"""
+    """Главное окно приложения - с поддержкой прав доступа"""
 
     def __init__(self, session, user_id, socket_client=None):
         super().__init__()
@@ -26,7 +27,7 @@ class MainWindow(QMainWindow):
         self.session = session
         self.current_user_id = user_id
         self.socket_client = socket_client
-        self.current_user = None  # будет загружен через сервис
+        self.current_user = None
 
         # Состояние фильтров
         self.current_search_query = ""
@@ -41,68 +42,20 @@ class MainWindow(QMainWindow):
         # Инициализация
         self._init_services()
         self._load_current_user()
+
+        # Инициализация сервиса прав (после загрузки пользователя)
+        self._init_permission_service()
+
         self._setup_ui()
         self._init_handlers()
         self._setup_navigation()
         self._setup_socket()
         self._setup_column_service()
 
+        # Настройка UI в зависимости от прав
+        self._setup_permission_ui()
+
         self.showMaximized()
-
-    def _on_columns_updated(self):
-        """Обработчик обновления колонок"""
-        print("📢 Получен сигнал обновления колонок")
-
-        # Прямое обновление страницы Мои задачи
-        if hasattr(self, 'navigation') and 'my_tasks' in self.navigation.pages:
-            print("   - Прямое обновление страницы Мои задачи")
-            # Принудительно сбрасываем кэш колонок в сервисе
-            my_tasks = self.navigation.pages['my_tasks']
-            if hasattr(my_tasks.service.crud, '_column_cache'):
-                my_tasks.service.crud._column_cache = None
-            my_tasks.refresh_columns()
-
-        # Обновляем страницу Чужие задачи
-        if hasattr(self, 'navigation') and 'other_tasks' in self.navigation.pages:
-            print("   - Обновляем страницу Чужие задачи")
-            self.navigation.pages['other_tasks'].refresh_columns()
-
-        # Также через NavigationHandler
-        if hasattr(self, 'navigation'):
-            self.navigation.refresh_task_pages_columns()
-
-    def _setup_column_service(self):
-        """Настройка сервиса колонок и подключение сигналов"""
-        # Создаем экземпляр ColumnService как синглтон
-        self.column_service = ColumnService()
-
-        # Подключаем сигнал обновления колонок к NavigationHandler
-        self.column_service.columns_updated.connect(self._on_columns_updated)
-
-        # Дополнительно подключаем напрямую к страницам (страховка)
-        self.column_service.columns_updated.connect(self._force_refresh_task_pages)
-
-    def _force_refresh_task_pages(self):
-        """Принудительное обновление страниц задач"""
-        print("📢 Принудительное обновление страниц задач")
-        if hasattr(self, 'navigation'):
-            # Обновляем даже если страницы еще не созданы - они создадутся при первом открытии
-            if 'my_tasks' in self.navigation.pages:
-                self.navigation.pages['my_tasks'].refresh_columns()
-            if 'other_tasks' in self.navigation.pages:
-                self.navigation.pages['other_tasks'].refresh_columns()
-
-    def get_my_tasks_page_with_signals(self):
-        """Создает страницу моих задач с подключенными сигналами"""
-        from windows.my_tasks.my_tasks_page import MyTasksPage
-
-        page = MyTasksPage(
-            db_session=self.session,
-            current_user={"id": self.current_user_id, "last_name": "", "first_name": ""},
-            column_service=self.column_service  # <-- ПЕРЕДАЁМ
-        )
-        page.open_project_requested.connect(self.navigation.open_project_by_id)
-        return page
 
     def _init_services(self):
         """Инициализация сервисов"""
@@ -117,12 +70,33 @@ class MainWindow(QMainWindow):
         self.analytics_service.set_current_user_id(self.current_user_id)
         self.overtime_service.set_current_user_id(self.current_user_id)
 
+    def _init_permission_service(self):
+        """Инициализация сервиса прав доступа"""
+        self.permission_service = PermissionService(
+            user_id=self.current_user_id,
+            app_service=self.project_service,
+            project_service=self.project_service,
+            employee_service=None
+        )
+        print(f"🔐 Сервис прав инициализирован для пользователя {self.current_user_id}")
+        print(f"   Роль в приложении: {self.permission_service.app_manager.role.value}")
+
+        # Проверка прав для тестового проекта (если есть)
+        # Найдите любой проект пользователя и проверьте права
+        try:
+            projects = self.project_service.get_projects_for_cards(owner_filter=True)
+            if projects:
+                test_project_id = projects[0].id
+                can_edit = self.permission_service.can_edit_project(test_project_id)
+                print(f"   Тестовый проект {test_project_id}: can_edit={can_edit}")
+        except Exception as e:
+            print(f"   Ошибка проверки прав: {e}")
+
     def _load_current_user(self):
         """Загрузка текущего пользователя через сервис"""
         self.current_user = self.project_service.get_user_by_id(self.current_user_id)
-        print(f"🔍 Загружен пользователь: {self.current_user}")  # Для отладки
+        print(f"🔍 Загружен пользователь: {self.current_user}")
 
-        # Если нет полей, добавляем дефолтные значения
         if self.current_user:
             if 'last_name' not in self.current_user:
                 self.current_user['last_name'] = ''
@@ -130,6 +104,111 @@ class MainWindow(QMainWindow):
                 self.current_user['first_name'] = ''
             if 'middle_name' not in self.current_user:
                 self.current_user['middle_name'] = ''
+
+    def _setup_permission_ui(self):
+        """Настраивает UI в зависимости от прав пользователя"""
+        if not self.permission_service:
+            return
+
+        # 1. Кнопка создания проекта
+        if hasattr(self, 'btnCreateProject'):
+            can_create = self.permission_service.can_show_create_project_button()
+            self.btnCreateProject.setVisible(can_create)
+            print(f"   btnCreateProject visible: {can_create}")
+
+        # 2. Настройка видимости вкладок в левой панели
+        visible_tabs = self.permission_service.app_manager.get_visible_tabs()
+
+        tab_buttons = {
+            'projects': None,
+            'my_tasks': None,
+            'other_tasks': None,
+            'gantt': None,
+            'analytics': None,
+            'chat': None,
+            'overtime': None,
+            'settings': None,
+            'archive': None
+        }
+
+        # Получаем кнопки из левой панели
+        if hasattr(self.leftPanel, 'btnMain'):
+            tab_buttons['projects'] = self.leftPanel.btnMain
+        if hasattr(self.leftPanel, 'btnMyTasks'):
+            tab_buttons['my_tasks'] = self.leftPanel.btnMyTasks
+        if hasattr(self.leftPanel, 'btnOtherTasks'):
+            tab_buttons['other_tasks'] = self.leftPanel.btnOtherTasks
+        if hasattr(self.leftPanel, 'btnGantt'):
+            tab_buttons['gantt'] = self.leftPanel.btnGantt
+        if hasattr(self.leftPanel, 'btnAnalytics'):
+            tab_buttons['analytics'] = self.leftPanel.btnAnalytics
+        if hasattr(self.leftPanel, 'btnChat'):
+            tab_buttons['chat'] = self.leftPanel.btnChat
+        if hasattr(self.leftPanel, 'btnOvertime'):
+            tab_buttons['overtime'] = self.leftPanel.btnOvertime
+        if hasattr(self.leftPanel, 'btnSettings'):
+            tab_buttons['settings'] = self.leftPanel.btnSettings
+        if hasattr(self.leftPanel, 'btnArchive'):
+            tab_buttons['archive'] = self.leftPanel.btnArchive
+
+        # Применяем видимость
+        for tab_name, button in tab_buttons.items():
+            if button:
+                is_visible = tab_name in visible_tabs
+                button.setVisible(is_visible)
+                if not is_visible:
+                    print(f"   Скрыта вкладка: {tab_name}")
+
+        # 3. Дополнительные настройки для страницы переработок
+        if hasattr(self.leftPanel, 'btnOvertime') and self.leftPanel.btnOvertime.isVisible():
+            can_view_all = self.permission_service.can_show_overtime_tab_all()
+            # Флаг будет использован на странице переработок
+            self._overtime_can_view_all = can_view_all
+
+    def _on_columns_updated(self):
+        """Обработчик обновления колонок"""
+        print("📢 Получен сигнал обновления колонок")
+
+        if hasattr(self, 'navigation') and 'my_tasks' in self.navigation.pages:
+            print("   - Прямое обновление страницы Мои задачи")
+            my_tasks = self.navigation.pages['my_tasks']
+            if hasattr(my_tasks.service.crud, '_column_cache'):
+                my_tasks.service.crud._column_cache = None
+            my_tasks.refresh_columns()
+
+        if hasattr(self, 'navigation') and 'other_tasks' in self.navigation.pages:
+            print("   - Обновляем страницу Чужие задачи")
+            self.navigation.pages['other_tasks'].refresh_columns()
+
+        if hasattr(self, 'navigation'):
+            self.navigation.refresh_task_pages_columns()
+
+    def _setup_column_service(self):
+        """Настройка сервиса колонок и подключение сигналов"""
+        self.column_service = ColumnService()
+        self.column_service.columns_updated.connect(self._on_columns_updated)
+        self.column_service.columns_updated.connect(self._force_refresh_task_pages)
+
+    def _force_refresh_task_pages(self):
+        """Принудительное обновление страниц задач"""
+        print("📢 Принудительное обновление страниц задач")
+        if hasattr(self, 'navigation'):
+            if 'my_tasks' in self.navigation.pages:
+                self.navigation.pages['my_tasks'].refresh_columns()
+            if 'other_tasks' in self.navigation.pages:
+                self.navigation.pages['other_tasks'].refresh_columns()
+
+    def get_my_tasks_page_with_signals(self):
+        """Создает страницу моих задач с подключенными сигналами"""
+        from windows.my_tasks.my_tasks_page import MyTasksPage
+
+        page = MyTasksPage(
+            db_session=self.session,
+            current_user={"id": self.current_user_id, "last_name": "", "first_name": ""},
+            column_service=self.column_service
+        )
+        page.open_project_requested.connect(self.navigation.open_project_by_id)
+        return page
 
     def _setup_ui(self):
         """Загрузка UI файлов"""
@@ -144,12 +223,10 @@ class MainWindow(QMainWindow):
         self.ui_handler = UIHandler(self)
         self.socket_handler = SocketHandler(self)
 
-        # Сохраняем индексы страниц для доступа из других обработчиков
         self.page_indices = self.navigation.get_page_index()
 
     def _setup_navigation(self):
         """Настройка навигации"""
-        # Подключаем кнопки навигации
         self.nav_map = {
             self.leftPanel.btnMain: self.navigation.PAGE_PROJECTS,
             self.leftPanel.btnMyTasks: self.navigation.PAGE_MY_TASKS,
@@ -163,7 +240,6 @@ class MainWindow(QMainWindow):
         if hasattr(self.leftPanel, 'btnArchive'):
             self.nav_map[self.leftPanel.btnArchive] = self.navigation.PAGE_ARCHIVE
 
-        # Подключаем сигналы
         for btn, index in self.nav_map.items():
             btn.clicked.connect(lambda checked, i=index: self.navigation.switch_page(i))
 
@@ -182,7 +258,6 @@ class MainWindow(QMainWindow):
 
         self.contentStack.currentChanged.connect(self._on_stack_page_changed)
 
-        # Начальное состояние
         self.ui_handler.setup_initial_state()
         self.ui_handler.update_profile_button()
         self.project_handler.refresh_projects_view()
@@ -217,6 +292,10 @@ class MainWindow(QMainWindow):
     def open_project(self, project_id):
         self.project_handler.open_project(project_id)
 
+    def view_project(self, project_id):
+        """Просмотр проекта (без права редактирования)"""
+        self.project_handler.view_project(project_id)
+
     def search_projects(self, text):
         self.project_handler.search_projects(text)
 
@@ -249,22 +328,13 @@ class MainWindow(QMainWindow):
         if reply == QMessageBox.StandardButton.Yes:
             from services.auth_service import AuthService
 
-            # Очищаем сессию через AuthService
             auth_service = AuthService()
             user_id = self.current_user.get('id') if self.current_user else None
             auth_service.clear_session(user_id)
             auth_service.clear_current_user()
 
-            # Закрываем текущее окно
             self.close()
 
-            # Создаем и показываем окно входа
             from windows.login.login_window import LoginWindow
             self.login_window = LoginWindow()
             self.login_window.show()
-
-            # Важно: сохраняем ссылку на окно, чтобы оно не было удалено сборщиком мусора
-            # и показываем его после закрытия главного окна
-            if hasattr(self, 'parent()'):
-                # Если есть родительское окно, показываем относительно него
-                pass

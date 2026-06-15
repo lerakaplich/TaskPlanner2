@@ -9,18 +9,21 @@ from PyQt6.QtWidgets import QFrame, QLabel, QMenu
 
 
 class ProjectCard(QFrame):
-    """Карточка проекта с кнопкой редактирования и отображением участников"""
+    """Карточка проекта с кнопкой редактирования и поддержкой прав"""
 
     edit_clicked = pyqtSignal(int)  # Сигнал для редактирования
     open_clicked = pyqtSignal(int)  # Сигнал для открытия
     archive_clicked = pyqtSignal(int)  # Сигнал для архивации
+    view_clicked = pyqtSignal(int)  # Сигнал для просмотра (для пользователей без прав редактирования)
 
-    def __init__(self, project_id, project_data, parent=None, service=None):
+    def __init__(self, project_id, project_data, parent=None, service=None, permission_service=None):
         super().__init__(parent)
 
         self.service = service
+        self.permission_service = permission_service
         self.project_id = project_id
         self.project_data = project_data
+        self.is_editable = True  # Будет установлено из permission_service
 
         # Загружаем UI
         ui_path = os.path.join(
@@ -34,6 +37,9 @@ class ProjectCard(QFrame):
 
         # Заполняем данными
         self.update_data(project_data)
+
+        # Настраиваем кнопки в зависимости от прав
+        self._setup_permission_buttons()
 
         # Подключаем сигналы
         self._connect_signals()
@@ -73,10 +79,32 @@ class ProjectCard(QFrame):
                 layout.insertWidget(btn_index, self.tasksLabel)
                 layout.insertWidget(btn_index + 1, self.columnsLabel)
 
+    def _setup_permission_buttons(self):
+        """Настраивает видимость и текст кнопок в зависимости от прав"""
+        if not self.permission_service:
+            self.is_editable = True
+            return
+
+        # Проверяем, может ли пользователь редактировать проект
+        self.is_editable = self.permission_service.can_edit_project(self.project_id)
+
+        # Меняем текст кнопки редактирования
+        button_text = "Редактировать" if self.is_editable else "Подробнее"
+        self.btnEdit.setText(button_text)
+
+        # Меняем иконку (опционально)
+        if not self.is_editable:
+            self.btnEdit.setToolTip("Просмотр информации о проекте")
+        else:
+            self.btnEdit.setToolTip("Редактировать проект")
+        can_archive = self.permission_service.can_archive_project(self.project_id) if self.permission_service else True
+        if hasattr(self, 'menuButton'):
+            self.menuButton.setVisible(can_archive)
+
     def _connect_signals(self):
         """Подключает сигналы кнопок"""
         self.btnOpen.clicked.connect(lambda: self.open_clicked.emit(self.project_id))
-        self.btnEdit.clicked.connect(lambda: self.edit_clicked.emit(self.project_id))
+        self.btnEdit.clicked.connect(self._on_edit_clicked)
 
         if hasattr(self, 'menuButton'):
             self.menuButton.clicked.connect(self.show_context_menu)
@@ -88,6 +116,14 @@ class ProjectCard(QFrame):
         )
         self.setMinimumHeight(285)
         self.setMaximumHeight(285)
+
+    def _on_edit_clicked(self):
+        """Обработчик нажатия на кнопку редактирования"""
+        if not self.is_editable:
+            # Если пользователь не может редактировать, отправляем сигнал на просмотр/открытие
+            self.view_clicked.emit(self.project_id)
+        else:
+            self.edit_clicked.emit(self.project_id)
 
     def show_context_menu(self):
         """Показывает контекстное меню с действиями"""
@@ -125,21 +161,17 @@ class ProjectCard(QFrame):
         if self.service:
             card_data = self.service.get_project_card_data(project_data)
         else:
-            # Fallback если нет сервиса
             card_data = self._fallback_format_data(project_data)
 
-        # Применяем данные к UI
         self._apply_card_data(card_data)
 
     def _fallback_format_data(self, project_data):
         """Форматирование данных без сервиса (fallback)"""
-        # Прогресс
         if project_data.tasks_total > 0:
             progress = int((project_data.tasks_done / project_data.tasks_total) * 100)
         else:
             progress = 0
 
-        # Информационная строка
         owner_name = getattr(project_data, 'owner_name', 'Не назначен')
         manager_name = getattr(project_data, 'manager_name', None)
         if manager_name:
@@ -147,19 +179,15 @@ class ProjectCard(QFrame):
         else:
             info_text = f"Владелец: {owner_name}"
 
-        # Дата создания
         created_at = getattr(project_data, 'created_at', None)
         start_date_text = f"Создан: {created_at}" if created_at else ""
 
-        # Участники
         member_count = getattr(project_data, 'member_count', 0)
         participants_text = f"Участники: {member_count} чел."
 
-        # Администраторы
         admin_count = getattr(project_data, 'admin_count', 0)
         admins_text = f"Админы: {admin_count} чел."
 
-        # Задачи
         tasks_total = getattr(project_data, 'tasks_total', 0)
         tasks_done = getattr(project_data, 'tasks_done', 0)
 
@@ -170,7 +198,6 @@ class ProjectCard(QFrame):
 
         tasks_style = "color: #4CAF50;" if (tasks_total > 0 and tasks_done == tasks_total) else "color: #1B232A;"
 
-        # Колонки
         columns_count = getattr(project_data, 'columns_count', 0)
         columns_text = f"Колонок: {columns_count}"
 
@@ -188,23 +215,13 @@ class ProjectCard(QFrame):
 
     def _apply_card_data(self, card_data: dict):
         """Применяет отформатированные данные к UI"""
-        # Название проекта
         self.projectTitle.setText(card_data['name'])
-
-        # Прогресс
         self.progressBar.setValue(card_data['progress'])
-
-        # Информация о владельце/кураторе
         self.projectInfo.setText(card_data['info_text'])
-
-        # Дата создания
         self.startDate.setText(card_data['start_date_text'])
-
-        # Участники и администраторы
         self.participants.setText(card_data['participants_text'])
         self.admins.setText(card_data['admins_text'])
 
-        # Задачи
         self.tasksLabel.setText(card_data['tasks_text'])
         self.tasksLabel.setStyleSheet(f"""
             QLabel {{
@@ -215,5 +232,4 @@ class ProjectCard(QFrame):
             }}
         """)
 
-        # Колонки
         self.columnsLabel.setText(card_data['columns_text'])

@@ -2,7 +2,7 @@
 
 from typing import List, Optional, Dict, Any
 from database import get_tasks_session, get_employees_session
-
+from sqlalchemy import text
 from .projects_crud_service import ProjectsCrudService
 from .projects_members_service import ProjectsMembersService
 from .projects_columns_service import ProjectsColumnsService
@@ -10,6 +10,7 @@ from .projects_tasks_service import ProjectsTasksService
 from .projects_statistics_service import ProjectsStatisticsService
 from .projects_notification_service import ProjectsNotificationService
 from ..employee_service.column_service import ColumnService
+from ..permissions.project_permissions import ProjectRole
 
 
 class ProjectsService:
@@ -33,6 +34,162 @@ class ProjectsService:
         self.tasks = ProjectsTasksService(self.session, self.employees_session, self.crud.employee_repo)
         self.stats = ProjectsStatisticsService(self.session, self.crud.employee_repo)
         self.notification = ProjectsNotificationService(self.crud.employee_repo)
+
+    def get_user_role_display(self, user_id: int) -> str:
+        """
+        Возвращает отображаемое название роли пользователя
+        """
+        app_role = self.get_app_role(user_id)
+        role_names = {
+            'superadmin': 'Суперадминистратор',
+            'admin': 'Администратор',
+            'user': 'Пользователь'
+        }
+        return role_names.get(app_role.value, 'Пользователь')
+
+    def get_project_role_display(self, user_id: int, project_id: int) -> str:
+        """
+        Возвращает отображаемое название роли в проекте
+        """
+        project_role = self.get_project_role(user_id, project_id)
+        role_names = {
+            'project_manager': 'Руководитель проекта',
+            'curator': 'Куратор проекта',
+            'member': 'Участник проекта'
+        }
+        return role_names.get(project_role.value, 'Участник проекта')
+
+    def get_user_projects_with_roles(self, user_id: int) -> List[Dict]:
+        """
+        Возвращает список проектов пользователя с указанием его роли в каждом
+        """
+        from sqlalchemy import text
+
+        stmt = text("""
+            SELECT 
+                p.id,
+                p.name,
+                p.is_archived,
+                ep.is_admin,
+                CASE 
+                    WHEN p.manager_id = :user_id THEN 'curator'
+                    WHEN ep.is_admin = true THEN 'project_manager'
+                    ELSE 'member'
+                END as role_in_project
+            FROM public.projects p
+            LEFT JOIN public.employees_projects ep 
+                ON ep.project_id = p.id AND ep.employee_id = :user_id
+            WHERE p.is_archived = false
+            AND (
+                ep.employee_id IS NOT NULL 
+                OR p.manager_id = :user_id 
+                OR p.owner = :user_id
+            )
+        """)
+
+        result = self.session.execute(stmt, {'user_id': user_id}).all()
+
+        return [
+            {
+                'id': row[0],
+                'name': row[1],
+                'is_archived': row[2],
+                'is_admin': row[3],
+                'role': row[4]
+            }
+            for row in result
+        ]
+
+    def get_app_role(self, user_id: int):
+        """
+        Возвращает роль пользователя на уровне приложения
+        Читает из таблицы public.employees_data (БД taskplanner)
+        """
+        from services.permissions.app_permissions import AppRole
+        from sqlalchemy import text
+
+        if not self.session:
+            return AppRole.USER
+
+        try:
+            stmt = text("SELECT role FROM public.employees_data WHERE employee_id = :user_id")
+            result = self.session.execute(stmt, {'user_id': user_id}).first()
+
+            if result:
+                role_str = result[0]
+                if role_str == 'superadmin':
+                    return AppRole.SUPER_ADMIN
+                elif role_str == 'admin':
+                    return AppRole.ADMIN
+                else:
+                    return AppRole.USER
+        except Exception as e:
+            print(f"⚠️ Ошибка получения роли пользователя {user_id}: {e}")
+
+        return AppRole.USER
+
+    def get_project_role(self, user_id: int, project_id: int):
+        """
+        Возвращает роль пользователя в проекте
+        """
+        from services.permissions.project_permissions import ProjectRole
+
+        try:
+            # 1. Проверяем, является ли пользователь куратором проекта
+            stmt = text("""
+                SELECT manager_id FROM public.projects WHERE id = :project_id
+            """)
+            result = self.session.execute(stmt, {'project_id': project_id}).first()
+
+            if result and result[0] == user_id:
+                return ProjectRole.CURATOR
+
+            # 2. Проверяем, является ли пользователь администратором проекта
+            stmt = text("""
+                SELECT is_admin FROM public.employees_projects 
+                WHERE project_id = :project_id AND employee_id = :user_id
+            """)
+            result = self.session.execute(stmt, {
+                'project_id': project_id,
+                'user_id': user_id
+            }).first()
+
+            if result:
+                if result[0]:  # is_admin = True
+                    return ProjectRole.PROJECT_MANAGER
+                else:
+                    return ProjectRole.MEMBER
+
+            # 3. Проверяем, является ли пользователь владельцем проекта
+            stmt = text("""
+                SELECT owner FROM public.projects WHERE id = :project_id
+            """)
+            result = self.session.execute(stmt, {'project_id': project_id}).first()
+
+            if result and result[0] == user_id:
+                return ProjectRole.PROJECT_MANAGER
+
+        except Exception as e:
+            print(f"⚠️ Ошибка получения роли в проекте: {e}")
+
+        return ProjectRole.MEMBER
+
+    def can_archive_project(self, project_id: int, user_id: int = None) -> bool:
+        """
+        Проверяет, может ли пользователь архивировать проект
+        """
+        target_user_id = user_id or self.current_user_id
+
+        # Суперадмин и админ могут архивировать любые проекты
+        app_role = self.get_app_role(target_user_id)
+        if app_role.value in ('superadmin', 'admin'):
+            return True
+
+        # Проверяем роль в проекте
+        project_role = self.get_project_role(target_user_id, project_id)
+
+        # Куратор и руководитель могут архивировать проект
+        return project_role in (ProjectRole.CURATOR, ProjectRole.PROJECT_MANAGER)
 
     def set_current_user_id(self, user_id):
         self.current_user_id = user_id

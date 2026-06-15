@@ -1,5 +1,6 @@
 ﻿+-- .dockerignore
 +-- __pycache__
++-- bilet.py
 +-- build
 |  +-- main
 |  |  +-- Analysis-00.toc
@@ -37,7 +38,6 @@
 |  |  +-- warn-TasksServer.txt
 |  |  +-- xref-TasksServer.html
 +-- chat_server.py
-+-- convert_png_ico.py
 +-- database.py
 +-- dist
 |  +-- main
@@ -55,6 +55,7 @@
 |  +-- qr.png
 |  +-- taskplanner.ico
 |  +-- taskplanner.png
+|  +-- taskplanner_icon.png
 +-- main.py
 +-- main.spec
 +-- models
@@ -138,6 +139,8 @@
 +-- shared_state.py
 +-- structure.txt
 +-- taskplanner.zip
++-- taskplanner_icon.ico
++-- taskplanner_icon.png
 +-- TasksServer.spec
 +-- telegram_bot
 |  +-- __pycache__
@@ -202,6 +205,7 @@
 |  |  +-- project_card.ui
 |  |  +-- project_creation_dialog.ui
 |  |  +-- project_edit_dialog.ui
+|  |  +-- project_page.ui
 |  +-- settings
 |  |  +-- base_tab.ui
 |  |  +-- columns
@@ -272,6 +276,9 @@
 |  |  +-- gantt_widget.py
 |  |  +-- link_dialog.py
 |  |  +-- period_dialog.py
+|  +-- gantt_chart_20260608_144211.png
+|  +-- gantt_chart_20260608_144232.xlsx
+|  +-- gantt_report_20260608_144313.docx
 |  +-- login
 |  |  +-- __pycache__
 |  |  +-- login_window.py

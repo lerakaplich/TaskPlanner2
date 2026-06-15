@@ -11,7 +11,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(
 
 
 class BaseProjectDialog(QDialog):
-    """Базовый класс для диалогов создания и редактирования проектов"""
+    """Базовый класс для диалогов создания и редактирования проектов с поддержкой прав"""
 
     columns_changed = pyqtSignal(dict)
 
@@ -28,25 +28,65 @@ class BaseProjectDialog(QDialog):
         self.project_data = project_data or {}
         self.participants = []
         self.admins = []
-        self.all_columns = []  # Все доступные канбан-колонки
-        self.column_checkboxes = {}  # Словарь чекбоксов: col_key -> checkbox
-        self.selected_columns_data = []  # Выбранные колонки
+        self.all_columns = []
+        self.column_checkboxes = {}
+        self.selected_columns_data = []
 
-        # Настройка UI
+        # Инициализация сервиса прав
+        self.permission_service = None
+        self._init_permission_service(parent)
+
         self.setup_base_ui()
         self.connect_signals()
         self.setup_manager_selector()
-        self.hide_field_checkboxes()  # Скрываем чекбоксы полей проекта
+        self.hide_field_checkboxes()
         self.load_columns()
 
-        # Загружаем данные проекта если есть
         if project_data:
             self.load_project_data()
 
+    def _init_permission_service(self, parent):
+        """Инициализирует сервис прав из родительского окна"""
+        if parent and hasattr(parent, 'current_user_id') and hasattr(parent, 'permission_service'):
+            self.permission_service = parent.permission_service
+        elif parent and hasattr(parent, 'current_user_id') and self.service:
+            from services.permissions.permission_service import PermissionService
+            self.permission_service = PermissionService(
+                user_id=parent.current_user_id,
+                app_service=self.service,
+                project_service=self.service
+            )
+
     def connect_signals(self):
         """Подключает сигналы"""
+        # Не подключаем здесь - подключим позже в зависимости от режима
+        pass
+
+    def connect_edit_signals(self):
+        """Подключает сигналы для режима редактирования"""
+        try:
+            self.participantsBtn.clicked.disconnect()
+        except:
+            pass
+        try:
+            self.adminsBtn.clicked.disconnect()
+        except:
+            pass
         self.participantsBtn.clicked.connect(self.select_participants)
         self.adminsBtn.clicked.connect(self.select_admins)
+
+    def connect_view_signals(self):
+        """Подключает сигналы для режима просмотра"""
+        try:
+            self.participantsBtn.clicked.disconnect()
+        except:
+            pass
+        try:
+            self.adminsBtn.clicked.disconnect()
+        except:
+            pass
+        self.participantsBtn.clicked.connect(self.view_participants)
+        self.adminsBtn.clicked.connect(self.view_admins)
 
     def setup_base_ui(self):
         """Базовая настройка UI"""
@@ -54,9 +94,50 @@ class BaseProjectDialog(QDialog):
         self.dateLabel.setText(f"Создан: {current_date}")
         self.createBtn.setText("Создать проект")
 
-        # Переименовываем GroupBox для колонок
+        # Подключаем сигналы для режима редактирования (по умолчанию)
+        self.connect_edit_signals()
+
         if hasattr(self, 'columnsGroupBox'):
             self.columnsGroupBox.setTitle("Выбор канбан-колонок для проекта")
+
+    def view_participants(self):
+        """Просмотр участников проекта (режим только для чтения)"""
+        try:
+            from windows.projects.employee_selector import EmployeeSelectorDialog
+
+            dialog = EmployeeSelectorDialog(self, service=self.service, mode="participants")
+
+            # Устанавливаем предвыбранных участников
+            if self.participants:
+                preselected_ids = [p.get('id') if isinstance(p, dict) else p for p in self.participants]
+                dialog.set_preselected(preselected_ids)
+
+            # Делаем диалог только для чтения - отключаем возможность выбора
+            # Для этого переопределяем поведение чекбоксов в диалоге
+            dialog.set_readonly_mode(True)
+
+            dialog.exec()
+        except Exception as e:
+            QMessageBox.warning(self, "Ошибка", f"Ошибка при просмотре участников: {e}")
+
+    def view_admins(self):
+        """Просмотр администраторов проекта (режим только для чтения)"""
+        try:
+            from windows.projects.employee_selector import EmployeeSelectorDialog
+
+            dialog = EmployeeSelectorDialog(self, service=self.service, mode="admins")
+
+            # Устанавливаем предвыбранных администраторов
+            if self.admins:
+                preselected_ids = [a.get('id') if isinstance(a, dict) else a for a in self.admins]
+                dialog.set_preselected(preselected_ids)
+
+            # Делаем диалог только для чтения - отключаем возможность выбора
+            dialog.set_readonly_mode(True)
+
+            dialog.exec()
+        except Exception as e:
+            QMessageBox.warning(self, "Ошибка", f"Ошибка при просмотре администраторов: {e}")
 
     def hide_field_checkboxes(self):
         """Скрывает ненужные чекбоксы полей проекта"""
@@ -69,35 +150,106 @@ class BaseProjectDialog(QDialog):
             if hasattr(self, cb_name):
                 getattr(self, cb_name).hide()
 
+    def setup_edit_mode(self, project_id: int):
+        """
+        Настраивает диалог в зависимости от прав пользователя
+        Вызывается в ProjectEditDialog после загрузки данных
+        """
+        if not self.permission_service:
+            self.connect_edit_signals()
+            return
+
+        can_edit = self.permission_service.can_edit_project(project_id)
+
+        if not can_edit:
+            # Режим только для просмотра
+            self._setup_readonly_mode(project_id)
+            self.connect_view_signals()
+        else:
+            # Режим редактирования - оставляем кнопку видимой
+            self.createBtn.setText("Сохранить изменения")
+            self.createBtn.show()
+            self.connect_edit_signals()
+
+    def _setup_readonly_mode(self, project_id: int):
+        """
+        Настраивает режим только для просмотра
+        """
+        # Меняем заголовок окна
+        project_name = self.project_data.get('name', '')
+        self.setWindowTitle(f"Информация о проекте: {project_name}")
+
+        # Меняем текст заголовка в UI
+        if hasattr(self, 'titleLabel'):
+            self.titleLabel.setText("Информация о проекте")
+
+        # Скрываем кнопку сохранения
+        self.createBtn.hide()
+
+        # Делаем все поля только для чтения
+        if hasattr(self, 'nameInput'):
+            self.nameInput.setReadOnly(True)
+            self.nameInput.setStyleSheet("background-color: #f5f5f5;")
+
+        if hasattr(self, 'descInput'):
+            self.descInput.setReadOnly(True)
+            self.descInput.setStyleSheet("background-color: #f5f5f5;")
+
+        if hasattr(self, 'activeCheckbox'):
+            self.activeCheckbox.setEnabled(False)
+
+        # Кнопки выбора участников/админов - НЕ отключаем, а меняем поведение
+        if hasattr(self, 'participantsBtn'):
+            try:
+                self.participantsBtn.clicked.disconnect()
+            except:
+                pass
+            self.participantsBtn.clicked.connect(self.view_participants)
+
+        if hasattr(self, 'adminsBtn'):
+            try:
+                self.adminsBtn.clicked.disconnect()
+            except:
+                pass
+            self.adminsBtn.clicked.connect(self.view_admins)
+
+        # Проверяем, может ли пользователь управлять колонками
+        if hasattr(self, 'permission_service'):
+            can_manage_columns = self.permission_service.can_show_project_columns_selector(project_id)
+            if not can_manage_columns:
+                for checkbox in self.column_checkboxes.values():
+                    checkbox.setEnabled(False)
+
+        # Отключаем выбор куратора
+        combo = self._get_manager_combo()
+        if combo:
+            combo.setEnabled(False)
+            combo.setStyleSheet("background-color: #f5f5f5;")
+
     def load_columns(self):
         """Загружает доступные канбан-колонки и создает чекбоксы"""
         if not self.service:
             return
 
-        # Получаем все доступные колонки
         self.all_columns = self.service.get_template_columns_for_selector()
 
         if not hasattr(self, 'columnsGroupBox'):
             return
 
-        # Получаем layout внутри GroupBox
         columns_layout = self.columnsGroupBox.layout()
         if columns_layout is None:
             columns_layout = QVBoxLayout(self.columnsGroupBox)
             self.columnsGroupBox.setLayout(columns_layout)
 
-        # Удаляем старые динамически созданные чекбоксы колонок
         for checkbox in self.column_checkboxes.values():
             if checkbox and checkbox.parent():
                 checkbox.deleteLater()
         self.column_checkboxes.clear()
 
-        # Создаем новые чекбоксы для каждой колонки
         for col in self.all_columns:
             col_id = col.get('id')
             col_name = col.get('name', 'Без названия')
             col_key = col.get('col_key', col_name.lower().replace(' ', '_'))
-            # Красный цвет для всех чекбоксов как в UI
             col_color = "#D22730"
 
             checkbox = QCheckBox(col_name)
@@ -106,7 +258,6 @@ class BaseProjectDialog(QDialog):
             checkbox.setProperty('col_data', col)
             checkbox.setChecked(False)
 
-            # Стиль с красным цветом как в UI
             checkbox.setStyleSheet(f"""
                 QCheckBox {{
                     font-size: 13px;
@@ -134,12 +285,10 @@ class BaseProjectDialog(QDialog):
             self.column_checkboxes[col_key] = checkbox
             columns_layout.addWidget(checkbox)
 
-        # Добавляем растяжку в конец
         columns_layout.addStretch()
 
     def _on_column_checkbox_changed(self, col_key: str, state):
         """Обработчик изменения состояния чекбокса колонки"""
-        # Находим колонку по ключу
         col = None
         for c in self.all_columns:
             if c.get('col_key', c.get('name', '').lower().replace(' ', '_')) == col_key:
@@ -150,11 +299,9 @@ class BaseProjectDialog(QDialog):
             return
 
         if state == Qt.CheckState.Checked.value:
-            # Добавляем колонку в список выбранных
             if col not in self.selected_columns_data:
                 self.selected_columns_data.append(col)
         else:
-            # Удаляем колонку из списка выбранных
             if col in self.selected_columns_data:
                 self.selected_columns_data.remove(col)
 
@@ -201,10 +348,10 @@ class BaseProjectDialog(QDialog):
         return None
 
     def select_participants(self):
+        """Выбор участников проекта"""
         try:
             from windows.projects.employee_selector import EmployeeSelectorDialog
 
-            # ВАЖНО: передаем service в диалог
             dialog = EmployeeSelectorDialog(self, service=self.service, mode="participants")
 
             if self.participants:
@@ -221,10 +368,10 @@ class BaseProjectDialog(QDialog):
             traceback.print_exc()
 
     def select_admins(self):
+        """Выбор администраторов проекта"""
         try:
             from windows.projects.employee_selector import EmployeeSelectorDialog
 
-            # ВАЖНО: передаем service в диалог
             dialog = EmployeeSelectorDialog(self, service=self.service, mode="admins")
 
             if self.admins:
@@ -272,15 +419,19 @@ class BaseProjectDialog(QDialog):
 
     def load_project_data(self):
         """Загрузка данных проекта"""
-        self.nameInput.setText(self.project_data.get('name', ''))
-        self.descInput.setPlainText(self.project_data.get('description', ''))
+        if hasattr(self, 'nameInput'):
+            self.nameInput.setText(self.project_data.get('name', ''))
+
+        if hasattr(self, 'descInput'):
+            self.descInput.setPlainText(self.project_data.get('description', ''))
 
         is_active = self.project_data.get('is_active', True)
         if isinstance(is_active, str):
             is_active = is_active.lower() == 'true'
-        self.activeCheckbox.setChecked(is_active)
 
-        # Устанавливаем куратора
+        if hasattr(self, 'activeCheckbox'):
+            self.activeCheckbox.setChecked(is_active)
+
         manager_id = self.project_data.get('manager_id')
         if manager_id:
             combo = self._get_manager_combo()
@@ -290,7 +441,6 @@ class BaseProjectDialog(QDialog):
                         combo.setCurrentIndex(i)
                         break
 
-        # Загружаем выбранные канбан-колонки
         self.selected_columns_data = []
         selected_keys = []
 
@@ -300,14 +450,11 @@ class BaseProjectDialog(QDialog):
                              for col in self.selected_columns_data]
         elif self.project_data.get('selected_columns'):
             selected_keys = self.project_data.get('selected_columns', [])
-            # Восстанавливаем данные колонок из ключей
             self._restore_columns_from_keys(selected_keys)
 
-        # Устанавливаем состояние чекбоксов
         for col_key, checkbox in self.column_checkboxes.items():
             checkbox.setChecked(col_key in selected_keys)
 
-        # Загружаем участников и администраторов
         self._load_participants_and_admins()
 
     def _restore_columns_from_keys(self, column_keys: List[str]):
@@ -335,12 +482,10 @@ class BaseProjectDialog(QDialog):
             admin_ids = self.project_data.get('admin_ids', [])
 
         if member_ids and self.service:
-            # Загружаем через сервис
             employees = self.service.load_employees_by_ids(member_ids)
             self.participants = employees
             self.admins = [emp for emp in employees if emp['id'] in admin_ids]
         else:
-            # Формат из старых данных
             participants_data = self.project_data.get('participants', [])
             self.participants = self._normalize_employee_data(participants_data)
             admins_data = self.project_data.get('admins', [])
@@ -373,20 +518,17 @@ class BaseProjectDialog(QDialog):
 
     def get_project_data(self):
         """Получить данные нового проекта"""
-        # Сначала собираем ID участников
         participants_ids = set()
         for p in self.participants:
             emp_id = p.get('id') if isinstance(p, dict) else p
             if emp_id:
                 participants_ids.add(str(emp_id))
 
-        # ДОБАВЛЯЕМ АДМИНИСТРАТОРОВ в участники
         for a in self.admins:
             emp_id = a.get('id') if isinstance(a, dict) else a
             if emp_id:
                 participants_ids.add(str(emp_id))
 
-        # ДОБАВЛЯЕМ КУРАТОРА в участники (НО НЕ В АДМИНИСТРАТОРЫ)
         manager_id = self.get_manager_id()
         if manager_id:
             participants_ids.add(str(manager_id))
@@ -397,16 +539,14 @@ class BaseProjectDialog(QDialog):
             if emp_id:
                 admins_ids.add(str(emp_id))
 
-        # КУРАТОРА НЕ ДОБАВЛЯЕМ В АДМИНИСТРАТОРЫ
-
         data = {
-            'name': self.nameInput.text(),
-            'description': self.descInput.toPlainText(),
+            'name': self.nameInput.text() if hasattr(self, 'nameInput') else '',
+            'description': self.descInput.toPlainText() if hasattr(self, 'descInput') else '',
             'participants_ids': ','.join(participants_ids) if participants_ids else '',
             'participants': self.participants,
             'admins_ids': ','.join(admins_ids) if admins_ids else '',
             'admins': self.admins,
-            'is_active': self.activeCheckbox.isChecked(),
+            'is_active': self.activeCheckbox.isChecked() if hasattr(self, 'activeCheckbox') else True,
             'created_date': QDate.currentDate().toString("dd.MM.yyyy"),
             'updated_date': QDate.currentDate().toString("dd.MM.yyyy"),
             'selected_columns_data': self.selected_columns_data,
@@ -414,7 +554,6 @@ class BaseProjectDialog(QDialog):
             'manager_id': manager_id,
         }
 
-        # Если это редактирование, добавляем ID
         if self.project_data and self.project_data.get('id'):
             data['id'] = self.project_data.get('id')
 
@@ -422,7 +561,7 @@ class BaseProjectDialog(QDialog):
 
     def validate_input(self):
         """Проверка введенных данных"""
-        if not self.nameInput.text().strip():
+        if hasattr(self, 'nameInput') and not self.nameInput.text().strip():
             QMessageBox.warning(self, "Предупреждение", "Введите название проекта")
             return False
 
@@ -441,3 +580,12 @@ class BaseProjectDialog(QDialog):
             'middle_name': '',
             'position': 'Сотрудник'
         }
+
+    def showEvent(self, event):
+        """Срабатывает при показе диалога"""
+        super().showEvent(event)
+        # Если это диалог редактирования с ID проекта, настраиваем режим
+        project_id = self.project_data.get('id') if self.project_data else None
+        if project_id and hasattr(self, 'setup_edit_mode'):
+            from PyQt6.QtCore import QTimer
+            QTimer.singleShot(50, lambda: self.setup_edit_mode(project_id))
