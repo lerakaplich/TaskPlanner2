@@ -10,6 +10,7 @@ from PyQt6.QtWidgets import (QWidget, QScrollArea,
                              QMessageBox, QSizePolicy, QHBoxLayout)
 
 from database import get_tasks_session
+from services.permissions.app_permissions import AppRole
 from services.tasks_service.tasks_service import TasksService
 from windows.other_tasks.others_task_card import OthersTaskCard
 from windows.other_tasks.task_dialog import TaskDialog
@@ -20,25 +21,24 @@ class OthersTasksPage(QWidget):
     taskUpdated = pyqtSignal()
     open_project_requested = pyqtSignal(int)
 
-    def __init__(self, parent=None, current_user=None, project_id=None, column_service=None):
+    def __init__(self, parent=None, current_user=None, project_id=None, column_service=None, permission_service=None):
         super().__init__(parent)
 
         self._is_loading = False
         self._is_refreshing = False
-        self._first_show = True  # Флаг первого показа
+        self._first_show = True
+        self.permission_service = permission_service
 
         self.current_user = current_user or {"id": 1, "last_name": "Копейкина", "first_name": "Виктория",
                                              "middle_name": "Анатольевна"}
 
-        # Загружаем UI
         ui_path = os.path.join(os.path.dirname(__file__), "..", "..", "ui", "other_tasks")
         uic.loadUi(os.path.join(ui_path, "others_tasks_page.ui"), self)
 
-        self.columns = {}  # name -> widget
+        self.columns = {}
         self.column_widgets = []
-        self._all_projects = []  # Список проектов для фильтра
+        self._all_projects = []
 
-        # Инициализация сервиса - РЕЖИМ "others" (чужие задачи)
         self.db_session = get_tasks_session()
         self.service = TasksService(
             db_session=self.db_session,
@@ -47,18 +47,92 @@ class OthersTasksPage(QWidget):
             column_service=column_service
         )
 
-        # Настройка UI
         self.setAcceptDrops(True)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
 
         self.setup_kanban()
-
-        # Загружаем проекты для фильтра
         self._load_projects_for_filter()
-
-        # Не загружаем задачи при создании, только при первом показе
-        # self.load_tasks() - убираем отсюда
         self.connect_signals()
+
+        # Настройка UI в зависимости от прав
+        self._setup_permission_ui()
+
+    def _can_edit_or_delete_task(self) -> bool:
+        """Проверяет, может ли пользователь редактировать/удалять задачи в чужих задачах"""
+        if not self.permission_service:
+            return True  # По умолчанию разрешаем, если нет сервиса прав
+
+        # Только суперадмин может
+        app_role = self.permission_service.app_manager.role
+        return app_role == AppRole.SUPER_ADMIN
+
+    def _can_create_task(self) -> bool:
+        """Проверяет, может ли пользователь создавать задачи в чужих задачах"""
+        if not self.permission_service:
+            return True
+
+        # Только суперадмин может создавать задачи в чужих задачах
+        app_role = self.permission_service.app_manager.role
+        return app_role == AppRole.SUPER_ADMIN
+
+    def _can_archive_task(self) -> bool:
+        """Проверяет, может ли пользователь архивировать задачи в чужих задачах"""
+        if not self.permission_service:
+            return True
+
+        # Только суперадмин может архивировать чужие задачи
+        app_role = self.permission_service.app_manager.role
+        return app_role == AppRole.SUPER_ADMIN
+
+    def _setup_permission_ui(self):
+        """Настраивает UI в зависимости от прав пользователя"""
+        # Кнопка создания задачи
+        if hasattr(self, 'btnCreateTask'):
+            can_create = self._can_create_task()
+            self.btnCreateTask.setVisible(can_create)
+            print(f"   btnCreateTask visible (Чужие задачи): {can_create}")
+
+    def connect_signals(self):
+        """Подключает сигналы UI."""
+        self.priorityFilter.currentTextChanged.connect(self.filter_tasks)
+        self.projectFilter.currentTextChanged.connect(self.filter_tasks)
+
+        # Подключаем кнопку создания только если она видима
+        if hasattr(self, 'btnCreateTask') and self.btnCreateTask.isVisible():
+            self.btnCreateTask.clicked.connect(self.create_new_task)
+
+    def create_task_card(self, task_data: Dict) -> QWidget:
+        """Создает карточку задачи с учётом прав."""
+        is_creator = (task_data.get('created_by') == self.current_user.get('id'))
+
+        # Определяем, какие действия доступны
+        can_edit_delete = self._can_edit_or_delete_task()
+        can_archive = self._can_archive_task()
+
+        card = OthersTaskCard(
+            task_data,
+            service=self.service,
+            is_creator=is_creator,
+            can_edit_delete=can_edit_delete,
+            can_archive=can_archive
+        )
+        return card
+
+    def connect_task_card_signals(self, card):
+        """Подключает сигналы карточки."""
+        card.editRequested.connect(self.edit_task)
+        card.deleteRequested.connect(self.delete_task)
+        card.archiveRequested.connect(self.archive_task)
+        card.approveRequested.connect(self.approve_task)
+        card.returnToWorkRequested.connect(self.return_to_work)
+        card.moveToDoneColumn.connect(self.move_to_done)
+        card.project_clicked.connect(self._on_project_clicked)
+
+        card.duplicateRequested.connect(self.duplicate_task)
+        card.pauseRequested.connect(self.pause_task)
+        card.resumeRequested.connect(self.resume_task)
+
+        card.drag_started.connect(self._on_drag_started)
 
     def showEvent(self, event):
         """Показываем задачи при каждом отображении страницы"""

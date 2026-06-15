@@ -511,10 +511,7 @@ class NavigationHandler(QObject):
         """Возвращает страницу чужих задач - ВСЕГДА ПЕРЕСОЗДАЁМ для свежих данных"""
         from windows.other_tasks.others_tasks_page import OthersTasksPage
 
-        # ВАЖНО: принудительно пересоздаем страницу чужих задач при каждом запросе
-        # Это решает проблему с белым экраном при повторном переходе
         if 'other_tasks' in self.pages:
-            # Удаляем старую страницу
             old_page = self.pages['other_tasks']
             index = self.main.contentStack.indexOf(old_page)
             if index >= 0:
@@ -523,7 +520,6 @@ class NavigationHandler(QObject):
             del self.pages['other_tasks']
             print("   🗑️ Старая страница Чужие задачи удалена")
 
-        # Создаем новую страницу
         current_user = self.main.current_user if self.main.current_user else {
             "id": self.main.current_user_id,
             "last_name": "",
@@ -535,7 +531,8 @@ class NavigationHandler(QObject):
             parent=self.main,
             current_user=current_user,
             project_id=2,
-            column_service=self.main.column_service
+            column_service=self.main.column_service,
+            permission_service=self.main.permission_service  # <-- ДОБАВИТЬ
         )
         self.pages['other_tasks'].open_project_requested.connect(self.open_project_by_id)
         self.main.contentStack.insertWidget(self.PAGE_OTHER_TASKS, self.pages['other_tasks'])

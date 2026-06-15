@@ -27,11 +27,13 @@ class OthersTaskCard(TaskCard):
     resumeRequested = pyqtSignal(int)
 
     def __init__(self, task_data, service: Optional[TasksService] = None,
-                 is_creator=False, parent=None):
+                 is_creator=False, parent=None, can_edit_delete=False, can_archive=False):
         super().__init__(task_data, parent)
 
         self.is_creator = is_creator
         self.service = service
+        self.can_edit_delete = can_edit_delete  # <-- ДОБАВИТЬ
+        self.can_archive = can_archive  # <-- ДОБАВИТЬ
         self.drag_start_position = None
 
         self._disconnect_parent_signals()
@@ -123,7 +125,7 @@ class OthersTaskCard(TaskCard):
         self.menuButton.clicked.connect(self.show_full_context_menu)
 
     def show_full_context_menu(self):
-        """Показывает полное контекстное меню (для всех пользователей)"""
+        """Показывает полное контекстное меню (с учётом прав)"""
         menu = QMenu(self)
         menu.setStyleSheet("""
             QMenu {
@@ -149,8 +151,8 @@ class OthersTaskCard(TaskCard):
         is_paused = self.task_data.get("is_paused", False)
         is_completed = self.task_data.get("completed", False)
 
-        # ===== РЕДАКТИРОВАНИЕ (только для создателя) =====
-        if self.is_creator:
+        # ===== РЕДАКТИРОВАНИЕ И УДАЛЕНИЕ (только если есть права) =====
+        if self.can_edit_delete:
             edit_action = QAction("Редактировать", self)
             edit_action.triggered.connect(
                 lambda: self.editRequested.emit(self.task_data["id"])
@@ -190,12 +192,13 @@ class OthersTaskCard(TaskCard):
             done_action.triggered.connect(self.mark_as_done)
             menu.addAction(done_action)
 
-        # ===== АРХИВИРОВАНИЕ =====
-        archive_action = QAction("Архивировать", self)
-        archive_action.triggered.connect(
-            lambda: self.archiveRequested.emit(self.task_data["id"])
-        )
-        menu.addAction(archive_action)
+        # ===== АРХИВИРОВАНИЕ (только если есть права) =====
+        if self.can_archive:
+            archive_action = QAction("Архивировать", self)
+            archive_action.triggered.connect(
+                lambda: self.archiveRequested.emit(self.task_data["id"])
+            )
+            menu.addAction(archive_action)
 
         menu.exec(self.menuButton.mapToGlobal(self.menuButton.rect().bottomLeft()))
 
@@ -226,7 +229,6 @@ class OthersTaskCard(TaskCard):
         if (event.pos() - self.drag_start_position).manhattanLength() < QApplication.startDragDistance():
             return
 
-        # Сигнал о начале перетаскивания
         self.drag_started.emit(self.task_data)
 
         drag = QDrag(self)
