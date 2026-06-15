@@ -20,15 +20,16 @@ class MyTasksPage(QWidget):
     task_moved = pyqtSignal()
     open_project_requested = pyqtSignal(int)
 
-    def __init__(self, db_session, current_user, parent=None, column_service=None):
+    def __init__(self, db_session, current_user, parent=None, column_service=None, permission_service=None):
         super().__init__(parent)
 
         self._is_loading = False
         self._is_refreshing = False
         self._loaded = False
         self._first_show = True
-        self._all_projects = []  # Список проектов для фильтра
-        self._current_project_id = None  # Текущий выбранный проект
+        self._all_projects = []
+        self._current_project_id = None
+        self.permission_service = permission_service  # <-- ДОБАВИТЬ
 
         ui_path = os.path.join(
             os.path.dirname(__file__),
@@ -49,17 +50,64 @@ class MyTasksPage(QWidget):
         self.current_user = current_user
 
         self.setup_board()
-        # Не загружаем задачи при создании, только при первом показе
 
-        # Drag & Drop
         self.setAcceptDrops(True)
 
-        # Фильтры
         self.priorityFilter.currentTextChanged.connect(self._on_filter_changed)
         self.projectFilter.currentTextChanged.connect(self._on_project_filter_changed)
 
-        # Загружаем проекты для фильтра
         self._load_projects_for_filter()
+
+    def _connect_task_card_signals(self, card):
+        """Подключает сигналы карточки с учётом прав"""
+        card.edit_requested.connect(self._on_edit_task)
+
+        # Проверяем права на удаление и архивацию
+        can_delete = self._can_delete_task()
+        can_archive = self._can_archive_task()
+
+        if can_delete:
+            card.delete_requested.connect(self._on_delete_task)
+        else:
+            card.set_delete_button_visible(False)
+
+        if can_archive:
+            card.archive_requested.connect(self._on_archive_task)
+        else:
+            card.set_archive_button_visible(False)
+
+        card.duplicate_requested.connect(self._on_duplicate_task)
+        card.pause_requested.connect(self._on_pause_task)
+        card.resume_requested.connect(self._on_resume_task)
+        card.drag_started.connect(self._on_drag_started)
+        card.progress_changed.connect(self._on_progress_changed)
+        card.project_clicked.connect(self._on_project_clicked)
+
+    def _can_delete_task(self) -> bool:
+        """Проверяет, может ли пользователь удалять задачи"""
+        if not self.permission_service:
+            return True  # По умолчанию разрешаем, если нет сервиса прав
+
+        # Суперадмин и админ могут удалять
+        app_role = self.permission_service.app_manager.role
+        if app_role.value in ('super_admin', 'admin'):
+            return True
+
+        # Обычный пользователь НЕ может удалять
+        return False
+
+    def _can_archive_task(self) -> bool:
+        """Проверяет, может ли пользователь архивировать задачи"""
+        if not self.permission_service:
+            return True  # По умолчанию разрешаем, если нет сервиса прав
+
+        # Суперадмин и админ могут архивировать
+        app_role = self.permission_service.app_manager.role
+        if app_role.value in ('super_admin', 'admin'):
+            return True
+
+        # Обычный пользователь НЕ может архивировать
+        return False
 
     def _load_projects_for_filter(self):
         """Загружает проекты для выпадающего списка (только где пользователь участник/админ/куратор/создатель)"""
@@ -387,18 +435,6 @@ class MyTasksPage(QWidget):
         """Очищает все колонки от карточек"""
         for column in self.column_widgets:
             column.clear_tasks()
-
-    def _connect_task_card_signals(self, card):
-        """Подключает сигналы карточки"""
-        card.edit_requested.connect(self._on_edit_task)
-        card.delete_requested.connect(self._on_delete_task)
-        card.archive_requested.connect(self._on_archive_task)
-        card.duplicate_requested.connect(self._on_duplicate_task)
-        card.pause_requested.connect(self._on_pause_task)
-        card.resume_requested.connect(self._on_resume_task)
-        card.drag_started.connect(self._on_drag_started)
-        card.progress_changed.connect(self._on_progress_changed)
-        card.project_clicked.connect(self._on_project_clicked)
 
     def _on_project_clicked(self, project_id: int):
         """Обработчик клика по названию проекта"""

@@ -499,7 +499,8 @@ class NavigationHandler(QObject):
             self.pages['my_tasks'] = MyTasksPage(
                 db_session=self.main.session,
                 current_user={"id": self.main.current_user_id, "last_name": "", "first_name": ""},
-                column_service=self.main.column_service
+                column_service=self.main.column_service,
+                permission_service=self.main.permission_service  # <-- ДОБАВИТЬ
             )
             self.pages['my_tasks'].open_project_requested.connect(self.open_project_by_id)
             self.main.contentStack.insertWidget(self.PAGE_MY_TASKS, self.pages['my_tasks'])

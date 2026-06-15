@@ -64,6 +64,71 @@ class TaskCard(QFrame):
         self.menuButton.clicked.connect(self._show_context_menu)
         self.projectButton.clicked.connect(self._on_project_clicked)
 
+    def set_delete_button_visible(self, visible: bool):
+        """Устанавливает видимость кнопки удаления в контекстном меню"""
+        self._delete_enabled = visible
+
+    def set_archive_button_visible(self, visible: bool):
+        """Устанавливает видимость кнопки архивации в контекстном меню"""
+        self._archive_enabled = visible
+
+    def _show_context_menu(self):
+        menu = QMenu(self)
+        menu.setStyleSheet("""
+            QMenu {
+                background-color: #ffffff;
+                border: 1px solid #e0e0e0;
+                border-radius: 10px;
+                padding: 6px 0;
+                font-size: 14px;
+            }
+            QMenu::item {
+                padding: 10px 30px 10px 15px;
+                color: #1B232A;
+            }
+            QMenu::item:selected {
+                background-color: #ccab6e;
+                color: white;
+                border-radius: 6px;
+                margin: 2px 6px;
+            }
+        """)
+
+        duplicate_action = menu.addAction("Дублировать")
+
+        is_paused = self.task_data.get("is_paused", False)
+        is_completed = self.task_data.get("completed", False)
+
+        pause_action = None
+        if not is_completed:
+            if is_paused:
+                pause_action = menu.addAction("Возобновить")
+            else:
+                pause_action = menu.addAction("Пауза")
+
+        # Проверяем права на архивацию и удаление
+        archive_action = None
+        if getattr(self, '_archive_enabled', True):
+            archive_action = menu.addAction("Архивировать")
+
+        delete_action = None
+        if getattr(self, '_delete_enabled', True):
+            delete_action = menu.addAction("Удалить")
+
+        action = menu.exec(self.menuButton.mapToGlobal(QPoint(0, self.menuButton.height())))
+
+        if action == duplicate_action:
+            self.duplicate_requested.emit(self.task_id)
+        elif pause_action and action == pause_action:
+            if is_paused:
+                self.resume_requested.emit(self.task_id)
+            else:
+                self.pause_requested.emit(self.task_id)
+        elif archive_action and action == archive_action:
+            self.archive_requested.emit(self.task_id)
+        elif delete_action and action == delete_action:
+            self.delete_requested.emit(self.task_id)
+
     def _setup_difficulty_widget(self):
         """Создает виджет для отображения сложности и вставляет его в layout"""
         self.difficulty_widget = QWidget()
@@ -356,57 +421,6 @@ class TaskCard(QFrame):
             tags_widget = self.tagsLayout.parentWidget()
             if tags_widget:
                 tags_widget.hide()
-
-    def _show_context_menu(self):
-        menu = QMenu(self)
-        menu.setStyleSheet("""
-            QMenu {
-                background-color: #ffffff;
-                border: 1px solid #e0e0e0;
-                border-radius: 10px;
-                padding: 6px 0;
-                font-size: 14px;
-            }
-            QMenu::item {
-                padding: 10px 30px 10px 15px;
-                color: #1B232A;
-            }
-            QMenu::item:selected {
-                background-color: #ccab6e;
-                color: white;
-                border-radius: 6px;
-                margin: 2px 6px;
-            }
-        """)
-
-        duplicate_action = menu.addAction("Дублировать")
-
-        is_paused = self.task_data.get("is_paused", False)
-        is_completed = self.task_data.get("completed", False)
-
-        pause_action = None
-        if not is_completed:
-            if is_paused:
-                pause_action = menu.addAction("Возобновить")
-            else:
-                pause_action = menu.addAction("Пауза")
-
-        archive_action = menu.addAction("Архивировать")
-        delete_action = menu.addAction("Удалить")
-
-        action = menu.exec(self.menuButton.mapToGlobal(QPoint(0, self.menuButton.height())))
-
-        if action == duplicate_action:
-            self.duplicate_requested.emit(self.task_id)
-        elif pause_action and action == pause_action:
-            if is_paused:
-                self.resume_requested.emit(self.task_id)
-            else:
-                self.pause_requested.emit(self.task_id)
-        elif action == archive_action:
-            self.archive_requested.emit(self.task_id)
-        elif action == delete_action:
-            self.delete_requested.emit(self.task_id)
 
     def mousePressEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:

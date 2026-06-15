@@ -69,7 +69,7 @@ class AppPermissionManager:
             'can_create_project',
             'can_edit_any_project',
             'can_delete_any_project',
-            'can_archive_any_project',
+            # 'can_archive_any_project',  # УДАЛЯЕМ - админ НЕ может архивировать проекты
 
             # Страницы
             'can_view_analytics',
@@ -90,7 +90,8 @@ class AppPermissionManager:
             # Управление проектами (только просмотр)
             'can_view_own_projects',  # Может видеть только свои проекты
             # НЕ может создавать проекты
-            # НЕ может редактировать проекты - УБИРАЕМ can_edit_any_project
+            # НЕ может редактировать проекты
+            # НЕ может архивировать проекты
 
             # Страницы
             'can_view_settings',  # Может видеть настройки, но только для просмотра
