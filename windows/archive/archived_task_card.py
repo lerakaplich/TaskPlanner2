@@ -7,37 +7,35 @@ from PyQt6.QtWidgets import QMenu, QLabel, QFrame, QPushButton, QSizePolicy, QAp
 
 
 class ArchivedTaskCard(QFrame):
-    """Карточка архивированной задачи - только UI"""
+    """Карточка архивированной задачи"""
 
     restore_requested = pyqtSignal(int)
     delete_permanently_requested = pyqtSignal(int)
     data_updated = pyqtSignal(dict)
 
-    def __init__(self, task_data: dict, parent=None, service=None):
+    def __init__(self, task_data: dict, parent=None, service=None, can_restore=True, can_delete=True):
         super().__init__(parent)
         self.task_data = task_data
         self.task_id = task_data["id"]
         self.service = service
+        self.can_restore = can_restore
+        self.can_delete = can_delete
 
-        # Загружаем UI
         ui_path = os.path.join(
             os.path.dirname(__file__), "..", "..", "ui", "archive", "archived_task_card.ui"
         )
         uic.loadUi(ui_path, self)
 
-        # Настройка размеров
         self.setMinimumWidth(320)
         self.setMaximumWidth(350)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.MinimumExpanding)
 
-        # Настройка переноса слов
         self.title_label.setWordWrap(True)
         self.description_label.setWordWrap(True)
         self.project_label.setWordWrap(True)
         self.deadline_label.setWordWrap(True)
         self.assignee_label.setWordWrap(True)
 
-        # Убираем ограничение высоты
         self.setMinimumHeight(0)
         self.setMaximumHeight(16777215)
 
@@ -45,9 +43,17 @@ class ArchivedTaskCard(QFrame):
         self.fill_data()
         self.setup_menu()
 
+        # Применяем права
+        self._apply_permissions()
+
+    def _apply_permissions(self):
+        """Применяет права доступа к кнопке меню"""
+        # Меню-кнопка видна только если есть хотя бы одно доступное действие
+        has_actions = self.can_restore or self.can_delete
+        self.menuButton.setVisible(has_actions)
+        self.menuButton.setEnabled(has_actions)
+
     def _apply_styles(self):
-        """Применяет стили к элементам"""
-        # Стиль для карточки
         self.setStyleSheet("""
             ArchivedTaskCard {
                 background-color: #fafafa;
@@ -60,7 +66,6 @@ class ArchivedTaskCard(QFrame):
             }
         """)
 
-        # Стили меток
         normal_style = """
             QLabel {
                 color: #555555;
@@ -90,12 +95,25 @@ class ArchivedTaskCard(QFrame):
             }
         """)
 
+        # Стиль для кнопки меню
+        self.menuButton.setStyleSheet("""
+            QPushButton {
+                background-color: transparent;
+                border: none;
+                font-size: 18px;
+                color: #999999;
+                padding: 4px 8px;
+                border-radius: 4px;
+            }
+            QPushButton:hover {
+                background-color: #eeeeee;
+                color: #555555;
+            }
+        """)
+
     def fill_data(self):
-        """Заполнение карточки данными"""
-        # Название
         self.title_label.setText(self.task_data.get("title", "Без названия"))
 
-        # Описание
         description = self.task_data.get("description", "")
         if description:
             self.description_label.setText(description[:150] + ("..." if len(description) > 150 else ""))
@@ -103,7 +121,6 @@ class ArchivedTaskCard(QFrame):
         else:
             self.description_label.setVisible(False)
 
-        # Проект
         project_name = self.task_data.get("project_name", "")
         if project_name:
             self.project_label.setText(f"Проект: {project_name}")
@@ -111,7 +128,6 @@ class ArchivedTaskCard(QFrame):
         else:
             self.project_label.setVisible(False)
 
-        # Приоритет
         priority = self.task_data.get("priority", "Средний")
         priority_colors = {
             "Низкий": "#4CAF50",
@@ -133,21 +149,18 @@ class ArchivedTaskCard(QFrame):
             }}
         """)
 
-        # Дедлайн
         deadline = self.task_data.get("deadline", "")
         if deadline:
             self.deadline_label.setText(f"Дедлайн: {deadline}")
         else:
             self.deadline_label.setText("Дедлайн: не указан")
 
-        # Исполнитель
         assignee = self.task_data.get("assignee_name", "")
         if assignee:
             self.assignee_label.setText(f"Исполнитель: {assignee}")
         else:
             self.assignee_label.setText("Исполнитель: не назначен")
 
-        # Теги
         tags = self.task_data.get("tags", [])
         self.clear_tags()
         if tags:
@@ -156,15 +169,12 @@ class ArchivedTaskCard(QFrame):
             if len(tags) > 3:
                 self.add_tag(f"+{len(tags) - 3}")
 
-        # Бейдж архивации
         self._add_archive_badge()
 
-        # Обновляем размер
         self.adjustSize()
         self.updateGeometry()
 
     def _add_archive_badge(self):
-        """Добавляет бейдж архивации"""
         for i in range(self.footer_layout.count()):
             widget = self.footer_layout.itemAt(i).widget()
             if widget and isinstance(widget, QLabel) and hasattr(widget, 'is_archive_badge'):
@@ -188,14 +198,12 @@ class ArchivedTaskCard(QFrame):
         self.footer_layout.insertWidget(0, archive_badge)
 
     def clear_tags(self):
-        """Очищает контейнер с тегами"""
         while self.tags_layout.count():
             item = self.tags_layout.takeAt(0)
             if item.widget():
                 item.widget().deleteLater()
 
     def add_tag(self, tag_name: str):
-        """Добавляет тег"""
         tag_btn = QPushButton(tag_name)
         tag_btn.setStyleSheet("""
             QPushButton {
@@ -215,11 +223,9 @@ class ArchivedTaskCard(QFrame):
         self.tags_layout.addWidget(tag_btn)
 
     def setup_menu(self):
-        """Настройка контекстного меню"""
         self.menuButton.clicked.connect(self._show_context_menu)
 
     def _show_context_menu(self):
-        """Показывает контекстное меню"""
         menu = QMenu(self)
         menu.setStyleSheet("""
             QMenu {
@@ -241,35 +247,34 @@ class ArchivedTaskCard(QFrame):
             }
         """)
 
-        restore_action = menu.addAction("Восстановить")
-        restore_action.triggered.connect(lambda: self.restore_requested.emit(self.task_id))
+        if self.can_restore:
+            restore_action = menu.addAction("Восстановить")
+            restore_action.triggered.connect(lambda: self.restore_requested.emit(self.task_id))
 
-        delete_action = menu.addAction("Удалить навсегда")
-        delete_action.triggered.connect(lambda: self.delete_permanently_requested.emit(self.task_id))
+        if self.can_delete:
+            delete_action = menu.addAction("Удалить навсегда")
+            delete_action.triggered.connect(lambda: self.delete_permanently_requested.emit(self.task_id))
 
-        menu.exec(self.menuButton.mapToGlobal(QPoint(0, self.menuButton.height())))
+        if menu.actions():
+            menu.exec(self.menuButton.mapToGlobal(QPoint(0, self.menuButton.height())))
 
     def update_data(self, task_data: dict):
-        """Обновляет данные карточки"""
         self.task_data = task_data
         self.task_id = task_data["id"]
         self.fill_data()
         self.data_updated.emit(task_data)
 
     def set_loading(self, loading: bool):
-        """Устанавливает состояние загрузки"""
         if loading:
             self.menuButton.setEnabled(False)
             QApplication.processEvents()
         else:
-            self.menuButton.setEnabled(True)
+            self.menuButton.setEnabled(self.can_restore or self.can_delete)
 
     def enterEvent(self, event):
-        """При наведении курсора"""
         super().enterEvent(event)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
 
     def leaveEvent(self, event):
-        """При уходе курсора"""
         super().leaveEvent(event)
         self.setCursor(Qt.CursorShape.ArrowCursor)

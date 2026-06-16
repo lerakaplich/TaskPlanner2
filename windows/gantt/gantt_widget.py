@@ -7,29 +7,32 @@ from PyQt6.QtCore import Qt, QTimer, QDate
 from PyQt6.QtGui import QColor, QFont
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QTreeWidgetItem,
-    QDialog, QMessageBox, QPushButton, QComboBox, QFrame, QGroupBox, QScrollArea, QApplication
+    QDialog, QMessageBox, QPushButton, QComboBox, QFrame, QGroupBox, QScrollArea, QApplication, QTabWidget
 )
 from PyQt6 import uic
 
 from sqlalchemy.orm import Session
 
+from services.permissions.app_permissions import AppRole
+
 
 class GanttWidget(QWidget):
-    """Основной виджет диаграммы Ганта - только UI, вся логика в сервисе"""
+    """Основной виджет диаграммы Ганта - с поддержкой прав доступа"""
 
-    def __init__(self, session: Session, current_user_id: int = None, project_service=None, parent=None):
+    def __init__(self, session: Session, current_user_id: int = None, project_service=None, permission_service=None,
+                 parent=None):
         super().__init__(parent)
 
         self.session = session
         self.current_user_id = current_user_id
         self.project_service = project_service
-        self._first_show = True  # Флаг первого показа
+        self.permission_service = permission_service  # <-- ПРЯМОЕ ПРИСВАИВАНИЕ
+        self._first_show = True
 
-        # Импортируем сервис и холст
         from services.gantt_service import GanttService
         from windows.gantt.gantt_canvas import GanttCanvas
 
-        self._service = GanttService(session, current_user_id, project_service)
+        self._service = GanttService(session, current_user_id, project_service, self.permission_service)
         self._dont_show_link_dialog = False
         self._current_project_filter = "all"
         self._current_executor_filter = "all"
@@ -37,32 +40,71 @@ class GanttWidget(QWidget):
         self._setup_ui()
         self._connect_signals()
 
-        # Не загружаем данные при создании, только при первом показе
-        # self._load_initial_data() - убираем отсюда
+        # Настройка UI в зависимости от прав
+        self._setup_permission_ui()
+
+    def _can_export(self) -> bool:
+        """Проверяет, может ли пользователь экспортировать диаграмму"""
+        if not self.permission_service:
+            return False  # Без сервиса - НЕ РАЗРЕШАЕМ
+
+        # Экспорт доступен суперадмину и админу
+        app_role = self.permission_service.app_manager.role
+        return app_role in (AppRole.SUPER_ADMIN, AppRole.ADMIN)
+
+    def _setup_permission_ui(self):
+        """Настраивает UI в зависимости от прав пользователя"""
+        # Кнопка добавления задачи
+        if hasattr(self, 'addTaskButton'):
+            can_create = self._can_create_task()
+            self.addTaskButton.setVisible(can_create)
+            print(f"   addTaskButton visible (Гант): {can_create}")
+
+        # Кнопка создания связи
+        if hasattr(self, 'createLinkButton'):
+            can_create_link = self._can_create_link()
+            self.createLinkButton.setVisible(can_create_link)
+            print(f"   createLinkButton visible (Гант): {can_create_link}")
+
+        # Кнопка экспорта
+        if hasattr(self, 'btnExport'):
+            can_export = self._can_export()
+            self.btnExport.setVisible(can_export)
+            print(f"   btnExport visible (Гант): {can_export}")
+
+    def _can_create_task(self) -> bool:
+        """Проверяет, может ли пользователь создавать задачи"""
+        if not self.permission_service:
+            return False  # Без сервиса - НЕ РАЗРЕШАЕМ
+
+        # Только суперадмин может создавать задачи на диаграмме Ганта
+        app_role = self.permission_service.app_manager.role
+        return app_role == AppRole.SUPER_ADMIN
+
+    def _can_create_link(self) -> bool:
+        """Проверяет, может ли пользователь создавать связи между задачами"""
+        if not self.permission_service:
+            return False  # Без сервиса - НЕ РАЗРЕШАЕМ
+
+        # Только суперадмин может создавать связи
+        app_role = self.permission_service.app_manager.role
+        return app_role == AppRole.SUPER_ADMIN
 
     def showEvent(self, event):
         """Срабатывает при каждом показе страницы"""
         super().showEvent(event)
         if self._first_show:
             self._first_show = False
-            # При первом показе - откладываем загрузку
             QTimer.singleShot(10, self._load_initial_data)
         else:
-            # При повторном показе - перезагружаем полностью
             print("🔄 Повторный показ страницы Гант - перезагружаем")
             QTimer.singleShot(10, self._full_reload)
 
     def _full_reload(self):
         """Полная перезагрузка страницы Гант"""
         print("🔄 Полная перезагрузка страницы Гант")
-
-        # Очищаем кэш сервиса
         self._service.clear_cache()
-
-        # Загружаем данные заново
         self._service.load_data()
-
-        # Принудительно обновляем UI
         self._refresh_ui()
 
     def _setup_ui(self) -> None:
@@ -160,7 +202,7 @@ class GanttWidget(QWidget):
         # Вкладки
         self.tabWidget = QTabWidget()
         self.tabWidget.addTab(QWidget(), "Диаграмма Ганта")
-        self.tabWidget.addTab(QWidget(), "Календарь")
+        # self.tabWidget.addTab(QWidget(), "Календарь")
         right_layout.addWidget(self.tabWidget)
 
         scroll_area = QScrollArea()
@@ -208,10 +250,8 @@ class GanttWidget(QWidget):
         # Настройка календаря
         self.calendar_widget = CalendarWidget(self._service)
 
-        # Находим вкладку календаря и очищаем её
         calendar_tab = self.findChild(QWidget, "calendarTab")
         if calendar_tab:
-            # Получаем или создаём layout для вкладки
             tab_layout = calendar_tab.layout()
             if tab_layout is None:
                 tab_layout = QVBoxLayout(calendar_tab)
@@ -219,16 +259,13 @@ class GanttWidget(QWidget):
                 tab_layout.setSpacing(0)
                 calendar_tab.setLayout(tab_layout)
             else:
-                # Очищаем существующий layout
                 while tab_layout.count():
                     item = tab_layout.takeAt(0)
                     if item.widget():
                         item.widget().deleteLater()
 
-            # Добавляем календарь прямо во вкладку
             tab_layout.addWidget(self.calendar_widget)
 
-        # Удаляем calendarPlaceholder если он существует
         placeholder = self.findChild(QLabel, "calendarPlaceholder")
         if placeholder:
             placeholder.hide()
@@ -308,12 +345,10 @@ class GanttWidget(QWidget):
         if hasattr(self, 'btnExport'):
             self.btnExport.clicked.connect(self._on_export_clicked)
 
-        # Сигналы от холста
         if hasattr(self, 'gantt_canvas'):
             self.gantt_canvas.task_moved_signal.connect(self._on_task_moved)
             self.gantt_canvas.link_created_signal.connect(self._on_link_created)
 
-        # Сигналы от календаря
         if hasattr(self, 'calendar_widget'):
             self.calendar_widget.task_clicked.connect(self._on_calendar_task_clicked)
 
@@ -332,7 +367,6 @@ class GanttWidget(QWidget):
             QMessageBox.warning(self, "Экспорт", "Нет данных для экспорта")
             return
 
-        # Проверяем, есть ли задачи для отображения
         all_tasks = self._service.get_filtered_tasks(
             self._current_project_filter,
             self._current_executor_filter
@@ -341,18 +375,15 @@ class GanttWidget(QWidget):
             QMessageBox.warning(self, "Экспорт", "Нет задач для экспорта")
             return
 
-        # Сначала выбираем формат экспорта
         dialog = ExportDialog(self)
         if dialog.exec() != QDialog.DialogCode.Accepted:
             return
 
         selected_format = dialog.get_selected_format()
 
-        # Затем выбираем период для экспорта
         period_dialog = PeriodDialog(self)
         period_dialog.setWindowTitle("Выбор периода для экспорта")
 
-        # Устанавливаем диапазон по задачам как предустановленный
         start_default, end_default = self._service.get_date_range_for_tasks(all_tasks, padding_days=0)
         period_dialog.start_edit.setDate(QDate(start_default.year, start_default.month, start_default.day))
         period_dialog.end_edit.setDate(QDate(end_default.year, end_default.month, end_default.day))
@@ -362,10 +393,8 @@ class GanttWidget(QWidget):
 
         start_date, end_date = period_dialog.get_dates()
 
-        # Фильтруем задачи по выбранному периоду
         filtered_tasks = []
         for task in all_tasks:
-            # Задача попадает в экспорт, если она пересекается с выбранным периодом
             if (task.start_date <= end_date and task.end_date >= start_date):
                 filtered_tasks.append(task)
 
@@ -377,22 +406,16 @@ class GanttWidget(QWidget):
             )
             return
 
-        # Показываем курсор ожидания
         QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
 
         try:
             saved_path = None
 
             if selected_format == "image":
-                # Для PNG: создаём временный холст с отфильтрованными задачами и периодом
                 saved_path = self._export_to_image_with_period(filtered_tasks, start_date, end_date)
-
             elif selected_format == "excel":
-                # Экспорт в Excel с выбранным периодом
                 saved_path = self._service.export_to_excel(filtered_tasks, start_date, end_date)
-
             elif selected_format == "docx":
-                # Экспорт в Word с выбранным периодом
                 saved_path = self._service.export_to_docx(filtered_tasks, start_date, end_date)
 
             if saved_path:
@@ -418,33 +441,20 @@ class GanttWidget(QWidget):
             QApplication.restoreOverrideCursor()
 
     def _export_to_image_with_period(self, tasks: List, start_date: datetime, end_date: datetime) -> Optional[str]:
-        """
-        Экспортирует диаграмму Ганта в PNG с заданным периодом.
-
-        Args:
-            tasks: список задач для отображения
-            start_date: начало периода
-            end_date: конец периода
-
-        Returns:
-            Optional[str]: путь к сохранённому файлу или None
-        """
+        """Экспортирует диаграмму Ганта в PNG с заданным периодом."""
         from PyQt6.QtWidgets import QFileDialog
         from PyQt6.QtGui import QPixmap
         from datetime import datetime
 
-        # Сохраняем текущее состояние
         original_tasks = self.gantt_canvas._tasks.copy()
         original_start = self.gantt_canvas._start_date
         original_end = self.gantt_canvas._end_date
         original_links = self.gantt_canvas._links.copy()
 
         try:
-            # Устанавливаем новые данные
             self.gantt_canvas.set_tasks(tasks)
             self.gantt_canvas.set_date_range(start_date, end_date)
 
-            # Фильтруем связи
             task_ids = {t.id for t in tasks}
             filtered_links = {}
             all_links = self._service.get_all_links()
@@ -455,15 +465,12 @@ class GanttWidget(QWidget):
                         filtered_links[from_id] = filtered_to_ids
             self.gantt_canvas.set_links(filtered_links)
 
-            # Принудительно обновляем геометрию и перерисовываем
             self.gantt_canvas.updateGeometry()
             self.gantt_canvas.update()
 
-            # Ждём завершения отрисовки
             for _ in range(10):
                 QApplication.processEvents()
 
-            # Диалог сохранения
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             default_name = f"gantt_chart_{timestamp}.png"
 
@@ -477,7 +484,6 @@ class GanttWidget(QWidget):
             if not file_path:
                 return None
 
-            # Сохраняем изображение
             pixmap = self.gantt_canvas.grab()
             success = pixmap.save(file_path)
 
@@ -495,7 +501,6 @@ class GanttWidget(QWidget):
             return None
 
         finally:
-            # Восстанавливаем исходное состояние
             self.gantt_canvas.set_tasks(original_tasks)
             self.gantt_canvas.set_date_range(original_start, original_end)
             self.gantt_canvas.set_links(original_links)
@@ -513,13 +518,12 @@ class GanttWidget(QWidget):
         self._update_projects_tree()
         self._update_filters()
         self._apply_filters()
-        self._update_canvas_date_range()  # Это должно быть после _apply_filters
+        self._update_canvas_date_range()
 
         if hasattr(self, 'gantt_canvas'):
             self.gantt_canvas.set_links(self._service.get_all_links())
             self.gantt_canvas.update()
 
-        # Принудительно обновляем календарь после загрузки
         if hasattr(self, 'calendar_widget'):
             self.calendar_widget.update()
             self.calendar_widget.repaint()
@@ -559,13 +563,11 @@ class GanttWidget(QWidget):
         self.projectFilter.blockSignals(True)
         self.executorFilter.blockSignals(True)
 
-        # Проекты
         self.projectFilter.clear()
         self.projectFilter.addItem("Все проекты", "all")
         for project in self._service.get_projects():
             self.projectFilter.addItem(project.name, f"project_{project.id}")
 
-        # Исполнители
         self.executorFilter.clear()
         self.executorFilter.addItem("Все исполнители", "all")
         for executor in self._service.get_unique_executors():
@@ -574,7 +576,6 @@ class GanttWidget(QWidget):
         self.projectFilter.blockSignals(False)
         self.executorFilter.blockSignals(False)
 
-        # Восстанавливаем текущие фильтры
         self._restore_filter_selection()
 
     def _restore_filter_selection(self) -> None:
@@ -582,13 +583,11 @@ class GanttWidget(QWidget):
         if not hasattr(self, 'projectFilter') or not hasattr(self, 'executorFilter'):
             return
 
-        # Восстанавливаем фильтр проекта
         for i in range(self.projectFilter.count()):
             if self.projectFilter.itemData(i) == self._current_project_filter:
                 self.projectFilter.setCurrentIndex(i)
                 break
 
-        # Восстанавливаем фильтр исполнителя
         for i in range(self.executorFilter.count()):
             if self.executorFilter.itemData(i) == self._current_executor_filter:
                 self.executorFilter.setCurrentIndex(i)
@@ -605,7 +604,6 @@ class GanttWidget(QWidget):
             tasks = self._service.get_all_tasks()
 
         if not tasks:
-            # Если задач нет, показываем текущий месяц
             today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
             start = today.replace(day=1)
             if start.month == 12:
@@ -613,7 +611,6 @@ class GanttWidget(QWidget):
             else:
                 end = start.replace(month=start.month + 1, day=1) - timedelta(days=1)
         else:
-            # Получаем диапазон дат с небольшим отступом
             start, end = self._service.get_date_range_for_tasks(tasks, padding_days=5)
 
         self.gantt_canvas.set_date_range(start, end)
@@ -631,8 +628,8 @@ class GanttWidget(QWidget):
             project_data = project_item.data(0, Qt.ItemDataRole.UserRole)
 
             project_visible = (
-                    self._current_project_filter == "all" or
-                    project_data == self._current_project_filter
+                self._current_project_filter == "all" or
+                project_data == self._current_project_filter
             )
 
             visible_tasks = 0
@@ -646,8 +643,8 @@ class GanttWidget(QWidget):
 
                     if task:
                         executor_visible = (
-                                self._current_executor_filter == "all" or
-                                self._current_executor_filter == task.executor_name
+                            self._current_executor_filter == "all" or
+                            self._current_executor_filter == task.executor_name
                         )
                         task_visible = project_visible and executor_visible
                         task_item.setHidden(not task_visible)
@@ -657,24 +654,6 @@ class GanttWidget(QWidget):
             project_item.setHidden(not project_visible or visible_tasks == 0)
             if project_visible and visible_tasks > 0:
                 project_item.setExpanded(True)
-
-    def _setup_filters_placeholder(self) -> None:
-        """Настройка плейсхолдеров для фильтров"""
-        if hasattr(self, 'projectFilter'):
-            self.projectFilter.setEditText("Все проекты")
-            line_edit = self.projectFilter.lineEdit()
-            if line_edit:
-                line_edit.setPlaceholderText("Все проекты")
-                line_edit.setReadOnly(False)
-                line_edit.setSelection(0, 0)
-
-        if hasattr(self, 'executorFilter'):
-            self.executorFilter.setEditText("Все исполнители")
-            line_edit = self.executorFilter.lineEdit()
-            if line_edit:
-                line_edit.setPlaceholderText("Все исполнители")
-                line_edit.setReadOnly(False)
-                line_edit.setSelection(0, 0)
 
     def _on_project_filter_changed(self, text: str) -> None:
         """Обработка изменения фильтра проектов"""
@@ -720,7 +699,6 @@ class GanttWidget(QWidget):
         if hasattr(self, 'gantt_canvas'):
             self.gantt_canvas.set_tasks(filtered_tasks)
 
-        # Обновляем календарь
         if hasattr(self, 'calendar_widget'):
             self.calendar_widget.set_tasks(filtered_tasks)
             self.calendar_widget.update()
@@ -730,6 +708,10 @@ class GanttWidget(QWidget):
 
     def _on_add_task(self) -> None:
         """Обработка кнопки добавления задачи"""
+        if not self._can_create_task():
+            QMessageBox.warning(self, "Доступ запрещён", "У вас нет прав на создание задач.")
+            return
+
         is_valid, project_id, error = self._service.validate_project_selected(self._current_project_filter)
 
         if not is_valid:
@@ -790,6 +772,10 @@ class GanttWidget(QWidget):
 
     def _on_create_link(self) -> None:
         """Обработка кнопки создания связи"""
+        if not self._can_create_link():
+            QMessageBox.warning(self, "Доступ запрещён", "У вас нет прав на создание связей между задачами.")
+            return
+
         if not self._dont_show_link_dialog:
             from windows.gantt.link_dialog import LinkDialog
             dialog = LinkDialog(self)
@@ -807,6 +793,10 @@ class GanttWidget(QWidget):
 
     def _on_link_created(self, predecessor_id: int, successor_id: int) -> None:
         """Обработчик создания связи от холста"""
+        if not self._can_create_link():
+            QMessageBox.warning(self, "Доступ запрещён", "У вас нет прав на создание связей.")
+            return
+
         reply = QMessageBox.question(
             self, "Создание связи",
             f"Создать связь между задачами?\n"

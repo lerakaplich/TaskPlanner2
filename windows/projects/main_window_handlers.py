@@ -650,7 +650,8 @@ class NavigationHandler(QObject):
         self.pages['gantt'] = GanttWidget(
             session=self.main.session,
             current_user_id=self.main.current_user_id,
-            project_service=self.main.project_service
+            project_service=self.main.project_service,
+            permission_service=self.main.permission_service  # <-- ДОБАВИТЬ ЭТУ СТРОКУ
         )
         print(f"   📌 Вставляем в contentStack на позицию {self.PAGE_GANTT}")
         self.main.contentStack.insertWidget(self.PAGE_GANTT, self.pages['gantt'])
@@ -733,7 +734,6 @@ class NavigationHandler(QObject):
 
         # ВАЖНО: принудительно пересоздаем страницу архива при каждом запросе
         if 'archive' in self.pages:
-            # Удаляем старую страницу
             old_page = self.pages['archive']
             index = self.main.contentStack.indexOf(old_page)
             if index >= 0:
@@ -741,8 +741,11 @@ class NavigationHandler(QObject):
             old_page.deleteLater()
             del self.pages['archive']
 
-        # Создаем новую страницу
-        self.pages['archive'] = ArchivePage(service=self.main.archive_service)
+        # ✅ Передаём permission_service
+        self.pages['archive'] = ArchivePage(
+            service=self.main.archive_service,
+            permission_service=self.main.permission_service  # <-- ДОБАВИТЬ ЭТУ СТРОКУ
+        )
         self.main.contentStack.insertWidget(self.PAGE_ARCHIVE, self.pages['archive'])
 
         return self.pages['archive']
