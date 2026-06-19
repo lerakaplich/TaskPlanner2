@@ -19,7 +19,6 @@ class EmployeesTab(BaseTab):
 
     def __init__(self, parent=None):
         # Инициализируем поля ДО вызова super().__init__
-        # чтобы они были доступны в setup_permission_ui
         self.employee_service = None
         self.employees = []
         self.all_departments = []
@@ -86,15 +85,7 @@ class EmployeesTab(BaseTab):
         if self.employees:
             self.refresh_cards()
 
-    def _apply_read_only_state(self):
-        """Применяет состояние только просмотра"""
-        super()._apply_read_only_state()
-
-        # Блокируем фильтры в режиме просмотра
-        if self._read_only_mode:
-            for combo in (self.filterDepartment, self.filterSubDepartment):
-                if combo:
-                    combo.setEnabled(False)
+    # Убираем _apply_read_only_state — фильтры НЕ блокируем
 
     def _rename_edit_buttons(self):
         """
@@ -195,7 +186,7 @@ class EmployeesTab(BaseTab):
                 employee_data=employee,
                 employee_service=self.employee_service,
                 is_registration_mode=False,
-                read_only=self._read_only_mode  # Передаём режим просмотра
+                read_only=self._read_only_mode
             )
             if not self._read_only_mode:
                 dialog.employee_saved.connect(lambda data: self.on_employee_updated(employee_id, data))

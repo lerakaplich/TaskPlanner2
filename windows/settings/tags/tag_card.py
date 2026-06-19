@@ -45,14 +45,14 @@ class TagCard(QFrame):
     def _apply_read_only_state(self):
         """Применяет состояние только просмотра"""
         if self.read_only:
-            # Скрываем кнопку удаления
+            # Скрываем ВСЕ кнопки
+            if hasattr(self, 'editButton'):
+                self.editButton.setVisible(False)
+                self.editButton.hide()
+
             if hasattr(self, 'deleteButton'):
                 self.deleteButton.setVisible(False)
                 self.deleteButton.hide()
-
-            # Переименовываем кнопку редактирования
-            if hasattr(self, 'editButton'):
-                self.editButton.setText("Подробнее")
 
             # Отключаем клик по цветному индикатору
             if hasattr(self, 'colorIndicator'):
@@ -61,8 +61,8 @@ class TagCard(QFrame):
 
     def connect_signals(self):
         """Подключение сигналов"""
-        self.editButton.clicked.connect(lambda: self.edit_clicked.emit(self.tag_id))
         if not self.read_only:
+            self.editButton.clicked.connect(lambda: self.edit_clicked.emit(self.tag_id))
             self.deleteButton.clicked.connect(lambda: self.delete_clicked.emit(self.tag_id))
             if hasattr(self, 'colorIndicator'):
                 self.colorIndicator.installEventFilter(self)

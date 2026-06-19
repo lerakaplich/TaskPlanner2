@@ -83,13 +83,10 @@ class BaseTab(QWidget, UIPermissionMixin):
         self._apply_read_only_state()
 
     def _apply_read_only_state(self):
+        """Применяет состояние только просмотра — скрывает кнопку добавления"""
         if self.btnAdd:
             self.btnAdd.setVisible(self._should_show_add_buttons())
-
-        if self._read_only_mode:
-            for combo in (self.filterDepartment, self.filterSubDepartment):
-                if combo:
-                    combo.setEnabled(False)
+        # Фильтры НЕ блокируем — пользователь должен иметь возможность фильтровать
 
     def confirm_delete(self, title: str, message: str, item_type: str, item_id: int):
         if self._read_only_mode:

@@ -53,13 +53,22 @@ class TagsTab(BaseTab):
         if self.btnAdd:
             self.btnAdd.setVisible(self._should_show_add_buttons())
 
-        # Если режим просмотра - переименовываем кнопки
-        if self._read_only_mode:
-            self._rename_edit_buttons()
-
         # Обновляем карточки только если данные уже загружены
         if self.tags:
             self.refresh_cards()
+
+    def refresh_cards(self):
+        """Обновление карточек"""
+        self.clear_cards()
+        for i, tag in enumerate(self.tags):
+            card = TagCard(tag, parent=self, read_only=self._read_only_mode)
+            # В режиме просмотра НЕ подключаем сигналы кликов
+            if not self._read_only_mode:
+                card.edit_clicked.connect(self.on_edit_clicked)
+                card.delete_clicked.connect(self.on_delete_clicked)
+                card.color_changed.connect(self.on_color_changed)
+            self.add_card_to_grid(card, i)
+        self.set_last_row_stretch()
 
     def set_session(self, session):
         """Установка сессии и создание сервиса тегов"""
@@ -196,15 +205,3 @@ class TagsTab(BaseTab):
                         break
                 self.refresh_cards()
                 self.item_color_changed.emit(tag_id, new_color)
-
-    def refresh_cards(self):
-        """Обновление карточек"""
-        self.clear_cards()
-        for i, tag in enumerate(self.tags):
-            card = TagCard(tag, parent=self, read_only=self._read_only_mode)
-            card.edit_clicked.connect(self.on_edit_clicked)
-            if not self._read_only_mode:
-                card.delete_clicked.connect(self.on_delete_clicked)
-                card.color_changed.connect(self.on_color_changed)
-            self.add_card_to_grid(card, i)
-        self.set_last_row_stretch()

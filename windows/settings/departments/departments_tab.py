@@ -70,12 +70,7 @@ class DepartmentsTab(BaseTab):
         if self.btnAdd:
             self.btnAdd.setVisible(self._should_show_add_buttons())
 
-        # Блокируем фильтры в режиме просмотра
-        if self._read_only_mode:
-            if hasattr(self, 'filterDepartment') and self.filterDepartment:
-                self.filterDepartment.setEnabled(False)
-            if hasattr(self, 'filterSubDepartment') and self.filterSubDepartment:
-                self.filterSubDepartment.setEnabled(False)
+        # Фильтры НЕ блокируем — пользователь должен иметь возможность фильтровать
 
         # Если режим просмотра - переименовываем кнопки
         if self._read_only_mode:
