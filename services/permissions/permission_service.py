@@ -1,4 +1,5 @@
 # services/permissions/permission_service.py
+
 from typing import Optional
 
 from services.permissions.app_permissions import AppPermissionManager, AppRole
@@ -39,15 +40,12 @@ class PermissionService:
 
     def can_archive_project(self, project_id: int) -> bool:
         """Может ли пользователь архивировать проект"""
-        # Сначала проверяем глобальные права
         if self.app_manager.can_archive_any_project():
             return True
 
-        # Затем проверяем права в проекте через сервис
         if self.project_service and hasattr(self.project_service, 'can_archive_project'):
             return self.project_service.can_archive_project(project_id, self.user_id)
 
-        # Fallback - проверяем роль в проекте
         project_perms = self.get_project_permissions(project_id)
         return project_perms.has_permission('can_archive_project')
 
@@ -67,75 +65,45 @@ class PermissionService:
         return self._project_role_cache[project_id]
 
     def can_show_create_project_button(self) -> bool:
-        """Может ли пользователь видеть кнопку создания проекта"""
         return self.app_manager.can_create_project()
 
     def can_edit_project(self, project_id: int) -> bool:
-        """Может ли пользователь редактировать проект"""
-        # Проверяем глобальные права (только суперадмин и админ)
         if self.app_manager.role in (AppRole.SUPER_ADMIN, AppRole.ADMIN):
             if self.app_manager.can_edit_any_project():
                 return True
-
-        # Для обычного пользователя - НЕТ права на редактирование
-        # Даже если он состоит в проекте
         return False
 
     def get_project_button_text(self, project_id: int, is_edit_mode: bool = False) -> str:
-        """
-        Определяет текст кнопки для проекта:
-        - Если пользователь может редактировать -> "Редактировать"
-        - Иначе -> "Подробнее"
-        """
         if is_edit_mode:
-            # Для окна редактирования
             if self.can_edit_project(project_id):
                 return "Сохранить изменения"
             return "Закрыть"
         else:
-            # Для карточки проекта
             if self.can_edit_project(project_id):
                 return "Редактировать"
             return "Подробнее"
 
     def can_edit_project_dialog(self, project_id: int) -> bool:
-        """
-        Может ли пользователь редактировать поля в диалоге проекта
-        (True - поля активны, False - только просмотр)
-        """
         return self.can_edit_project(project_id)
 
     def can_show_project_columns_selector(self, project_id: int) -> bool:
-        """
-        Может ли пользователь видеть/изменять выбор колонок в проекте
-        """
         project_perms = self.get_project_permissions(project_id)
         return project_perms.can_manage_project_columns()
 
     def can_show_analytics_page(self) -> bool:
-        """Может ли пользователь видеть страницу аналитики"""
         return self.app_manager.can_view_analytics()
 
     def can_show_overtime_tab_all(self) -> bool:
-        """
-        Может ли пользователь видеть вкладку "Все переработки"
-        (Начальники могут, обычные пользователи - нет)
-        """
         system_role = self._get_system_role()
         return system_role != SystemRole.EMPLOYEE
 
     def can_import_overtime(self) -> bool:
-        """Может ли пользователь импортировать переработки"""
         return self.app_manager.can_import_overtime()
 
     def can_add_overtime(self) -> bool:
-        """Может ли пользователь добавлять переработки"""
         return self.app_manager.can_add_overtime()
 
     def can_show_create_task_button(self, project_id: Optional[int] = None) -> bool:
-        """
-        Может ли пользователь видеть кнопку создания задачи
-        """
         if self.app_manager.can_create_task_in_any_project():
             return True
 
@@ -145,28 +113,37 @@ class PermissionService:
 
         return False
 
+    # ===== МЕТОДЫ ДЛЯ НАСТРОЕК =====
+
     def can_edit_settings(self) -> bool:
-        """Может ли пользователь редактировать настройки"""
         return self.app_manager.can_edit_settings()
 
+    def can_view_settings(self) -> bool:
+        return self.app_manager.can_view_settings()
+
     def can_show_add_buttons_in_settings(self) -> bool:
-        """Может ли пользователь видеть кнопки добавления в настройках"""
         return self.can_edit_settings()
 
     def can_show_delete_buttons_in_settings(self) -> bool:
-        """Может ли пользователь видеть кнопки удаления в настройках"""
         return self.can_edit_settings()
 
     def get_settings_button_text(self) -> str:
-        """
-        Определяет текст кнопки в настройках:
-        - Если может редактировать -> "Редактировать"
-        - Иначе -> "Подробнее"
-        """
         return "Редактировать" if self.can_edit_settings() else "Подробнее"
 
     def is_settings_dialog_editable(self) -> bool:
-        """
-        Можно ли редактировать поля в диалоге настроек
-        """
         return self.can_edit_settings()
+
+    def is_employee_tab_read_only(self) -> bool:
+        """Вкладка Сотрудники - только просмотр для USER"""
+        return self.app_manager.role == AppRole.USER
+
+    def is_departments_tab_read_only(self) -> bool:
+        """Вкладка Отделы - только просмотр для USER"""
+        return self.app_manager.role == AppRole.USER
+
+    def is_divisions_tab_read_only(self) -> bool:
+        """Вкладка Подразделения - только просмотр для USER"""
+        return self.app_manager.role == AppRole.USER
+
+    def get_app_role(self) -> AppRole:
+        return self.app_manager.role

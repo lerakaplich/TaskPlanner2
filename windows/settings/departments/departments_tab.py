@@ -16,26 +16,24 @@ class DepartmentsTab(BaseTab):
     item_edited = pyqtSignal(str, dict)
 
     def __init__(self, parent=None):
-        super().__init__(parent)
+        # Инициализируем поля ДО вызова super().__init__
         self.departments = []
         self.all_divisions = []
         self.employee_service = None
         self.filter_division_id = None
         self.filter_search_text = ""
 
+        super().__init__(parent)
+
         # Показываем фильтры
         self.show_filters()
 
         # Настраиваем фильтры
-        # filterDepartment - это QLineEdit для поиска (текстовое поле)
-        # filterSubDepartment - это QComboBox для выбора подразделения
         if hasattr(self, 'filterDepartment'):
-            # Проверяем тип виджета
             if isinstance(self.filterDepartment, QLineEdit):
                 self.filterDepartment.setPlaceholderText("Поиск по названию...")
                 self.filterDepartment.textChanged.connect(self.on_filter_text_changed)
             else:
-                # Если это QComboBox, используем другой подход
                 self.filterDepartment.setEditable(True)
                 self.filterDepartment.setPlaceholderText("Поиск по названию...")
                 self.filterDepartment.lineEdit().textChanged.connect(self.on_filter_text_changed)
@@ -53,6 +51,39 @@ class DepartmentsTab(BaseTab):
         self.item_deleted.connect(self.delete_item)
 
         self.filterDepartment.hide() if hasattr(self, 'filterDepartment') else None
+
+    def setup_permission_ui(self):
+        """
+        Настройка UI в зависимости от прав пользователя
+        Для USER - только просмотр (read-only)
+        Для ADMIN и SUPER_ADMIN - полный доступ
+        """
+        # Определяем режим на основе роли
+        if self._permission_service:
+            is_read_only = self._permission_service.is_departments_tab_read_only()
+            self._read_only_mode = is_read_only
+
+        # Применяем состояние
+        self._apply_read_only_state()
+
+        # Скрываем или показываем кнопку добавления
+        if self.btnAdd:
+            self.btnAdd.setVisible(self._should_show_add_buttons())
+
+        # Блокируем фильтры в режиме просмотра
+        if self._read_only_mode:
+            if hasattr(self, 'filterDepartment') and self.filterDepartment:
+                self.filterDepartment.setEnabled(False)
+            if hasattr(self, 'filterSubDepartment') and self.filterSubDepartment:
+                self.filterSubDepartment.setEnabled(False)
+
+        # Если режим просмотра - переименовываем кнопки
+        if self._read_only_mode:
+            self._rename_edit_buttons()
+
+        # Обновляем карточки только если данные уже загружены
+        if self.departments:
+            self.refresh_cards()
 
     def set_employee_service(self, service):
         """Установка сервиса для работы с БД"""
@@ -95,11 +126,15 @@ class DepartmentsTab(BaseTab):
 
     def on_add_clicked(self):
         """Открытие диалога добавления отдела"""
+        if self._read_only_mode:
+            QMessageBox.information(self, "Информация", "В режиме просмотра добавление недоступно")
+            return
+
         if not self.employee_service:
             QMessageBox.warning(self, "Ошибка", "Сервис не инициализирован")
             return
 
-        dialog = DepartmentDialog(parent=self, department_data=None, employee_service=self.employee_service)
+        dialog = DepartmentDialog(parent=self, department_data=None, employee_service=self.employee_service, read_only=False)
         dialog.department_saved.connect(self.on_department_saved)
         dialog.exec()
 
@@ -139,9 +174,15 @@ class DepartmentsTab(BaseTab):
         print(f"🔄 Обновление карточек отделов: отображается {len(filtered_departments)} из {len(self.departments)}")
 
         for i, department in enumerate(filtered_departments):
-            card = DepartmentCard(department, self.employee_service, parent=self)
+            card = DepartmentCard(
+                department,
+                self.employee_service,
+                parent=self,
+                read_only=self._read_only_mode
+            )
             card.edit_clicked.connect(self.on_edit_clicked)
-            card.delete_clicked.connect(self.on_delete_clicked)
+            if not self._read_only_mode:
+                card.delete_clicked.connect(self.on_delete_clicked)
             self.add_card_to_grid(card, i)
 
         self.set_last_row_stretch()
@@ -162,18 +203,27 @@ class DepartmentsTab(BaseTab):
         return filtered
 
     def on_edit_clicked(self, department_id: int):
-        """Открытие окна редактирования отдела"""
+        """Открытие окна редактирования/просмотра отдела"""
         if not self.employee_service:
             return
 
         department = self.employee_service.get_department_card_data(department_id)
         if department:
-            dialog = DepartmentDialog(parent=self, department_data=department, employee_service=self.employee_service)
-            dialog.department_saved.connect(lambda data: self.on_department_updated(department_id, data))
+            dialog = DepartmentDialog(
+                parent=self,
+                department_data=department,
+                employee_service=self.employee_service,
+                read_only=self._read_only_mode
+            )
+            if not self._read_only_mode:
+                dialog.department_saved.connect(lambda data: self.on_department_updated(department_id, data))
             dialog.exec()
 
     def on_department_updated(self, department_id: int, department_data: dict):
         """Обработка редактирования отдела"""
+        if self._read_only_mode:
+            return
+
         if self.employee_service:
             success = self.employee_service.update_department(department_id, department_data)
             if success:
@@ -184,6 +234,10 @@ class DepartmentsTab(BaseTab):
 
     def on_delete_clicked(self, department_id: int):
         """Удаление отдела - вызывается из карточки"""
+        if self._read_only_mode:
+            QMessageBox.information(self, "Информация", "В режиме просмотра удаление недоступно")
+            return
+
         if not self.employee_service:
             return
 
@@ -198,6 +252,19 @@ class DepartmentsTab(BaseTab):
                 item_type="department",
                 item_id=department_id
             )
+
+    def delete_item(self, item_type: str, item_id: int):
+        """Обработка подтверждённого удаления"""
+        if self._read_only_mode:
+            return
+
+        if item_type == "department" and self.employee_service:
+            success = self.employee_service.delete_department_by_id(item_id)
+            if success:
+                self.load_departments()
+                QMessageBox.information(self, "Успех", "Отдел удалён")
+            else:
+                QMessageBox.warning(self, "Ошибка", "Не удалось удалить отдел")
 
     def show_delete_with_dependencies_dialog(self, department_id: int):
         """Диалог удаления отдела с сотрудниками"""
@@ -387,13 +454,3 @@ class DepartmentsTab(BaseTab):
                 background-color: #5a6268;
             }
         """
-
-    def delete_item(self, item_type: str, item_id: int):
-        """Обработка подтверждённого удаления"""
-        if item_type == "department" and self.employee_service:
-            success = self.employee_service.delete_department_by_id(item_id)
-            if success:
-                self.load_departments()
-                QMessageBox.information(self, "Успех", "Отдел удалён")
-            else:
-                QMessageBox.warning(self, "Ошибка", "Не удалось удалить отдел")

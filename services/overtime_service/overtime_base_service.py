@@ -133,7 +133,15 @@ class OvertimeBaseService:
         description = overtime_data.get('description', '')
         project_name = overtime_data.get('project')
         task_title = overtime_data.get('task')
-        return bool((description and description.strip()) or project_name or task_title)
+
+        # ===== ИСПРАВЛЕНИЕ: "Без описания" считается как отсутствие описания =====
+        if description and description.strip() and description.strip() != "Без описания":
+            return True
+        if project_name and str(project_name).strip():
+            return True
+        if task_title and str(task_title).strip():
+            return True
+        return False
 
     @staticmethod
     def get_display_description(overtime_data: Dict) -> str:
@@ -142,7 +150,8 @@ class OvertimeBaseService:
         project_name = overtime_data.get('project')
         task_title = overtime_data.get('task')
 
-        if description:
+        # ===== ИСПРАВЛЕНИЕ: если описание "Без описания" - показываем стандартный текст =====
+        if description and description.strip() and description.strip() != "Без описания":
             return description
         elif project_name and task_title:
             return f"{project_name} - {task_title}"

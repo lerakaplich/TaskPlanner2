@@ -9,8 +9,10 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import pyqtSignal, Qt
 
+from windows.permissions.ui_permission_mixin import UIPermissionMixin
 
-class BaseTab(QWidget):
+
+class BaseTab(QWidget, UIPermissionMixin):
     """Базовый класс для всех вкладок настроек - ТОЛЬКО UI логика"""
 
     item_deleted = pyqtSignal(str, int)
@@ -19,7 +21,7 @@ class BaseTab(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.cards = []
-        self.employee_service = None  # Сервис будет установлен извне
+        self.employee_service = None
 
         # Загрузка UI
         current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -57,8 +59,11 @@ class BaseTab(QWidget):
             self.toolsLayout.setAlignment(Qt.AlignmentFlag.AlignVCenter)
 
     def set_employee_service(self, service):
-        """Установка сервиса для работы с данными"""
         self.employee_service = service
+
+    def set_permission_service(self, permission_service):
+        self._permission_service = permission_service
+        self.setup_permission_ui()
 
     def hide_filters(self):
         if self.filterDepartment:
@@ -74,8 +79,23 @@ class BaseTab(QWidget):
         if self.tools_frame:
             self.tools_frame.updateGeometry()
 
+    def setup_permission_ui(self):
+        self._apply_read_only_state()
+
+    def _apply_read_only_state(self):
+        if self.btnAdd:
+            self.btnAdd.setVisible(self._should_show_add_buttons())
+
+        if self._read_only_mode:
+            for combo in (self.filterDepartment, self.filterSubDepartment):
+                if combo:
+                    combo.setEnabled(False)
+
     def confirm_delete(self, title: str, message: str, item_type: str, item_id: int):
-        """Показывает диалоговое окно удаления"""
+        if self._read_only_mode:
+            QMessageBox.information(self, "Информация", "В режиме просмотра удаление недоступно")
+            return
+
         dialog = QDialog(self)
         dialog.setWindowTitle(title)
         dialog.setFixedSize(420, 180)
@@ -161,3 +181,9 @@ class BaseTab(QWidget):
         if self.cards:
             last_row = (len(self.cards) - 1) // 2
             self.cardsGridLayout.setRowStretch(last_row + 1, 1)
+
+    def _rename_edit_buttons(self):
+        """Переименовывает кнопки редактирования на 'Подробнее'"""
+        for card in self.cards:
+            if hasattr(card, 'editButton'):
+                card.editButton.setText("Подробнее")

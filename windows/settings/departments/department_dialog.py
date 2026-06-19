@@ -1,3 +1,5 @@
+# windows/settings/departments/department_dialog.py
+
 import os
 from pathlib import Path
 from PyQt6 import QtWidgets, QtCore, uic
@@ -8,12 +10,19 @@ from PyQt6.QtCore import pyqtSignal, Qt, QEvent
 class DepartmentDialog(QDialog):
     department_saved = pyqtSignal(dict)
 
-    def __init__(self, parent=None, department_data=None, employee_service=None):
+    def __init__(self, parent=None, department_data=None, employee_service=None, read_only=False):
         super().__init__(parent)
 
         self.employee_service = employee_service
         self.department_data = department_data
+        self.read_only = read_only
         self.selected_manager_ids = set()
+        self.employees = []
+        self.divisions = []
+        self.checkboxes_by_id = {}
+        self.checkboxes_list = []
+        self.popup = None
+        self.fields = []
 
         # Определяем путь к UI
         script_dir = Path(__file__).resolve().parent
@@ -38,6 +47,41 @@ class DepartmentDialog(QDialog):
         self.btnSave.clicked.connect(self.save_department)
         self.setup_keyboard_navigation()
 
+        # Применяем режим только просмотра
+        self._apply_read_only_state()
+
+    def _apply_read_only_state(self):
+        """Применяет состояние только просмотра к диалогу"""
+        if self.read_only:
+            # Скрываем кнопку сохранения
+            if hasattr(self, 'btnSave'):
+                self.btnSave.setVisible(False)
+                self.btnSave.hide()
+
+            # Блокируем все поля ввода
+            self._set_all_fields_read_only()
+
+            # Блокируем комбобоксы
+            if hasattr(self, 'comboBoxDivision'):
+                self.comboBoxDivision.setEnabled(False)
+            if hasattr(self, 'comboManagers'):
+                self.comboManagers.setEnabled(False)
+
+    def _set_all_fields_read_only(self):
+        """Блокирует все поля ввода"""
+        read_only_fields = [
+            self.lineEditName,
+            self.lineEditNumber,
+            self.lineEditPhone,
+        ]
+
+        for field in read_only_fields:
+            if field:
+                if hasattr(field, 'setReadOnly'):
+                    field.setReadOnly(True)
+                elif hasattr(field, 'setEnabled'):
+                    field.setEnabled(False)
+
     def load_data_from_service(self):
         """Загружает данные через сервис"""
         if self.employee_service:
@@ -50,7 +94,11 @@ class DepartmentDialog(QDialog):
 
     def init_ui(self):
         """Настройка UI"""
-        if self.department_data and self.department_data.get('id'):
+        if self.read_only:
+            self.setWindowTitle("Просмотр отдела")
+            if hasattr(self, 'titleLabel'):
+                self.titleLabel.setText("Просмотр отдела")
+        elif self.department_data and self.department_data.get('id'):
             self.setWindowTitle("Редактирование отдела")
             if hasattr(self, 'titleLabel'):
                 self.titleLabel.setText("Редактирование отдела")
@@ -68,6 +116,10 @@ class DepartmentDialog(QDialog):
             display_text = div.get('display_name', div.get('name', 'Без названия'))
             self.comboBoxDivision.addItem(display_text, div.get('id'))
 
+        # В режиме просмотра отключаем
+        if self.read_only:
+            self.comboBoxDivision.setEnabled(False)
+
     def setup_managers_combo(self):
         """Создаёт popup с поиском и чекбоксами для выбора руководителей"""
         self.managers_widget = QWidget()
@@ -80,12 +132,22 @@ class DepartmentDialog(QDialog):
         self.search_line.setPlaceholderText("Поиск по имени или должности...")
         self.search_line.textChanged.connect(self.on_search_text_changed)
         self.search_line.setMinimumHeight(32)
+
+        # В режиме просмотра отключаем поиск
+        if self.read_only:
+            self.search_line.setEnabled(False)
+
         self.managers_layout.addWidget(self.search_line)
 
         # Кнопки Выбрать всех / Снять всех
         btn_layout = QHBoxLayout()
         select_all_btn = QPushButton("Выбрать всех")
         clear_all_btn = QPushButton("Снять выделение")
+
+        # В режиме просмотра скрываем кнопки
+        if self.read_only:
+            select_all_btn.setVisible(False)
+            clear_all_btn.setVisible(False)
 
         select_all_btn.clicked.connect(self.select_all_managers)
         clear_all_btn.clicked.connect(self.clear_all_managers)
@@ -111,6 +173,11 @@ class DepartmentDialog(QDialog):
             cb.setProperty("employee_id", emp['id'])
             cb.setProperty("employee_name", emp['full_name'])
             cb.setProperty("full_text", f"{emp['full_name']} {emp['position']}".lower())
+
+            # В режиме просмотра блокируем чекбоксы
+            if self.read_only:
+                cb.setEnabled(False)
+
             cb.toggled.connect(lambda checked, eid=emp['id']: self.on_checkbox_toggled(eid, checked))
             self.checkboxes_by_id[emp['id']] = cb
             self.checkboxes_list.append(cb)
@@ -142,10 +209,42 @@ class DepartmentDialog(QDialog):
         line_edit.setReadOnly(True)
         line_edit.setCursor(Qt.CursorShape.PointingHandCursor)
 
+        # В режиме просмотра отключаем комбобокс
+        if self.read_only:
+            self.comboManagers.setEnabled(False)
+
         self.comboManagers.installEventFilter(self)
         line_edit.installEventFilter(self)
 
         self.update_selected_managers_text()
+
+    def save_department(self):
+        """Сохранение отдела"""
+        if self.read_only:
+            QMessageBox.information(self, "Информация", "В режиме просмотра редактирование недоступно")
+            return
+
+        if not self.employee_service:
+            QMessageBox.warning(self, "Ошибка", "Сервис не инициализирован")
+            return
+
+        department_data = self.get_department_data()
+
+        # Валидация через сервис
+        is_valid, error_msg = self.employee_service.validate_department_form(department_data)
+
+        if not is_valid:
+            QMessageBox.warning(self, "Ошибка", error_msg)
+            return
+
+        # Сохраняем через сервис
+        result = self.employee_service.save_department_from_dialog(department_data)
+
+        if result:
+            self.department_saved.emit(result)
+            self.accept()
+        else:
+            QMessageBox.warning(self, "Ошибка", "Не удалось сохранить отдел")
 
     def _get_popup_stylesheet(self) -> str:
         """Возвращает стили для popup"""

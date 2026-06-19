@@ -45,12 +45,30 @@ class OvertimeCrudService:
             print(f"❌ Ошибка при загрузке сотрудников: {e}")
             return []
 
-    def get_projects(self, only_active: bool = True) -> List[Dict]:
-        """Получает список всех активных проектов из базы проектов"""
+    def get_projects(self, only_active: bool = True, user_id: Optional[int] = None) -> List[Dict]:
+        """Получает список проектов, в которых участвует пользователь"""
         try:
-            # Получаем проекты из репозитория проектов
-            # Используем существующий метод get_all с параметром exclude_archived
-            projects = self.project_repo.get_all(exclude_archived=only_active)
+            from models.projects import Project, EmployeeProject
+            from sqlalchemy import select, or_
+
+            # Базовый запрос
+            stmt = select(Project).where(Project.is_archived == False if only_active else True)
+
+            # Если указан user_id - фильтруем по участникам
+            if user_id:
+                # Получаем ID проектов, где пользователь является участником
+                subq = select(EmployeeProject.project_id).where(EmployeeProject.employee_id == user_id)
+                stmt = stmt.where(
+                    or_(
+                        Project.id.in_(subq),
+                        Project.created_by == user_id,
+                        Project.owner == user_id,
+                        Project.manager_id == user_id
+                    )
+                )
+
+            stmt = stmt.order_by(Project.name)
+            projects = self.session.scalars(stmt).all()
 
             result = []
             for project in projects:
@@ -59,7 +77,7 @@ class OvertimeCrudService:
                     'name': project.name
                 })
 
-            print(f"[DEBUG] Загружено проектов из БД: {len(result)}")
+            print(f"[DEBUG] Загружено проектов для пользователя {user_id}: {len(result)}")
             return sorted(result, key=lambda x: x['name'])
         except Exception as e:
             print(f"❌ Ошибка при загрузке проектов: {e}")
@@ -220,10 +238,11 @@ class OvertimeCrudService:
         # Извлекаем проект и задачу из описания
         project_name = None
         task_title = None
-        description = note.note_text or "Без описания"
+        description = note.note_text or ""
 
+        # ===== ИСПРАВЛЕНИЕ: если description пустой или только маркеры =====
         # Регулярное выражение для извлечения проекта и задачи
-        if description and description != "Без описания":
+        if description:
             project_match = re.search(r'\[Проект: (.*?)\]', description)
             if project_match:
                 project_name = project_match.group(1).strip()
@@ -232,11 +251,13 @@ class OvertimeCrudService:
                 task_title = task_match.group(1).strip()
 
             # Удаляем маркеры из описания для отображения
-            description = re.sub(r'\[Проект: .*?\]\s*', '', description)
-            description = re.sub(r'\[Задача: .*?\]\s*', '', description)
-            description = description.strip()
-            if not description:
-                description = "Без описания"
+            clean_description = re.sub(r'\[Проект: .*?\]\s*', '', description)
+            clean_description = re.sub(r'\[Задача: .*?\]\s*', '', clean_description)
+            description = clean_description.strip()
+
+            # ===== ИСПРАВЛЕНИЕ: если после очистки остался только "Без описания" =====
+            if not description or description == "Без описания":
+                description = ""
 
         return {
             "id": note.id,

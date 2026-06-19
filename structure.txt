@@ -1,6 +1,5 @@
 ﻿+-- .dockerignore
 +-- __pycache__
-+-- bilet.py
 +-- build
 |  +-- main
 |  |  +-- Analysis-00.toc

@@ -12,10 +12,11 @@ class DivisionCard(QFrame):
     edit_clicked = pyqtSignal(int)
     delete_clicked = pyqtSignal(int)
 
-    def __init__(self, division_data, parent=None):
+    def __init__(self, division_data, parent=None, read_only=False):
         super().__init__(parent)
         self.division_data = division_data
         self.division_id = division_data.get('id', 0)
+        self.read_only = read_only
 
         # Загрузка UI
         ui_path = os.path.join(
@@ -27,11 +28,25 @@ class DivisionCard(QFrame):
 
         self.fill_data()
         self.connect_signals()
+        self._apply_read_only_state()
+
+    def _apply_read_only_state(self):
+        """Применяет состояние только просмотра"""
+        if self.read_only:
+            # Скрываем кнопку удаления
+            if hasattr(self, 'deleteButton'):
+                self.deleteButton.setVisible(False)
+                self.deleteButton.hide()
+
+            # Переименовываем кнопку редактирования
+            if hasattr(self, 'editButton'):
+                self.editButton.setText("Подробнее")
 
     def connect_signals(self):
         """Подключение сигналов"""
         self.editButton.clicked.connect(lambda: self.edit_clicked.emit(self.division_id))
-        self.deleteButton.clicked.connect(lambda: self.delete_clicked.emit(self.division_id))
+        if not self.read_only:
+            self.deleteButton.clicked.connect(lambda: self.delete_clicked.emit(self.division_id))
 
     def fill_data(self):
         """Заполнение данными"""

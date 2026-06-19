@@ -42,7 +42,8 @@ class OvertimeService:
         return self.crud.get_all_employees()
 
     def get_projects(self, only_active: bool = True) -> List[Dict]:
-        return self.crud.get_projects(only_active)
+        """Получает проекты, в которых участвует текущий пользователь"""
+        return self.crud.get_projects(only_active, self.current_user_id)
 
     def get_tasks_for_project(self, project_id: int) -> List[Dict]:
         """Получить задачи по ID проекта"""

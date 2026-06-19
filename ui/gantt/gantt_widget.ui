@@ -577,6 +577,7 @@ QGroupBox::title {
        </item>
       </layout>
      </widget>
+     <!-- Вкладка Календарь ЗАКОММЕНТИРОВАНА
      <widget class="QWidget" name="calendarTab">
       <attribute name="title">
        <string>Календарь</string>
@@ -636,6 +637,7 @@ QGroupBox::title {
        </item>
       </layout>
      </widget>
+     -->
     </widget>
    </item>
   </layout>

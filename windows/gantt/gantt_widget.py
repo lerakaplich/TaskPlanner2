@@ -199,10 +199,10 @@ class GanttWidget(QWidget):
         top_bar.addStretch()
         right_layout.addLayout(top_bar)
 
-        # Вкладки
+        # Вкладки - ТОЛЬКО ДИАГРАММА ГАНТА
         self.tabWidget = QTabWidget()
         self.tabWidget.addTab(QWidget(), "Диаграмма Ганта")
-        # self.tabWidget.addTab(QWidget(), "Календарь")
+        # Вкладка календаря полностью УДАЛЕНА
         right_layout.addWidget(self.tabWidget)
 
         scroll_area = QScrollArea()
@@ -214,14 +214,10 @@ class GanttWidget(QWidget):
         self.gantt_canvas = GanttCanvas(self._service)
         scroll_area.setWidget(self.gantt_canvas)
 
-        # Настройка календаря
-        from windows.gantt.calendar_widget import CalendarWidget
-        self.calendar_widget = CalendarWidget(self._service)
-        self.tabWidget.widget(1).setLayout(QVBoxLayout())
-        self.tabWidget.widget(1).layout().addWidget(self.calendar_widget)
+        # ВЕСЬ КОД НАСТРОЙКИ КАЛЕНДАРЯ УДАЛЕН
 
         main_layout.addWidget(left_panel)
-        main_layout.addWidget(right_panel)
+        main_layout.addWidget(right_panel)  # ВАЖНО: раскомментировать эту строку!
 
         self._setup_priorities()
 
@@ -248,28 +244,28 @@ class GanttWidget(QWidget):
             self.ganttScrollArea.setWidget(self.gantt_canvas)
 
         # Настройка календаря
-        self.calendar_widget = CalendarWidget(self._service)
-
-        calendar_tab = self.findChild(QWidget, "calendarTab")
-        if calendar_tab:
-            tab_layout = calendar_tab.layout()
-            if tab_layout is None:
-                tab_layout = QVBoxLayout(calendar_tab)
-                tab_layout.setContentsMargins(0, 0, 0, 0)
-                tab_layout.setSpacing(0)
-                calendar_tab.setLayout(tab_layout)
-            else:
-                while tab_layout.count():
-                    item = tab_layout.takeAt(0)
-                    if item.widget():
-                        item.widget().deleteLater()
-
-            tab_layout.addWidget(self.calendar_widget)
-
-        placeholder = self.findChild(QLabel, "calendarPlaceholder")
-        if placeholder:
-            placeholder.hide()
-            placeholder.deleteLater()
+        # self.calendar_widget = CalendarWidget(self._service)
+        #
+        # calendar_tab = self.findChild(QWidget, "calendarTab")
+        # if calendar_tab:
+        #     tab_layout = calendar_tab.layout()
+        #     if tab_layout is None:
+        #         tab_layout = QVBoxLayout(calendar_tab)
+        #         tab_layout.setContentsMargins(0, 0, 0, 0)
+        #         tab_layout.setSpacing(0)
+        #         calendar_tab.setLayout(tab_layout)
+        #     else:
+        #         while tab_layout.count():
+        #             item = tab_layout.takeAt(0)
+        #             if item.widget():
+        #                 item.widget().deleteLater()
+        #
+        #     tab_layout.addWidget(self.calendar_widget)
+        #
+        # placeholder = self.findChild(QLabel, "calendarPlaceholder")
+        # if placeholder:
+        #     placeholder.hide()
+        #     placeholder.deleteLater()
 
         print("✅ UI загружен")
 
@@ -349,14 +345,14 @@ class GanttWidget(QWidget):
             self.gantt_canvas.task_moved_signal.connect(self._on_task_moved)
             self.gantt_canvas.link_created_signal.connect(self._on_link_created)
 
-        if hasattr(self, 'calendar_widget'):
-            self.calendar_widget.task_clicked.connect(self._on_calendar_task_clicked)
+        # if hasattr(self, 'calendar_widget'):
+        #     self.calendar_widget.task_clicked.connect(self._on_calendar_task_clicked)
 
-    def _on_calendar_task_clicked(self, task_id: int) -> None:
-        """Обработчик клика по задаче в календаре"""
-        task = self._service.get_task_by_id(task_id)
-        if task:
-            self._show_task_info(task)
+    # def _on_calendar_task_clicked(self, task_id: int) -> None:
+    #     """Обработчик клика по задаче в календаре"""
+    #     task = self._service.get_task_by_id(task_id)
+    #     if task:
+    #         self._show_task_info(task)
 
     def _on_export_clicked(self) -> None:
         """Обработчик нажатия кнопки экспорта"""
@@ -524,9 +520,9 @@ class GanttWidget(QWidget):
             self.gantt_canvas.set_links(self._service.get_all_links())
             self.gantt_canvas.update()
 
-        if hasattr(self, 'calendar_widget'):
-            self.calendar_widget.update()
-            self.calendar_widget.repaint()
+        # if hasattr(self, 'calendar_widget'):
+        #     self.calendar_widget.update()
+        #     self.calendar_widget.repaint()
 
     def _update_projects_tree(self) -> None:
         """Обновление дерева проектов"""
@@ -699,10 +695,10 @@ class GanttWidget(QWidget):
         if hasattr(self, 'gantt_canvas'):
             self.gantt_canvas.set_tasks(filtered_tasks)
 
-        if hasattr(self, 'calendar_widget'):
-            self.calendar_widget.set_tasks(filtered_tasks)
-            self.calendar_widget.update()
-            self.calendar_widget.repaint()
+        # if hasattr(self, 'calendar_widget'):
+        #     self.calendar_widget.set_tasks(filtered_tasks)
+        #     self.calendar_widget.update()
+        #     self.calendar_widget.repaint()
 
         self._update_tree_visibility()
 

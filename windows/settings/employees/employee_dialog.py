@@ -29,12 +29,14 @@ class EmployeeDialog(QDialog):
     """Диалоговое окно для добавления/редактирования сотрудника"""
     employee_saved = pyqtSignal(dict)
 
-    def __init__(self, parent=None, employee_data=None, employee_service=None, is_registration_mode=False):
+    def __init__(self, parent=None, employee_data=None, employee_service=None,
+                 is_registration_mode=False, read_only=False):
         super().__init__(parent)
 
         self.employee_service = employee_service
         self.employee_data = employee_data
         self.is_registration_mode = is_registration_mode
+        self.read_only = read_only
 
         # Определяем путь к UI файлу
         ui_path = os.path.join(
@@ -61,6 +63,9 @@ class EmployeeDialog(QDialog):
         # Настраиваем клавиатуру
         self.setup_keyboard_navigation()
 
+        # Применяем режим только просмотра
+        self._apply_read_only_state()
+
         # Подключаем сигналы
         self.btnSave.clicked.connect(self.save_employee)
         self.btnAddDivision.clicked.connect(self.add_division)
@@ -68,6 +73,51 @@ class EmployeeDialog(QDialog):
         self.comboBoxDivision.currentIndexChanged.connect(self.on_division_changed)
 
         self.dateEditBirthDate.setMaximumDate(QDate.currentDate())
+
+    def _apply_read_only_state(self):
+        """Применяет состояние только просмотра к диалогу"""
+        if self.read_only:
+            # Скрываем кнопку сохранения
+            if hasattr(self, 'btnSave'):
+                self.btnSave.setVisible(False)
+                self.btnSave.hide()
+
+            # Скрываем кнопки добавления подразделения и отдела
+            if hasattr(self, 'btnAddDivision'):
+                self.btnAddDivision.setVisible(False)
+                self.btnAddDivision.hide()
+            if hasattr(self, 'btnAddDepartment'):
+                self.btnAddDepartment.setVisible(False)
+                self.btnAddDepartment.hide()
+
+            # Блокируем все поля ввода
+            self._set_all_fields_read_only()
+
+            # Скрываем комбобокс ролей (если есть)
+            if hasattr(self, 'comboBoxRole'):
+                self.comboBoxRole.setEnabled(False)
+
+    def _set_all_fields_read_only(self):
+        """Блокирует все поля ввода"""
+        read_only_fields = [
+            self.lineEditLastName,
+            self.lineEditFirstName,
+            self.lineEditMiddleName,
+            self.dateEditBirthDate,
+            self.comboBoxDivision,
+            self.comboBoxDepartment,
+            self.lineEditPosition,
+            self.lineEditMobilePhone,
+            self.lineEditWorkPhone,
+            self.lineEditEmail,
+        ]
+
+        for field in read_only_fields:
+            if field:
+                if hasattr(field, 'setReadOnly'):
+                    field.setReadOnly(True)
+                elif hasattr(field, 'setEnabled'):
+                    field.setEnabled(False)
 
     def load_data_from_service(self):
         """Загружает данные через сервис"""
@@ -117,6 +167,15 @@ class EmployeeDialog(QDialog):
         """Настройка UI в зависимости от режима"""
         # Загружаем подразделения в комбобокс
         self.load_divisions_combo()
+
+        if self.read_only:
+            self.setWindowTitle("Просмотр сотрудника")
+            if hasattr(self, 'titleLabel'):
+                self.titleLabel.setText("Просмотр сотрудника")
+            # Загружаем данные для просмотра
+            if self.employee_data:
+                self.load_employee_data_for_edit()
+            return
 
         if self.is_edit_mode:
             self.setWindowTitle("Редактирование сотрудника")
@@ -232,6 +291,9 @@ class EmployeeDialog(QDialog):
 
     def add_division(self):
         """Открытие диалога добавления подразделения"""
+        if self.read_only:
+            return
+
         from windows.settings.divisions.division_dialog import DivisionDialog
 
         dialog = DivisionDialog(parent=self, division_data=None)
@@ -254,6 +316,9 @@ class EmployeeDialog(QDialog):
 
     def add_department(self):
         """Открытие диалога добавления отдела"""
+        if self.read_only:
+            return
+
         from windows.settings.departments.department_dialog import DepartmentDialog
 
         division_id = self.comboBoxDivision.currentData()
@@ -327,6 +392,10 @@ class EmployeeDialog(QDialog):
 
     def save_employee(self):
         """Сохранение сотрудника"""
+        if self.read_only:
+            QMessageBox.information(self, "Информация", "В режиме просмотра редактирование недоступно")
+            return
+
         if not self.employee_service:
             QMessageBox.warning(self, "Ошибка", "Сервис не инициализирован")
             return

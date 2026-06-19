@@ -1,3 +1,5 @@
+# windows/settings/departments/department_card.py
+
 from PyQt6 import uic
 from PyQt6.QtWidgets import QFrame, QLabel
 from PyQt6.QtCore import pyqtSignal
@@ -10,11 +12,12 @@ class DepartmentCard(QFrame):
     edit_clicked = pyqtSignal(int)
     delete_clicked = pyqtSignal(int)
 
-    def __init__(self, department_data, employee_service, parent=None):
+    def __init__(self, department_data, employee_service, parent=None, read_only=False):
         super().__init__(parent)
         self.department_data = department_data
         self.employee_service = employee_service
         self.department_id = department_data.get('id', 0)
+        self.read_only = read_only
 
         # Загрузка UI
         ui_path = os.path.join(
@@ -26,11 +29,25 @@ class DepartmentCard(QFrame):
 
         self.fill_data()
         self.connect_signals()
+        self._apply_read_only_state()
+
+    def _apply_read_only_state(self):
+        """Применяет состояние только просмотра"""
+        if self.read_only:
+            # Скрываем кнопку удаления
+            if hasattr(self, 'deleteButton'):
+                self.deleteButton.setVisible(False)
+                self.deleteButton.hide()
+
+            # Переименовываем кнопку редактирования
+            if hasattr(self, 'editButton'):
+                self.editButton.setText("Подробнее")
 
     def connect_signals(self):
         """Подключение сигналов"""
         self.editButton.clicked.connect(lambda: self.edit_clicked.emit(self.department_id))
-        self.deleteButton.clicked.connect(lambda: self.delete_clicked.emit(self.department_id))
+        if not self.read_only:
+            self.deleteButton.clicked.connect(lambda: self.delete_clicked.emit(self.department_id))
 
     def fill_data(self):
         """Заполнение данными через сервис"""
@@ -68,6 +85,14 @@ class DepartmentCard(QFrame):
             self.bossesSectionLabel.setVisible(len(boss_names) > 0)
 
         if hasattr(self, 'bossesContainer'):
+            # Очищаем контейнер
+            layout = self.bossesContainer.layout()
+            if layout:
+                while layout.count():
+                    item = layout.takeAt(0)
+                    if item.widget():
+                        item.widget().deleteLater()
+
             if boss_names:
                 boss_text = ", ".join(boss_names)
                 label = QLabel(boss_text)
@@ -81,7 +106,7 @@ class DepartmentCard(QFrame):
                         padding: 0px;
                     }
                 """)
-                self.bossesContainer.layout().addWidget(label)
+                layout.addWidget(label)
                 self.bossesContainer.setVisible(True)
             else:
                 self.bossesContainer.setVisible(False)
@@ -109,11 +134,3 @@ class DepartmentCard(QFrame):
             if self.bossesContainer.layout():
                 self.bossesContainer.layout().setContentsMargins(0, 0, 0, 0)
                 self.bossesContainer.layout().setSpacing(4)
-
-            # Очищаем старые виджеты
-            layout = self.bossesContainer.layout()
-            if layout:
-                while layout.count():
-                    item = layout.takeAt(0)
-                    if item.widget():
-                        item.widget().deleteLater()

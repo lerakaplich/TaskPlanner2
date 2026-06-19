@@ -7,6 +7,7 @@ from PyQt6.QtCore import QDate, Qt, QTimer
 from PyQt6.QtWidgets import QWidget, QMessageBox, QFileDialog, QProgressDialog, QApplication
 from PyQt6 import uic
 
+from services.permissions.app_permissions import AppRole
 from windows.overtime.overtime_card import OvertimeCard
 from windows.overtime.add_overtime_dialog import AddOvertimeDialog
 from windows.overtime.edit_overtime_dialog import EditOvertimeDialog
@@ -15,9 +16,9 @@ from services.overtime_service.overtime_export_service import OvertimeExportServ
 
 
 class OvertimePage(QWidget):
-    """UI-страница переработок"""
+    """UI-страница переработок с поддержкой прав доступа"""
 
-    def __init__(self, service=None, employee_service=None, parent=None):
+    def __init__(self, service=None, employee_service=None, permission_service=None, parent=None):
         super().__init__(parent)
 
         ui_path = os.path.join(
@@ -30,17 +31,17 @@ class OvertimePage(QWidget):
         self.service = service
         self.excel_export = OvertimeExportService()
         self.employee_service = employee_service
+        self.permission_service = permission_service
 
         self.my_overtimes: List[Dict] = []
         self.all_overtimes: List[Dict] = []
-        self._cards_cache = {}  # Кэш карточек
+        self._cards_cache = {}
 
         self.current_project_filter: Optional[str] = None
         self.current_task_filter: Optional[str] = None
         self.current_start_date: Optional[QDate] = None
         self.current_end_date: Optional[QDate] = None
 
-        # Флаг для предотвращения лишних обновлений
         self._updating = False
 
         self.btnAddOvertime.clicked.connect(self.show_add_overtime)
@@ -53,8 +54,45 @@ class OvertimePage(QWidget):
         if hasattr(self, 'btnImport'):
             self.btnImport.clicked.connect(self.show_import_dialog)
 
+        # Применяем права доступа
+        self._setup_permission_ui()
+
         self.init_filters()
         self.load_overtimes()
+
+    def _setup_permission_ui(self):
+        """Настройка UI в зависимости от прав пользователя"""
+        if not self.permission_service:
+            return
+
+        # 1. Кнопка импорта - только для админа и суперадмина
+        if hasattr(self, 'btnImport'):
+            can_import = self.permission_service.can_import_overtime()
+            self.btnImport.setVisible(can_import)
+            self.btnImport.setEnabled(can_import)
+            print(f"   btnImport visible: {can_import}")
+
+        # 2. Кнопка добавления переработки - только для админа и суперадмина
+        if hasattr(self, 'btnAddOvertime'):
+            can_add = self.permission_service.can_add_overtime()
+            self.btnAddOvertime.setVisible(can_add)
+            self.btnAddOvertime.setEnabled(can_add)
+            print(f"   btnAddOvertime visible: {can_add}")
+
+        # 3. Кнопка экспорта - только для админа и суперадмина
+        if hasattr(self, 'btnExport'):
+            # Используем ту же проверку, что и для добавления (админ/суперадмин)
+            can_export = self.permission_service.can_add_overtime()
+            self.btnExport.setVisible(can_export)
+            self.btnExport.setEnabled(can_export)
+            print(f"   btnExport visible: {can_export}")
+
+        # 4. Вкладка "Все переработки" - только для начальников
+        if hasattr(self, 'tabWidget'):
+            can_view_all = self.permission_service.can_show_overtime_tab_all()
+            if self.tabWidget.count() > 1:
+                self.tabWidget.setTabVisible(1, can_view_all)
+                print(f"   Вкладка 'Все переработки' visible: {can_view_all}")
 
     def showEvent(self, event):
         """Срабатывает при каждом показе страницы"""
@@ -80,14 +118,16 @@ class OvertimePage(QWidget):
             self.totalHoursValue.setText(f"{total:.1f}")
 
     def init_filters(self):
-        """Инициализация фильтров (с оптимизацией блокировки сигналов)"""
+        """Инициализация фильтров (только проекты пользователя)"""
         self.comboProject.blockSignals(True)
         self.comboProject.clear()
         self.comboProject.addItem("Все проекты", None)
-        if self.service:
-            projects = self.service.get_projects()
+
+        if self.service and self.service.current_user_id:
+            projects = self.service.get_projects(only_active=True)
             for project in projects:
                 self.comboProject.addItem(project['name'], project['name'])
+
         self.comboProject.setCurrentIndex(0)
         self.comboProject.blockSignals(False)
 
@@ -143,25 +183,21 @@ class OvertimePage(QWidget):
 
         self._updating = True
         try:
-            # Сбрасываем проект на "Все проекты"
             self.comboProject.blockSignals(True)
             self.comboProject.setCurrentIndex(0)
             self.comboProject.blockSignals(False)
 
-            # Сбрасываем задачу - очищаем и делаем неактивным
             self.comboTask.blockSignals(True)
             self.comboTask.clear()
             self.comboTask.addItem("Все задачи", None)
             self.comboTask.setEnabled(False)
             self.comboTask.blockSignals(False)
 
-            # Сбрасываем переменные фильтров
             self.current_project_filter = None
             self.current_task_filter = None
             self.current_start_date = None
             self.current_end_date = None
 
-            # Обновляем отображение
             self._display_tab_optimized(self.gridLayoutMy, self.my_overtimes)
             self._display_tab_optimized(self.gridLayoutAll, self.all_overtimes)
             self._update_total_hours()
@@ -200,8 +236,10 @@ class OvertimePage(QWidget):
         filtered_all = self.service.filter_overtimes(self.all_overtimes,
                                                      **filters) if self.service else self.all_overtimes
 
-        self._display_tab_optimized(self.gridLayoutMy, filtered_my)
-        self._display_tab_optimized(self.gridLayoutAll, filtered_all)
+        # Для вкладки "Мои переработки" - передаём флаг is_my_tab=True
+        self._display_tab_optimized(self.gridLayoutMy, filtered_my, is_my_tab=True)
+        # Для вкладки "Все переработки" - is_my_tab=False
+        self._display_tab_optimized(self.gridLayoutAll, filtered_all, is_my_tab=False)
         self._update_total_hours_display(filtered_my)
 
     def _update_total_hours_display(self, overtimes: List[Dict]):
@@ -209,32 +247,44 @@ class OvertimePage(QWidget):
             total = self.service.crud.get_total_hours(overtimes)
             self.totalHoursValue.setText(f"{total:.1f}")
 
-    def _display_tab_optimized(self, layout, overtimes):
+    def _display_tab_optimized(self, layout, overtimes, is_my_tab=False):
         """Оптимизированное отображение карточек с переиспользованием виджетов"""
-        # Сохраняем существующие карточки для переиспользования
         existing_widgets = {}
         while layout.count():
             item = layout.takeAt(0)
             if item.widget():
                 widget = item.widget()
-                # Сохраняем виджет для возможного переиспользования
                 if hasattr(widget, 'overtime_id'):
                     existing_widgets[widget.overtime_id] = widget
                 else:
                     widget.deleteLater()
 
-        # Создаём или переиспользуем карточки
         for i, ot in enumerate(overtimes):
             ot_id = ot.get('id')
+            is_my = ot.get('is_mine', False) or is_my_tab
+
+            # Определяем права для этой конкретной карточки
+            can_edit = False
+            can_delete = False
+
+            if self.permission_service:
+                # Проверяем, может ли пользователь редактировать ЭТУ переработку
+                can_edit = self._can_edit_overtime(ot)
+                can_delete = self._can_delete_overtime(ot)
+            else:
+                can_edit = True
+                can_delete = True
+
             if ot_id in existing_widgets:
-                # Переиспользуем существующую карточку, обновляя данные
                 card = existing_widgets[ot_id]
                 card.overtime_data = ot
                 card.setup_data()
+                card.can_edit = can_edit
+                card.can_delete = can_delete
+                card._apply_permissions()
                 del existing_widgets[ot_id]
             else:
-                # Создаём новую карточку
-                card = OvertimeCard(ot)
+                card = OvertimeCard(ot, can_edit=can_edit, can_delete=can_delete)
                 card.edit_clicked.connect(self.show_edit_overtime)
                 card.add_details_clicked.connect(self.show_add_details_overtime)
                 card.delete_clicked.connect(self.delete_overtime)
@@ -243,14 +293,48 @@ class OvertimePage(QWidget):
             col = i % 2
             layout.addWidget(card, row, col)
 
-        # Удаляем оставшиеся неиспользуемые виджеты
         for widget in existing_widgets.values():
             widget.deleteLater()
 
+    def _can_edit_overtime(self, overtime: Dict) -> bool:
+        """
+        Проверяет, может ли пользователь редактировать конкретную переработку
+        """
+        if not self.permission_service:
+            return True
+
+        # Админ и суперадмин могут редактировать любые
+        role = self.permission_service.app_manager.role
+        if role in (AppRole.ADMIN, AppRole.SUPER_ADMIN):
+            return True
+
+        # Обычный пользователь может редактировать только свои переработки
+        if role == AppRole.USER:
+            return overtime.get('is_mine', False)
+
+        return False
+
+    def _can_delete_overtime(self, overtime: Dict) -> bool:
+        """
+        Проверяет, может ли пользователь удалять переработку
+        """
+        if not self.permission_service:
+            return True
+
+        # Только админ и суперадмин могут удалять
+        role = self.permission_service.app_manager.role
+        return role in (AppRole.ADMIN, AppRole.SUPER_ADMIN)
+
     def show_add_details_overtime(self, overtime_id: int):
+        """Добавление описания к переработке (кнопка Добавить)"""
         overtime = self.service.get_overtime_by_id(overtime_id)
         if not overtime:
             QMessageBox.warning(self, "Ошибка", "Переработка не найдена")
+            return
+
+        # Проверяем права на редактирование ЭТОЙ переработки
+        if not self._can_edit_overtime(overtime):
+            QMessageBox.warning(self, "Доступ запрещён", "У вас нет прав на редактирование этой переработки")
             return
 
         dialog = EditOvertimeDialog(service=self.service, overtime_data=overtime, parent=self)
@@ -259,9 +343,15 @@ class OvertimePage(QWidget):
             QMessageBox.information(self, "Успех", "Данные переработки добавлены")
 
     def show_edit_overtime(self, overtime_id: int):
+        """Редактирование переработки (кнопка Редактировать)"""
         overtime = self.service.get_overtime_by_id(overtime_id)
         if not overtime:
             QMessageBox.warning(self, "Ошибка", "Переработка не найдена")
+            return
+
+        # Проверяем права на редактирование ЭТОЙ переработки
+        if not self._can_edit_overtime(overtime):
+            QMessageBox.warning(self, "Доступ запрещён", "У вас нет прав на редактирование этой переработки")
             return
 
         dialog = EditOvertimeDialog(service=self.service, overtime_data=overtime, parent=self)
@@ -270,6 +360,17 @@ class OvertimePage(QWidget):
             QMessageBox.information(self, "Успех", "Переработка обновлена")
 
     def delete_overtime(self, overtime_id: int):
+        """Удаление переработки"""
+        overtime = self.service.get_overtime_by_id(overtime_id)
+        if not overtime:
+            QMessageBox.warning(self, "Ошибка", "Переработка не найдена")
+            return
+
+        # Проверяем права на удаление ЭТОЙ переработки
+        if not self._can_delete_overtime(overtime):
+            QMessageBox.warning(self, "Доступ запрещён", "У вас нет прав на удаление переработок")
+            return
+
         reply = QMessageBox.question(
             self, "Удаление переработки",
             "Вы уверены, что хотите удалить эту переработку?\nЭто действие нельзя отменить.",
@@ -283,6 +384,12 @@ class OvertimePage(QWidget):
                 QMessageBox.critical(self, "Ошибка", "Не удалось удалить переработку")
 
     def show_add_overtime(self):
+        """Создание новой переработки"""
+        # Для создания новой переработки нужно право can_add_overtime (только админ/суперадмин)
+        if self.permission_service and not self.permission_service.can_add_overtime():
+            QMessageBox.warning(self, "Доступ запрещён", "У вас нет прав на добавление переработок")
+            return
+
         dialog = AddOvertimeDialog(service=self.service, parent=self)
         if dialog.exec():
             data = dialog.get_overtime_data()
@@ -310,6 +417,10 @@ class OvertimePage(QWidget):
             self._update_total_hours()
 
     def show_import_dialog(self):
+        if self.permission_service and not self.permission_service.can_import_overtime():
+            QMessageBox.warning(self, "Доступ запрещён", "У вас нет прав на импорт переработок")
+            return
+
         file_path, _ = QFileDialog.getOpenFileName(
             self, "Выберите файл для импорта переработок", "", "Excel files (*.xlsx *.xls)"
         )
@@ -351,16 +462,24 @@ class OvertimePage(QWidget):
             if item.widget():
                 item.widget().deleteLater()
 
+        can_edit = self.permission_service.can_add_overtime() if self.permission_service else True
+
         for i, ot in enumerate(overtimes):
-            card = OvertimeCard(ot)
+            card = OvertimeCard(ot, can_edit=can_edit)
             card.edit_clicked.connect(self.show_edit_overtime)
             card.add_details_clicked.connect(self.show_add_details_overtime)
             card.delete_clicked.connect(self.delete_overtime)
+
             row = i // 2
             col = i % 2
             layout.addWidget(card, row, col)
 
     def show_export_dialog(self):
+        # Проверяем права на экспорт
+        if self.permission_service and not self.permission_service.can_add_overtime():
+            QMessageBox.warning(self, "Доступ запрещён", "У вас нет прав на экспорт переработок")
+            return
+
         dialog = PeriodDialog(self, employee_service=self.employee_service)
         if dialog.exec():
             start_date, end_date = dialog.get_period()

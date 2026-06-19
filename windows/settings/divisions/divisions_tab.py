@@ -15,9 +15,11 @@ class DivisionsTab(BaseTab):
     item_deleted = pyqtSignal(str, int)
 
     def __init__(self, parent=None):
-        super().__init__(parent)
+        # Инициализируем поля ДО вызова super().__init__
         self.divisions = []
         self.employee_service = None
+
+        super().__init__(parent)
 
         # Скрываем фильтры
         QTimer.singleShot(0, self.hide_filters_forced)
@@ -31,6 +33,42 @@ class DivisionsTab(BaseTab):
 
         self.filterDepartment.hide() if hasattr(self, 'filterDepartment') else None
         self.filterSubDepartment.hide() if hasattr(self, 'filterSubDepartment') else None
+
+    def setup_permission_ui(self):
+        """
+        Настройка UI в зависимости от прав пользователя
+        Для USER - только просмотр (read-only)
+        Для ADMIN и SUPER_ADMIN - полный доступ
+        """
+        # Определяем режим на основе роли
+        if self._permission_service:
+            is_read_only = self._permission_service.is_divisions_tab_read_only()
+            self._read_only_mode = is_read_only
+
+        # Применяем состояние
+        self._apply_read_only_state()
+
+        # Скрываем или показываем кнопку добавления
+        if self.btnAdd:
+            self.btnAdd.setVisible(self._should_show_add_buttons())
+
+        # Если режим просмотра - переименовываем кнопки
+        if self._read_only_mode:
+            self._rename_edit_buttons()
+
+        # Обновляем карточки только если данные уже загружены
+        if self.divisions:
+            self.refresh_cards()
+
+    def _apply_read_only_state(self):
+        """Применяет состояние только просмотра"""
+        super()._apply_read_only_state()
+
+        # Блокируем фильтры в режиме просмотра
+        if self._read_only_mode:
+            for combo in (self.filterDepartment, self.filterSubDepartment):
+                if combo:
+                    combo.setEnabled(False)
 
     def set_employee_service(self, service):
         """Установка сервиса для работы с БД"""
@@ -50,7 +88,6 @@ class DivisionsTab(BaseTab):
     def load_divisions(self):
         """Загрузка подразделений через сервис"""
         if self.employee_service:
-            # ИСПРАВЛЕНО: используем get_division_card_data вместо get_division_display_data
             self.divisions = self.employee_service.get_division_card_data()
             self.refresh_cards()
 
@@ -59,20 +96,25 @@ class DivisionsTab(BaseTab):
         self.clear_cards()
 
         for i, division in enumerate(self.divisions):
-            card = DivisionCard(division, parent=self)
+            card = DivisionCard(division, parent=self, read_only=self._read_only_mode)
             card.edit_clicked.connect(self.on_edit_clicked)
-            card.delete_clicked.connect(self.on_delete_clicked)
+            if not self._read_only_mode:
+                card.delete_clicked.connect(self.on_delete_clicked)
             self.add_card_to_grid(card, i)
 
         self.set_last_row_stretch()
 
     def on_add_clicked(self):
         """Открытие диалога добавления подразделения"""
+        if self._read_only_mode:
+            QMessageBox.information(self, "Информация", "В режиме просмотра добавление недоступно")
+            return
+
         if not self.employee_service:
             QMessageBox.warning(self, "Ошибка", "Сервис не инициализирован")
             return
 
-        dialog = DivisionDialog(parent=self, division_data=None, employee_service=self.employee_service)
+        dialog = DivisionDialog(parent=self, division_data=None, employee_service=self.employee_service, read_only=False)
         dialog.division_saved.connect(self.on_division_saved)
         dialog.exec()
 
@@ -83,22 +125,29 @@ class DivisionsTab(BaseTab):
             QMessageBox.information(self, "Успех", f"Подразделение сохранено")
 
     def on_edit_clicked(self, division_id: int):
-        """Открытие окна редактирования подразделения"""
+        """Открытие окна редактирования/просмотра подразделения"""
         if not self.employee_service:
             return
 
-        # ИСПРАВЛЕНО: используем get_division_card_data вместо get_division_edit_data
         division = self.employee_service.get_division_card_data(division_id)
         if division:
-            # ИСПРАВЛЕНО: используем prepare_division_for_dialog для получения данных для диалога
             dialog_data = self.employee_service.prepare_division_for_dialog(division_id)
             if dialog_data:
-                dialog = DivisionDialog(parent=self, division_data=dialog_data, employee_service=self.employee_service)
-                dialog.division_saved.connect(lambda data: self.on_division_updated(division_id, data))
+                dialog = DivisionDialog(
+                    parent=self,
+                    division_data=dialog_data,
+                    employee_service=self.employee_service,
+                    read_only=self._read_only_mode
+                )
+                if not self._read_only_mode:
+                    dialog.division_saved.connect(lambda data: self.on_division_updated(division_id, data))
                 dialog.exec()
 
     def on_division_updated(self, division_id: int, division_data: dict):
         """Обработка редактирования подразделения"""
+        if self._read_only_mode:
+            return
+
         if self.employee_service:
             success = self.employee_service.update_division(division_id, division_data)
             if success:
@@ -109,10 +158,13 @@ class DivisionsTab(BaseTab):
 
     def on_delete_clicked(self, division_id: int):
         """Удаление подразделения - вызывается из карточки"""
+        if self._read_only_mode:
+            QMessageBox.information(self, "Информация", "В режиме просмотра удаление недоступно")
+            return
+
         if not self.employee_service:
             return
 
-        # ИСПРАВЛЕНО: используем существующие методы для проверки зависимостей
         has_departments = self.employee_service.has_departments_in_division(division_id)
         has_employees = self.employee_service.has_employees_in_division(division_id)
 
@@ -125,6 +177,19 @@ class DivisionsTab(BaseTab):
                 item_type="division",
                 item_id=division_id
             )
+
+    def delete_item(self, item_type: str, item_id: int):
+        """Обработка подтверждённого удаления"""
+        if self._read_only_mode:
+            return
+
+        if item_type == "division" and self.employee_service:
+            success = self.employee_service.delete_division_with_options(item_id)
+            if success:
+                self.load_divisions()
+                QMessageBox.information(self, "Успех", "Подразделение удалено")
+            else:
+                QMessageBox.warning(self, "Ошибка", "Не удалось удалить подразделение")
 
     def show_delete_with_dependencies_dialog(self, division_id: int, has_departments: bool, has_employees: bool):
         """Диалог удаления подразделения с зависимостями"""
@@ -323,13 +388,3 @@ class DivisionsTab(BaseTab):
         """Загрузка данных (для совместимости со старым кодом)"""
         self.divisions = divisions
         self.refresh_cards()
-
-    def delete_item(self, item_type: str, item_id: int):
-        """Обработка подтверждённого удаления"""
-        if item_type == "division" and self.employee_service:
-            success = self.employee_service.delete_division_with_options(item_id)
-            if success:
-                self.load_divisions()
-                QMessageBox.information(self, "Успех", "Подразделение удалено")
-            else:
-                QMessageBox.warning(self, "Ошибка", "Не удалось удалить подразделение")

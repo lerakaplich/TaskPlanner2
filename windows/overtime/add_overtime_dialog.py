@@ -6,17 +6,20 @@ from PyQt6 import uic
 from PyQt6.QtWidgets import QDialog, QMessageBox
 from PyQt6.QtCore import QDate, QTime
 
+from services.permissions.app_permissions import AppRole
+
 
 class AddOvertimeDialog(QDialog):
     """UI-диалог добавления переработки"""
 
-    def __init__(self, service=None, parent=None):
+    def __init__(self, service=None, permission_service=None, parent=None):
         super().__init__(parent)
 
         ui_path = os.path.join(os.path.dirname(__file__), "..", "..", "ui", "overtime")
         uic.loadUi(os.path.join(ui_path, "add_overtime_dialog.ui"), self)
 
         self.service = service
+        self.permission_service = permission_service
 
         for widget in [self.comboEmployee, self.comboProject, self.comboTask,
                        self.dateEdit, self.timeStart, self.timeEnd, self.btnSave]:
@@ -41,17 +44,33 @@ class AddOvertimeDialog(QDialog):
         self.comboTask.addItem("Сначала выберите проект", None)
 
     def _load_employees(self):
+        """Загружает сотрудников в зависимости от прав"""
         self.comboEmployee.clear()
-        if self.service:
-            employees = self.service.get_all_employees()
+        if not self.service:
+            return
+
+        employees = self.service.get_all_employees()
+        can_edit_all = True
+
+        # Проверяем права
+        if self.permission_service:
+            role = self.permission_service.app_manager.role
+            can_edit_all = role in (AppRole.ADMIN, AppRole.SUPER_ADMIN)
+            print(f"[DEBUG] AddOvertimeDialog: role={role.value}, can_edit_all={can_edit_all}")
+
+        if can_edit_all:
+            # Админ/суперадмин - показываем всех
             for emp in employees:
                 self.comboEmployee.addItem(emp['name'], emp['id'])
-
-            if hasattr(self.service, 'current_user_id') and self.service.current_user_id:
-                for i in range(self.comboEmployee.count()):
-                    if self.comboEmployee.itemData(i) == self.service.current_user_id:
-                        self.comboEmployee.setCurrentIndex(i)
-                        break
+            self.comboEmployee.setEnabled(True)
+        else:
+            # Обычный пользователь - только себя
+            current_user_id = self.service.current_user_id
+            for emp in employees:
+                if emp['id'] == current_user_id:
+                    self.comboEmployee.addItem(emp['name'], emp['id'])
+                    break
+            self.comboEmployee.setEnabled(False)
 
     def _load_projects(self):
         self.comboProject.clear()

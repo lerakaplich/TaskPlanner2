@@ -715,18 +715,35 @@ class NavigationHandler(QObject):
             'overtime',
             lambda: OvertimePage(
                 service=self.main.overtime_service,
-                employee_service=employee_service
+                employee_service=employee_service,
+                permission_service=self.main.permission_service
             ),
             self.PAGE_OVERTIME
         )
 
     def get_settings_page(self):
+        """Возвращает страницу настроек с сервисом прав"""
         from windows.settings.settings_page import SettingsPage
-        return self._get_or_create_page(
-            'settings',
-            lambda: SettingsPage(session=self.main.session),
-            self.PAGE_SETTINGS
-        )
+
+        # Принудительно пересоздаём страницу для применения прав
+        if 'settings' in self.pages:
+            old_page = self.pages['settings']
+            index = self.main.contentStack.indexOf(old_page)
+            if index >= 0:
+                self.main.contentStack.removeWidget(old_page)
+            old_page.deleteLater()
+            del self.pages['settings']
+
+        # Создаём новую страницу
+        self.pages['settings'] = SettingsPage(session=self.main.session)
+
+        # Передаём сервис прав
+        if hasattr(self.main, 'permission_service'):
+            self.pages['settings'].set_permission_service(self.main.permission_service)
+
+        self.main.contentStack.insertWidget(self.PAGE_SETTINGS, self.pages['settings'])
+
+        return self.pages['settings']
 
     def get_archive_page(self):
         """Возвращает страницу архива - всегда пересоздаем для свежих данных"""

@@ -12,11 +12,12 @@ class DivisionDialog(QDialog):
 
     division_saved = pyqtSignal(dict)
 
-    def __init__(self, parent=None, division_data=None, employee_service=None):
+    def __init__(self, parent=None, division_data=None, employee_service=None, read_only=False):
         super().__init__(parent)
 
         self.employee_service = employee_service
         self.division_data = division_data
+        self.read_only = read_only
         self.selected_manager_ids = set()
         self.employees = []
         self.all_checkboxes = []
@@ -42,6 +43,40 @@ class DivisionDialog(QDialog):
         self.btnSave.clicked.connect(self.save_division)
         self.setup_keyboard_navigation()
 
+        # Применяем режим только просмотра
+        self._apply_read_only_state()
+
+    def _apply_read_only_state(self):
+        """Применяет состояние только просмотра к диалогу"""
+        if self.read_only:
+            # Скрываем кнопку сохранения
+            if hasattr(self, 'btnSave'):
+                self.btnSave.setVisible(False)
+                self.btnSave.hide()
+
+            # Блокируем все поля ввода
+            self._set_all_fields_read_only()
+
+            # Скрываем комбобокс руководителей
+            if hasattr(self, 'comboHeads'):
+                self.comboHeads.setEnabled(False)
+
+    def _set_all_fields_read_only(self):
+        """Блокирует все поля ввода"""
+        read_only_fields = [
+            self.lineEditName,
+            self.lineEditNumber,
+            self.lineEditPhone,
+            self.textEditDescription,
+        ]
+
+        for field in read_only_fields:
+            if field:
+                if hasattr(field, 'setReadOnly'):
+                    field.setReadOnly(True)
+                elif hasattr(field, 'setEnabled'):
+                    field.setEnabled(False)
+
     def load_employees(self):
         """Загружает сотрудников через сервис"""
         if self.employee_service:
@@ -51,7 +86,11 @@ class DivisionDialog(QDialog):
 
     def init_ui(self):
         """Настройка UI"""
-        if self.division_data and self.division_data.get('id'):
+        if self.read_only:
+            self.setWindowTitle("Просмотр подразделения")
+            if hasattr(self, 'titleLabel'):
+                self.titleLabel.setText("Просмотр подразделения")
+        elif self.division_data and self.division_data.get('id'):
             self.setWindowTitle("Редактирование подразделения")
             if hasattr(self, 'titleLabel'):
                 self.titleLabel.setText("Редактирование подразделения")
@@ -72,12 +111,22 @@ class DivisionDialog(QDialog):
         self.search_line.setPlaceholderText("Поиск по имени или должности...")
         self.search_line.textChanged.connect(self.filter_employees)
         self.search_line.setMinimumHeight(32)
+
+        # В режиме просмотра отключаем поиск
+        if self.read_only:
+            self.search_line.setEnabled(False)
+
         self.heads_layout.addWidget(self.search_line)
 
         # Кнопки Выбрать всех / Снять всех
         btn_layout = QHBoxLayout()
         select_all_btn = QPushButton("Выбрать всех")
         clear_all_btn = QPushButton("Снять выделение")
+
+        # В режиме просмотра скрываем кнопки
+        if self.read_only:
+            select_all_btn.setVisible(False)
+            clear_all_btn.setVisible(False)
 
         select_all_btn.clicked.connect(self.select_all_heads)
         clear_all_btn.clicked.connect(self.clear_all_heads)
@@ -103,6 +152,11 @@ class DivisionDialog(QDialog):
             cb.setProperty("employee_id", emp['id'])
             cb.setProperty("employee_name", emp['full_name'])
             cb.setProperty("full_text", f"{emp['full_name']} {emp['position']}".lower())
+
+            # В режиме просмотра блокируем чекбоксы
+            if self.read_only:
+                cb.setEnabled(False)
+
             cb.toggled.connect(lambda checked, eid=emp['id']: self.on_checkbox_toggled(eid, checked))
             self.checkboxes_by_id[emp['id']] = cb
             self.all_checkboxes.append(cb)
@@ -134,10 +188,40 @@ class DivisionDialog(QDialog):
         line_edit.setReadOnly(True)
         line_edit.setCursor(Qt.CursorShape.PointingHandCursor)
 
+        # В режиме просмотра отключаем комбобокс
+        if self.read_only:
+            self.comboHeads.setEnabled(False)
+
         self.comboHeads.installEventFilter(self)
         line_edit.installEventFilter(self)
 
         self.update_selected_heads_text()
+
+    def save_division(self):
+        """Сохранение подразделения"""
+        if self.read_only:
+            QMessageBox.information(self, "Информация", "В режиме просмотра редактирование недоступно")
+            return
+
+        if not self.employee_service:
+            QMessageBox.warning(self, "Ошибка", "Сервис не инициализирован")
+            return
+
+        division_data = self.get_division_data()
+
+        is_valid, error_msg = self.employee_service.validate_division_form(division_data)
+
+        if not is_valid:
+            QMessageBox.warning(self, "Ошибка", error_msg)
+            return
+
+        result = self.employee_service.save_division_from_dialog(division_data)
+
+        if result:
+            self.division_saved.emit(result)
+            self.accept()
+        else:
+            QMessageBox.warning(self, "Ошибка", "Не удалось сохранить подразделение")
 
     def _get_popup_stylesheet(self) -> str:
         """Возвращает стили для popup"""
@@ -308,30 +392,6 @@ class DivisionDialog(QDialog):
             "workshop_code": self.textEditDescription.toPlainText().strip(),
             "boss": boss_string,
         }
-
-    def save_division(self):
-        """Сохранение подразделения через сервис"""
-        if not self.employee_service:
-            QMessageBox.warning(self, "Ошибка", "Сервис не инициализирован")
-            return
-
-        division_data = self.get_division_data()
-
-        # Валидация через сервис - ИСПРАВЛЕНО: используем validate_division_form
-        is_valid, error_msg = self.employee_service.validate_division_form(division_data)
-
-        if not is_valid:
-            QMessageBox.warning(self, "Ошибка", error_msg)
-            return
-
-        # Сохраняем через сервис - ИСПРАВЛЕНО: используем save_division_from_dialog
-        result = self.employee_service.save_division_from_dialog(division_data)
-
-        if result:
-            self.division_saved.emit(result)
-            self.accept()
-        else:
-            QMessageBox.warning(self, "Ошибка", "Не удалось сохранить подразделение")
 
     def setup_keyboard_navigation(self):
         """Навигация по полям с помощью стрелок ↑ ↓"""

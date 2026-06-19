@@ -1,3 +1,5 @@
+# windows/settings/employees/employee_card.py
+
 from PyQt6 import uic
 from PyQt6.QtWidgets import QFrame
 from PyQt6.QtCore import pyqtSignal
@@ -10,11 +12,12 @@ class EmployeeCard(QFrame):
     edit_clicked = pyqtSignal(int)
     delete_clicked = pyqtSignal(int)
 
-    def __init__(self, employee_data, employee_service, parent=None):
+    def __init__(self, employee_data, employee_service, parent=None, read_only=False):
         super().__init__(parent)
         self.employee_data = employee_data
         self.employee_service = employee_service
         self.employee_id = employee_data.get('id', 0)
+        self.read_only = read_only
 
         # Загрузка UI
         ui_path = os.path.join(
@@ -26,11 +29,25 @@ class EmployeeCard(QFrame):
 
         self.fill_data()
         self.connect_signals()
+        self._apply_read_only_state()
+
+    def _apply_read_only_state(self):
+        """Применяет состояние только просмотра"""
+        if self.read_only:
+            # Скрываем кнопку удаления
+            if hasattr(self, 'deleteButton'):
+                self.deleteButton.setVisible(False)
+                self.deleteButton.hide()
+
+            # Переименовываем кнопку редактирования
+            if hasattr(self, 'editButton'):
+                self.editButton.setText("Подробнее")
 
     def connect_signals(self):
         """Подключение сигналов"""
         self.editButton.clicked.connect(lambda: self.edit_clicked.emit(self.employee_id))
-        self.deleteButton.clicked.connect(lambda: self.delete_clicked.emit(self.employee_id))
+        if not self.read_only:
+            self.deleteButton.clicked.connect(lambda: self.delete_clicked.emit(self.employee_id))
 
     def fill_data(self):
         """Заполнение данными через сервис"""
