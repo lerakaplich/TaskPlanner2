@@ -12,11 +12,12 @@ class TagDialog(QDialog):
     """Диалог добавления/редактирования хэштега"""
     tag_saved = pyqtSignal(dict)
 
-    def __init__(self, tag_data=None, parent=None):
+    def __init__(self, tag_data=None, parent=None, read_only=False):
         super().__init__(parent)
 
         self.tag_data = tag_data or {}
         self.is_edit_mode = bool(tag_data and tag_data.get('id'))
+        self.read_only = read_only
         self.current_color = self.tag_data.get('color', '#ccab6e')
         self.fields = []
 
@@ -35,13 +36,47 @@ class TagDialog(QDialog):
         self.connect_signals()
         self.fill_data()
         self.setup_keyboard_navigation()
+        self._apply_read_only_state()
+
+    def _apply_read_only_state(self):
+        """Применяет состояние только просмотра к диалогу"""
+        if self.read_only:
+            # Скрываем кнопку сохранения
+            if hasattr(self, 'btnSave'):
+                self.btnSave.setVisible(False)
+                self.btnSave.hide()
+
+            # Блокируем поле ввода
+            if hasattr(self, 'lineEditName'):
+                self.lineEditName.setReadOnly(True)
+
+            # Скрываем кнопку выбора цвета
+            if hasattr(self, 'btnCustomColor'):
+                self.btnCustomColor.setVisible(False)
+
+            # Блокируем комбобокс цвета
+            if hasattr(self, 'comboBoxColor'):
+                self.comboBoxColor.setEnabled(False)
+
+            # Отключаем клик по цветному индикатору
+            if hasattr(self, 'colorIndicator'):
+                self.colorIndicator.setCursor(Qt.CursorShape.ArrowCursor)
+                self.colorIndicator.setToolTip("Изменение цвета недоступно в режиме просмотра")
 
     def setup_ui(self):
         """Настройка UI элементов"""
-        if self.is_edit_mode:
+        if self.read_only:
+            self.setWindowTitle("Просмотр темы")
+            if hasattr(self, 'titleLabel'):
+                self.titleLabel.setText("Просмотр темы")
+        elif self.is_edit_mode:
             self.setWindowTitle("Редактирование темы")
             if hasattr(self, 'titleLabel'):
                 self.titleLabel.setText("Редактирование темы")
+        else:
+            self.setWindowTitle("Добавление темы")
+            if hasattr(self, 'titleLabel'):
+                self.titleLabel.setText("Добавление новой темы")
 
         if hasattr(self, 'lineEditName'):
             self.lineEditName.setMaxLength(50)
@@ -101,6 +136,10 @@ class TagDialog(QDialog):
 
     def on_save_clicked(self):
         """Обработка сохранения тега"""
+        if self.read_only:
+            QMessageBox.information(self, "Информация", "В режиме просмотра редактирование недоступно")
+            return
+
         if not hasattr(self, 'lineEditName'):
             return
 
@@ -124,6 +163,8 @@ class TagDialog(QDialog):
 
     def on_color_indicator_clicked(self):
         """Открываем диалог выбора цвета по клику на кружочек"""
+        if self.read_only:
+            return
         dialog = ColorPickerDialog(self.current_color, self)
 
         if dialog.exec():
@@ -141,6 +182,8 @@ class TagDialog(QDialog):
 
     def on_custom_color_clicked(self):
         """Открытие диалога выбора пользовательского цвета"""
+        if self.read_only:
+            return
         dialog = ColorPickerDialog(self.current_color, self)
 
         if dialog.exec():
@@ -223,10 +266,11 @@ class TagDialog(QDialog):
 
     def setup_keyboard_navigation(self):
         """Настройка перехода между полями по стрелкам"""
-        self.fields = [
-            self.lineEditName,
-            self.comboBoxColor,
-        ]
+        self.fields = []
+        if hasattr(self, 'lineEditName'):
+            self.fields.append(self.lineEditName)
+        if hasattr(self, 'comboBoxColor'):
+            self.fields.append(self.comboBoxColor)
 
         for widget in self.fields:
             if widget is not None:

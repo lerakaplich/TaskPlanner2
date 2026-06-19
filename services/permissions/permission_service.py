@@ -145,5 +145,13 @@ class PermissionService:
         """Вкладка Подразделения - только просмотр для USER"""
         return self.app_manager.role == AppRole.USER
 
+    def is_columns_tab_read_only(self) -> bool:
+        """Вкладка Колонки - только просмотр для USER и ADMIN"""
+        return self.app_manager.role in (AppRole.USER, AppRole.ADMIN)
+
+    def is_tags_tab_read_only(self) -> bool:
+        """Вкладка Темы - только просмотр для USER"""
+        return self.app_manager.role == AppRole.USER
+
     def get_app_role(self) -> AppRole:
         return self.app_manager.role

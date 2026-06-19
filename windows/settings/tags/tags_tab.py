@@ -1,4 +1,5 @@
 # windows/settings/tags/tags_tab.py
+
 from services.employee_service.tag_service import TagService
 from windows.settings.base_tab import BaseTab
 from windows.settings.tags.tag_card import TagCard
@@ -17,10 +18,12 @@ class TagsTab(BaseTab):
     item_added = pyqtSignal(str, dict)
 
     def __init__(self, parent=None):
-        super().__init__(parent)
+        # Инициализируем поля ДО вызова super().__init__
         self.tags = []
         self.tag_service = None
         self.session = None
+
+        super().__init__(parent)
 
         if self.btnAdd:
             self.btnAdd.setText("Добавить тему")
@@ -31,6 +34,32 @@ class TagsTab(BaseTab):
 
         self.filterDepartment.hide() if hasattr(self, 'filterDepartment') else None
         self.filterSubDepartment.hide() if hasattr(self, 'filterSubDepartment') else None
+
+    def setup_permission_ui(self):
+        """
+        Настройка UI в зависимости от прав пользователя
+        Для USER - только просмотр (read-only)
+        Для ADMIN и SUPER_ADMIN - полный доступ
+        """
+        # Определяем режим на основе роли
+        if self._permission_service:
+            is_read_only = self._permission_service.is_tags_tab_read_only()
+            self._read_only_mode = is_read_only
+
+        # Применяем состояние
+        self._apply_read_only_state()
+
+        # Скрываем или показываем кнопку добавления
+        if self.btnAdd:
+            self.btnAdd.setVisible(self._should_show_add_buttons())
+
+        # Если режим просмотра - переименовываем кнопки
+        if self._read_only_mode:
+            self._rename_edit_buttons()
+
+        # Обновляем карточки только если данные уже загружены
+        if self.tags:
+            self.refresh_cards()
 
     def set_session(self, session):
         """Установка сессии и создание сервиса тегов"""
@@ -58,20 +87,32 @@ class TagsTab(BaseTab):
 
     def on_add_clicked(self):
         """Открытие окна добавления тега"""
-        dialog = TagDialog(tag_data=None, parent=self)
+        if self._read_only_mode:
+            QMessageBox.information(self, "Информация", "В режиме просмотра добавление недоступно")
+            return
+
+        dialog = TagDialog(tag_data=None, parent=self, read_only=False)
         dialog.tag_saved.connect(self.on_tag_added)
         dialog.exec()
 
     def on_edit_clicked(self, tag_id: int):
-        """Открытие окна редактирования тега"""
+        """Открытие окна редактирования/просмотра тега"""
         tag = next((t for t in self.tags if t.get('id') == tag_id), None)
         if tag:
-            dialog = TagDialog(tag_data=tag, parent=self)
-            dialog.tag_saved.connect(lambda data: self.on_tag_updated(tag_id, data))
+            dialog = TagDialog(
+                tag_data=tag,
+                parent=self,
+                read_only=self._read_only_mode
+            )
+            if not self._read_only_mode:
+                dialog.tag_saved.connect(lambda data: self.on_tag_updated(tag_id, data))
             dialog.exec()
 
     def on_tag_added(self, tag_data: dict):
         """Новый тег успешно сохранён"""
+        if self._read_only_mode:
+            return
+
         if self.tag_service:
             new_tag = self.tag_service.create_tag(tag_data)
             if new_tag:
@@ -88,6 +129,9 @@ class TagsTab(BaseTab):
 
     def on_tag_updated(self, tag_id: int, tag_data: dict):
         """Обработка редактирования тега"""
+        if self._read_only_mode:
+            return
+
         if self.tag_service:
             success = self.tag_service.update_tag(tag_id, tag_data)
             if success:
@@ -107,6 +151,10 @@ class TagsTab(BaseTab):
 
     def on_delete_clicked(self, tag_id: int):
         """Удаление тега - вызывается из карточки"""
+        if self._read_only_mode:
+            QMessageBox.information(self, "Информация", "В режиме просмотра удаление недоступно")
+            return
+
         tag = next((t for t in self.tags if t.get('id') == tag_id), None)
         usage_count = tag.get('usage_count', 0) if tag else 0
 
@@ -123,6 +171,9 @@ class TagsTab(BaseTab):
 
     def delete_item(self, item_type: str, item_id: int):
         """Обработка подтверждённого удаления"""
+        if self._read_only_mode:
+            return
+
         if item_type == "tag" and self.tag_service:
             success = self.tag_service.delete_tag(item_id)
             if success:
@@ -133,6 +184,9 @@ class TagsTab(BaseTab):
 
     def on_color_changed(self, tag_id: int, new_color: str):
         """Изменение цвета тега"""
+        if self._read_only_mode:
+            return
+
         if self.tag_service:
             success = self.tag_service.update_tag(tag_id, {'color': new_color})
             if success:
@@ -147,9 +201,10 @@ class TagsTab(BaseTab):
         """Обновление карточек"""
         self.clear_cards()
         for i, tag in enumerate(self.tags):
-            card = TagCard(tag, parent=self)
+            card = TagCard(tag, parent=self, read_only=self._read_only_mode)
             card.edit_clicked.connect(self.on_edit_clicked)
-            card.delete_clicked.connect(self.on_delete_clicked)
-            card.color_changed.connect(self.on_color_changed)
+            if not self._read_only_mode:
+                card.delete_clicked.connect(self.on_delete_clicked)
+                card.color_changed.connect(self.on_color_changed)
             self.add_card_to_grid(card, i)
         self.set_last_row_stretch()

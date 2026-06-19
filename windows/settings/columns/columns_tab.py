@@ -1,4 +1,5 @@
 # windows/settings/columns/columns_tab.py
+
 from services.employee_service.column_service import ColumnService
 from windows.settings.base_tab import BaseTab
 from windows.settings.columns.column_card import ColumnCard
@@ -17,10 +18,12 @@ class ColumnsTab(BaseTab):
     item_added = pyqtSignal(str, dict)
 
     def __init__(self, parent=None):
-        super().__init__(parent)
+        # Инициализируем поля ДО вызова super().__init__
         self.columns = []
         self.column_service = None
         self.session = None
+
+        super().__init__(parent)
 
         self.hide_filters()
 
@@ -33,6 +36,32 @@ class ColumnsTab(BaseTab):
 
         self.filterDepartment.hide() if hasattr(self, 'filterDepartment') else None
         self.filterSubDepartment.hide() if hasattr(self, 'filterSubDepartment') else None
+
+    def setup_permission_ui(self):
+        """
+        Настройка UI в зависимости от прав пользователя
+        Для USER и ADMIN - только просмотр (read-only)
+        Для SUPER_ADMIN - полный доступ
+        """
+        # Определяем режим на основе роли
+        if self._permission_service:
+            is_read_only = self._permission_service.is_columns_tab_read_only()
+            self._read_only_mode = is_read_only
+
+        # Применяем состояние
+        self._apply_read_only_state()
+
+        # Скрываем или показываем кнопку добавления
+        if self.btnAdd:
+            self.btnAdd.setVisible(self._should_show_add_buttons())
+
+        # Если режим просмотра - переименовываем кнопки
+        if self._read_only_mode:
+            self._rename_edit_buttons()
+
+        # Обновляем карточки только если данные уже загружены
+        if self.columns:
+            self.refresh_cards()
 
     def set_session(self, session):
         """Установка сессии и создание сервиса колонок"""
@@ -60,20 +89,33 @@ class ColumnsTab(BaseTab):
 
     def on_add_clicked(self):
         """Открытие окна добавления шаблонной колонки"""
-        dialog = ColumnDialog(column_data=None, is_template_mode=True, parent=self)
+        if self._read_only_mode:
+            QMessageBox.information(self, "Информация", "В режиме просмотра добавление недоступно")
+            return
+
+        dialog = ColumnDialog(column_data=None, is_template_mode=True, parent=self, read_only=False)
         dialog.column_saved.connect(self.on_column_added)
         dialog.exec()
 
     def on_edit_clicked(self, column_id: int):
-        """Открытие окна редактирования шаблонной колонки"""
+        """Открытие окна редактирования/просмотра шаблонной колонки"""
         column = next((c for c in self.columns if c.get('id') == column_id), None)
         if column:
-            dialog = ColumnDialog(column_data=column, is_template_mode=True, parent=self)
-            dialog.column_saved.connect(lambda data: self.on_column_updated(column_id, data))
+            dialog = ColumnDialog(
+                column_data=column,
+                is_template_mode=True,
+                parent=self,
+                read_only=self._read_only_mode
+            )
+            if not self._read_only_mode:
+                dialog.column_saved.connect(lambda data: self.on_column_updated(column_id, data))
             dialog.exec()
 
     def on_column_added(self, column_data: dict):
         """Новая шаблонная колонка успешно сохранена"""
+        if self._read_only_mode:
+            return
+
         if self.column_service:
             new_column = self.column_service.create_template_column(column_data)
             if new_column:
@@ -90,6 +132,9 @@ class ColumnsTab(BaseTab):
 
     def on_column_updated(self, column_id: int, column_data: dict):
         """Обработка редактирования шаблонной колонки"""
+        if self._read_only_mode:
+            return
+
         if self.column_service:
             success = self.column_service.update_template_column(column_id, column_data)
             if success:
@@ -109,6 +154,10 @@ class ColumnsTab(BaseTab):
 
     def on_delete_clicked(self, column_id: int):
         """Удаление шаблонной колонки - вызывается из карточки"""
+        if self._read_only_mode:
+            QMessageBox.information(self, "Информация", "В режиме просмотра удаление недоступно")
+            return
+
         column = next((c for c in self.columns if c.get('id') == column_id), None)
         usage_count = column.get('usage_count', 0) if column else 0
 
@@ -125,6 +174,9 @@ class ColumnsTab(BaseTab):
 
     def delete_item(self, item_type: str, item_id: int):
         """Обработка подтверждённого удаления"""
+        if self._read_only_mode:
+            return
+
         if item_type == "column" and self.column_service:
             success = self.column_service.delete_template_column(item_id)
             if success:
@@ -135,6 +187,9 @@ class ColumnsTab(BaseTab):
 
     def on_color_changed(self, column_id: int, new_color: str):
         """Изменение цвета шаблонной колонки"""
+        if self._read_only_mode:
+            return
+
         if self.column_service:
             success = self.column_service.update_template_column(column_id, {'color': new_color})
             if success:
@@ -149,16 +204,20 @@ class ColumnsTab(BaseTab):
         """Обновление карточек"""
         self.clear_cards()
         for i, column in enumerate(self.columns):
-            card = ColumnCard(column, parent=self)
+            card = ColumnCard(column, parent=self, read_only=self._read_only_mode)
             card.edit_clicked.connect(self.on_edit_clicked)
-            card.delete_clicked.connect(self.on_delete_clicked)
-            card.color_changed.connect(self.on_color_changed)
-            card.done_changed.connect(self.on_done_changed)
+            if not self._read_only_mode:
+                card.delete_clicked.connect(self.on_delete_clicked)
+                card.color_changed.connect(self.on_color_changed)
+                card.done_changed.connect(self.on_done_changed)
             self.add_card_to_grid(card, i)
         self.set_last_row_stretch()
 
     def on_done_changed(self, column_id: int, is_done: bool):
         """Изменение статуса Done"""
+        if self._read_only_mode:
+            return
+
         if self.column_service:
             self.column_service.update_template_column(column_id, {'is_done_column': is_done})
             for column in self.columns:

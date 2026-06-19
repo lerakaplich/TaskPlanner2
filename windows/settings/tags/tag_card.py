@@ -12,10 +12,11 @@ class TagCard(QFrame):
     delete_clicked = pyqtSignal(int)
     color_changed = pyqtSignal(int, str)   # id тега, новый цвет
 
-    def __init__(self, tag_data, parent=None):
+    def __init__(self, tag_data, parent=None, read_only=False):
         super().__init__(parent)
         self.tag_data = tag_data
         self.tag_id = tag_data.get('id', 0)
+        self.read_only = read_only
 
         # Загрузка UI
         ui_path = os.path.join(
@@ -39,17 +40,37 @@ class TagCard(QFrame):
 
         self.fill_data()
         self.connect_signals()
+        self._apply_read_only_state()
+
+    def _apply_read_only_state(self):
+        """Применяет состояние только просмотра"""
+        if self.read_only:
+            # Скрываем кнопку удаления
+            if hasattr(self, 'deleteButton'):
+                self.deleteButton.setVisible(False)
+                self.deleteButton.hide()
+
+            # Переименовываем кнопку редактирования
+            if hasattr(self, 'editButton'):
+                self.editButton.setText("Подробнее")
+
+            # Отключаем клик по цветному индикатору
+            if hasattr(self, 'colorIndicator'):
+                self.colorIndicator.setCursor(Qt.CursorShape.ArrowCursor)
+                self.colorIndicator.setToolTip("Изменение цвета недоступно в режиме просмотра")
 
     def connect_signals(self):
         """Подключение сигналов"""
         self.editButton.clicked.connect(lambda: self.edit_clicked.emit(self.tag_id))
-        self.deleteButton.clicked.connect(lambda: self.delete_clicked.emit(self.tag_id))
-
-        if hasattr(self, 'colorIndicator'):
-            self.colorIndicator.installEventFilter(self)
+        if not self.read_only:
+            self.deleteButton.clicked.connect(lambda: self.delete_clicked.emit(self.tag_id))
+            if hasattr(self, 'colorIndicator'):
+                self.colorIndicator.installEventFilter(self)
 
     def eventFilter(self, obj, event: QEvent) -> bool:
         """Ловим клик по цветному индикатору"""
+        if self.read_only:
+            return super().eventFilter(obj, event)
         if obj == self.colorIndicator and event.type() == QEvent.Type.MouseButtonPress:
             if event.button() == Qt.MouseButton.LeftButton:
                 self.color_changed.emit(self.tag_id, self.tag_data.get('color', '#ccab6e'))

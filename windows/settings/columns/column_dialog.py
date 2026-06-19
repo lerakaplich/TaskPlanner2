@@ -14,11 +14,12 @@ class ColumnDialog(QDialog):
     """Диалог добавления/редактирования колонки доски задач"""
     column_saved = pyqtSignal(dict)
 
-    def __init__(self, column_data=None, is_template_mode=True, parent=None):
+    def __init__(self, column_data=None, is_template_mode=True, parent=None, read_only=False):
         super().__init__(parent)
         self.column_data = column_data or {}
         self.is_template_mode = is_template_mode
         self.is_edit_mode = bool(column_data and column_data.get('id'))
+        self.read_only = read_only
         self.current_color = self.column_data.get('color', '#ccab6e')
         self.is_done_column = self.column_data.get('is_done_column', False)
         self.fields = []
@@ -35,10 +36,52 @@ class ColumnDialog(QDialog):
         self.connect_signals()
         self.fill_data()
         self.setup_keyboard_navigation()
+        self._apply_read_only_state()
+
+    def _apply_read_only_state(self):
+        """Применяет состояние только просмотра к диалогу"""
+        if self.read_only:
+            # Скрываем кнопку сохранения
+            if hasattr(self, 'btnSave'):
+                self.btnSave.setVisible(False)
+                self.btnSave.hide()
+
+            # Блокируем все поля ввода
+            self._set_all_fields_read_only()
+
+            # Скрываем кнопку выбора цвета (если есть)
+            if hasattr(self, 'btnCustomColor'):
+                self.btnCustomColor.setVisible(False)
+
+            # Блокируем комбобокс цвета
+            if hasattr(self, 'comboBoxColor'):
+                self.comboBoxColor.setEnabled(False)
+
+            # Блокируем комбобокс назначения (если есть)
+            if hasattr(self, 'comboBoxAssigment'):
+                self.comboBoxAssigment.setEnabled(False)
+
+    def _set_all_fields_read_only(self):
+        """Блокирует все поля ввода"""
+        if hasattr(self, 'lineEditName'):
+            self.lineEditName.setReadOnly(True)
+        if hasattr(self, 'comboBoxColor'):
+            self.comboBoxColor.setEnabled(False)
+        if hasattr(self, 'comboBoxAssigment'):
+            self.comboBoxAssigment.setEnabled(False)
 
     def setup_ui(self):
         """Настройка UI элементов"""
-        if self.is_edit_mode:
+        if self.read_only:
+            if self.is_template_mode:
+                self.setWindowTitle("Просмотр шаблона колонки")
+                if hasattr(self, 'titleLabel'):
+                    self.titleLabel.setText("Просмотр шаблона колонки")
+            else:
+                self.setWindowTitle("Просмотр колонки проекта")
+                if hasattr(self, 'titleLabel'):
+                    self.titleLabel.setText("Просмотр колонки проекта")
+        elif self.is_edit_mode:
             if self.is_template_mode:
                 self.setWindowTitle("Редактирование шаблона колонки")
                 if hasattr(self, 'titleLabel'):
@@ -60,6 +103,7 @@ class ColumnDialog(QDialog):
         if hasattr(self, 'lineEditName'):
             self.lineEditName.setMaxLength(100)
 
+        # Настройка индикатора цвета
         if hasattr(self, 'colorIndicator'):
             self.colorIndicator.setFixedSize(32, 32)
             self.colorIndicator.setMinimumSize(32, 32)
@@ -84,8 +128,6 @@ class ColumnDialog(QDialog):
             self.comboBoxColor.currentTextChanged.connect(self.on_color_changed)
         if hasattr(self, 'lineEditName'):
             self.lineEditName.textChanged.connect(self.update_preview)
-        if hasattr(self, 'checkBoxIsDone'):
-            self.checkBoxIsDone.stateChanged.connect(self.on_done_checkbox_changed)
 
     def fill_data(self):
         """Заполнение полей данными при редактировании"""
@@ -107,15 +149,15 @@ class ColumnDialog(QDialog):
                 self.comboBoxColor.addItem(f"{color_name} ({self.current_color})")
                 self.comboBoxColor.setCurrentIndex(self.comboBoxColor.count() - 1)
 
-        if hasattr(self, 'checkBoxIsDone'):
-            self.checkBoxIsDone.setChecked(self.is_done_column)
-
         self.update_preview()
         self.update_color_indicator(self.current_color)
-        self.update_done_badge(self.is_done_column)
 
     def on_save_clicked(self):
         """Обработка сохранения колонки"""
+        if self.read_only:
+            QMessageBox.information(self, "Информация", "В режиме просмотра редактирование недоступно")
+            return
+
         if not self.validate():
             return
 
@@ -158,6 +200,8 @@ class ColumnDialog(QDialog):
 
     def on_color_indicator_clicked(self):
         """Открываем диалог выбора цвета по клику на кружочек"""
+        if self.read_only:
+            return
         dialog = ColorPickerDialog(self.current_color, self)
         if dialog.exec():
             new_color = dialog.get_selected_color()
@@ -173,6 +217,8 @@ class ColumnDialog(QDialog):
 
     def on_custom_color_clicked(self):
         """Открытие диалога выбора пользовательского цвета"""
+        if self.read_only:
+            return
         dialog = ColorPickerDialog(self.current_color, self)
         if dialog.exec():
             new_color = dialog.get_selected_color()
@@ -190,11 +236,6 @@ class ColumnDialog(QDialog):
                         color_name = self.get_color_name(new_color)
                         self.comboBoxColor.addItem(f"{color_name} ({new_color})")
                         self.comboBoxColor.setCurrentIndex(self.comboBoxColor.count() - 1)
-
-    def on_done_checkbox_changed(self, state):
-        """Обработка изменения состояния чекбокса 'Готовая колонка'"""
-        self.is_done_column = bool(state == Qt.CheckState.Checked.value)
-        self.update_done_badge(self.is_done_column)
 
     def update_color(self, new_color: str):
         """Обновление цвета во всех элементах"""
@@ -221,29 +262,6 @@ class ColumnDialog(QDialog):
                 border-radius: 16px;
                 background-color: {color_code};
                 border: 2px solid #E0E0E0;
-            """)
-
-    def update_done_badge(self, is_done):
-        """Обновление отображения бейджа 'Готовая'"""
-        if hasattr(self, 'previewBadgeLabel'):
-            self.previewBadgeLabel.setVisible(is_done)
-        if hasattr(self, 'previewFrame') and is_done:
-            self.previewFrame.setStyleSheet("""
-                QFrame {
-                    background-color: #f0f9f0;
-                    border: 2px solid #2ecc71;
-                    border-radius: 10px;
-                    padding: 15px;
-                }
-            """)
-        elif hasattr(self, 'previewFrame'):
-            self.previewFrame.setStyleSheet("""
-                QFrame {
-                    background-color: white;
-                    border: 2px solid #e9ecef;
-                    border-radius: 10px;
-                    padding: 15px;
-                }
             """)
 
     def update_preview(self):
@@ -281,11 +299,13 @@ class ColumnDialog(QDialog):
 
     def setup_keyboard_navigation(self):
         """Настройка перехода между полями по стрелкам"""
-        self.fields = [
-            self.lineEditName,
-            self.comboBoxColor,
-            self.checkBoxIsDone,
-        ]
+        self.fields = []
+        if hasattr(self, 'lineEditName'):
+            self.fields.append(self.lineEditName)
+        if hasattr(self, 'comboBoxColor'):
+            self.fields.append(self.comboBoxColor)
+        if hasattr(self, 'comboBoxAssigment'):
+            self.fields.append(self.comboBoxAssigment)
 
         for widget in self.fields:
             if widget is not None:

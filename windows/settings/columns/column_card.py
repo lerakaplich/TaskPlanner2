@@ -14,10 +14,11 @@ class ColumnCard(QFrame):
     color_changed = pyqtSignal(int, str)
     done_changed = pyqtSignal(int, bool)
 
-    def __init__(self, column_data: dict, parent=None):
+    def __init__(self, column_data: dict, parent=None, read_only=False):
         super().__init__(parent)
         self.column_data = column_data
         self.column_id = column_data.get('id', 0)
+        self.read_only = read_only
 
         # Загружаем UI
         ui_path = os.path.join(
@@ -41,15 +42,36 @@ class ColumnCard(QFrame):
 
         self.fill_data()
         self.connect_signals()
+        self._apply_read_only_state()
+
+    def _apply_read_only_state(self):
+        """Применяет состояние только просмотра"""
+        if self.read_only:
+            # Скрываем кнопку удаления
+            if hasattr(self, 'deleteButton'):
+                self.deleteButton.setVisible(False)
+                self.deleteButton.hide()
+
+            # Переименовываем кнопку редактирования
+            if hasattr(self, 'editButton'):
+                self.editButton.setText("Подробнее")
+
+            # Блокируем чекбокс Done
+            if hasattr(self, 'doneCheckBox'):
+                self.doneCheckBox.setEnabled(False)
+
+            # Отключаем клик по цветному индикатору
+            if hasattr(self, 'colorIndicator'):
+                self.colorIndicator.setCursor(Qt.CursorShape.ArrowCursor)
+                self.colorIndicator.setToolTip("Изменение цвета недоступно в режиме просмотра")
 
     def connect_signals(self):
         self.editButton.clicked.connect(lambda: self.edit_clicked.emit(self.column_id))
-        self.deleteButton.clicked.connect(lambda: self.delete_clicked.emit(self.column_id))
-
-        self.doneCheckBox.stateChanged.connect(self._on_done_changed)
-
-        if hasattr(self, 'colorIndicator'):
-            self.colorIndicator.installEventFilter(self)
+        if not self.read_only:
+            self.deleteButton.clicked.connect(lambda: self.delete_clicked.emit(self.column_id))
+            self.doneCheckBox.stateChanged.connect(self._on_done_changed)
+            if hasattr(self, 'colorIndicator'):
+                self.colorIndicator.installEventFilter(self)
 
     def _on_done_changed(self, state: int):
         is_done = bool(state)
@@ -57,6 +79,8 @@ class ColumnCard(QFrame):
         self.done_changed.emit(self.column_id, is_done)
 
     def eventFilter(self, obj, event: QEvent) -> bool:
+        if self.read_only:
+            return super().eventFilter(obj, event)
         if obj == self.colorIndicator and event.type() == QEvent.Type.MouseButtonPress:
             if event.button() == Qt.MouseButton.LeftButton:
                 self.color_changed.emit(self.column_id, self.column_data.get('color', '#ccab6e'))
