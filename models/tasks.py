@@ -191,8 +191,6 @@ class Tag(Base):
     color: Mapped[str] = mapped_column(String(7), default="#ccab6e")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now, onupdate=datetime.now)
-    is_archived: Mapped[bool] = mapped_column(Boolean, default=False)
-    archived_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
 
     tasks: Mapped[List["TaskTag"]] = relationship(back_populates="tag", cascade="all, delete-orphan")
 

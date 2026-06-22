@@ -82,9 +82,6 @@ class EmployeeData(Base):
     # Пароль (хеш)
     password_hash: Mapped[Optional[str]] = mapped_column(String(255))
 
-    # Токен сессий
-    app_session_token: Mapped[Optional[str]] = mapped_column(String(255))
-
     # Временные метки
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now, onupdate=datetime.now)

@@ -1,31 +1,20 @@
-"""
-Модель данных для диаграммы Ганта.
-"""
+# models/gantt_data.py
 
-from datetime import datetime, timedelta, date
-from typing import List, Dict, Optional
-
+from datetime import datetime, timedelta
+from typing import List, Dict, Optional, Callable
 from models.schemas.tasks_dto import TaskDTO, TaskPriority
 
 
 class GanttTaskData:
     """Адаптер задачи для диаграммы Ганта."""
 
-    # Словарь для соответствия ID сотрудника -> имени (временно для тестов)
-    # В реальном приложении нужно получать из сервиса сотрудников
-    _EMPLOYEES_NAMES: Dict[int, str] = {
-        101: "Иванов А.А.",
-        102: "Петрова М.С.",
-        103: "Сидоров К.В.",
-        104: "Козлова Е.Д.",
-        105: "Морозова А.В.",
-        106: "Волков Д.С.",
-        107: "Соколов П.Н.",
-        108: "Белова И.К.",
-    }
-
-    def __init__(self, task_dto: TaskDTO):
+    def __init__(
+        self,
+        task_dto: TaskDTO,
+        get_employee_name: Optional[Callable[[int], str]] = None
+    ):
         self.task_dto = task_dto
+        self._get_employee_name = get_employee_name or (lambda x: f"ID:{x}")
         self._start_date = None
         self._end_date = None
         self._init_dates()
@@ -34,7 +23,7 @@ class GanttTaskData:
         """Инициализация дат из DTO."""
         today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
 
-        if self.task_dto.start_date:
+        if hasattr(self.task_dto, 'start_date') and self.task_dto.start_date:
             self._start_date = datetime.combine(
                 self.task_dto.start_date,
                 datetime.min.time()
@@ -47,7 +36,7 @@ class GanttTaskData:
         else:
             self._start_date = today
 
-        if self.task_dto.end_date:
+        if hasattr(self.task_dto, 'end_date') and self.task_dto.end_date:
             self._end_date = datetime.combine(
                 self.task_dto.end_date,
                 datetime.min.time()
@@ -85,18 +74,17 @@ class GanttTaskData:
 
     @property
     def progress(self) -> int:
-        return self.task_dto.progress
+        return int(self.task_dto.progress_percent or 0)
 
     @property
     def assigned_to(self) -> str:
-        """Возвращает имя сотрудника, а не ID."""
+        """Возвращает имя сотрудника."""
         if self.task_dto.assigned_to:
-            return self._EMPLOYEES_NAMES.get(self.task_dto.assigned_to, f"ID:{self.task_dto.assigned_to}")
+            return self._get_employee_name(self.task_dto.assigned_to)
         return "Не назначен"
 
     @property
     def assigned_to_id(self) -> Optional[int]:
-        """Возвращает ID сотрудника."""
         return self.task_dto.assigned_to
 
     @property
@@ -107,12 +95,25 @@ class GanttTaskData:
     def duration_days(self) -> int:
         return max(1, (self._end_date - self._start_date).days)
 
+    @property
+    def is_completed(self) -> bool:
+        return self.task_dto.completed_at is not None or self.progress == 100
+
+    @property
+    def is_overdue(self) -> bool:
+        if self.is_completed or not self.task_dto.deadline:
+            return False
+        return datetime.now() > self.task_dto.deadline
+
     def update_dates(self, start_date: datetime, end_date: datetime):
         """Обновление дат задачи."""
         self._start_date = start_date
         self._end_date = end_date
 
 
-def get_gantt_tasks_from_dto(tasks_dto: List[TaskDTO]) -> List[GanttTaskData]:
+def get_gantt_tasks_from_dto(
+    tasks_dto: List[TaskDTO],
+    get_employee_name: Optional[Callable[[int], str]] = None
+) -> List[GanttTaskData]:
     """Преобразование списка TaskDTO в GanttTaskData."""
-    return [GanttTaskData(task) for task in tasks_dto]
+    return [GanttTaskData(task, get_employee_name) for task in tasks_dto]

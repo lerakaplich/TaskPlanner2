@@ -5,11 +5,10 @@ from typing import Optional, List
 from pydantic import BaseModel, ConfigDict
 
 
-# =========================
-# Базовый DTO сотрудника
-# =========================
+# employees_dto.py
+
 class EmployeeDTO(BaseModel):
-    """Базовый DTO для сотрудника (соответствует public.employees)"""
+    """Базовый DTO для сотрудника (только поля из Employee)"""
     model_config = ConfigDict(from_attributes=True)
 
     id: int
@@ -19,44 +18,37 @@ class EmployeeDTO(BaseModel):
     middle_name: Optional[str] = None
     position: Optional[str] = None
     phone_number: Optional[str] = None
-    work_number: Optional[str] = None  # ← ДОБАВЛЕНО (было в модели)
+    work_number: Optional[str] = None
     email: Optional[str] = None
     chat_id: Optional[int] = None
     birth_date: Optional[date] = None
-    department_id: Optional[int] = None  # ← ДОБАВЛЕНО
-    division_id: Optional[int] = None  # ← ДОБАВЛЕНО
-    organization_id: Optional[int] = None  # ← ДОБАВЛЕНО
+    department_id: Optional[int] = None
+    division_id: Optional[int] = None
+    organization_id: Optional[int] = None
 
-    # Добавляем поле для ФИО (удобно для отображения)
     full_name: Optional[str] = None
 
     @property
     def get_full_name(self) -> str:
-        """Формирует ФИО из частей"""
         parts = [self.last_name, self.first_name]
         if self.middle_name:
             parts.append(self.middle_name)
         return ' '.join(parts)
 
     def model_post_init(self, __context):
-        """После инициализации заполняем full_name"""
         if not self.full_name:
             self.full_name = self.get_full_name
 
 
-# =========================
-# DTO для профиля (расширенный)
-# =========================
 class EmployeeProfileDTO(EmployeeDTO):
-    """Расширенный DTO для профиля сотрудника (с данными из EmployeeData)"""
-    # Данные из EmployeeData (служебные)
+    """Расширенный DTO для профиля (с EmployeeData)"""
+    # Только поля из EmployeeData
     role: Optional[str] = None
     is_active: Optional[bool] = None
     last_login: Optional[datetime] = None
-    session_token: Optional[str] = None  # ← ДОБАВЛЕНО
-    app_session_token: Optional[str] = None  # ← ДОБАВЛЕНО
-    created_at: Optional[datetime] = None  # ← ДОБАВЛЕНО
-    updated_at: Optional[datetime] = None  # ← ДОБАВЛЕНО
+    # ❌ УДАЛИТЬ session_token и app_session_token (они не нужны в UI)
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
 
     kpd_rating: Optional[float] = None
     kpd_level: Optional[str] = None
@@ -65,10 +57,8 @@ class EmployeeProfileDTO(EmployeeDTO):
     tasks_completed_on_time: Optional[int] = None
     avg_task_completion_days: Optional[float] = None
 
-    # Для отображения
     department_name: Optional[str] = None
     division_name: Optional[str] = None
-
 
 # =========================
 # DTO для карточки сотрудника (для analytics)

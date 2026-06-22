@@ -1,17 +1,16 @@
 # models/schemas/projects_dto.py
 
-from datetime import datetime, time
+from datetime import datetime, date
 from typing import Optional, List, Dict, Any
 from pydantic import BaseModel, ConfigDict
 
 from models.schemas.tasks_dto import BoardColumnDTO, TaskCardDTO
+from models.projects import ProjectRoleEnum
 
 
 # =========================
 # Базовый DTO проекта
 # =========================
-# models/schemas/projects_dto.py
-
 class ProjectDTO(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -19,20 +18,36 @@ class ProjectDTO(BaseModel):
     name: str
     description: Optional[str] = None
     is_archived: bool = False
+    created_by: Optional[int] = None  # ✅ ДОБАВЛЕНО (было в БД)
     created_at: datetime
     updated_at: datetime
-    deadline: Optional[time] = None
-    owner: int
+    deadline_date: Optional[date] = None  # ✅ ИСПРАВЛЕНО (было deadline: time)
+    owner: Optional[int] = None  # ⚠️ Можно удалить, если дублирует created_by
     selected_column_ids: Optional[str] = None
     manager_id: Optional[int] = None
 
 
+# =========================
+# DTO с участниками (исправлен)
+# =========================
+class ProjectMemberDTO(BaseModel):
+    """DTO участника проекта с ролью"""
+    employee_id: int
+    full_name: str
+    role: str  # project_manager, curator, member
+    joined_at: datetime
+
+
 class ProjectWithMembersDTO(ProjectDTO):
-    member_ids: List[int] = []
-    admin_ids: List[int] = []
-    is_admin: Optional[bool] = None
+    """DTO проекта с участниками"""
+    members: List[ProjectMemberDTO] = []  # ✅ Вместо member_ids и admin_ids
+
     selected_columns_data: List[Dict[str, Any]] = []
     manager_name: Optional[str] = None
+
+    # Текущая роль пользователя в проекте (для UI)
+    current_user_role: Optional[str] = None
+
 
 # =========================
 # DTO карточки проекта
@@ -45,27 +60,10 @@ class ProjectCardDTO(BaseModel):
     tasks_done: int
     is_archived: bool = False
     member_count: int = 0
-    admin_count: int = 0
     owner_name: str = "Не назначен"
     owner_id: Optional[int] = None
     created_at: Optional[str] = None
     columns_count: int = 0
     manager_name: Optional[str] = None
-
-
-class ProjectAnalyticsDTO(BaseModel):
-    id: int
-    name: str
-    total_tasks: int
-    completed_tasks: int
-    overdue_tasks: int
-    high_priority_tasks: int
-
-
-class BoardColumnWithTasksDTO(BoardColumnDTO):
-    tasks: List[TaskCardDTO] = []
-
-
-class ProjectBoardDTO(BaseModel):
-    project: ProjectWithMembersDTO
-    columns: List[BoardColumnWithTasksDTO]
+    # Текущая роль пользователя в проекте
+    user_role: Optional[str] = None

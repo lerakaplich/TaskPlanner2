@@ -1,24 +1,24 @@
 # models/projects.py
 
-from datetime import datetime, time
+from datetime import datetime
 from typing import Optional, List
+from enum import Enum as PyEnum
 
 from sqlalchemy import (
-    String,
-    Integer,
-    Boolean,
-    ForeignKey,
-    DateTime,
-    Time,
+    String, Integer, Boolean, ForeignKey, DateTime,
+    Enum as SQLAlchemyEnum
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .employees import Base
 
 
-# =========================
-# projects
-# =========================
+class ProjectRoleEnum(str, PyEnum):
+    PROJECT_MANAGER = "project_manager"
+    CURATOR = "curator"
+    MEMBER = "member"
+
+
 class Project(Base):
     __tablename__ = "projects"
 
@@ -29,18 +29,17 @@ class Project(Base):
     created_by: Mapped[Optional[int]]
     created_at: Mapped[datetime]
     updated_at: Mapped[datetime]
-    deadline: Mapped[Optional[time]]
-    owner: Mapped[int]
+
+    # ✅ ОДНО ПОЛЕ для дедлайна (дата + время)
+    deadline: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
 
     selected_column_ids: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
     manager_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
 
-    # relationships
     columns: Mapped[List["BoardColumn"]] = relationship(
         back_populates="project",
         cascade="all, delete-orphan"
     )
-
     members: Mapped[List["EmployeeProject"]] = relationship(
         back_populates="project",
         cascade="all, delete-orphan"
@@ -48,7 +47,7 @@ class Project(Base):
 
 
 # =========================
-# board_columns (колонки доски проекта)
+# board_columns
 # =========================
 class BoardColumn(Base):
     __tablename__ = "board_columns"
@@ -59,16 +58,14 @@ class BoardColumn(Base):
         nullable=True
     )
     name: Mapped[str] = mapped_column(String(100))
-    color: Mapped[str] = mapped_column(String(7), default="#ffffff")  # #ffffff как в дампе
+    color: Mapped[str] = mapped_column(String(7), default="#ffffff")
     position: Mapped[int] = mapped_column(Integer, default=0)
     is_done_column: Mapped[bool] = mapped_column(Boolean, default=False)
 
-    # Поля из дампа БД
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
     is_template: Mapped[bool] = mapped_column(Boolean, default=False)
     template_order: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
 
-    # relationships
     project: Mapped[Optional["Project"]] = relationship(back_populates="columns")
     tasks: Mapped[List["Task"]] = relationship(
         back_populates="column",
@@ -76,22 +73,23 @@ class BoardColumn(Base):
     )
 
 
-# =========================
-# employees_projects
-# =========================
 class EmployeeProject(Base):
     __tablename__ = "employees_projects"
 
     employee_id: Mapped[int] = mapped_column(
-        ForeignKey("public.employees.id", ondelete="CASCADE"),
+        ForeignKey("employees.id", ondelete="CASCADE"),
         primary_key=True,
     )
-
     project_id: Mapped[int] = mapped_column(
         ForeignKey("projects.id", ondelete="CASCADE"),
         primary_key=True,
     )
 
-    is_admin: Mapped[Optional[bool]]
+    role: Mapped[ProjectRoleEnum] = mapped_column(
+        SQLAlchemyEnum(ProjectRoleEnum),
+        default=ProjectRoleEnum.MEMBER
+    )
+    joined_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
 
     project: Mapped["Project"] = relationship(back_populates="members")
+    employee: Mapped["Employee"] = relationship()

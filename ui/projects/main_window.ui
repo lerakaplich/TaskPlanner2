@@ -181,25 +181,6 @@ QLineEdit:focus {
           </widget>
          </item>
          <item>
-          <widget class="QPushButton" name="btnNotifications">
-           <property name="styleSheet">
-            <string notr="true">QPushButton {
-    background-color: transparent;
-    border: none;
-    font-size: 20px;
-    padding: 10px;
-}
-QPushButton:hover {
-    background-color: #F0F0F0;
-    border-radius: 10px;
-}</string>
-           </property>
-           <property name="text">
-            <string>🔔</string>
-           </property>
-          </widget>
-         </item>
-         <item>
           <spacer name="horizontalSpacer_4">
            <property name="orientation">
             <enum>Qt::Vertical</enum>

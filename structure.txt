@@ -1,5 +1,6 @@
 ﻿+-- .dockerignore
 +-- __pycache__
++-- bilet.py
 +-- build
 |  +-- main
 |  |  +-- Analysis-00.toc
@@ -85,7 +86,6 @@
 +-- ServerApp.spec
 +-- services
 |  +-- __pycache__
-|  +-- access_service.py
 |  +-- analytics_service
 |  |  +-- __pycache__
 |  |  +-- analytics_base_service.py
@@ -114,9 +114,16 @@
 |  |  +-- overtime_export_service.py
 |  |  +-- overtime_import_service.py
 |  |  +-- overtime_service.py
+|  +-- permissions
+|  |  +-- __pycache__
+|  |  +-- app_permissions.py
+|  |  +-- permission_service.py
+|  |  +-- project_permissions.py
+|  |  +-- system_permissions.py
 |  +-- profile_service.py
 |  +-- projects_service
 |  |  +-- __pycache__
+|  |  +-- project_role_service.py
 |  |  +-- projects_columns_service.py
 |  |  +-- projects_crud_service.py
 |  |  +-- projects_members_service.py
@@ -203,7 +210,6 @@
 |  |  +-- main_window.ui
 |  |  +-- project_card.ui
 |  |  +-- project_creation_dialog.ui
-|  |  +-- project_edit_dialog.ui
 |  |  +-- project_page.ui
 |  +-- settings
 |  |  +-- base_tab.ui
@@ -297,6 +303,10 @@
 |  |  +-- overtime_card.py
 |  |  +-- overtime_page.py
 |  |  +-- period_dialog.py
+|  +-- permissions
+|  |  +-- __pycache__
+|  |  +-- read_only_mixin.py
+|  |  +-- ui_permission_mixin.py
 |  +-- profile
 |  |  +-- __pycache__
 |  |  +-- chart_widget.py
@@ -337,6 +347,7 @@
 |  |  |  +-- employee_card.py
 |  |  |  +-- employee_dialog.py
 |  |  |  +-- employees_tab.py
+|  |  +-- settings_factory.py
 |  |  +-- settings_page.py
 |  |  +-- tags
 |  |  |  +-- __pycache__

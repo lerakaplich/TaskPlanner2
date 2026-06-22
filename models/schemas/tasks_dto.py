@@ -75,7 +75,6 @@ class TagDTO(BaseModel):
     project_id: int
     name: str
     color: str = "#ccab6e"
-    is_archived: bool = False
     usage_count: int = 0
 
 

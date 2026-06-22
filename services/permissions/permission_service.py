@@ -15,6 +15,7 @@ class PermissionService:
 
     def __init__(self, user_id: int, app_service=None, project_service=None, employee_service=None):
         self.user_id = user_id
+        self._project_role_cache = {}
 
         # Инициализируем менеджеры прав
         app_role = self._get_app_role(app_service)
@@ -23,8 +24,47 @@ class PermissionService:
         self.project_service = project_service
         self.employee_service = employee_service
 
-        # Кэш для ролей в проектах
-        self._project_role_cache = {}
+        # Если есть project_service, используем его для определения ролей
+        if project_service and hasattr(project_service, 'get_project_role'):
+            self._get_project_role = project_service.get_project_role
+        else:
+            self._get_project_role = self._default_get_project_role
+
+    def _default_get_project_role(self, user_id: int, project_id: int) -> ProjectRole:
+        """Заглушка для определения роли в проекте"""
+        return ProjectRole.MEMBER
+
+    def _get_project_role(self, project_id: int) -> ProjectRole:
+        """Определяет роль пользователя в проекте с кэшированием"""
+        if project_id not in self._project_role_cache:
+            role = self._get_project_role(self.user_id, project_id)
+            self._project_role_cache[project_id] = role or ProjectRole.MEMBER
+        return self._project_role_cache[project_id]
+
+    def can_archive_project(self, project_id: int) -> bool:
+        """
+        Проверяет, может ли пользователь архивировать проект
+        """
+        # 1. Проверяем права на уровне приложения (суперадмин может всё)
+        if self.app_manager.can_archive_any_project():
+            return True
+
+        # 2. Проверяем права на уровне проекта
+        if self.project_service and hasattr(self.project_service, 'can_archive_project'):
+            return self.project_service.can_archive_project(project_id, self.user_id)
+
+        # 3. Проверяем роль в проекте
+        role = self._get_project_role(project_id)
+        return role in (ProjectRole.PROJECT_MANAGER, ProjectRole.CURATOR)
+
+    def get_project_permissions(self, project_id: int) -> ProjectPermissionManager:
+        """Возвращает менеджер прав для конкретного проекта"""
+        if project_id not in self._project_permission_cache:
+            role = self._get_project_role(project_id)
+            self._project_permission_cache[project_id] = ProjectPermissionManager(
+                self.user_id, project_id, role
+            )
+        return self._project_permission_cache[project_id]
 
     def _get_app_role(self, service) -> AppRole:
         """Получает роль на уровне приложения"""
@@ -32,37 +72,11 @@ class PermissionService:
             return service.get_app_role(self.user_id)
         return AppRole.USER
 
-    def _get_project_role(self, project_id: int) -> ProjectRole:
-        """Определяет роль пользователя в проекте"""
-        if self.project_service and hasattr(self.project_service, 'get_project_role'):
-            return self.project_service.get_project_role(self.user_id, project_id)
-        return ProjectRole.MEMBER
-
-    def can_archive_project(self, project_id: int) -> bool:
-        """Может ли пользователь архивировать проект"""
-        if self.app_manager.can_archive_any_project():
-            return True
-
-        if self.project_service and hasattr(self.project_service, 'can_archive_project'):
-            return self.project_service.can_archive_project(project_id, self.user_id)
-
-        project_perms = self.get_project_permissions(project_id)
-        return project_perms.has_permission('can_archive_project')
-
     def _get_system_role(self) -> SystemRole:
         """Получает роль в системе (должность)"""
         if self.employee_service:
             return self.employee_service.get_system_role(self.user_id)
         return SystemRole.EMPLOYEE
-
-    def get_project_permissions(self, project_id: int) -> ProjectPermissionManager:
-        """Возвращает менеджер прав для конкретного проекта"""
-        if project_id not in self._project_role_cache:
-            role = self._get_project_role(project_id)
-            self._project_role_cache[project_id] = ProjectPermissionManager(
-                self.user_id, project_id, role
-            )
-        return self._project_role_cache[project_id]
 
     def can_show_create_project_button(self) -> bool:
         return self.app_manager.can_create_project()

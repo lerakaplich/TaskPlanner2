@@ -45,3 +45,5 @@ class ChatReadDTO(BaseModel):
     project_id: Optional[int]
 
     display_name: str
+    is_admin: bool = False  # ✅ Добавить для проверки прав в чате
+    unread_count: int = 0  # ✅ Добавить для уведомлений

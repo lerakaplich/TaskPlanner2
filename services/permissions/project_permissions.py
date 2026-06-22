@@ -1,75 +1,74 @@
 # services/permissions/project_permissions.py
+
 from enum import Enum
-from typing import Set, Dict, Any, Optional
+from typing import Set, Dict, Optional
+from models.projects import ProjectRoleEnum  # Импортируем из моделей
 
 
 class ProjectRole(Enum):
-    """Роли внутри проекта"""
-    PROJECT_MANAGER = "project_manager"  # Руководитель проекта
-    CURATOR = "curator"  # Куратор проекта
-    MEMBER = "member"  # Участник проекта
+    """Роли внутри проекта (для PermissionManager)"""
+    PROJECT_MANAGER = "project_manager"
+    CURATOR = "curator"
+    MEMBER = "member"
+
+    @classmethod
+    def from_enum(cls, role_enum):
+        """Конвертирует ProjectRoleEnum в ProjectRole"""
+        if role_enum == ProjectRoleEnum.PROJECT_MANAGER:
+            return cls.PROJECT_MANAGER
+        elif role_enum == ProjectRoleEnum.CURATOR:
+            return cls.CURATOR
+        else:
+            return cls.MEMBER
 
 
 class ProjectPermissionManager:
     """
     Менеджер прав на уровне проекта
-    Определяет, что может делать пользователь внутри конкретного проекта
     """
 
-    # Права для каждой роли внутри проекта
     _permissions: Dict[ProjectRole, Set[str]] = {
         ProjectRole.PROJECT_MANAGER: {
             # Управление проектом
-            'can_edit_project',  # Может редактировать проект
-            'can_delete_project',  # Может удалять проект
-            'can_archive_project',  # Может архивировать проект
-            'can_manage_members',  # Может управлять участниками
-            'can_manage_admins',  # Может управлять администраторами
-
+            'can_edit_project',
+            'can_delete_project',
+            'can_archive_project',
+            'can_manage_members',
+            'can_manage_admins',
             # Управление задачами
-            'can_create_task',  # Может создавать задачи
-            'can_edit_any_task',  # Может редактировать любые задачи проекта
-            'can_delete_any_task',  # Может удалять любые задачи проекта
-            'can_move_any_task',  # Может перемещать любые задачи
-            'can_assign_task',  # Может назначать исполнителей
-
-            # Управление колонками проекта
-            'can_manage_project_columns',  # Может управлять колонками проекта
+            'can_create_task',
+            'can_edit_any_task',
+            'can_delete_any_task',
+            'can_move_any_task',
+            'can_assign_task',
+            # Управление колонками
+            'can_manage_project_columns',
         },
 
         ProjectRole.CURATOR: {
             # Управление проектом (ограничено)
-            'can_edit_project',  # Может редактировать проект
-            'can_archive_project',  # Может архивировать проект
-            'can_manage_members',  # Может управлять участниками
-
+            'can_edit_project',
+            'can_archive_project',
+            'can_manage_members',
             # Управление задачами
-            'can_create_task',  # Может создавать задачи
-            'can_edit_any_task',  # Может редактировать любые задачи
-            'can_delete_any_task',  # Может удалять любые задачи
-            'can_move_any_task',  # Может перемещать любые задачи
-            'can_assign_task',  # Может назначать исполнителей
-
+            'can_create_task',
+            'can_edit_any_task',
+            'can_delete_any_task',
+            'can_move_any_task',
+            'can_assign_task',
             # Колонки
-            'can_manage_project_columns',  # Может управлять колонками
-
-            # НЕ может удалять проект
+            'can_manage_project_columns',
         },
 
         ProjectRole.MEMBER: {
-            # Управление проектом (только просмотр)
-            'can_view_project',  # Может просматривать проект
-
-            # Управление задачами (ограничено)
-            'can_create_task',  # Может создавать задачи
-            'can_edit_own_task',  # Может редактировать только свои задачи
-            'can_move_own_task',  # Может перемещать только свои задачи
-
-            # НЕ может:
-            # - удалять задачи
-            # - редактировать проект
-            # - управлять участниками
-            # - управлять колонками
+            'can_view_project',
+            'can_create_task',
+            'can_edit_own_task',
+            'can_move_own_task',
+            # НЕ может удалять задачи
+            # НЕ может редактировать проект
+            # НЕ может управлять участниками
+            # НЕ может управлять колонками
         }
     }
 
@@ -79,7 +78,6 @@ class ProjectPermissionManager:
         self.role = role
 
     def has_permission(self, permission: str) -> bool:
-        """Проверяет, есть ли у пользователя право внутри проекта"""
         return permission in self._permissions.get(self.role, set())
 
     def can_edit_project(self) -> bool:
