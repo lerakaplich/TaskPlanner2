@@ -28,6 +28,104 @@ class TasksCrudService:
         task_orm = self.repo.get_by_id(task_id)
         return self._task_to_dict(task_orm) if task_orm else None
 
+    def get_projects_for_filter(self, user_id: int) -> List[Dict]:
+        """Загружает проекты для фильтра (только где пользователь участник/админ/куратор/создатель)"""
+        from sqlalchemy import select
+        from models.projects import Project, EmployeeProject
+
+        try:
+            stmt = select(Project).where(
+                (Project.is_archived == False) & (
+                        (Project.id.in_(
+                            select(EmployeeProject.project_id).where(EmployeeProject.employee_id == user_id)
+                        )) |
+                        (Project.created_by == user_id)
+                )
+            ).order_by(Project.name)
+
+            projects = self.db_session.scalars(stmt).all()
+            return [{"id": p.id, "name": p.name} for p in projects]
+        except Exception as e:
+            print(f"⚠️ Ошибка загрузки проектов для фильтра: {e}")
+            return []
+
+    def get_project_columns(self, project_id: int) -> List[Dict]:
+        """Получает колонки проекта по его ID"""
+        from models.projects import BoardColumn
+        from sqlalchemy import select
+
+        try:
+            # Получаем проект
+            stmt = select(Project).where(Project.id == project_id)
+            project = self.db_session.scalar(stmt)
+
+            column_ids = []
+            if project and project.selected_column_ids:
+                ids_str = project.selected_column_ids
+                if ids_str:
+                    column_ids = [int(id_str.strip()) for id_str in ids_str.split(',') if id_str.strip()]
+
+            if not column_ids:
+                # Возвращаем шаблонные колонки по умолчанию
+                stmt = select(BoardColumn).where(
+                    BoardColumn.is_template == True
+                ).order_by(BoardColumn.template_order)
+                columns = self.db_session.scalars(stmt).all()
+            else:
+                stmt = select(BoardColumn).where(BoardColumn.id.in_(column_ids)).order_by(BoardColumn.position)
+                columns = self.db_session.scalars(stmt).all()
+
+            return [
+                {
+                    "id": col.id,
+                    "name": col.name,
+                    "color": col.color,
+                    "position": col.position,
+                    "is_done": col.is_done_column
+                }
+                for col in columns
+            ]
+        except Exception as e:
+            print(f"⚠️ Ошибка получения колонок проекта {project_id}: {e}")
+            return []
+
+    def get_tasks_for_project_filter(self, tasks: List[Dict], project_id: int) -> List[Dict]:
+        """Фильтрует задачи по проекту"""
+        if not project_id:
+            return tasks
+        return [t for t in tasks if t.get("project_id") == project_id]
+
+    def get_task_statistics(self, tasks: List[Dict]) -> Dict:
+        """Рассчитывает статистику по задачам"""
+        total = len(tasks)
+
+        in_progress = sum(1 for t in tasks if not t.get("completed", False))
+
+        overdue = 0
+        today = datetime.now().date()
+        for task in tasks:
+            deadline_str = task.get("deadline")
+            if deadline_str and not task.get("completed", False):
+                try:
+                    deadline_date = datetime.strptime(deadline_str, "%d.%m.%Y").date()
+                    if deadline_date < today:
+                        overdue += 1
+                except (ValueError, TypeError):
+                    pass
+
+        avg_progress = int(sum(t.get("progress_percent", 0) for t in tasks) / total) if total > 0 else 0
+
+        return {
+            "total": total,
+            "in_progress": in_progress,
+            "overdue": overdue,
+            "avg_progress": avg_progress
+        }
+
+    def get_column_tasks_count(self, column_name: str, tasks: List[Dict]) -> int:
+        """Возвращает количество задач в колонке"""
+        return sum(1 for t in tasks if t.get("status") == column_name)
+
     def get_tasks_by_ids(self, task_ids: List[int]) -> List[Dict]:
         """Получить задачи по списку ID"""
         if not task_ids:
@@ -35,6 +133,137 @@ class TasksCrudService:
         stmt = select(Task).where(Task.id.in_(task_ids))
         tasks = self.db_session.scalars(stmt).all()
         return [self._task_to_dict(task) for task in tasks]
+
+    def get_projects_for_filter_others(self, user_id: int) -> List[Dict]:
+        """Загружает проекты для фильтра (чужие задачи)"""
+        from sqlalchemy import select
+        from models.projects import Project, EmployeeProject
+
+        try:
+            # Для чужих задач показываем все проекты, где пользователь НЕ является создателем
+            stmt = select(Project).where(
+                Project.is_archived == False,
+                Project.created_by != user_id
+            ).order_by(Project.name)
+
+            projects = self.db_session.scalars(stmt).all()
+            return [{"id": p.id, "name": p.name} for p in projects]
+        except Exception as e:
+            print(f"⚠️ Ошибка загрузки проектов для фильтра (чужие): {e}")
+            return []
+
+    def filter_tasks_by_priority_and_project_ids(
+            self,
+            tasks: List[Dict],
+            priority: str,
+            project_id: Optional[int]
+    ) -> set:
+        """Возвращает множество ID отфильтрованных задач"""
+        filtered = tasks
+        if priority and priority != "Все приоритеты":
+            priority_map = {"Низкий": "low", "Средний": "medium", "Высокий": "high", "Критический": "critical"}
+            target_priority = priority_map.get(priority, priority.lower())
+            filtered = [t for t in filtered if t.get("priority") == target_priority]
+        if project_id:
+            filtered = [t for t in filtered if t.get("project_id") == project_id]
+        return {t["id"] for t in filtered}
+
+    def get_tasks_for_project_filter_others(
+            self,
+            all_tasks: List[Dict],
+            project_id: Optional[int],
+            user_id: int
+    ) -> List[Dict]:
+        """Фильтрует задачи для чужих задач"""
+        filtered = all_tasks
+
+        # Исключаем задачи, где пользователь является исполнителем
+        filtered = [t for t in filtered if t.get("assigned_to") != user_id]
+
+        if project_id:
+            filtered = [t for t in filtered if t.get("project_id") == project_id]
+
+        return filtered
+
+    def get_project_columns_by_ids(self, project_id: int) -> List[Dict]:
+        """Получает колонки проекта по его ID (с fallback на шаблонные)"""
+        from models.projects import BoardColumn
+        from sqlalchemy import select
+
+        try:
+            stmt = select(Project).where(Project.id == project_id)
+            project = self.db_session.scalar(stmt)
+
+            column_ids = []
+            if project and project.selected_column_ids:
+                ids_str = project.selected_column_ids
+                if ids_str:
+                    column_ids = [int(id_str.strip()) for id_str in ids_str.split(',') if id_str.strip()]
+
+            if not column_ids:
+                stmt = select(BoardColumn).where(
+                    BoardColumn.is_template == True
+                ).order_by(BoardColumn.template_order)
+                columns = self.db_session.scalars(stmt).all()
+            else:
+                stmt = select(BoardColumn).where(BoardColumn.id.in_(column_ids)).order_by(BoardColumn.position)
+                columns = self.db_session.scalars(stmt).all()
+
+            return [
+                {
+                    "id": col.id,
+                    "name": col.name,
+                    "color": col.color,
+                    "position": col.position,
+                    "is_done": col.is_done_column
+                }
+                for col in columns
+            ]
+        except Exception as e:
+            print(f"⚠️ Ошибка получения колонок проекта {project_id}: {e}")
+            return []
+
+    def get_task_statistics_others(self, tasks: List[Dict]) -> Dict:
+        """Рассчитывает статистику для чужих задач"""
+        total = len(tasks)
+
+        in_progress = 0
+        done_columns = ["Готово", "Done", "Выполнено"]
+        for task in tasks:
+            status = task.get("status", "")
+            completed = task.get("completed", False)
+            if status not in done_columns and not completed:
+                in_progress += 1
+
+        overdue = 0
+        today = datetime.now().date()
+        for task in tasks:
+            deadline_str = task.get("deadline")
+            completed = task.get("completed", False)
+            if deadline_str and not completed:
+                try:
+                    deadline_date = datetime.strptime(deadline_str, "%d.%m.%Y").date()
+                    if deadline_date < today:
+                        overdue += 1
+                except (ValueError, TypeError):
+                    pass
+
+        avg_progress = int(sum(t.get("progress_percent", 0) for t in tasks) / total) if total > 0 else 0
+
+        return {
+            "total": total,
+            "in_progress": in_progress,
+            "overdue": overdue,
+            "avg_progress": avg_progress
+        }
+
+    def update_task_card_data(self, task_id: int, updated_task: Dict) -> Dict:
+        """Обновляет данные карточки задачи"""
+        return self._task_to_dict(updated_task)
+
+    def has_task_in_ui(self, tasks: List[Dict], task_id: int) -> bool:
+        """Проверяет, есть ли задача в списке"""
+        return any(t.get("id") == task_id for t in tasks)
 
     def create_task(self, data: Dict) -> Dict:
         """Создать новую задачу"""

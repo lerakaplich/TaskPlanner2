@@ -6,12 +6,87 @@ import os
 from PyQt6 import uic
 from PyQt6.QtCore import Qt, QMimeData, pyqtSignal, QPoint, QSize
 from PyQt6.QtGui import QDrag, QPixmap, QPainter
-from PyQt6.QtWidgets import QFrame, QPushButton, QMenu, QApplication, QSizePolicy, QLabel, QHBoxLayout, QWidget
+from PyQt6.QtWidgets import (
+    QFrame, QPushButton, QMenu, QApplication, QSizePolicy,
+    QLabel, QHBoxLayout, QWidget, QGridLayout
+)
+
+
+class TaskCardStyles:
+    """Стили для TaskCard - вынесены в отдельный класс"""
+
+    DIFFICULTY_STYLES = {
+        4: {"color": "#D22730", "bg": "#FFEBEE"},
+        3: {"color": "#FF9800", "bg": "#FFF3E0"},
+        1: {"color": "#4CAF50", "bg": "#E8F5E9"},
+        0: {"color": "#9E9E9E", "bg": "#F5F5F5"},
+    }
+
+    TAG_STYLE = """
+        QPushButton {
+            font-size: 10px;
+            padding: 4px 10px;
+            border-radius: 10px;
+            background: #E8F5E9;
+            color: #2E7D32;
+            border: 1px solid #C8E6C9;
+        }
+        QPushButton:hover {
+            background: #C8E6C9;
+        }
+    """
+
+    PAUSE_STYLE = """
+        background-color: #FF9800;
+        color: white;
+        font-size: 10px;
+        font-weight: bold;
+        padding: 2px 8px;
+        border-radius: 10px;
+    """
+
+    MENU_STYLE = """
+        QMenu {
+            background-color: #ffffff;
+            border: 1px solid #e0e0e0;
+            border-radius: 10px;
+            padding: 6px 0;
+            font-size: 14px;
+        }
+        QMenu::item {
+            padding: 10px 30px 10px 15px;
+            color: #1B232A;
+        }
+        QMenu::item:selected {
+            background-color: #ccab6e;
+            color: white;
+            border-radius: 6px;
+            margin: 2px 6px;
+        }
+    """
+
+    PROGRESS_STYLE = """
+        QProgressBar {
+            border: 2px solid #E0E0E0;
+            border-radius: 8px;
+            text-align: center;
+            background-color: white;
+            font-size: 13px;
+        }
+        QProgressBar:hover {
+            border: 2px solid #ccab6e;
+        }
+        QProgressBar::chunk {
+            background-color: #D22730;
+            border-radius: 8px;
+        }
+    """
 
 
 class TaskCard(QFrame):
     """UI карточки задачи - только отображение и сигналы"""
 
+    # Сигналы для внешней обработки
     edit_requested = pyqtSignal(int)
     delete_requested = pyqtSignal(int)
     archive_requested = pyqtSignal(int)
@@ -30,107 +105,48 @@ class TaskCard(QFrame):
         self.task_id = task_data.get("id")
         self.drag_start_position = None
         self._updating_progress = False
+        self._delete_enabled = True
+        self._archive_enabled = True
 
-        # КРИТИЧЕСКИ ВАЖНО: отключаем все обновления и скрываем
-        # self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
+        self._setup_widget_flags()
+        self._load_ui()
+        self._setup_ui_components()
+        self.fill_ui()
+        self._connect_signals()
+
+    # ==========================================================
+    # НАСТРОЙКА UI
+    # ==========================================================
+
+    def _setup_widget_flags(self):
+        """Настройка флагов виджета"""
         self.setWindowFlags(Qt.WindowType.FramelessWindowHint)
         self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating, True)
-
-        # Полностью отключаем отображение до готовности
         self.setVisible(False)
 
-        # Создаем UI без parent (или с parent=self)
+    def _load_ui(self):
+        """Загрузка UI из файла"""
         ui_path = os.path.join(
             os.path.dirname(__file__),
             "..", "..",
-            "ui", "my_tasks"
+            "ui", "my_tasks", "task_card.ui"
         )
-
-        uic.loadUi(os.path.join(ui_path, "task_card.ui"), self)
+        uic.loadUi(ui_path, self)
 
         self.setObjectName("TaskCard")
         self.setAcceptDrops(True)
-
-        # Фиксированная ширина, высота по содержимому
         self.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Minimum)
         self.setFixedWidth(300)
         self.setMinimumHeight(0)
         self.setContentsMargins(0, 0, 0, 0)
 
+    def _setup_ui_components(self):
+        """Настройка компонентов UI"""
         self._setup_difficulty_widget()
         self.overallProgress.mousePressEvent = self._on_progress_click
 
-        self.fill_ui()
-        self.menuButton.clicked.connect(self._show_context_menu)
-        self.projectButton.clicked.connect(self._on_project_clicked)
-
-    def set_delete_button_visible(self, visible: bool):
-        """Устанавливает видимость кнопки удаления в контекстном меню"""
-        self._delete_enabled = visible
-
-    def set_archive_button_visible(self, visible: bool):
-        """Устанавливает видимость кнопки архивации в контекстном меню"""
-        self._archive_enabled = visible
-
-    def _show_context_menu(self):
-        menu = QMenu(self)
-        menu.setStyleSheet("""
-            QMenu {
-                background-color: #ffffff;
-                border: 1px solid #e0e0e0;
-                border-radius: 10px;
-                padding: 6px 0;
-                font-size: 14px;
-            }
-            QMenu::item {
-                padding: 10px 30px 10px 15px;
-                color: #1B232A;
-            }
-            QMenu::item:selected {
-                background-color: #ccab6e;
-                color: white;
-                border-radius: 6px;
-                margin: 2px 6px;
-            }
-        """)
-
-        duplicate_action = menu.addAction("Дублировать")
-
-        is_paused = self.task_data.get("is_paused", False)
-        is_completed = self.task_data.get("completed", False)
-
-        pause_action = None
-        if not is_completed:
-            if is_paused:
-                pause_action = menu.addAction("Возобновить")
-            else:
-                pause_action = menu.addAction("Пауза")
-
-        # Проверяем права на архивацию и удаление
-        archive_action = None
-        if getattr(self, '_archive_enabled', True):
-            archive_action = menu.addAction("Архивировать")
-
-        delete_action = None
-        if getattr(self, '_delete_enabled', True):
-            delete_action = menu.addAction("Удалить")
-
-        action = menu.exec(self.menuButton.mapToGlobal(QPoint(0, self.menuButton.height())))
-
-        if action == duplicate_action:
-            self.duplicate_requested.emit(self.task_id)
-        elif pause_action and action == pause_action:
-            if is_paused:
-                self.resume_requested.emit(self.task_id)
-            else:
-                self.pause_requested.emit(self.task_id)
-        elif archive_action and action == archive_action:
-            self.archive_requested.emit(self.task_id)
-        elif delete_action and action == delete_action:
-            self.delete_requested.emit(self.task_id)
-
     def _setup_difficulty_widget(self):
-        """Создает виджет для отображения сложности и вставляет его в layout"""
+        """Создает виджет для отображения сложности"""
         self.difficulty_widget = QWidget()
         self.difficulty_layout = QHBoxLayout(self.difficulty_widget)
         self.difficulty_layout.setContentsMargins(0, 0, 0, 0)
@@ -152,44 +168,58 @@ class TaskCard(QFrame):
         self.difficulty_layout.addWidget(self.difficulty_value_label)
         self.difficulty_layout.addStretch()
 
+        self._insert_difficulty_widget()
+
+    def _insert_difficulty_widget(self):
+        """Вставляет виджет сложности в layout"""
         layout = self.layout()
         if layout:
-            progress_index = -1
             for i in range(layout.count()):
                 item = layout.itemAt(i)
                 if item.widget() == self.overallProgress:
-                    progress_index = i
+                    layout.insertWidget(i, self.difficulty_widget)
                     break
 
-            if progress_index >= 0:
-                layout.insertWidget(progress_index, self.difficulty_widget)
+    def _connect_signals(self):
+        """Подключение сигналов"""
+        self.menuButton.clicked.connect(self._show_context_menu)
+        self.projectButton.clicked.connect(self._on_project_clicked)
 
-    def _on_project_clicked(self):
-        project_id = self.task_data.get("project_id")
-        if project_id:
-            self.project_clicked.emit(project_id)
+    # ==========================================================
+    # УПРАВЛЕНИЕ ВИДИМОСТЬЮ КНОПОК
+    # ==========================================================
 
-    def _on_progress_click(self, event):
-        width = self.overallProgress.width()
-        pos_x = event.position().x()
-        percent = int((pos_x / width) * 100)
-        percent = max(0, min(100, percent))
+    def set_delete_button_visible(self, visible: bool):
+        self._delete_enabled = visible
 
-        self._updating_progress = True
-        self.overallProgress.setValue(percent)
-        self.overallProgress.setFormat(f"Общий прогресс: {percent}%")
-        self._updating_progress = False
+    def set_archive_button_visible(self, visible: bool):
+        self._archive_enabled = visible
 
-        self.task_data["progress_percent"] = percent
-        self.progress_changed.emit(self.task_id, percent)
+    # ==========================================================
+    # ЗАПОЛНЕНИЕ ДАННЫМИ
+    # ==========================================================
 
     def fill_ui(self):
-        """Заполнение карточки данными из task_data"""
+        """Заполнение карточки данными"""
+        self._fill_title()
+        self._fill_project()
+        self._fill_priority()
+        self._fill_description()
+        self._fill_progress()
+        self._fill_difficulty()
+        self._fill_dates()
+        self._fill_author_executor()
+        self._fill_deadline()
+        self._setup_tags()
+        self._setup_pause_indicator()
+
+    def _fill_title(self):
         title = self.task_data.get("title", "")
         self.taskTitleLabel.setText(title if title else "Без названия")
         self.taskTitleLabel.setWordWrap(True)
         self.taskTitleLabel.setMinimumHeight(30)
 
+    def _fill_project(self):
         project_name = self.task_data.get("project_name", "")
         if project_name:
             self.projectButton.setText(f"📁 {project_name}")
@@ -199,6 +229,7 @@ class TaskCard(QFrame):
             self.projectButton.hide()
             self.projectLabel.hide()
 
+    def _fill_priority(self):
         priority_text = self.task_data.get("priority_text", "")
         priority_color = self.task_data.get("priority_color", "#FFA726")
 
@@ -214,16 +245,14 @@ class TaskCard(QFrame):
             self.priorityValueLabel.hide()
             self.priorityLabel.hide()
 
+    def _fill_description(self):
         description = self.task_data.get("description", "")
-
         if description and description.strip():
             import re
             clean_description = re.sub(r'<[^>]+>', '', description)
             clean_description = clean_description.strip()
-
             if not clean_description:
                 clean_description = description[:100]
-
             if len(clean_description) > 100:
                 clean_description = clean_description[:100] + "..."
 
@@ -238,29 +267,17 @@ class TaskCard(QFrame):
             self.descriptionText.hide()
             self.descriptionText.setFixedHeight(0)
 
+    def _fill_progress(self):
         progress = self.task_data.get("progress_percent", 0)
         self.overallProgress.setValue(int(progress))
         self.overallProgress.setFormat(f"Общий прогресс: {int(progress)}%")
-        self.overallProgress.setStyleSheet("""
-            QProgressBar {
-                border: 2px solid #E0E0E0;
-                border-radius: 8px;
-                text-align: center;
-                background-color: white;
-                font-size: 13px;
-            }
-            QProgressBar:hover {
-                border: 2px solid #ccab6e;
-            }
-            QProgressBar::chunk {
-                background-color: #D22730;
-                border-radius: 8px;
-            }
-        """)
+        self.overallProgress.setStyleSheet(TaskCardStyles.PROGRESS_STYLE)
 
+    def _fill_difficulty(self):
         difficulty = self.task_data.get("difficulty", 0)
         self._set_difficulty_display(difficulty)
 
+    def _fill_dates(self):
         created_text = self.task_data.get("created_text", "")
         if created_text:
             self.createdLabel.setText(f"Создана: {created_text}")
@@ -276,6 +293,7 @@ class TaskCard(QFrame):
         else:
             self.updatedLabel.hide()
 
+    def _fill_author_executor(self):
         author = self.task_data.get("author_text", "")
         if author:
             self.authorLabel.setText(f"Автор: {author}")
@@ -290,6 +308,7 @@ class TaskCard(QFrame):
         else:
             self.executorLabel.hide()
 
+    def _fill_deadline(self):
         deadline_text = self.task_data.get("deadline_text", "")
         if deadline_text:
             self.deadlineLabel.setText(f"Срок выполнения: {deadline_text}")
@@ -301,11 +320,9 @@ class TaskCard(QFrame):
         else:
             self.deadlineLabel.hide()
 
-        self._setup_tags()
-        self._setup_pause_indicator()
-
-        # Убираем adjustSize - он вызывает перерисовку
-        # self.adjustSize()  # ЗАКОММЕНТИРОВАНО
+    # ==========================================================
+    # ОТОБРАЖЕНИЕ СЛОЖНОСТИ
+    # ==========================================================
 
     def _set_difficulty_display(self, difficulty):
         try:
@@ -314,113 +331,187 @@ class TaskCard(QFrame):
             value = 0
 
         value = max(0, min(5, value))
-
-        if value == int(value):
-            display_value = int(value)
-        else:
-            display_value = value
+        display_value = int(value) if value == int(value) else value
 
         self.difficulty_value_label.setText(f"{display_value}⭐")
 
-        if value >= 4:
-            color = "#D22730"
-            bg_color = "#FFEBEE"
-        elif value >= 3:
-            color = "#FF9800"
-            bg_color = "#FFF3E0"
-        elif value >= 1:
-            color = "#4CAF50"
-            bg_color = "#E8F5E9"
-        else:
-            color = "#9E9E9E"
-            bg_color = "#F5F5F5"
-
+        # Получаем стиль для значения сложности
+        style = self._get_difficulty_style(value)
         self.difficulty_value_label.setStyleSheet(f"""
             font-size: 11px;
             font-weight: bold;
-            color: {color};
-            background-color: {bg_color};
+            color: {style['color']};
+            background-color: {style['bg']};
             border-radius: 10px;
             padding: 2px 8px;
         """)
 
         self.difficulty_widget.setVisible(value > 0)
 
-    def _setup_tags(self):
-        """Настраивает отображение тегов с переносом на несколько строк"""
-        # Очищаем существующие виджеты
-        for i in reversed(range(self.tagsLayout.count())):
-            w = self.tagsLayout.itemAt(i).widget()
-            if w:
-                w.deleteLater()
+    def _get_difficulty_style(self, value: float) -> dict:
+        """Возвращает стиль для сложности"""
+        if value >= 4:
+            return {"color": "#D22730", "bg": "#FFEBEE"}
+        elif value >= 3:
+            return {"color": "#FF9800", "bg": "#FFF3E0"}
+        elif value >= 1:
+            return {"color": "#4CAF50", "bg": "#E8F5E9"}
+        else:
+            return {"color": "#9E9E9E", "bg": "#F5F5F5"}
 
+    # ==========================================================
+    # ОТОБРАЖЕНИЕ ТЕГОВ
+    # ==========================================================
+
+    def _setup_tags(self):
+        """Настраивает отображение тегов"""
+        self._clear_tags()
         tags = self.task_data.get("tags", [])
 
-        if tags:
-            # Меняем QHBoxLayout на QGridLayout для автоматического переноса
-            from PyQt6.QtWidgets import QGridLayout
+        if not tags:
+            self._hide_tags_container()
+            return
 
-            # Сохраняем родительский виджет
-            tags_widget = self.tagsLayout.parentWidget()
+        grid_layout = self._create_tag_grid(tags)
+        self.tagsLayout.addLayout(grid_layout)
+        self._show_tags_container()
+        self.updateGeometry()
 
-            # Создаём новый GridLayout
-            grid_layout = QGridLayout()
-            grid_layout.setSpacing(4)
-            grid_layout.setContentsMargins(0, 0, 0, 0)
+    def _clear_tags(self):
+        """Очищает существующие теги"""
+        while self.tagsLayout.count():
+            item = self.tagsLayout.takeAt(0)
 
-            # Добавляем теги в сетку
-            row = 0
-            col = 0
-            max_cols = 3  # Максимум 3 тега в строке
+    def _create_tag_grid(self, tags: list) -> QGridLayout:
+        """Создает сетку тегов"""
+        grid = QGridLayout()
+        grid.setSpacing(4)
+        grid.setContentsMargins(0, 0, 0, 0)
 
-            for tag_name in tags:
-                tag_button = QPushButton(tag_name)
-                tag_button.setStyleSheet("""
-                    QPushButton {
-                        font-size: 10px;
-                        padding: 4px 10px;
-                        border-radius: 10px;
-                        background: #E8F5E9;
-                        color: #2E7D32;
-                        border: 1px solid #C8E6C9;
-                    }
-                    QPushButton:hover {
-                        background: #C8E6C9;
-                    }
-                """)
-                tag_button.setCursor(Qt.CursorShape.PointingHandCursor)
-                tag_button.setFixedHeight(24)
-                tag_button.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Fixed)
+        row, col = 0, 0
+        max_cols = 3
 
-                grid_layout.addWidget(tag_button, row, col)
+        for tag_name in tags:
+            tag_button = self._create_tag_button(tag_name)
+            grid.addWidget(tag_button, row, col)
+            col += 1
+            if col >= max_cols:
+                col = 0
+                row += 1
 
-                col += 1
-                if col >= max_cols:
-                    col = 0
-                    row += 1
+        return grid
 
-            # Удаляем старый layout и устанавливаем новый
-            # Очищаем tagsLayout (он QHBoxLayout)
-            while self.tagsLayout.count():
-                item = self.tagsLayout.takeAt(0)
+    def _create_tag_button(self, tag_name: str) -> QPushButton:
+        """Создает кнопку тега"""
+        tag_button = QPushButton(tag_name)
+        tag_button.setStyleSheet(TaskCardStyles.TAG_STYLE)
+        tag_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        tag_button.setFixedHeight(24)
+        tag_button.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Fixed)
+        return tag_button
 
-            # Добавляем GridLayout в tagsLayout
-            self.tagsLayout.addLayout(grid_layout)
+    def _hide_tags_container(self):
+        tags_widget = self.tagsLayout.parentWidget()
+        if tags_widget:
+            tags_widget.hide()
 
-            if tags_widget:
-                tags_widget.show()
+    def _show_tags_container(self):
+        tags_widget = self.tagsLayout.parentWidget()
+        if tags_widget:
+            tags_widget.show()
 
-            # Обновляем геометрию
-            self.updateGeometry()
-            if self.parent():
-                self.parent().updateGeometry()
-        else:
-            # Очищаем tagsLayout
-            while self.tagsLayout.count():
-                item = self.tagsLayout.takeAt(0)
-            tags_widget = self.tagsLayout.parentWidget()
-            if tags_widget:
-                tags_widget.hide()
+    # ==========================================================
+    # ПАУЗА
+    # ==========================================================
+
+    def _setup_pause_indicator(self):
+        """Настраивает индикатор паузы"""
+        self._remove_pause_indicator()
+        if self.task_data.get("is_paused", False):
+            self._add_pause_indicator()
+
+    def _add_pause_indicator(self):
+        pause_indicator = QLabel("ПАУЗА")
+        pause_indicator.is_pause_indicator = True
+        pause_indicator.setStyleSheet(TaskCardStyles.PAUSE_STYLE)
+        self.titleLayout.insertWidget(0, pause_indicator)
+
+    def _remove_pause_indicator(self):
+        for i in range(self.titleLayout.count()):
+            widget = self.titleLayout.itemAt(i).widget()
+            if widget and hasattr(widget, 'is_pause_indicator') and widget.is_pause_indicator:
+                widget.deleteLater()
+                break
+
+    def _update_pause_indicator(self):
+        """Обновляет индикатор паузы (вызывается извне)"""
+        self._setup_pause_indicator()
+
+    # ==========================================================
+    # КОНТЕКСТНОЕ МЕНЮ
+    # ==========================================================
+
+    def _show_context_menu(self):
+        menu = QMenu(self)
+        menu.setStyleSheet(TaskCardStyles.MENU_STYLE)
+
+        duplicate_action = menu.addAction("Дублировать")
+
+        is_paused = self.task_data.get("is_paused", False)
+        is_completed = self.task_data.get("completed", False)
+
+        pause_action = None
+        if not is_completed:
+            pause_action = menu.addAction("Возобновить" if is_paused else "Пауза")
+
+        archive_action = menu.addAction("Архивировать") if self._archive_enabled else None
+        delete_action = menu.addAction("Удалить") if self._delete_enabled else None
+
+        action = menu.exec(self.menuButton.mapToGlobal(QPoint(0, self.menuButton.height())))
+
+        if action == duplicate_action:
+            self.duplicate_requested.emit(self.task_id)
+        elif pause_action and action == pause_action:
+            if is_paused:
+                self.resume_requested.emit(self.task_id)
+            else:
+                self.pause_requested.emit(self.task_id)
+        elif archive_action and action == archive_action:
+            self.archive_requested.emit(self.task_id)
+        elif delete_action and action == delete_action:
+            self.delete_requested.emit(self.task_id)
+
+    # ==========================================================
+    # ОБНОВЛЕНИЕ ДАННЫХ
+    # ==========================================================
+
+    def update_task_data(self, new_data):
+        self.task_data.update(new_data)
+        self.task_id = self.task_data.get("id")
+        self.fill_ui()
+
+    # ==========================================================
+    # ОБРАБОТКА СОБЫТИЙ
+    # ==========================================================
+
+    def _on_progress_click(self, event):
+        width = self.overallProgress.width()
+        pos_x = event.position().x()
+        percent = int((pos_x / width) * 100)
+        percent = max(0, min(100, percent))
+
+        self._updating_progress = True
+        self.overallProgress.setValue(percent)
+        self.overallProgress.setFormat(f"Общий прогресс: {percent}%")
+        self._updating_progress = False
+
+        self.task_data["progress_percent"] = percent
+        self.progress_changed.emit(self.task_id, percent)
+
+    def _on_project_clicked(self):
+        project_id = self.task_data.get("project_id")
+        if project_id:
+            self.project_clicked.emit(project_id)
 
     def mousePressEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
@@ -437,6 +528,9 @@ class TaskCard(QFrame):
         if (event.pos() - self.drag_start_position).manhattanLength() < QApplication.startDragDistance():
             return
 
+        self._start_drag()
+
+    def _start_drag(self):
         self.drag_started.emit(self.task_data)
 
         drag = QDrag(self)
@@ -447,65 +541,23 @@ class TaskCard(QFrame):
 
         drag.setMimeData(mime)
 
-        pixmap = QPixmap(self.size())
-        """pixmap.fill(Qt.GlobalColor.transparent)"""
+        pixmap = self._create_drag_pixmap()
+        drag.setPixmap(pixmap)
+        drag.setHotSpot(self.drag_start_position)
 
+        drag.exec(Qt.DropAction.MoveAction)
+
+    def _create_drag_pixmap(self) -> QPixmap:
+        pixmap = QPixmap(self.size())
         painter = QPainter(pixmap)
         painter.setOpacity(0.7)
         self.render(painter)
         painter.end()
+        return pixmap
 
-        drag.setPixmap(pixmap)
-        drag.setHotSpot(event.pos())
-
-        drag.exec(Qt.DropAction.MoveAction)
-
-    def _update_pause_indicator(self):
-        is_paused = self.task_data.get("is_paused", False)
-
-        pause_indicator = None
-        for i in range(self.titleLayout.count()):
-            widget = self.titleLayout.itemAt(i).widget()
-            if widget and hasattr(widget, 'is_pause_indicator') and widget.is_pause_indicator:
-                pause_indicator = widget
-                break
-
-        if is_paused:
-            if not pause_indicator:
-                pause_indicator = QLabel("ПАУЗА")
-                pause_indicator.is_pause_indicator = True
-                pause_indicator.setStyleSheet("""
-                    background-color: #FF9800;
-                    color: white;
-                    font-size: 10px;
-                    font-weight: bold;
-                    padding: 2px 8px;
-                    border-radius: 10px;
-                """)
-                self.titleLayout.insertWidget(0, pause_indicator)
-        else:
-            if pause_indicator:
-                pause_indicator.deleteLater()
-
-    def _setup_pause_indicator(self):
-        is_paused = self.task_data.get("is_paused", False)
-        if is_paused:
-            pause_indicator = QLabel("ПАУЗА")
-            pause_indicator.is_pause_indicator = True
-            pause_indicator.setStyleSheet("""
-                background-color: #FF9800;
-                color: white;
-                font-size: 10px;
-                font-weight: bold;
-                padding: 2px 8px;
-                border-radius: 10px;
-            """)
-            self.titleLayout.insertWidget(0, pause_indicator)
-
-    def update_task_data(self, new_data):
-        self.task_data.update(new_data)
-        self.task_id = self.task_data.get("id")
-        self.fill_ui()
+    # ==========================================================
+    # РАЗМЕРЫ
+    # ==========================================================
 
     def sizeHint(self):
         return QSize(300, super().sizeHint().height())

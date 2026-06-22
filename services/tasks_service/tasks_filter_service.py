@@ -13,6 +13,39 @@ class TasksFilterService:
         self.current_user = current_user
         self.mode = mode
 
+    def filter_tasks_by_priority_and_project(
+            self,
+            tasks: List[Dict],
+            priority: str,
+            project_id: Optional[int]
+    ) -> List[Dict]:
+        """Фильтрация по приоритету и проекту"""
+        filtered = tasks
+
+        if priority and priority != "Все приоритеты":
+            priority_map = {"Низкий": "low", "Средний": "medium", "Высокий": "high", "Критический": "critical"}
+            target_priority = priority_map.get(priority, priority.lower())
+            filtered = [t for t in filtered if t.get("priority") == target_priority]
+
+        if project_id:
+            filtered = [t for t in filtered if t.get("project_id") == project_id]
+
+        return filtered
+
+    def filter_tasks_by_priority_and_project_ids(
+            self,
+            tasks: List[Dict],
+            priority: str,
+            project_id: Optional[int]
+    ) -> set:
+        """Возвращает множество ID отфильтрованных задач"""
+        return self.get_filtered_task_ids(tasks, priority, project_id)
+
+    def get_filtered_task_ids(self, tasks: List[Dict], priority: str, project_id: Optional[int]) -> set:
+        """Возвращает множество ID отфильтрованных задач"""
+        filtered = self.filter_tasks_by_priority_and_project(tasks, priority, project_id)
+        return {t["id"] for t in filtered}
+
     def filter_tasks_by_priority(self, tasks: List[Dict], priority: str) -> List[Dict]:
         """Фильтрация по приоритету"""
         if priority == "Все приоритеты":
