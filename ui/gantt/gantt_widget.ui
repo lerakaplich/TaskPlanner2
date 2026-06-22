@@ -95,7 +95,7 @@ QComboBox::drop-down {
         <property name="editable">
          <bool>true</bool>
         </property>
-        <property name="placeholderText" stdset="0">
+        <property name="placeholderText">
          <string>Все проекты</string>
         </property>
        </widget>
@@ -136,7 +136,7 @@ QComboBox::drop-down {
         <property name="editable">
          <bool>true</bool>
         </property>
-        <property name="placeholderText" stdset="0">
+        <property name="placeholderText">
          <string>Все исполнители</string>
         </property>
        </widget>
@@ -204,7 +204,7 @@ QComboBox::drop-down {
       <item>
        <spacer name="horizontalSpacer">
         <property name="orientation">
-         <enum>Qt::Horizontal</enum>
+         <enum>Qt::Orientation::Horizontal</enum>
         </property>
         <property name="sizeHint" stdset="0">
          <size>
@@ -213,45 +213,6 @@ QComboBox::drop-down {
          </size>
         </property>
        </spacer>
-      </item>
-      <item>
-       <widget class="QPushButton" name="btnExport">
-        <property name="minimumSize">
-         <size>
-          <width>0</width>
-          <height>41</height>
-         </size>
-        </property>
-        <property name="maximumSize">
-         <size>
-          <width>16777215</width>
-          <height>41</height>
-         </size>
-        </property>
-        <property name="styleSheet">
-         <string notr="true">
-QPushButton {
-    background-color: #1B232A;
-    color: white;
-    border: none;
-    border-radius: 10px;
-    padding: 8px 12px;
-    font-size: 16px;
-    font-weight: bold;
-}
-QPushButton:hover {
-    background-color: #D9D9D6;
-    color: black;
-}
-QPushButton:pressed {
-    background-color: #B8B8B5;
-}
-         </string>
-        </property>
-        <property name="text">
-         <string>Экспорт</string>
-        </property>
-       </widget>
       </item>
       <item>
        <widget class="QPushButton" name="createLinkButton">
@@ -408,10 +369,10 @@ backgroun-color: transparent;
           </size>
          </property>
          <property name="verticalScrollBarPolicy">
-          <enum>Qt::ScrollBarAsNeeded</enum>
+          <enum>Qt::ScrollBarPolicy::ScrollBarAsNeeded</enum>
          </property>
          <property name="horizontalScrollBarPolicy">
-          <enum>Qt::ScrollBarAsNeeded</enum>
+          <enum>Qt::ScrollBarPolicy::ScrollBarAsNeeded</enum>
          </property>
          <property name="widgetResizable">
           <bool>true</bool>
@@ -422,7 +383,7 @@ backgroun-color: transparent;
             <x>0</x>
             <y>0</y>
             <width>498</width>
-            <height>690</height>
+            <height>684</height>
            </rect>
           </property>
           <layout class="QVBoxLayout" name="leftPanelLayout">
@@ -549,10 +510,10 @@ QGroupBox::title {
        <item>
         <widget class="QScrollArea" name="ganttScrollArea">
          <property name="verticalScrollBarPolicy">
-          <enum>Qt::ScrollBarAsNeeded</enum>
+          <enum>Qt::ScrollBarPolicy::ScrollBarAsNeeded</enum>
          </property>
          <property name="horizontalScrollBarPolicy">
-          <enum>Qt::ScrollBarAsNeeded</enum>
+          <enum>Qt::ScrollBarPolicy::ScrollBarAsNeeded</enum>
          </property>
          <property name="widgetResizable">
           <bool>true</bool>
@@ -563,7 +524,7 @@ QGroupBox::title {
             <x>0</x>
             <y>0</y>
             <width>800</width>
-            <height>673</height>
+            <height>667</height>
            </rect>
           </property>
           <property name="minimumSize">
@@ -577,67 +538,26 @@ QGroupBox::title {
        </item>
       </layout>
      </widget>
-     <!-- Вкладка Календарь ЗАКОММЕНТИРОВАНА
      <widget class="QWidget" name="calendarTab">
       <attribute name="title">
        <string>Календарь</string>
       </attribute>
       <layout class="QVBoxLayout" name="calendarTabLayout">
-       <property name="spacing">
-        <number>10</number>
-       </property>
-       <property name="leftMargin">
-        <number>10</number>
-       </property>
-       <property name="topMargin">
-        <number>10</number>
-       </property>
-       <property name="rightMargin">
-        <number>10</number>
-       </property>
-       <property name="bottomMargin">
-        <number>10</number>
-       </property>
        <item>
-        <widget class="QScrollArea" name="calendarScrollArea">
+        <widget class="QLabel" name="calendarPlaceholder">
          <property name="styleSheet">
-          <string notr="true">border: none; background-color: transparent;</string>
+          <string notr="true">font-size: 18px; color: #999; font-style: italic;</string>
          </property>
-         <property name="widgetResizable">
-          <bool>true</bool>
+         <property name="text">
+          <string>Календарь (в разработке)</string>
          </property>
-         <widget class="QWidget" name="calendarContainer">
-          <property name="geometry">
-           <rect>
-            <x>0</x>
-            <y>0</y>
-            <width>1158</width>
-            <height>672</height>
-           </rect>
-          </property>
-          <layout class="QVBoxLayout" name="calendarContainerLayout">
-           <property name="spacing">
-            <number>0</number>
-           </property>
-           <property name="leftMargin">
-            <number>0</number>
-           </property>
-           <property name="topMargin">
-            <number>0</number>
-           </property>
-           <property name="rightMargin">
-            <number>0</number>
-           </property>
-           <property name="bottomMargin">
-            <number>0</number>
-           </property>
-          </layout>
-         </widget>
+         <property name="alignment">
+          <set>Qt::AlignmentFlag::AlignCenter</set>
+         </property>
         </widget>
        </item>
       </layout>
      </widget>
-     -->
     </widget>
    </item>
   </layout>

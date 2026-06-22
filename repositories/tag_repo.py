@@ -1,5 +1,5 @@
 # repositories/tag_repo.py
-
+from datetime import datetime
 from typing import Optional, List
 from sqlalchemy.orm import Session
 from sqlalchemy import select, update, delete, func
@@ -8,7 +8,7 @@ from models.tasks import Tag, TaskTag
 
 
 class TagRepo:
-    """Репозиторий для работы с тегами (глобальными)"""
+    """Репозиторий для работы с тегами"""
 
     def __init__(self, session: Session):
         self.session = session
@@ -16,6 +16,7 @@ class TagRepo:
     # =========================
     # CRUD для тегов
     # =========================
+
     def get_by_id(self, tag_id: int) -> Optional[Tag]:
         return self.session.get(Tag, tag_id)
 
@@ -23,10 +24,9 @@ class TagRepo:
         stmt = select(Tag).where(Tag.name == name)
         return self.session.scalar(stmt)
 
-    def get_all(self, include_archived: bool = False) -> List[Tag]:
+    def get_all(self) -> List[Tag]:
+        """Получить все теги (архивации нет)"""
         stmt = select(Tag).order_by(Tag.name)
-        if not include_archived:
-            stmt = stmt.where(Tag.archived_at.is_(None))  # ✅ Неархивированные = archived_at IS NULL
         return list(self.session.scalars(stmt))
 
     def create(self, name: str, color: str = "#ccab6e") -> Tag:
@@ -34,7 +34,8 @@ class TagRepo:
         tag = Tag(
             name=name.strip(),
             color=color,
-            is_archived=False
+            created_at=datetime.now(),
+            updated_at=datetime.now()
         )
         self.session.add(tag)
         self.session.flush()
@@ -46,24 +47,18 @@ class TagRepo:
             for key, value in kwargs.items():
                 if hasattr(tag, key):
                     setattr(tag, key, value)
+            tag.updated_at = datetime.now()
             self.session.flush()
         return tag
 
     def delete(self, tag_id: int) -> bool:
+        """Удалить тег (полное удаление)"""
         tag = self.get_by_id(tag_id)
         if tag:
             self.session.delete(tag)
+            self.session.flush()
             return True
         return False
-
-    def archive(self, tag_id: int, archived: bool = True) -> Optional[Tag]:
-        from datetime import datetime
-        tag = self.get_by_id(tag_id)
-        if tag:
-            tag.is_archived = archived
-            tag.archived_at = datetime.now() if archived else None
-            self.session.flush()
-        return tag
 
     def get_tag_usage_count(self, tag_id: int) -> int:
         stmt = select(func.count()).where(TaskTag.tag_id == tag_id)
@@ -78,7 +73,6 @@ class TagRepo:
                 'id': tag.id,
                 'name': tag.name,
                 'color': tag.color,
-                'is_archived': tag.is_archived,
                 'usage_count': self.get_tag_usage_count(tag.id),
                 'created_at': tag.created_at,
                 'updated_at': tag.updated_at
@@ -88,6 +82,7 @@ class TagRepo:
     # =========================
     # Связи тегов с задачами
     # =========================
+
     def add_tag_to_task(self, task_id: int, tag_id: int) -> bool:
         existing = self.session.query(TaskTag).filter(
             TaskTag.task_id == task_id,
@@ -98,6 +93,7 @@ class TagRepo:
 
         task_tag = TaskTag(task_id=task_id, tag_id=tag_id)
         self.session.add(task_tag)
+        self.session.flush()
         return True
 
     def remove_tag_from_task(self, task_id: int, tag_id: int) -> bool:
@@ -106,6 +102,7 @@ class TagRepo:
             TaskTag.tag_id == tag_id
         )
         result = self.session.execute(stmt)
+        self.session.flush()
         return result.rowcount > 0
 
     def get_task_tags(self, task_id: int) -> List[Tag]:
@@ -127,6 +124,7 @@ class TagRepo:
             return True
         except Exception as e:
             print(f"❌ Ошибка при установке тегов: {e}")
+            self.session.rollback()
             return False
 
     def get_tasks_by_tag(self, tag_id: int) -> List[int]:
