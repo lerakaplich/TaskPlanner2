@@ -35,6 +35,29 @@ class ProjectsService:
         self.stats = ProjectsStatisticsService(self.session, self.crud.employee_repo)
         self.notification = ProjectsNotificationService(self.crud.employee_repo)
 
+    def get_user_projects_for_navigation(self, user_id: int) -> List[Dict]:
+        """
+        Возвращает список проектов пользователя для навигации
+        """
+        return self.get_user_projects_with_roles(user_id)
+
+    def get_project_basic_info(self, project_id: int) -> Dict:
+        """
+        Возвращает базовую информацию о проекте
+        """
+        project = self.crud.project_repo.get_by_id(project_id)
+        if not project:
+            return {'id': project_id, 'name': f"Проект #{project_id}", 'is_archived': False}
+
+        return {
+            'id': project.id,
+            'name': project.name,
+            'is_archived': project.is_archived,
+            'description': project.description or '',
+            'owner_id': project.owner,
+            'manager_id': project.manager_id
+        }
+
     def get_user_role_display(self, user_id: int) -> str:
         """
         Возвращает отображаемое название роли пользователя

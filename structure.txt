@@ -89,6 +89,7 @@
 |  +-- analytics_service
 |  |  +-- __pycache__
 |  |  +-- analytics_base_service.py
+|  |  +-- analytics_filter_service.py
 |  |  +-- analytics_service.py
 |  |  +-- employees_analytics.py
 |  |  +-- kpd_calculator.py
@@ -106,7 +107,13 @@
 |  |  +-- employee_crud_service.py
 |  |  +-- employee_service.py
 |  |  +-- tag_service.py
-|  +-- gantt_service.py
+|  +-- gantt_service
+|  |  +-- gantt_base_service.py
+|  |  +-- gantt_data_service.py
+|  |  +-- gantt_dependency_service.py
+|  |  +-- gantt_export_service.py
+|  |  +-- gantt_filter_service.py
+|  |  +-- gantt_service.py
 |  +-- overtime_service
 |  |  +-- __pycache__
 |  |  +-- overtime_base_service.py
@@ -240,6 +247,8 @@
 |  +-- analytics
 |  |  +-- __pycache__
 |  |  +-- analytics_page.py
+|  |  +-- analytics_page_handlers.py
+|  |  +-- analytics_page_views.py
 |  |  +-- employees
 |  |  |  +-- __pycache__
 |  |  |  +-- employee_card.py
@@ -259,6 +268,8 @@
 |  +-- archive
 |  |  +-- __pycache__
 |  |  +-- archive_page.py
+|  |  +-- archive_page_handlers.py
+|  |  +-- archive_page_views.py
 |  |  +-- archived_project_card.py
 |  |  +-- archived_task_card.py
 |  +-- chat
@@ -269,7 +280,9 @@
 |  |  +-- chat_message_widget.py
 |  |  +-- chat_messages_separator.py
 |  |  +-- chat_page.py
+|  |  +-- chat_page_handlers.py
 |  |  +-- chat_settings_dialog.py
+|  |  +-- chat_settings_handlers.py
 |  |  +-- chat_text_edit.py
 |  |  +-- chat_view.py
 |  |  +-- employee_selection_dialog.py
@@ -279,6 +292,8 @@
 |  |  +-- export_dialog.py
 |  |  +-- gantt_canvas.py
 |  |  +-- gantt_widget.py
+|  |  +-- gantt_widget_handlers.py
+|  |  +-- gantt_widget_views.py
 |  |  +-- link_dialog.py
 |  |  +-- period_dialog.py
 |  +-- gantt_chart_20260608_144211.png
@@ -289,11 +304,13 @@
 |  |  +-- login_window.py
 |  +-- my_tasks
 |  |  +-- __pycache__
+|  |  +-- my_tasks_handlers.py
 |  |  +-- my_tasks_page.py
 |  |  +-- task_card.py
 |  +-- other_tasks
 |  |  +-- __pycache__
 |  |  +-- others_task_card.py
+|  |  +-- others_tasks_handlers.py
 |  |  +-- others_tasks_page.py
 |  |  +-- task_dialog.py
 |  +-- overtime
