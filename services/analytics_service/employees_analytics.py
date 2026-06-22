@@ -13,8 +13,9 @@ from .kpd_calculator import KPDCalculator
 class EmployeesAnalytics(AnalyticsBaseService):
     """Аналитика по сотрудникам - вся бизнес-логика здесь"""
 
-    def __init__(self, session):
+    def __init__(self, session, overtime_session=None):
         super().__init__(session)
+        self.overtime_session = overtime_session
 
     def get_employee_card_data(self, employee_id: int) -> Dict[str, Any]:
         """Получить данные сотрудника для карточки EmployeeCard"""
@@ -430,13 +431,12 @@ class EmployeesAnalytics(AnalyticsBaseService):
         return sorted(tag_stats.values(), key=lambda x: x["count"], reverse=True)
 
     def _get_employee_overtime_hours(self, employee_id: int) -> float:
-        try:
-            from database import get_tasks_session
-            overtime_session = get_tasks_session()
-            if overtime_session is None:
-                return 0.0
+        """Получить часы переработок сотрудника"""
+        if not self.overtime_session:
+            return 0.0
 
-            overtimes = overtime_session.query(EmployeeNote).filter(
+        try:
+            overtimes = self.overtime_session.query(EmployeeNote).filter(
                 EmployeeNote.employee_id == employee_id
             ).all()
 
@@ -450,7 +450,6 @@ class EmployeesAnalytics(AnalyticsBaseService):
                     hours = (end - start).total_seconds() / 3600
                     total_hours += hours
 
-            overtime_session.close()
             return round(total_hours, 1)
         except Exception as e:
             print(f"❌ Ошибка получения переработок: {e}")

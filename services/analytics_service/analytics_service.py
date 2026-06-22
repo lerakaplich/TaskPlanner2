@@ -14,11 +14,21 @@ class AnalyticsService:
 
     def __init__(self, session: Session):
         self.session = session
+        self.overtime_session = get_tasks_session()
+
         self.base = AnalyticsBaseService(session)
-        self.employees = EmployeesAnalytics(session)
+        self.employees = EmployeesAnalytics(session, self.overtime_session)  # ✅ передаём сессию
         self.projects = ProjectsAnalytics(session)
         self.themes = ThemesAnalytics(session)
         self.current_user_id = None
+
+    def __del__(self):
+        """Закрываем сессию при удалении"""
+        try:
+            if hasattr(self, 'overtime_session') and self.overtime_session:
+                self.overtime_session.close()
+        except:
+            pass
 
     def set_current_user_id(self, user_id: int):
         self.current_user_id = user_id
