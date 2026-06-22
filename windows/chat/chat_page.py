@@ -37,6 +37,9 @@ class ChatPage(QWidget):
         self.selection_mode = False
         self.selected_messages = set()
 
+        from windows.chat.chat_page_handlers import ChatPageHandlers
+        self.handlers = ChatPageHandlers(self)
+
         # Инициализируем UI
         self.ui = ChatView()
         self.selection_toolbar = self.ui.selection_toolbar
@@ -427,7 +430,7 @@ class ChatPage(QWidget):
         if action_type == "goto":
             self.scroll_to_message(message_id)
         elif action_type == "delete":
-            self.confirm_and_delete(message_id)
+            self.handlers.confirm_and_delete(message_id)
         elif action_type == "edit":
             msg = self.service.get_message_by_id(message_id)
             if msg:
@@ -437,70 +440,9 @@ class ChatPage(QWidget):
             if msg:
                 self.start_replying(message_id, msg.content, msg.sender_name)
         elif action_type == "forward":
-            self.open_forward_dialog(message_id)
+            self.handlers.open_forward_dialog(message_id)
         elif action_type == "select":
-            self.enter_selection_mode(message_id)
-
-    def confirm_and_delete(self, message_id):
-        widget = self.find_message_widget_by_id(message_id)
-        if not widget:
-            return
-
-        msg_box = QMessageBox(self)
-        msg_box.setWindowTitle("Удаление")
-        msg_box.setText("Вы хотите удалить это сообщение?")
-
-        btn_me = msg_box.addButton("Удалить у меня", QMessageBox.ButtonRole.ActionRole)
-        btn_everyone = None
-
-        if widget.is_mine:
-            btn_everyone = msg_box.addButton("Удалить у всех", QMessageBox.ButtonRole.DestructiveRole)
-
-        msg_box.addButton("Отмена", QMessageBox.ButtonRole.RejectRole)
-        msg_box.exec()
-
-        clicked = msg_box.clickedButton()
-
-        if clicked == btn_me:
-            if self.service.delete_message_for_me(message_id, self.current_user_id):
-                self.remove_message_from_ui(message_id)
-                if self.sio:
-                    self.sio.emit("delete_chat_msg", {
-                        "message_id": message_id,
-                        "chat_id": self.current_chat_id,
-                        "user_id": self.current_user_id,
-                        "mode": "me"
-                    })
-
-        elif btn_everyone and clicked == btn_everyone:
-            if self.service.delete_message_for_everyone(message_id):
-                if self.sio:
-                    self.sio.emit("delete_chat_msg", {
-                        "message_id": message_id,
-                        "chat_id": self.current_chat_id,
-                        "mode": "everyone"
-                    })
-                self.remove_message_from_ui(message_id)
-
-    def open_forward_dialog(self, message_id):
-        """Логика открытия окна пересылки"""
-        try:
-            chats = self.service.get_user_chats(self.current_user_id)
-            dialog = ForwardDialog(chats, self)
-
-            if dialog.exec():
-                target_chat_id = dialog.get_selected_chat_id()
-                if target_chat_id:
-                    payload = {
-                        "message_id": message_id,
-                        "target_chat_id": target_chat_id,
-                        "user_id": self.current_user_id
-                    }
-                    print(f"📡 Отправка пересылки: {payload}")
-                    self.sio.emit('forward_message', payload)
-
-        except Exception as e:
-            print(f"❌ Ошибка в ChatPage при пересылке: {e}")
+            self.handlers.enter_selection_mode(message_id)
 
     def scroll_to_bottom(self, force=False):
         if not self.all_new_loaded and force:
@@ -634,17 +576,6 @@ class ChatPage(QWidget):
         if event.type() == event.Type.MouseButtonPress:
             self.remove_new_messages_separator()
         return super().eventFilter(source, event)
-
-    def enter_selection_mode(self, first_msg_id):
-        """Вход в режим мультивыбора"""
-        self.selection_mode = True
-        self.selected_messages = {first_msg_id}
-
-        self.selection_toolbar.setVisible(True)
-        self.ui.input_frame.setVisible(False)
-
-        self.update_widgets_selection_state(True)
-        self.update_selection_label()
 
     def exit_selection_mode(self):
         """Выход из режима мультивыбора"""
