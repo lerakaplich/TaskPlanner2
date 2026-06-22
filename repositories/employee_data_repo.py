@@ -1,15 +1,15 @@
-# repositories/employee_data_repo.py
+# repositories/employee_data_repo.py - исправленный
 
 from typing import Optional, List
 from sqlalchemy.orm import Session
-from sqlalchemy import select, update, delete, func
+from sqlalchemy import select, update
 from datetime import datetime
 
 from models.employees import EmployeeData, RoleEnum
 
 
 class EmployeeDataRepo:
-    """Репозиторий для работы с EmployeeData (таблица в taskplanner)"""
+    """Репозиторий для работы с EmployeeData"""
 
     def __init__(self, session: Session):
         self.session = session
@@ -23,12 +23,10 @@ class EmployeeDataRepo:
         return list(self.session.scalars(stmt))
 
     def get_all_with_kpd(self, min_kpd: float = 0.0) -> List[EmployeeData]:
-        """Получить всех сотрудников с КПД выше минимума"""
         stmt = select(EmployeeData).where(EmployeeData.kpd_rating >= min_kpd)
         return list(self.session.scalars(stmt))
 
     def get_top_kpd(self, limit: int = 10) -> List[EmployeeData]:
-        """Получить топ сотрудников по КПД"""
         stmt = select(EmployeeData).order_by(EmployeeData.kpd_rating.desc()).limit(limit)
         return list(self.session.scalars(stmt))
 
@@ -71,28 +69,21 @@ class EmployeeDataRepo:
         result = self.session.execute(stmt)
         return result.rowcount > 0
 
-    def update_session_token(self, employee_id: int, session_token: str, is_app: bool = False) -> bool:
-        if is_app:
-            stmt = (
-                update(EmployeeData)
-                .where(EmployeeData.employee_id == employee_id)
-                .values(app_session_token=session_token, updated_at=datetime.now())
-            )
-        else:
-            stmt = (
-                update(EmployeeData)
-                .where(EmployeeData.employee_id == employee_id)
-                .values(session_token=session_token, updated_at=datetime.now())
-            )
+    # ✅ Исправлен: только app_session_token
+    def update_session_token(self, employee_id: int, session_token: str) -> bool:
+        stmt = (
+            update(EmployeeData)
+            .where(EmployeeData.employee_id == employee_id)
+            .values(app_session_token=session_token, updated_at=datetime.now())
+        )
         result = self.session.execute(stmt)
         return result.rowcount > 0
 
     # ============================================
-    # НОВЫЕ МЕТОДЫ ДЛЯ КПД
+    # Только CRUD для КПД (без бизнес-логики)
     # ============================================
 
     def update_kpd_rating(self, employee_id: int, kpd_rating: float) -> bool:
-        """Обновить рейтинг КПД сотрудника"""
         stmt = (
             update(EmployeeData)
             .where(EmployeeData.employee_id == employee_id)
@@ -106,7 +97,6 @@ class EmployeeDataRepo:
         return result.rowcount > 0
 
     def update_task_stats(self, employee_id: int, total: int, on_time: int) -> bool:
-        """Обновить статистику задач сотрудника"""
         stmt = (
             update(EmployeeData)
             .where(EmployeeData.employee_id == employee_id)
@@ -120,7 +110,6 @@ class EmployeeDataRepo:
         return result.rowcount > 0
 
     def update_completion_days(self, employee_id: int, avg_days: float) -> bool:
-        """Обновить среднее время выполнения задач"""
         stmt = (
             update(EmployeeData)
             .where(EmployeeData.employee_id == employee_id)
@@ -133,7 +122,6 @@ class EmployeeDataRepo:
         return result.rowcount > 0
 
     def increment_total_worked_hours(self, employee_id: int, hours: float) -> bool:
-        """Увеличить общее количество отработанных часов"""
         stmt = (
             update(EmployeeData)
             .where(EmployeeData.employee_id == employee_id)
@@ -141,20 +129,6 @@ class EmployeeDataRepo:
         )
         result = self.session.execute(stmt)
         return result.rowcount > 0
-
-    def recalc_all_kpd(self) -> int:
-        """Пересчитать КПД для всех сотрудников (возвращает количество обновленных)"""
-        all_employees = self.get_all_active()
-        updated_count = 0
-
-        for emp_data in all_employees:
-            emp_data.update_kpd(self.session)
-            updated_count += 1
-
-        if updated_count > 0:
-            self.session.flush()
-
-        return updated_count
 
     def is_active(self, employee_id: int) -> bool:
         emp_data = self.get_by_id(employee_id)

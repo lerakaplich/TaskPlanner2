@@ -24,10 +24,9 @@ class TagRepo:
         return self.session.scalar(stmt)
 
     def get_all(self, include_archived: bool = False) -> List[Tag]:
-        """Получить все теги (глобально)"""
         stmt = select(Tag).order_by(Tag.name)
         if not include_archived:
-            stmt = stmt.where(Tag.is_archived == False)
+            stmt = stmt.where(Tag.archived_at.is_(None))  # ✅ Неархивированные = archived_at IS NULL
         return list(self.session.scalars(stmt))
 
     def create(self, name: str, color: str = "#ccab6e") -> Tag:

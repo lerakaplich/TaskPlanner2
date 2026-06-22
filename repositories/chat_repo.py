@@ -77,22 +77,15 @@ class ChatRepo:
         )
         return self.session.scalar(stmt)
 
-    def add_participant(self, chat_id: int, employee_id: int, is_admin: bool = False):
-        """Добавляет участника в чат"""
-        try:
-            # Убираем аргумент role, заменяем на is_admin
-            participant = ChatParticipant(
-                chat_id=chat_id,
-                employee_id=employee_id,
-                is_admin=is_admin
-            )
-            self.session.add(participant)
-            self.session.commit()
-            return True
-        except Exception as e:
-            print(f"❌ Ошибка при добавлении участника: {e}")
-            self.session.rollback()
-            return False
+    def add_participant(self, chat_id: int, employee_id: int, is_admin: bool = False) -> ChatParticipant:
+        participant = ChatParticipant(
+            chat_id=chat_id,
+            employee_id=employee_id,
+            is_admin=is_admin
+        )
+        self.session.add(participant)
+        self.session.flush()
+        return participant
 
     def add_participants(self, chat_id: int, user_ids: list[int]):
         for uid in user_ids:
@@ -163,15 +156,14 @@ class ChatRepo:
         ).on_conflict_do_nothing()
         self.session.execute(stmt)
 
-    def get_who_read(self, message_id: int):
-        """Возвращает список ФИО сотрудников, прочитавших сообщение"""
+    def get_who_read(self, message_id: int) -> List[Employee]:
+        """Возвращает сотрудников, прочитавших сообщение"""
         stmt = (
-            select(Employee.last_name, Employee.first_name)  # ← ИСПРАВЛЕНО
+            select(Employee)
             .join(MessageRead, Employee.id == MessageRead.user_id)
             .where(MessageRead.message_id == message_id)
         )
-        results = self.session.execute(stmt).all()
-        return [f"{r.last_name} {r.first_name[0]}." for r in results]
+        return list(self.session.scalars(stmt))
 
     def is_message_read_by_anyone(self, message_id: int, sender_id: int) -> bool:
         """Проверка: есть ли хоть одна запись в message_reads от другого человека"""
@@ -221,45 +213,29 @@ class ChatRepo:
         )
         return self.session.execute(stmt).scalar() or 0
 
-    def update_message_content(self, message_id: int, new_content: str):
-        try:
-            stmt = (
-                update(ChatMessage)
-                .where(ChatMessage.id == message_id)
-                .values(
-                    content=new_content,
-                    updated_at=datetime.now()  # Фиксируем время изменения
-                )
-            )
-            self.session.execute(stmt)
-            self.session.commit()
-            return True
-        except Exception as e:
-            print(f"Ошибка обновления: {e}")
-            self.session.rollback()
-            return False
+    def update_message_content(self, message_id: int, new_content: str) -> bool:
+        stmt = (
+            update(ChatMessage)
+            .where(ChatMessage.id == message_id)
+            .values(content=new_content, updated_at=datetime.now())
+        )
+        result = self.session.execute(stmt)
+        self.session.flush()
+        return result.rowcount > 0
 
     def get_message_by_id(self, message_id: int) -> Optional[ChatMessage]:
         """Получить одно сообщение по его ID"""
         return self.session.get(ChatMessage, message_id)
 
-    def delete_message_for_everyone(self, message_id: int):
-        """Мягкое удаление для всех: сообщение просто помечается удаленным"""
-        try:
-            stmt = (
-                update(ChatMessage)
-                .where(ChatMessage.id == message_id)
-                .values(
-                    is_deleted=True  # Используем существующий флаг
-                    # ТЕКСТ НЕ МЕНЯЕМ, updated_at НЕ ТРОГАЕМ
-                )
-            )
-            self.session.execute(stmt)
-            self.session.commit()
-            return True
-        except Exception as e:
-            self.session.rollback()
-            return False
+    def delete_message_for_everyone(self, message_id: int) -> bool:
+        stmt = (
+            update(ChatMessage)
+            .where(ChatMessage.id == message_id)
+            .values(is_deleted=True)
+        )
+        result = self.session.execute(stmt)
+        self.session.flush()
+        return result.rowcount > 0
 
     def delete_message_for_user(self, message_id: int, user_id: int):
         try:

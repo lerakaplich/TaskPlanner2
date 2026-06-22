@@ -70,16 +70,15 @@ class ColumnRepo:
         self.session.flush()
         return column
 
-    def create_project_column(self, name: str, color: str = "#ffffff",
-                               position: int = 0, is_done_column: bool = False,
-                               project_id: int = None) -> BoardColumn:
-        """Создать колонку проекта"""
+    def create_project_column(self, project_id: int, name: str, color: str = "#ffffff",
+                              position: int = 0, is_done_column: bool = False) -> BoardColumn:
+        """Создать колонку проекта (project_id обязателен)"""
         column = BoardColumn(
             name=name,
             color=color,
             position=position,
             is_done_column=is_done_column,
-            project_id=project_id,
+            project_id=project_id,  # обязательный
             is_template=False,
             template_order=None
         )
