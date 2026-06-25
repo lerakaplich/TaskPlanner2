@@ -82,6 +82,8 @@ class EmployeeData(Base):
     # Пароль (хеш)
     password_hash: Mapped[Optional[str]] = mapped_column(String(255))
 
+    app_session_token: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+
     # Временные метки
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now, onupdate=datetime.now)
@@ -126,51 +128,39 @@ class EmployeeData(Base):
         else:
             return "Критический ❌"
 
-    def update_kpd(self, session) -> None:
-        """
-        Пересчет общего КПД сотрудника на основе выполненных задач.
-        Вызывать при завершении задачи или периодически.
-        """
-        from .tasks import Task  # Локальный импорт для избежания циклических ссылок
+    def update_kpd(self, session):
+        """Обновляет КПД сотрудника на основе завершённых задач с учётом пауз"""
+        from models.tasks import Task
 
-        # Получаем все завершенные задачи сотрудника
         completed_tasks = session.query(Task).filter(
             Task.assigned_to == self.employee_id,
-            Task.completed_at.isnot(None),
-            Task.is_archived == False
+            Task.completed_at.isnot(None)
         ).all()
 
         if not completed_tasks:
             self.kpd_rating = 0.0
-            self.tasks_completed_total = 0
-            self.tasks_completed_on_time = 0
-            self.avg_task_completion_days = 0.0
-            self.kpd_last_calculated = datetime.now()
             return
 
-        # Обновляем статистику
+        # Усредняем КПД всех задач
+        total_kpd = sum(task.kpd_score for task in completed_tasks)
+        self.kpd_rating = round(total_kpd / len(completed_tasks), 2)
+
+        # Дополнительная статистика
         self.tasks_completed_total = len(completed_tasks)
 
-        # Считаем количество выполненных в срок
-        on_time_count = sum(1 for t in completed_tasks
-                            if t.deadline and t.completed_at <= t.deadline)
-        self.tasks_completed_on_time = on_time_count
+        # Количество выполненных в срок (с учётом пауз)
+        on_time = 0
+        for task in completed_tasks:
+            if task.deadline and task.completed_at:
+                # Эффективное время <= планового
+                effective_days = task.actual_work_days
+                planned_days = (task.deadline - task.created_at).days
+                if planned_days <= 0:
+                    planned_days = 1
+                if effective_days <= planned_days * 1.2:  # Допуск 20%
+                    on_time += 1
 
-        # Средний КПД по всем задачам
-        task_kpds = [t.kpd_score for t in completed_tasks if t.kpd_score > 0]
-        if task_kpds:
-            avg_kpd = sum(task_kpds) / len(task_kpds)
-            self.kpd_rating = round(avg_kpd, 2)
-
-        # Среднее время выполнения в днях
-        completion_days = []
-        for t in completed_tasks:
-            if t.created_at and t.completed_at:
-                days = (t.completed_at - t.created_at).total_seconds() / 86400
-                completion_days.append(days)
-        if completion_days:
-            self.avg_task_completion_days = round(sum(completion_days) / len(completion_days), 2)
-
+        self.tasks_completed_on_time = on_time
         self.kpd_last_calculated = datetime.now()
 
 

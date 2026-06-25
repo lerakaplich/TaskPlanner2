@@ -1,8 +1,9 @@
 # windows/other_tasks/others_tasks_handlers.py
 
-from typing import Dict, Optional, List
-from PyQt6.QtWidgets import QMessageBox
+from typing import Optional
+
 from PyQt6.QtCore import QTimer
+from PyQt6.QtWidgets import QMessageBox
 
 
 class OthersTasksHandlers:
@@ -19,22 +20,23 @@ class OthersTasksHandlers:
         """Может ли пользователь редактировать/удалять чужие задачи"""
         if not self.page.permission_service:
             return True
-        from services.permissions.app_permissions import AppRole
-        return self.page.permission_service.app_manager.role == AppRole.SUPER_ADMIN
+        app_role = self.page.permission_service.app_manager.role
+        return app_role.value in ('super_admin', 'superadmin', 'admin')
 
     def can_create_task(self) -> bool:
         """Может ли пользователь создавать задачи в чужих задачах"""
         if not self.page.permission_service:
             return True
-        from services.permissions.app_permissions import AppRole
-        return self.page.permission_service.app_manager.role == AppRole.SUPER_ADMIN
+        # ✅ ИСПРАВЛЕНО: проверяем обе возможные роли
+        app_role = self.page.permission_service.app_manager.role
+        return app_role.value in ('super_admin', 'superadmin', 'admin')
 
     def can_archive_task(self) -> bool:
         """Может ли пользователь архивировать чужие задачи"""
         if not self.page.permission_service:
             return True
-        from services.permissions.app_permissions import AppRole
-        return self.page.permission_service.app_manager.role == AppRole.SUPER_ADMIN
+        app_role = self.page.permission_service.app_manager.role
+        return app_role.value in ('super_admin', 'superadmin', 'admin')
 
     # ==========================================================
     # ЗАГРУЗКА И ОБНОВЛЕНИЕ

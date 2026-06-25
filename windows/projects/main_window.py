@@ -80,9 +80,9 @@ class MainWindow(QMainWindow):
         )
         print(f"🔐 Сервис прав инициализирован для пользователя {self.current_user_id}")
         print(f"   Роль в приложении: {self.permission_service.app_manager.role.value}")
+        print(f"   Тип роли: {type(self.permission_service.app_manager.role)}")
 
-        # Проверка прав для тестового проекта (если есть)
-        # Найдите любой проект пользователя и проверьте права
+
         try:
             projects = self.project_service.get_projects_for_cards(owner_filter=True)
             if projects:

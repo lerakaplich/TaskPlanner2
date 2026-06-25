@@ -6,7 +6,8 @@ from typing import List, Optional, Dict, Any
 
 from sqlalchemy import select
 
-from models.schemas.projects_dto import ProjectWithMembersDTO, ProjectCardDTO
+from models.projects import ProjectRoleEnum
+from models.schemas.projects_dto import ProjectWithMembersDTO, ProjectCardDTO, ProjectMemberDTO
 from repositories.employee_repo import EmployeeRepo
 from repositories.project_repo import ProjectRepo
 from telegram_bot.bot import telegram_bot
@@ -41,9 +42,9 @@ def _send_notification_sync(chat_id: int, project_name: str, manager_name: str, 
 def _send_update_notification_sync(chat_id: int, project_name: str):
     """Синхронная обёртка для отправки уведомления об обновлении"""
     try:
+        # Создаём новый цикл событий
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
-
         try:
             loop.run_until_complete(
                 telegram_bot.send_project_update_notification(chat_id, project_name)
@@ -73,10 +74,38 @@ class ProjectsCrudService:
         if not project:
             return None
 
-        dto = ProjectWithMembersDTO.model_validate(project)
-        dto.member_ids = [m.employee_id for m in project.members]
-        dto.admin_ids = [m.employee_id for m in project.members if m.is_admin]
-        dto.manager_id = project.manager_id
+        # 1. Создаём словарь с данными проекта
+        #    Исключаем поле members, чтобы Pydantic не трогал его
+        project_data = {
+            'id': project.id,
+            'name': project.name,
+            'description': project.description,
+            'is_archived': project.is_archived,
+            'created_by': project.created_by,
+            'created_at': project.created_at,
+            'updated_at': project.updated_at,
+            'selected_column_ids': project.selected_column_ids,
+            'manager_id': project.manager_id,
+            # members будет заполнен вручную
+        }
+
+        # 2. Создаём DTO из словаря (без members)
+        dto = ProjectWithMembersDTO(**project_data)
+
+        # 3. ВРУЧНУЮ заполняем members
+        members_list = []
+        for member in project.members:
+            employee = self.employee_repo.get_by_id(member.employee_id)
+            full_name = self._get_employee_full_name(employee) if employee else f"User {member.employee_id}"
+            members_list.append(
+                ProjectMemberDTO(
+                    employee_id=member.employee_id,
+                    full_name=full_name,
+                    role=member.role,
+                    joined_at=member.joined_at
+                )
+            )
+        dto.members = members_list
 
         # Получаем имя куратора
         if project.manager_id:
@@ -185,6 +214,30 @@ class ProjectsCrudService:
             print(f"❌ Ошибка при архивации проекта: {e}")
             return False
 
+    def _ensure_employees_exist_in_taskplanner(self, employee_ids: List[int]):
+        """Проверяет наличие записей сотрудников в employees_data и создаёт их при необходимости"""
+        try:
+            from sqlalchemy import text
+
+            for emp_id in employee_ids:
+                if not emp_id:
+                    continue
+
+                # Проверяем, есть ли запись в employees_data
+                check_stmt = text("SELECT employee_id FROM public.employees_data WHERE employee_id = :emp_id")
+                result = self.session.execute(check_stmt, {'emp_id': emp_id}).first()
+
+                if not result:
+                    # Создаём запись
+                    insert_stmt = text("""
+                        INSERT INTO public.employees_data (employee_id, is_active, role, created_at, updated_at)
+                        VALUES (:emp_id, true, 'user', NOW(), NOW())
+                    """)
+                    self.session.execute(insert_stmt, {'emp_id': emp_id})
+                    print(f"✅ Создана запись в employees_data для сотрудника {emp_id}")
+        except Exception as e:
+            print(f"⚠️ Ошибка при проверке/создании employees_data: {e}")
+
     def create_new_project(self, raw_data: dict, creator_id: int) -> Optional[ProjectWithMembersDTO]:
         """Создать новый проект"""
         try:
@@ -193,7 +246,6 @@ class ProjectsCrudService:
             project = self.project_repo.create(
                 name=raw_data['name'],
                 description=raw_data.get('description', ''),
-                owner=creator_id,
                 created_by=creator_id,
                 created_at=datetime.now(),
                 updated_at=datetime.now(),
@@ -202,6 +254,9 @@ class ProjectsCrudService:
             )
 
             self.session.flush()
+
+            # ✅ ДОБАВЛЯЕМ УЧАСТНИКОВ ПРОЕКТА
+            self._sync_project_members(project.id, raw_data, creator_id)
 
             # Сохраняем ID выбранных колонок
             selected_columns_data = raw_data.get('selected_columns_data', [])
@@ -222,6 +277,67 @@ class ProjectsCrudService:
             self.session.rollback()
             print(f"❌ Ошибка при создании проекта: {e}")
             return None
+
+    def _sync_project_members(self, project_id: int, raw_data: dict, creator_id: int):
+        """
+        Синхронизирует участников проекта при создании.
+        """
+        from models.projects import ProjectRoleEnum
+
+        # Парсим ID участников и администраторов
+        participants_ids_str = raw_data.get('participants_ids', '')
+        admins_ids_str = raw_data.get('admins_ids', '')
+
+        participant_ids = set()
+        if participants_ids_str:
+            for pid in participants_ids_str.split(','):
+                if pid and pid.strip():
+                    participant_ids.add(int(pid.strip()))
+
+        admin_ids = set()
+        if admins_ids_str:
+            for aid in admins_ids_str.split(','):
+                if aid and aid.strip():
+                    admin_ids.add(int(aid.strip()))
+
+        # Добавляем создателя в участники (всегда)
+        participant_ids.add(creator_id)
+
+        # Если создатель не в админах, добавляем его как project_manager
+        if creator_id not in admin_ids:
+            admin_ids.add(creator_id)
+
+        # Добавляем куратора, если он есть
+        manager_id = raw_data.get('manager_id')
+        if manager_id:
+            manager_id_int = int(manager_id) if isinstance(manager_id, str) else manager_id
+            participant_ids.add(manager_id_int)
+
+        # ✅ ВАЖНО: Убеждаемся, что все сотрудники существуют в employees_data
+        all_employee_ids = list(participant_ids) + list(admin_ids)
+        if manager_id:
+            all_employee_ids.append(int(manager_id) if isinstance(manager_id, str) else manager_id)
+        self._ensure_employees_exist_in_taskplanner(list(set(all_employee_ids)))
+
+        # Строим словарь {employee_id: role}
+        members_with_roles = {}
+        for emp_id in participant_ids:
+            if emp_id in admin_ids:
+                members_with_roles[emp_id] = ProjectRoleEnum.PROJECT_MANAGER
+            elif manager_id and emp_id == (int(manager_id) if isinstance(manager_id, str) else manager_id):
+                members_with_roles[emp_id] = ProjectRoleEnum.CURATOR
+            else:
+                members_with_roles[emp_id] = ProjectRoleEnum.MEMBER
+
+        # Если куратор не в списке участников, но manager_id задан - добавляем
+        if manager_id:
+            manager_id_int = int(manager_id) if isinstance(manager_id, str) else manager_id
+            if manager_id_int not in members_with_roles:
+                members_with_roles[manager_id_int] = ProjectRoleEnum.CURATOR
+
+        # Синхронизируем участников через репозиторий
+        self.project_repo.sync_members(project_id, members_with_roles)
+        print(f"✅ Добавлены участники проекта: {list(members_with_roles.keys())}")
 
     def _extract_participant_ids(self, project_data: dict) -> List[int]:
         """Извлекает ID участников из данных проекта"""
@@ -356,13 +472,12 @@ class ProjectsCrudService:
     def update_project(self, project_id: int, updated_data: Any) -> bool:
         """Обновляет проект и отправляет уведомления о изменениях"""
         try:
-            # Получаем существующий проект
             project = self.project_repo.get_by_id(project_id)
             if not project:
                 print(f"❌ Проект {project_id} не найден")
                 return False
 
-            # Преобразуем DTO в словарь, если это DTO
+            # Преобразуем DTO в словарь
             if hasattr(updated_data, 'model_dump'):
                 data_dict = updated_data.model_dump()
             elif hasattr(updated_data, 'dict'):
@@ -380,23 +495,38 @@ class ProjectsCrudService:
             if 'manager_id' in data_dict:
                 project.manager_id = data_dict['manager_id']
 
-            # Обновляем дату
             project.updated_at = datetime.now()
 
-            # Обновляем участников и администраторов
-            member_ids = data_dict.get('member_ids', [])
-            admin_ids = data_dict.get('admin_ids', [])
+            # ============================================================
+            # ✅ ИСПРАВЛЕНО: используем members вместо member_ids/admin_ids
+            # ============================================================
+            members = data_dict.get('members', [])
 
-            # ВАЖНО: Сначала добавляем отсутствующих сотрудников в employees_data
-            self._ensure_employees_exist_in_taskplanner(member_ids)
+            # Строим словарь {employee_id: role}
+            members_with_roles = {}
+            for member in members:
+                emp_id = member.get('employee_id')
+                if emp_id:
+                    # Роль из DTO: project_manager, curator, member
+                    role_str = member.get('role', 'member')
+                    # Преобразуем строку в ProjectRoleEnum
+                    if role_str == 'project_manager':
+                        members_with_roles[emp_id] = ProjectRoleEnum.PROJECT_MANAGER
+                    elif role_str == 'curator':
+                        members_with_roles[emp_id] = ProjectRoleEnum.CURATOR
+                    else:
+                        members_with_roles[emp_id] = ProjectRoleEnum.MEMBER
 
-            # Очищаем существующие связи
-            self.project_repo.clear_project_members(project_id)
+            # Добавляем куратора, если он есть и не в списке
+            if project.manager_id and project.manager_id not in members_with_roles:
+                members_with_roles[project.manager_id] = ProjectRoleEnum.CURATOR
 
-            # Добавляем новых участников
-            for emp_id in member_ids:
-                is_admin = emp_id in admin_ids
-                self.project_repo.add_project_member(project_id, emp_id, is_admin)
+            # Добавляем создателя, если он есть и не в списке
+            if project.created_by and project.created_by not in members_with_roles:
+                members_with_roles[project.created_by] = ProjectRoleEnum.PROJECT_MANAGER
+
+            # Синхронизируем участников
+            self.project_repo.sync_members(project_id, members_with_roles)
 
             # Обновляем выбранные колонки
             selected_columns_data = data_dict.get('selected_columns_data', [])
@@ -407,7 +537,7 @@ class ProjectsCrudService:
 
             self.session.commit()
 
-            # === ОТПРАВКА УВЕДОМЛЕНИЙ ОБ ИЗМЕНЕНИЯХ ===
+            # Отправляем уведомления
             self._send_project_update_notifications(project_id, project.name, data_dict)
 
             print(f"✅ Проект '{project.name}' обновлён")
@@ -419,27 +549,6 @@ class ProjectsCrudService:
             import traceback
             traceback.print_exc()
             return False
-
-    def _ensure_employees_exist_in_taskplanner(self, employee_ids: List[int]):
-        """Проверяет наличие записей сотрудников в employees_data и создаёт их при необходимости"""
-        try:
-            from sqlalchemy import text
-
-            for emp_id in employee_ids:
-                # Проверяем, есть ли запись в employees_data
-                check_stmt = text("SELECT employee_id FROM public.employees_data WHERE employee_id = :emp_id")
-                result = self.session.execute(check_stmt, {'emp_id': emp_id}).first()
-
-                if not result:
-                    # Создаём запись
-                    insert_stmt = text("""
-                        INSERT INTO public.employees_data (employee_id, is_active, role, created_at, updated_at)
-                        VALUES (:emp_id, true, 'user', NOW(), NOW())
-                    """)
-                    self.session.execute(insert_stmt, {'emp_id': emp_id})
-                    print(f"✅ Создана запись в employees_data для сотрудника {emp_id}")
-        except Exception as e:
-            print(f"⚠️ Ошибка при проверке/создании employees_data: {e}")
 
     def _send_project_update_notifications(self, project_id: int, project_name: str,
                                            updated_data: Dict[str, Any]):
@@ -479,7 +588,7 @@ class ProjectsCrudService:
                             target=_send_update_notification_sync,
                             args=(employee.chat_id, project_name),
                             daemon=True
-                        )
+                        )   
                         thread.start()
 
             print(f"📨 Отправлены уведомления об обновлении проекта '{project_name}' для {len(member_ids)} участников")
@@ -495,7 +604,7 @@ class ProjectsCrudService:
             # Фильтруем проекты
             filtered_projects = []
             for proj in all_projects:
-                if owner_filter and proj.owner != self.current_user_id:
+                if owner_filter and proj.created_by != self.current_user_id:
                     continue
                 if search_query and search_query.lower() not in proj.name.lower():
                     continue
@@ -513,15 +622,30 @@ class ProjectsCrudService:
                 done_tasks = len([t for t in tasks if t.column and t.column.is_done_column])
 
                 member_count = len(proj.members) if hasattr(proj, 'members') else 0
-                admin_count = len([m for m in proj.members if m.is_admin]) if hasattr(proj, 'members') else 0
+
+                # ✅ ИСПРАВЛЕНО: считаем админов по роли (project_manager)
+                admin_count = 0
+                if hasattr(proj, 'members'):
+                    for m in proj.members:
+                        # Получаем значение role
+                        role_value = getattr(m, 'role', None)
+                        # Если role это строка - сравниваем напрямую
+                        if role_value == 'project_manager':
+                            admin_count += 1
+                        # Если это Enum - берем его значение
+                        elif hasattr(role_value, 'value') and role_value.value == 'project_manager':
+                            admin_count += 1
+                        # Для надежности - приводим к строке и сравниваем
+                        elif str(role_value) == 'project_manager':
+                            admin_count += 1
 
                 column_ids = self.project_repo.get_selected_column_ids(proj.id)
                 columns_count = len(column_ids) if column_ids else 0
 
                 # Получаем имя владельца
                 owner_name = "Не назначен"
-                if proj.owner:
-                    owner = self.employee_repo.get_by_id(proj.owner)
+                if proj.created_by:
+                    owner = self.employee_repo.get_by_id(proj.created_by)
                     if owner:
                         owner_name = f"{owner.last_name} {owner.first_name[0]}."
                         if owner.middle_name:
@@ -544,12 +668,11 @@ class ProjectsCrudService:
                     description=proj.description or "",
                     tasks_total=total_tasks,
                     tasks_done=done_tasks,
-                    deadline=proj.deadline,
                     is_archived=proj.is_archived,
                     member_count=member_count,
                     admin_count=admin_count,
                     owner_name=owner_name,
-                    owner_id=proj.owner,
+                    owner_id=proj.created_by,
                     created_at=created_at_str,
                     columns_count=columns_count,
                     manager_name=manager_name
@@ -559,6 +682,8 @@ class ProjectsCrudService:
             return result
         except Exception as e:
             print(f"❌ Критическая ошибка в get_projects_for_cards: {e}")
+            import traceback
+            traceback.print_exc()
             return []
 
     def _get_employee_full_name(self, employee) -> str:

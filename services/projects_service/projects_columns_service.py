@@ -12,11 +12,10 @@ class ProjectsColumnsService:
         self.session = session
 
     def get_template_columns_for_selector(self) -> List[Dict]:
-        """Возвращает шаблонные колонки для диалога выбора с дополнительными полями"""
+        """Возвращает шаблонные колонки для диалога выбора"""
         try:
-            stmt = select(BoardColumn).where(
-                BoardColumn.is_template == True
-            ).order_by(BoardColumn.template_order)
+            # ✅ УБИРАЕМ фильтр по is_template - загружаем все колонки
+            stmt = select(BoardColumn).order_by(BoardColumn.position)
             columns = self.session.scalars(stmt).all()
 
             result = []
@@ -26,9 +25,8 @@ class ProjectsColumnsService:
                     'name': col.name,
                     'col_key': col.name.lower().replace(' ', '_'),
                     'color': col.color,
-                    'position': col.template_order or col.position,
+                    'position': col.position,
                     'is_done_column': col.is_done_column,
-                    'is_template': True,
                     'description': getattr(col, 'description', '')
                 })
             return result
@@ -100,20 +98,20 @@ class ProjectsColumnsService:
                     'id': col.id,
                     'name': col.name,
                     'color': col.color,
-                    'position': col.template_order if col.template_order is not None else col.position,
+                    'position': col.position,
                     'is_done': col.is_done_column
                 })
             print(f"📋 Загружено колонок проекта: {len(result)}")
         else:
-            # Если нет сохраненных, берем все шаблонные
-            stmt = select(BoardColumn).where(BoardColumn.is_template == True)
+            # Если нет сохраненных, берем все колонки
+            stmt = select(BoardColumn).order_by(BoardColumn.position)
             columns = self.session.scalars(stmt).all()
             for col in columns:
                 result.append({
                     'id': col.id,
                     'name': col.name,
                     'color': col.color,
-                    'position': col.template_order if col.template_order is not None else col.position,
+                    'position': col.position,
                     'is_done': col.is_done_column
                 })
 

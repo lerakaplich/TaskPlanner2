@@ -12,7 +12,8 @@ from PyQt6.QtGui import (
 )
 from PyQt6.QtWidgets import QWidget, QMessageBox, QApplication
 
-from services.gantt_service import GanttService, TaskGanttData
+from services.gantt_service.gantt_base_service import TaskGanttData
+from services.gantt_service.gantt_service import GanttService
 
 
 class GanttCanvas(QWidget):

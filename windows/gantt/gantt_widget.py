@@ -12,7 +12,7 @@ from PyQt6 import uic
 
 from sqlalchemy.orm import Session
 
-from services.gantt_service import GanttService
+from services.gantt_service.gantt_service import GanttService
 
 
 class GanttWidget(QWidget):

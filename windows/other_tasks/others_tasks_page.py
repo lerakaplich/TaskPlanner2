@@ -51,7 +51,6 @@ class OthersTasksPage(QWidget):
             column_service=column_service
         )
 
-        # Инициализация обработчиков
         from windows.other_tasks.others_tasks_handlers import OthersTasksHandlers
         self._handlers = OthersTasksHandlers(self)
 
@@ -60,10 +59,8 @@ class OthersTasksPage(QWidget):
 
         self.setup_kanban()
         self._load_projects_for_filter()
-        self._connect_signals()
-
-        # Настройка UI в зависимости от прав
         self._setup_permission_ui()
+        self._connect_signals()
 
     # ==========================================================
     # ПРАВА ДОСТУПА
@@ -90,7 +87,7 @@ class OthersTasksPage(QWidget):
         self.priorityFilter.currentTextChanged.connect(self._on_filter_changed)
         self.projectFilter.currentTextChanged.connect(self._on_project_filter_changed)
 
-        if hasattr(self, 'btnCreateTask') and self.btnCreateTask.isVisible():
+        if hasattr(self, 'btnCreateTask'):
             self.btnCreateTask.clicked.connect(self._handlers.on_create_task)
 
     def _on_filter_changed(self):

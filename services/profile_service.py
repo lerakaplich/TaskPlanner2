@@ -147,6 +147,12 @@ class ProfileService:
             department_name = self._get_department_name(employee.department_id)
             division_name = self._get_division_name(employee.division_id)
 
+            # ✅ ИСПРАВЛЕНО: получаем роль из EmployeeData
+            role_value = "user"
+            if employee_data and employee_data.role:
+                role_value = employee_data.role.value if hasattr(employee_data.role, 'value') else str(
+                    employee_data.role)
+
             return {
                 "id": employee.id,
                 "last_name": employee.last_name or "",
@@ -162,7 +168,7 @@ class ProfileService:
                 "division_id": employee.division_id,
                 "division_name": division_name or "—",
                 "organization_id": employee.organization_id or 1,
-                "role": employee_data.role.value if employee_data and employee_data.role else "user",
+                "role": role_value,
                 "is_active": employee_data.is_active if employee_data else True,
                 "full_name": self._format_full_name(employee)
             }
@@ -215,11 +221,10 @@ class ProfileService:
                     # ВАЖНО: считаем только задачи, где сотрудник является исполнителем
                     tasks = self.session.query(Task).filter(
                         Task.project_id == project.id,
-                        Task.assigned_to == employee_id,  # <- ТОЛЬКО задачи сотрудника
+                        Task.assigned_to == employee_id,
                         Task.is_archived == False
                     ).all()
 
-                    # Для завершенных задач считаем также только те, где он исполнитель
                     completed_tasks = self.session.query(Task).filter(
                         Task.project_id == project.id,
                         Task.assigned_to == employee_id,
@@ -230,6 +235,11 @@ class ProfileService:
 
                     total_tasks = len(tasks)
 
+                    # ✅ ИСПРАВЛЕНО: проверяем роль вместо is_admin
+                    is_admin = False
+                    if membership.role == 'project_manager':
+                        is_admin = True
+
                     result.append({
                         "id": project.id,
                         "name": project.name,
@@ -237,7 +247,7 @@ class ProfileService:
                         "total_tasks": total_tasks,
                         "completed_tasks": completed_tasks,
                         "progress": int((completed_tasks / total_tasks * 100)) if total_tasks > 0 else 0,
-                        "is_admin": membership.is_admin or False,
+                        "is_admin": is_admin,  # ✅ теперь правильно определяется
                         "created_at": project.created_at.strftime("%d.%m.%Y") if project.created_at else "",
                         "is_archived": project.is_archived
                     })

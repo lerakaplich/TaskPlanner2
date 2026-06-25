@@ -32,7 +32,6 @@ class TaskStatusEnum(str, enum.Enum):
     done = "done"
     cancelled = "cancelled"
 
-# models/tasks.py - добавьте в класс TaskDependency правильные отношения:
 
 class TaskDependency(Base):
     """Модель связей между задачами для диаграммы Ганта"""
@@ -113,6 +112,89 @@ class Task(Base):
     )
 
     @property
+    def effective_work_seconds(self) -> float:
+        """
+        Возвращает эффективное время работы над задачей (без учёта пауз) в секундах.
+        Если задача ещё не начата или не завершена, возвращает 0.
+        """
+        if not self.started_at:
+            return 0.0
+
+        end_time = self.completed_at or datetime.now()
+        total_seconds = (end_time - self.started_at).total_seconds()
+
+        # Вычитаем общее время пауз
+        effective_seconds = total_seconds - self.total_paused_seconds
+
+        # Если задача на паузе сейчас, вычитаем текущую паузу
+        if self.is_paused and self.paused_at:
+            current_pause = (datetime.now() - self.paused_at).total_seconds()
+            effective_seconds -= current_pause
+
+        return max(0, effective_seconds)
+
+    @property
+    def effective_work_hours(self) -> float:
+        """Эффективное время работы в часах"""
+        return self.effective_work_seconds / 3600.0
+
+    @property
+    def actual_work_days(self) -> float:
+        """Эффективное время работы в днях (8-часовой рабочий день)"""
+        return self.effective_work_hours / 8.0
+
+    @property
+    def efficiency_factor(self) -> float:
+        """
+        Коэффициент эффективности с учётом пауз.
+        Сравниваем плановое время (от создания до дедлайна) с эффективным временем выполнения.
+        """
+        if not self.completed_at or not self.created_at:
+            return 1.0
+
+        # Плановое время в днях (от создания до дедлайна)
+        if self.deadline:
+            planned_days = (self.deadline - self.created_at).days
+        else:
+            # Если дедлайн не задан, используем среднее 7 дней
+            planned_days = 7
+
+        if planned_days <= 0:
+            planned_days = 1
+
+        # Эффективное время выполнения в днях
+        actual_days = self.actual_work_days
+        if actual_days <= 0:
+            actual_days = 0.5  # Минимальное время
+
+        # Чем меньше эффективное время относительно планового, тем выше коэффициент
+        # Но не больше 2.0 (чтобы не было перекоса)
+        factor = min(planned_days / actual_days, 2.0)
+        return factor
+
+    @property
+    def kpd_score(self) -> float:
+        """Расчет КПД для задачи с учётом пауз (0-100)"""
+        if not self.completed:
+            return 0.0
+
+        # Базовые компоненты
+        difficulty_factor = self.difficulty / 5.0  # 0-1, где 5⭐ = 1.0
+        priority_factor = self.priority_factor  # 0.8-1.5
+        efficiency = self.efficiency_factor  # 0.5-2.0
+
+        # Прогресс всегда 100% для завершённых задач
+        progress_factor = 1.0
+
+        # Итоговая формула
+        raw_score = (difficulty_factor * 0.4 + efficiency * 0.6) * 100
+        raw_score *= priority_factor
+
+        # Нормализация и ограничение
+        normalized = min(100, max(0, raw_score))
+        return round(normalized, 2)
+
+    @property
     def status(self) -> Optional[str]:
         if self.column:
             return self.column.name
@@ -136,19 +218,6 @@ class Task(Base):
         return datetime.now() > self.deadline
 
     @property
-    def efficiency_factor(self) -> float:
-        """Коэффициент эффективности (для КПД)"""
-        if self.completed_at and self.created_at:
-            planned_days = (self.deadline - self.created_at).days if self.deadline else 1
-            actual_days = (self.completed_at - self.created_at).days
-            if actual_days <= 0:
-                actual_days = 0.5
-            if planned_days <= 0:
-                planned_days = 1
-            return planned_days / actual_days
-        return 1.0
-
-    @property
     def priority_factor(self) -> float:
         """Коэффициент приоритета"""
         factors = {
@@ -163,25 +232,6 @@ class Task(Base):
     def progress_factor(self) -> float:
         """Коэффициент готовности"""
         return self.progress_percent / 100.0
-
-    @property
-    def kpd_score(self) -> float:
-        """Расчет КПД для задачи (0-100)"""
-        if not self.completed:
-            return 0.0
-
-        # Базовая формула
-        score = (
-                self.difficulty *  # Сложность (0-5)
-                self.priority_factor *  # Приоритет (0.8-1.5)
-                self.efficiency_factor *  # Эффективность по времени
-                self.progress_factor  # Готовность (1.0 для выполненных)
-        )
-
-        # Нормализация и перевод в 0-100
-        normalized = min(100, max(0, score * 20))
-        return round(normalized, 2)
-
 
 class Tag(Base):
     __tablename__ = "tags"

@@ -9,6 +9,8 @@ class ProjectEditDialog(BaseProjectDialog):
 
     def __init__(self, project_data, parent=None, service=None):
         self.original_data = project_data
+        self.project_id = None
+        self.permission_service = None  # Будет передан извне
 
         super().__init__(parent, title="Редактирование проекта", project_data=project_data, service=service)
 
@@ -26,6 +28,52 @@ class ProjectEditDialog(BaseProjectDialog):
             self.dateLabel.setText(f"Изменен: {current_date}")
 
         self.createBtn.clicked.connect(self._on_save)
+
+    def setup_edit_mode(self, project_id: int):
+        """Настраивает диалог в режиме редактирования/просмотра"""
+        self.project_id = project_id
+
+        # Проверяем права на редактирование
+        if self.permission_service:
+            can_edit = self.permission_service.can_edit_project(project_id)
+            if not can_edit:
+                # Режим только для просмотра
+                self.setWindowTitle(f"Просмотр проекта: {self.project_data.get('name', '')}")
+                self.titleLabel.setText("Просмотр проекта")
+                self.createBtn.setText("Закрыть")
+                self.createBtn.setEnabled(True)  # Кнопка будет закрывать диалог
+
+                # Отключаем все поля ввода
+                self._set_readonly_mode(True)
+
+                # Меняем обработчик кнопки
+                self.createBtn.clicked.disconnect()
+                self.createBtn.clicked.connect(self.reject)
+            else:
+                # Режим редактирования
+                self._set_readonly_mode(False)
+
+    def _set_readonly_mode(self, readonly: bool):
+        """Устанавливает режим только для чтения для всех полей"""
+        # Отключаем поля ввода
+        if hasattr(self, 'nameInput'):
+            self.nameInput.setReadOnly(readonly)
+        if hasattr(self, 'descInput'):
+            self.descInput.setReadOnly(readonly)
+        if hasattr(self, 'activeCheckbox'):
+            self.activeCheckbox.setEnabled(not readonly)
+        if hasattr(self, 'comboManager'):
+            self.comboManager.setEnabled(not readonly)
+
+        # Отключаем кнопки выбора участников
+        if hasattr(self, 'participantsBtn'):
+            self.participantsBtn.setEnabled(not readonly)
+        if hasattr(self, 'adminsBtn'):
+            self.adminsBtn.setEnabled(not readonly)
+
+        # Отключаем чекбоксы колонок
+        for checkbox in self.column_checkboxes.values():
+            checkbox.setEnabled(not readonly)
 
     def load_project_data(self):
         """Загружает данные для редактирования"""

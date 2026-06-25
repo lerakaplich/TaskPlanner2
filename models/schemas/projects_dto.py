@@ -18,11 +18,9 @@ class ProjectDTO(BaseModel):
     name: str
     description: Optional[str] = None
     is_archived: bool = False
-    created_by: Optional[int] = None  # ✅ ДОБАВЛЕНО (было в БД)
+    created_by: Optional[int] = None
     created_at: datetime
     updated_at: datetime
-    deadline_date: Optional[date] = None  # ✅ ИСПРАВЛЕНО (было deadline: time)
-    owner: Optional[int] = None  # ⚠️ Можно удалить, если дублирует created_by
     selected_column_ids: Optional[str] = None
     manager_id: Optional[int] = None
 
@@ -40,7 +38,7 @@ class ProjectMemberDTO(BaseModel):
 
 class ProjectWithMembersDTO(ProjectDTO):
     """DTO проекта с участниками"""
-    members: List[ProjectMemberDTO] = []  # ✅ Вместо member_ids и admin_ids
+    members: List[ProjectMemberDTO] = []
 
     selected_columns_data: List[Dict[str, Any]] = []
     manager_name: Optional[str] = None
@@ -60,10 +58,10 @@ class ProjectCardDTO(BaseModel):
     tasks_done: int
     is_archived: bool = False
     member_count: int = 0
+    admin_count: int = 0
     owner_name: str = "Не назначен"
     owner_id: Optional[int] = None
     created_at: Optional[str] = None
     columns_count: int = 0
     manager_name: Optional[str] = None
-    # Текущая роль пользователя в проекте
     user_role: Optional[str] = None

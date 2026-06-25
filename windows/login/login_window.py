@@ -1,6 +1,7 @@
 # windows/login/login_window.py
 
 from pathlib import Path
+from typing import Dict
 
 from PyQt6 import uic
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal

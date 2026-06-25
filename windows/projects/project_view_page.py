@@ -1,6 +1,6 @@
 # windows/projects/project_view_page.py
 import os
-from typing import Dict
+from typing import Dict, List
 from PyQt6.QtWidgets import QWidget, QLabel, QPushButton, QScrollArea, QHBoxLayout, QVBoxLayout, QMessageBox
 from PyQt6.QtCore import Qt, pyqtSignal, QTimer
 from PyQt6 import uic
@@ -23,6 +23,7 @@ class ProjectViewPage(QWidget):
         self.project_id = project_id
         self.columns = {}
         self.column_widgets = []
+        self.parent_window = parent  # Сохраняем ссылку на родительское окно
 
         # Получаем текущего пользователя
         current_user = self._get_current_user(parent)
@@ -56,7 +57,13 @@ class ProjectViewPage(QWidget):
 
     def _on_go_back(self):
         """Обработчик нажатия кнопки назад"""
+        # ✅ ЭМИТИМ СИГНАЛ ДЛЯ ВОЗВРАТА
         self.go_back.emit()
+
+        # ✅ ИЛИ ПРЯМО ВОЗВРАЩАЕМСЯ НА СТРАНИЦУ ПРОЕКТОВ
+        if self.parent_window and hasattr(self.parent_window, 'contentStack'):
+            # Находим индекс страницы проектов (обычно 0)
+            self.parent_window.contentStack.setCurrentIndex(0)
 
     def _setup_ui(self):
         """Настройка UI"""

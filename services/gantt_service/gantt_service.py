@@ -3,11 +3,11 @@
 from typing import List, Dict, Optional, Any, Tuple
 from sqlalchemy.orm import Session
 
-from .gantt_base_service import GanttBaseService, TaskGanttData
-from .gantt_data_service import GanttDataService
-from .gantt_filter_service import GanttFilterService
-from .gantt_dependency_service import GanttDependencyService
-from .gantt_export_service import GanttExportService
+from services.gantt_service.gantt_base_service import GanttBaseService, TaskGanttData
+from services.gantt_service.gantt_data_service import GanttDataService
+from services.gantt_service.gantt_dependency_service import GanttDependencyService
+from services.gantt_service.gantt_export_service import GanttExportService
+from services.gantt_service.gantt_filter_service import GanttFilterService
 
 
 class GanttService(GanttBaseService):
@@ -15,16 +15,13 @@ class GanttService(GanttBaseService):
 
     def __init__(self, session: Session, current_user_id: int = None, project_service=None, permission_service=None):
         self.session = session
+        self.current_user_id = current_user_id
+        self.permission_service = permission_service  # <-- ДОБАВЛЕНО
 
-        # Инициализация дочерних сервисов
         self.data = GanttDataService(session, current_user_id, project_service, permission_service)
         self.filter = GanttFilterService(self.data)
         self.deps = GanttDependencyService(session, self.data, permission_service)
         self.export = GanttExportService(permission_service)
-
-    # ==========================================================
-    # ДАННЫЕ (делегирует GanttDataService)
-    # ==========================================================
 
     def load_data(self, project_id: Optional[int] = None) -> None:
         self.data.load_data(project_id)
@@ -56,10 +53,6 @@ class GanttService(GanttBaseService):
     def has_tasks(self) -> bool:
         return self.data.has_tasks()
 
-    # ==========================================================
-    # ФИЛЬТРАЦИЯ (делегирует GanttFilterService)
-    # ==========================================================
-
     def get_filtered_tasks(self, project_filter: str, executor_filter: str) -> List[TaskGanttData]:
         return self.filter.get_filtered_tasks(project_filter, executor_filter)
 
@@ -78,10 +71,6 @@ class GanttService(GanttBaseService):
     def validate_project_selected(self, project_filter: str) -> Tuple:
         return self.filter.validate_project_selected(project_filter)
 
-    # ==========================================================
-    # СВЯЗИ (делегирует GanttDependencyService)
-    # ==========================================================
-
     def get_all_links(self) -> Dict[int, List[int]]:
         return self.deps.get_all_links()
 
@@ -94,24 +83,8 @@ class GanttService(GanttBaseService):
     def update_task_dates_with_linked(self, task_id: int, new_start, new_end) -> bool:
         return self.deps.update_task_dates_with_linked(task_id, new_start, new_end)
 
-    # ==========================================================
-    # ЭКСПОРТ (делегирует GanttExportService)
-    # ==========================================================
-
     def can_export(self) -> bool:
         return self.export.can_export()
-
-    def can_create_task(self) -> bool:
-        if not self.permission_service:
-            return False
-        from services.permissions.app_permissions import AppRole
-        return self.permission_service.app_manager.role == AppRole.SUPER_ADMIN
-
-    def can_create_link(self) -> bool:
-        if not self.permission_service:
-            return False
-        from services.permissions.app_permissions import AppRole
-        return self.permission_service.app_manager.role == AppRole.SUPER_ADMIN
 
     def export_to_image_with_period(self, canvas_widget, tasks, start_date, end_date) -> Optional[str]:
         return self.export.export_to_image_with_period(canvas_widget, tasks, start_date, end_date)
@@ -125,9 +98,19 @@ class GanttService(GanttBaseService):
     def get_task_info_text(self, task: TaskGanttData) -> str:
         return self.export.get_task_info_text(task)
 
-    # ==========================================================
-    # РАСЧЁТ ПОЗИЦИЙ (из базового класса)
-    # ==========================================================
+    def can_create_task(self) -> bool:
+        """Проверяет права на создание задач"""
+        if not self.permission_service:
+            return False
+        from services.permissions.app_permissions import AppRole
+        return self.permission_service.app_manager.role == AppRole.SUPER_ADMIN
+
+    def can_create_link(self) -> bool:
+        """Проверяет права на создание связей"""
+        if not self.permission_service:
+            return False
+        from services.permissions.app_permissions import AppRole
+        return self.permission_service.app_manager.role == AppRole.SUPER_ADMIN
 
     def calculate_bar_position(self, task: TaskGanttData, start_date) -> Tuple[float, float]:
         total_days = max(1, (task.end_date - task.start_date).days + 1)
@@ -137,10 +120,6 @@ class GanttService(GanttBaseService):
         width = total_days * self.DAY_WIDTH
 
         return float(x), float(width)
-
-    # ==========================================================
-    # СОЗДАНИЕ ЗАДАЧИ (остаётся здесь)
-    # ==========================================================
 
     def create_task_via_service(self, form_data: Dict) -> Optional[Dict]:
         """Создаёт задачу через сервис задач"""

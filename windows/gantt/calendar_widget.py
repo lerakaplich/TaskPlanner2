@@ -9,7 +9,8 @@ from PyQt6.QtWidgets import (
     QGridLayout, QFrame, QScrollArea, QMessageBox
 )
 
-from services.gantt_service import GanttService, TaskGanttData
+from services.gantt_service.gantt_base_service import TaskGanttData
+from services.gantt_service.gantt_service import GanttService
 
 
 class CalendarWidget(QWidget):

@@ -22,11 +22,8 @@ class ColumnRepo:
         return self.session.get(BoardColumn, column_id)
 
     def get_template_columns(self) -> List[BoardColumn]:
-        """Получить все шаблонные колонки (без привязки к проекту)"""
-        stmt = select(BoardColumn).where(
-            BoardColumn.project_id == None,
-            BoardColumn.is_template == True
-        ).order_by(BoardColumn.template_order)
+        """Получить все колонки"""
+        stmt = select(BoardColumn).order_by(BoardColumn.position)
         return list(self.session.scalars(stmt))
 
     def get_project_columns(self, project_id: int) -> List[BoardColumn]:

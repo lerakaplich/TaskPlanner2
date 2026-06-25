@@ -30,9 +30,6 @@ class Project(Base):
     created_at: Mapped[datetime]
     updated_at: Mapped[datetime]
 
-    # ✅ ОДНО ПОЛЕ для дедлайна (дата + время)
-    deadline: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
-
     selected_column_ids: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
     manager_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
 
@@ -63,8 +60,6 @@ class BoardColumn(Base):
     is_done_column: Mapped[bool] = mapped_column(Boolean, default=False)
 
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
-    is_template: Mapped[bool] = mapped_column(Boolean, default=False)
-    template_order: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
 
     project: Mapped[Optional["Project"]] = relationship(back_populates="columns")
     tasks: Mapped[List["Task"]] = relationship(
@@ -77,7 +72,7 @@ class EmployeeProject(Base):
     __tablename__ = "employees_projects"
 
     employee_id: Mapped[int] = mapped_column(
-        ForeignKey("employees.id", ondelete="CASCADE"),
+        ForeignKey("public.employees.id", ondelete="CASCADE"),
         primary_key=True,
     )
     project_id: Mapped[int] = mapped_column(
@@ -85,10 +80,8 @@ class EmployeeProject(Base):
         primary_key=True,
     )
 
-    role: Mapped[ProjectRoleEnum] = mapped_column(
-        SQLAlchemyEnum(ProjectRoleEnum),
-        default=ProjectRoleEnum.MEMBER
-    )
+    # ✅ ИСПРАВЛЕНО: используем String вместо Enum для совместимости с существующими данными
+    role: Mapped[str] = mapped_column(String(50), default="member")
     joined_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
 
     project: Mapped["Project"] = relationship(back_populates="members")

@@ -91,8 +91,6 @@ class ProjectViewHandler:
             return
 
         for dto in projects_dtos:
-            print(f"   Создаём карточку для проекта {dto.id}: {dto.name}")
-
             card = ProjectCard(
                 project_id=dto.id,
                 project_data=dto,
@@ -223,7 +221,7 @@ class ProjectViewHandler:
         project_page = ProjectViewPage(
             session=self.main.session,
             project_id=project_id,
-            service=self.main.project_service,
+            project_service=self.main.project_service,  # ← заменить service на project_service
             parent=self.main
         )
         self.main.contentStack.addWidget(project_page)
@@ -547,7 +545,7 @@ class NavigationHandler(QObject):
         project_page = ProjectViewPage(
             session=self.main.session,
             project_id=project_id,
-            service=self.main.project_service,
+            project_service=self.main.project_service,  # ← заменить service на project_service
             parent=self.main
         )
         self.main.contentStack.addWidget(project_page)

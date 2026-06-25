@@ -1,5 +1,5 @@
 # services/tasks_service/tasks_kanban_service.py
-
+from datetime import datetime
 from typing import List, Dict, Optional
 from sqlalchemy import select, func
 from sqlalchemy.orm import Session
@@ -59,10 +59,8 @@ class TasksKanbanService:
         ]
 
     def get_template_columns(self) -> List[Dict]:
-        """Получает шаблонные колонки"""
-        stmt = select(BoardColumn).where(
-            BoardColumn.is_template == True
-        ).order_by(BoardColumn.template_order)
+        """Получает все колонки"""
+        stmt = select(BoardColumn).order_by(BoardColumn.position)
         columns = self.db_session.scalars(stmt).all()
         return [
             {
@@ -70,8 +68,7 @@ class TasksKanbanService:
                 "name": col.name,
                 "color": col.color,
                 "position": col.position,
-                "is_done": col.is_done_column,
-                "template_order": col.template_order
+                "is_done": col.is_done_column
             }
             for col in columns
         ]
@@ -107,8 +104,6 @@ class TasksKanbanService:
         stmt = select(BoardColumn).order_by(BoardColumn.position)
         if project_id:
             stmt = stmt.where(BoardColumn.project_id == project_id)
-        else:
-            stmt = stmt.where(BoardColumn.project_id == None, BoardColumn.is_template == True)
 
         columns = self.db_session.scalars(stmt).all()
         result = {}

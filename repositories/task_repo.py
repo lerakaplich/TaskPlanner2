@@ -22,6 +22,43 @@ class TaskRepo:
             query = query.options(joinedload(Task.column))
         return self.session.scalar(query)
 
+    def pause_task(self, task_id: int) -> Optional[Task]:
+        """Поставить задачу на паузу"""
+        task = self.get_by_id(task_id)
+        if task and not task.is_paused and not task.completed:
+            task.is_paused = True
+            task.paused_at = datetime.now()
+            self.session.flush()
+            print(f"⏸️ Задача {task_id} поставлена на паузу в {task.paused_at}")
+        return task
+
+    def resume_task(self, task_id: int) -> Optional[Task]:
+        """Возобновить выполнение задачи"""
+        task = self.get_by_id(task_id)
+        if task and task.is_paused and task.paused_at:
+            # Рассчитываем время паузы
+            paused_duration = (datetime.now() - task.paused_at).total_seconds()
+            task.total_paused_seconds += int(paused_duration)
+            task.is_paused = False
+            task.paused_at = None
+            self.session.flush()
+
+            # Логируем в удобочитаемом формате
+            days = int(paused_duration // 86400)
+            hours = int((paused_duration % 86400) // 3600)
+            minutes = int((paused_duration % 3600) // 60)
+            secs = int(paused_duration % 60)
+
+            pause_str = []
+            if days > 0: pause_str.append(f"{days}д")
+            if hours > 0: pause_str.append(f"{hours}ч")
+            if minutes > 0: pause_str.append(f"{minutes}м")
+            if secs > 0 or not pause_str: pause_str.append(f"{secs}с")
+
+            print(f"▶️ Задача {task_id} возобновлена. Время паузы: {' '.join(pause_str)}. "
+                  f"Всего пауз: {task.total_paused_seconds // 3600}ч {(task.total_paused_seconds % 3600) // 60}м")
+        return task
+
     def get_by_project_with_project(self, project_id: int, employee_id: int = None) -> List[Task]:
         """Получить задачи проекта с загрузкой связанных данных"""
         query = select(Task).where(
@@ -94,30 +131,6 @@ class TaskRepo:
             .order_by(Task.position)
         )
         return list(self.session.scalars(stmt))
-
-    def pause_task(self, task_id: int) -> Optional[Task]:
-        """Поставить задачу на паузу"""
-        task = self.get_by_id(task_id)
-        if task and not task.is_paused and not task.completed:
-            task.is_paused = True
-            task.paused_at = datetime.now()
-            self.session.flush()
-            print(f"⏸️ Задача {task_id} поставлена на паузу в {task.paused_at}")
-        return task
-
-    def resume_task(self, task_id: int) -> Optional[Task]:
-        """Возобновить выполнение задачи"""
-        task = self.get_by_id(task_id)
-        if task and task.is_paused and task.paused_at:
-            # Рассчитываем время паузы
-            paused_duration = (datetime.now() - task.paused_at).total_seconds()
-            task.total_paused_seconds += int(paused_duration)
-            task.is_paused = False
-            task.paused_at = None
-            self.session.flush()
-            print(
-                f"▶️ Задача {task_id} возобновлена. Время паузы: {paused_duration:.0f} сек. Всего пауз: {task.total_paused_seconds} сек.")
-        return task
 
     def get_effective_work_seconds(self, task_id: int) -> float:
         """Получить эффективное время работы (без учёта пауз)"""
@@ -192,6 +205,29 @@ class TaskRepo:
 
             self.session.flush()
         return task
+
+    def get_pause_duration_display(self, task_id: int) -> str:
+        """Возвращает строку с временем паузы"""
+        task = self.get_by_id(task_id)
+        if not task:
+            return "0с"
+
+        total_seconds = task.total_paused_seconds
+        if task.is_paused and task.paused_at:
+            total_seconds += int((datetime.now() - task.paused_at).total_seconds())
+
+        days = total_seconds // 86400
+        hours = (total_seconds % 86400) // 3600
+        minutes = (total_seconds % 3600) // 60
+        seconds = total_seconds % 60
+
+        parts = []
+        if days > 0: parts.append(f"{days}д")
+        if hours > 0: parts.append(f"{hours}ч")
+        if minutes > 0: parts.append(f"{minutes}м")
+        if seconds > 0 or not parts: parts.append(f"{seconds}с")
+
+        return " ".join(parts)
 
     def update_actual_hours(self, task_id: int, actual_hours: float) -> Optional[Task]:
         """Обновить фактические затраченные часы"""

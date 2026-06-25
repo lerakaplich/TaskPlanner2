@@ -46,6 +46,27 @@ class TelegramBot:
         self._reminder_task = None
         self._setup_handlers()
 
+    async def send_project_update_notification(self, user_chat_id: int, project_name: str):
+        """Отправляет уведомление об обновлении проекта"""
+        try:
+            message_text = (
+                f"✏️ *ПРОЕКТ ОБНОВЛЕН!*\n\n"
+                f"📋 *Название:* {project_name}\n\n"
+                f"Информация о проекте была обновлена.\n"
+                f"Вы можете просмотреть актуальные данные в приложении TaskPlanner."
+            )
+
+            await self.bot.send_message(
+                chat_id=user_chat_id,
+                text=message_text,
+                parse_mode="Markdown"
+            )
+            logger.info(f"✅ Уведомление об обновлении проекта отправлено пользователю {user_chat_id}")
+            return True
+        except Exception as e:
+            logger.error(f"❌ Ошибка отправки уведомления об обновлении проекта пользователю {user_chat_id}: {e}")
+            return False
+
     async def send_registration_to_admins(self, request_id: str, registration_data: dict):
         """Отправляет заявку на одобрение администраторам"""
         with get_employees_session() as emp_session:

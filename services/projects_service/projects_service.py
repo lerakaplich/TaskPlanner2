@@ -1,5 +1,5 @@
 # services/projects_service/projects_service.py
-
+from datetime import datetime
 from typing import List, Optional, Dict, Any
 from database import get_tasks_session, get_employees_session
 from sqlalchemy import text
@@ -42,9 +42,6 @@ class ProjectsService:
         return self.get_user_projects_with_roles(user_id)
 
     def get_project_basic_info(self, project_id: int) -> Dict:
-        """
-        Возвращает базовую информацию о проекте
-        """
         project = self.crud.project_repo.get_by_id(project_id)
         if not project:
             return {'id': project_id, 'name': f"Проект #{project_id}", 'is_archived': False}
@@ -54,7 +51,7 @@ class ProjectsService:
             'name': project.name,
             'is_archived': project.is_archived,
             'description': project.description or '',
-            'owner_id': project.owner,
+            'owner_id': project.created_by,  # ← owner → created_by
             'manager_id': project.manager_id
         }
 
@@ -83,11 +80,6 @@ class ProjectsService:
         return role_names.get(project_role.value, 'Участник проекта')
 
     def get_user_projects_with_roles(self, user_id: int) -> List[Dict]:
-        """
-        Возвращает список проектов пользователя с указанием его роли в каждом
-        """
-        from sqlalchemy import text
-
         stmt = text("""
             SELECT 
                 p.id,
@@ -106,7 +98,7 @@ class ProjectsService:
             AND (
                 ep.employee_id IS NOT NULL 
                 OR p.manager_id = :user_id 
-                OR p.owner = :user_id
+                OR p.created_by = :user_id  -- ← owner → created_by
             )
         """)
 
@@ -185,7 +177,7 @@ class ProjectsService:
 
             # 3. Проверяем, является ли пользователь владельцем проекта
             stmt = text("""
-                SELECT owner FROM public.projects WHERE id = :project_id
+                SELECT created_by FROM public.projects WHERE id = :project_id
             """)
             result = self.session.execute(stmt, {'project_id': project_id}).first()
 
@@ -395,40 +387,45 @@ class ProjectsService:
             'description': project_dto.description,
             'is_active': not project_dto.is_archived,
             'created_date': project_dto.created_at.strftime('%d.%m.%Y') if project_dto.created_at else '',
-            'member_ids': project_dto.member_ids or [],
-            'admin_ids': project_dto.admin_ids or [],
             'selected_columns_data': project_dto.selected_columns_data or [],
             'selected_columns_keys': [col.get('col_key', '') for col in (project_dto.selected_columns_data or [])],
             'manager_id': project_dto.manager_id,
             'manager_name': project_dto.manager_name,
             'participants': [],
-            'admins': []
+            'admins': [],
+            'members': []  # ✅ Добавляем для обратной совместимости
         }
 
-        if result['member_ids']:
-            emp_session = get_employees_session()
-            if emp_session:
-                stmt = select(Employee).where(Employee.id.in_(result['member_ids']))
-                employees = emp_session.scalars(stmt).all()
-                for emp in employees:
-                    result['participants'].append({
-                        'id': emp.id, 'last_name': emp.last_name, 'first_name': emp.first_name,
-                        'middle_name': emp.middle_name or '', 'position': emp.position or 'Сотрудник',
-                        'phone': emp.phone_number or '', 'email': emp.email or ''
-                    })
-                emp_session.close()
+        # ✅ Используем members вместо member_ids/admin_ids
+        if project_dto.members:
+            # Собираем ID участников и администраторов
+            member_ids = []
+            admin_ids = []
+            for member in project_dto.members:
+                member_ids.append(member.employee_id)
+                if member.role == 'project_manager':
+                    admin_ids.append(member.employee_id)
 
-        if result['admin_ids']:
+            # Загружаем сотрудников
             emp_session = get_employees_session()
-            if emp_session:
-                stmt = select(Employee).where(Employee.id.in_(result['admin_ids']))
+            if emp_session and member_ids:
+                stmt = select(Employee).where(Employee.id.in_(member_ids))
                 employees = emp_session.scalars(stmt).all()
+
                 for emp in employees:
-                    result['admins'].append({
-                        'id': emp.id, 'last_name': emp.last_name, 'first_name': emp.first_name,
-                        'middle_name': emp.middle_name or '', 'position': emp.position or 'Сотрудник',
-                        'phone': emp.phone_number or '', 'email': emp.email or ''
-                    })
+                    emp_data = {
+                        'id': emp.id,
+                        'last_name': emp.last_name,
+                        'first_name': emp.first_name,
+                        'middle_name': emp.middle_name or '',
+                        'position': emp.position or 'Сотрудник',
+                        'phone': emp.phone_number or '',
+                        'email': emp.email or ''
+                    }
+                    result['participants'].append(emp_data)
+                    if emp.id in admin_ids:
+                        result['admins'].append(emp_data)
+
                 emp_session.close()
 
         return result
@@ -507,20 +504,69 @@ class ProjectsService:
         project_dto.selected_columns_data = dialog_data.get('selected_columns_data', [])
         project_dto.manager_id = dialog_data.get('manager_id')
 
-        def extract_ids(data):
-            if isinstance(data, str):
-                return [int(i.strip()) for i in data.split(',') if i.strip().isdigit()]
-            elif isinstance(data, list):
-                ids = []
-                for item in data:
-                    if isinstance(item, dict):
-                        ids.append(item.get('id'))
-                    elif isinstance(item, int):
-                        ids.append(item)
-                return [id for id in ids if id]
-            return []
+        # ✅ ИСПРАВЛЕНО: создаём members из participants и admins
+        participants = dialog_data.get('participants', [])
+        admins = dialog_data.get('admins', [])
 
-        project_dto.member_ids = extract_ids(dialog_data.get('participants_ids', []))
-        project_dto.admin_ids = extract_ids(dialog_data.get('admins_ids', []))
+        # Собираем ID администраторов
+        admin_ids = set()
+        for admin in admins:
+            if isinstance(admin, dict):
+                admin_ids.add(admin.get('id'))
+            else:
+                admin_ids.add(admin)
+
+        # Создаём список members
+        members_list = []
+        for participant in participants:
+            if isinstance(participant, dict):
+                emp_id = participant.get('id')
+                if emp_id:
+                    role = 'project_manager' if emp_id in admin_ids else 'member'
+                    members_list.append({
+                        'employee_id': emp_id,
+                        'full_name': participant.get('full_name', f"User {emp_id}"),
+                        'role': role,
+                        'joined_at': datetime.now()
+                    })
+            elif isinstance(participant, int):
+                role = 'project_manager' if participant in admin_ids else 'member'
+                members_list.append({
+                    'employee_id': participant,
+                    'full_name': f"User {participant}",
+                    'role': role,
+                    'joined_at': datetime.now()
+                })
+
+        # Добавляем создателя, если его нет в списке
+        creator_id = project_dto.created_by
+        if creator_id and not any(m.get('employee_id') == creator_id for m in members_list):
+            members_list.append({
+                'employee_id': creator_id,
+                'full_name': f"User {creator_id}",
+                'role': 'project_manager',
+                'joined_at': datetime.now()
+            })
+
+        # Добавляем куратора, если его нет в списке
+        manager_id = dialog_data.get('manager_id')
+        if manager_id and not any(m.get('employee_id') == manager_id for m in members_list):
+            members_list.append({
+                'employee_id': manager_id,
+                'full_name': f"User {manager_id}",
+                'role': 'curator',
+                'joined_at': datetime.now()
+            })
+
+        # Преобразуем в список ProjectMemberDTO
+        from models.schemas.projects_dto import ProjectMemberDTO
+        project_dto.members = []
+        for member_data in members_list:
+            project_dto.members.append(ProjectMemberDTO(
+                employee_id=member_data['employee_id'],
+                full_name=member_data['full_name'],
+                role=member_data['role'],
+                joined_at=member_data['joined_at']
+            ))
 
         return project_dto

@@ -66,10 +66,7 @@ class TasksCrudService:
                     column_ids = [int(id_str.strip()) for id_str in ids_str.split(',') if id_str.strip()]
 
             if not column_ids:
-                # Возвращаем шаблонные колонки по умолчанию
-                stmt = select(BoardColumn).where(
-                    BoardColumn.is_template == True
-                ).order_by(BoardColumn.template_order)
+                stmt = select(BoardColumn).order_by(BoardColumn.position)
                 columns = self.db_session.scalars(stmt).all()
             else:
                 stmt = select(BoardColumn).where(BoardColumn.id.in_(column_ids)).order_by(BoardColumn.position)
@@ -186,7 +183,7 @@ class TasksCrudService:
         return filtered
 
     def get_project_columns_by_ids(self, project_id: int) -> List[Dict]:
-        """Получает колонки проекта по его ID (с fallback на шаблонные)"""
+        """Получает колонки проекта по его ID (с fallback на все колонки)"""
         from models.projects import BoardColumn
         from sqlalchemy import select
 
@@ -201,9 +198,8 @@ class TasksCrudService:
                     column_ids = [int(id_str.strip()) for id_str in ids_str.split(',') if id_str.strip()]
 
             if not column_ids:
-                stmt = select(BoardColumn).where(
-                    BoardColumn.is_template == True
-                ).order_by(BoardColumn.template_order)
+                # ✅ ИСПРАВЛЕНО: берем все колонки, сортируем по position
+                stmt = select(BoardColumn).order_by(BoardColumn.position)
                 columns = self.db_session.scalars(stmt).all()
             else:
                 stmt = select(BoardColumn).where(BoardColumn.id.in_(column_ids)).order_by(BoardColumn.position)
@@ -485,7 +481,7 @@ class TasksCrudService:
         """Подготавливает данные для диалога создания/редактирования задачи"""
         from models.tasks import Tag
         from database import get_employees_session
-        from models.employees import Employee  # из models/employees.py
+        from models.employees import Employee
 
         result = {
             "projects": [],
@@ -508,7 +504,7 @@ class TasksCrudService:
                 seen_statuses.add(col.name)
                 result["statuses"].append({"id": col.id, "name": col.name})
 
-        # Получаем сотрудников из БД employees (без фильтрации по is_active)
+        # Получаем сотрудников из БД employees
         employees_session = get_employees_session()
         if employees_session:
             try:
@@ -530,8 +526,8 @@ class TasksCrudService:
         else:
             print("⚠️ Нет подключения к базе employees")
 
-        # Получаем теги (из taskplanner)
-        stmt = select(Tag).where(Tag.is_archived == False).order_by(Tag.name)
+        # ✅ ИСПРАВЛЕНО: убираем фильтр is_archived
+        stmt = select(Tag).order_by(Tag.name)  # <-- убрали .where(Tag.is_archived == False)
         tags = self.db_session.scalars(stmt).all()
         result["tags"] = [{"id": t.id, "name": t.name, "color": t.color} for t in tags]
 
@@ -651,48 +647,28 @@ class TasksCrudService:
         return self.get_all_columns()
 
     def get_all_columns(self) -> List[Dict]:
-        """Получить все уникальные колонки (из шаблонов и проектов)"""
+        """Получить все уникальные колонки"""
         print(f"🔍 get_all_columns: mode={self.mode}, вызывается...")
 
         columns_by_name = {}
 
-        # 1. Получаем шаблонные колонки через переданный сервис
-        if self._column_service:
-            template_columns = self._column_service.get_template_columns()
-        else:
-            temp_service = ColumnService(self.db_session)
-            template_columns = temp_service.get_template_columns()
-
-        for col in template_columns:
-            columns_by_name[col["name"]] = {
-                "id": col["id"],
-                "name": col["name"],
-                "color": col.get("color", "#2196F3"),
-                "position": col.get("position", 0),
-                "is_done": col.get("is_done_column", False),
-                "is_template": True
-            }
-
-        # 2. Получаем колонки из проектов (если есть)
         stmt = select(BoardColumn).order_by(BoardColumn.position)
-        project_columns = self.db_session.scalars(stmt).all()
+        all_columns = self.db_session.scalars(stmt).all()
 
-        for col in project_columns:
+        for col in all_columns:
             if col.name not in columns_by_name:
                 columns_by_name[col.name] = {
                     "id": col.id,
                     "name": col.name,
                     "color": col.color if col.color else "#2196F3",
                     "position": col.position,
-                    "is_done": col.is_done_column,
-                    "is_template": False
+                    "is_done": col.is_done_column
                 }
 
-        # Сортируем по позиции
         result = sorted(columns_by_name.values(), key=lambda x: x["position"])
 
         for col in result:
-            print(f"  - {col['name']} (позиция: {col['position']}, шаблон: {col.get('is_template', False)})")
+            print(f"  - {col['name']} (позиция: {col['position']})")
 
         return result
 
@@ -795,22 +771,10 @@ class TasksCrudService:
         }
 
     def _get_column_by_name(self, column_name: str, project_id: int = None) -> Optional[BoardColumn]:
-        """Получить колонку по имени (сначала ищем шаблонные, потом проектные)"""
+        """Получить колонку по имени"""
         if not column_name:
             return None
 
-        # Сначала ищем в шаблонных колонках (is_template=True)
-        stmt = select(BoardColumn).where(
-            BoardColumn.name == column_name,
-            BoardColumn.is_template == True
-        )
-        column = self.db_session.scalar(stmt)
-
-        if column:
-            print(f"   ✅ Найдена шаблонная колонка '{column_name}' с id={column.id}")
-            return column
-
-        # Если не нашли и есть project_id, ищем среди колонок проекта
         if project_id:
             stmt = select(BoardColumn).where(
                 BoardColumn.name == column_name,
@@ -821,11 +785,11 @@ class TasksCrudService:
                 print(f"   ✅ Найдена колонка проекта '{column_name}' с id={column.id}")
                 return column
 
-        # Если всё ещё не нашли, ищем любую колонку с таким именем
+        # Если не нашли в проекте, ищем любую колонку с таким именем
         stmt = select(BoardColumn).where(BoardColumn.name == column_name)
         column = self.db_session.scalar(stmt)
         if column:
-            print(f"   ⚠️ Найдена колонка '{column_name}' (не шаблонная, не для проекта {project_id}) с id={column.id}")
+            print(f"   ✅ Найдена колонка '{column_name}' с id={column.id}")
             return column
 
         print(f"   ❌ Колонка '{column_name}' не найдена!")

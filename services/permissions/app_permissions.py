@@ -6,7 +6,7 @@ from functools import lru_cache
 
 class AppRole(Enum):
     """Роли на уровне приложения"""
-    SUPER_ADMIN = "super_admin"  # Суперадмин - может всё
+    SUPER_ADMIN = "superadmin"  # Суперадмин - может всё
     ADMIN = "admin"  # Админ - почти всё, кроме управления админами и суперадминами
     USER = "user"  # Пользователь - ограниченный доступ
 

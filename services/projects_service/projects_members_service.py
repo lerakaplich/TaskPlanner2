@@ -172,7 +172,6 @@ class ProjectsMembersService:
             stmt = select(Division.id, Division.name).where(Division.name.isnot(None)).order_by(Division.name)
             divisions = self.employees_session.execute(stmt).all()
             result['divisions'] = [(div_id, div_name) for div_id, div_name in divisions]
-            print(f"📊 Загружено подразделений: {len(result['divisions'])}")
         except Exception as e:
             print(f"⚠️ Ошибка загрузки подразделений: {e}")
 
@@ -181,7 +180,6 @@ class ProjectsMembersService:
             stmt = select(Department.id, Department.name).where(Department.name.isnot(None)).order_by(Department.name)
             departments = self.employees_session.execute(stmt).all()
             result['departments'] = [(dept_id, dept_name) for dept_id, dept_name in departments]
-            print(f"📊 Загружено отделов: {len(result['departments'])}")
         except Exception as e:
             print(f"⚠️ Ошибка загрузки отделов: {e}")
 
@@ -208,7 +206,6 @@ class ProjectsMembersService:
                         'division_id': emp.division_id,
                         'role': 'user'
                     })
-            print(f"📊 Загружено сотрудников: {len(result['employees'])}")
         except Exception as e:
             print(f"❌ Ошибка загрузки сотрудников: {e}")
 

@@ -264,6 +264,13 @@ class BaseProjectDialog(QDialog):
             self.participants = self._normalize_data(self.project_data.get('participants', []))
             self.admins = self._normalize_data(self.project_data.get('admins', []))
 
+        # ✅ ВАЖНО: Убеждаемся, что все администраторы есть в participants
+        for admin in self.admins:
+            admin_id = admin.get('id') if isinstance(admin, dict) else admin
+            if admin_id and not any(
+                    p.get('id') == admin_id if isinstance(p, dict) else p == admin_id for p in self.participants):
+                self.participants.append(admin)
+
         self._update_participants_button_text()
         self._update_admins_button_text()
 
@@ -305,6 +312,10 @@ class BaseProjectDialog(QDialog):
         manager_id = self.get_manager_id()
         if manager_id:
             participants_ids.add(str(manager_id))
+
+        # ✅ ВАЖНО: ВСЕ администраторы должны быть в участниках
+        for admin_id in admins_ids:
+            participants_ids.add(admin_id)
 
         data = {
             'name': self.nameInput.text() if hasattr(self, 'nameInput') else '',

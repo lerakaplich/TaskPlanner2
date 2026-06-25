@@ -1,7 +1,7 @@
 # windows/my_tasks/my_tasks_page.py
 
 import os
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 from PyQt6 import uic
 from PyQt6.QtCore import Qt, pyqtSignal, QTimer
