@@ -42,6 +42,8 @@ class AppPermissionManager:
             'can_view_analytics',  # Может видеть страницу аналитики
             'can_view_settings',  # Может видеть страницу настроек
             'can_edit_settings',  # Может редактировать настройки
+            'can_view_own_overtime',  # <-- ДОБАВИТЬ
+            'can_view_all_overtime',  # <-- ДОБАВИТЬ (для просмотра всех)
 
             # Задачи
             'can_create_task_in_any_project',  # Может создавать задачи в любом проекте
@@ -75,6 +77,8 @@ class AppPermissionManager:
             'can_view_analytics',
             'can_view_settings',
             'can_edit_settings',
+            'can_view_own_overtime',  # <-- ДОБАВИТЬ
+            'can_view_all_overtime',  # <-- ДОБАВИТЬ (для просмотра всех)
 
             # Задачи
             'can_create_task_in_any_project',

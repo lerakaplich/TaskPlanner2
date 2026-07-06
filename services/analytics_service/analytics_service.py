@@ -31,6 +31,13 @@ class AnalyticsService:
         except:
             pass
 
+    def filter_employees_by_period(self, employees_data: List[Dict], period: str) -> List[Dict]:
+        """Фильтрует сотрудников по периоду с пересчётом КПД"""
+        # Используем метод из AnalyticsFilterService
+        from .analytics_filter_service import AnalyticsFilterService
+        filter_service = AnalyticsFilterService(self.session, self.employees.employees_session)
+        return filter_service.filter_employees_by_period(employees_data, period)
+
     def set_current_user_id(self, user_id: int):
         self.current_user_id = user_id
         print(f"📊 AnalyticsService: current_user_id = {user_id}")

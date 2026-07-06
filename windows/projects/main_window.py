@@ -70,27 +70,31 @@ class MainWindow(QMainWindow):
         self.analytics_service.set_current_user_id(self.current_user_id)
         self.overtime_service.set_current_user_id(self.current_user_id)
 
+    # windows/projects/main_window.py
+
     def _init_permission_service(self):
         """Инициализация сервиса прав доступа"""
-        self.permission_service = PermissionService(
-            user_id=self.current_user_id,
-            app_service=self.project_service,
-            project_service=self.project_service,
-            employee_service=None
-        )
-        print(f"🔐 Сервис прав инициализирован для пользователя {self.current_user_id}")
-        print(f"   Роль в приложении: {self.permission_service.app_manager.role.value}")
-        print(f"   Тип роли: {type(self.permission_service.app_manager.role)}")
-
-
         try:
-            projects = self.project_service.get_projects_for_cards(owner_filter=True)
-            if projects:
-                test_project_id = projects[0].id
-                can_edit = self.permission_service.can_edit_project(test_project_id)
-                print(f"   Тестовый проект {test_project_id}: can_edit={can_edit}")
+            self.permission_service = PermissionService(
+                user_id=self.current_user_id,
+                app_service=self.project_service,
+                project_service=self.project_service,
+                employee_service=None,
+                session=self.session
+            )
+            print(f"🔐 Сервис прав инициализирован для пользователя {self.current_user_id}")
+            print(f"   Роль в приложении: {self.permission_service.app_manager.role.value}")
         except Exception as e:
-            print(f"   Ошибка проверки прав: {e}")
+            print(f"⚠️ Ошибка инициализации сервиса прав: {e}")
+            # Создаём минимальный сервис прав
+            from services.permissions.app_permissions import AppPermissionManager, AppRole
+            self.permission_service = PermissionService(
+                user_id=self.current_user_id,
+                app_service=self.project_service,
+                project_service=self.project_service,
+                employee_service=None,
+                session=self.session
+            )
 
     def _load_current_user(self):
         """Загрузка текущего пользователя через сервис"""
@@ -105,6 +109,8 @@ class MainWindow(QMainWindow):
             if 'middle_name' not in self.current_user:
                 self.current_user['middle_name'] = ''
 
+    # windows/projects/main_window.py
+
     def _setup_permission_ui(self):
         """Настраивает UI в зависимости от прав пользователя"""
         if not self.permission_service:
@@ -118,6 +124,7 @@ class MainWindow(QMainWindow):
 
         # 2. Настройка видимости вкладок в левой панели
         visible_tabs = self.permission_service.app_manager.get_visible_tabs()
+        print(f"   📋 visible_tabs: {visible_tabs}")
 
         tab_buttons = {
             'projects': None,
@@ -126,7 +133,7 @@ class MainWindow(QMainWindow):
             'gantt': None,
             'analytics': None,
             'chat': None,
-            'overtime': None,
+            'overtime': None,  # ← УБЕДИТЬСЯ, ЧТО ЕСТЬ
             'settings': None,
             'archive': None
         }
@@ -144,7 +151,7 @@ class MainWindow(QMainWindow):
             tab_buttons['analytics'] = self.leftPanel.btnAnalytics
         if hasattr(self.leftPanel, 'btnChat'):
             tab_buttons['chat'] = self.leftPanel.btnChat
-        if hasattr(self.leftPanel, 'btnOvertime'):
+        if hasattr(self.leftPanel, 'btnOvertime'):  # ← УБЕДИТЬСЯ, ЧТО ЕСТЬ
             tab_buttons['overtime'] = self.leftPanel.btnOvertime
         if hasattr(self.leftPanel, 'btnSettings'):
             tab_buttons['settings'] = self.leftPanel.btnSettings
@@ -156,14 +163,7 @@ class MainWindow(QMainWindow):
             if button:
                 is_visible = tab_name in visible_tabs
                 button.setVisible(is_visible)
-                if not is_visible:
-                    print(f"   Скрыта вкладка: {tab_name}")
-
-        # 3. Дополнительные настройки для страницы переработок
-        if hasattr(self.leftPanel, 'btnOvertime') and self.leftPanel.btnOvertime.isVisible():
-            can_view_all = self.permission_service.can_show_overtime_tab_all()
-            # Флаг будет использован на странице переработок
-            self._overtime_can_view_all = can_view_all
+                print(f"   {tab_name}: visible={is_visible}")
 
     def _on_columns_updated(self):
         """Обработчик обновления колонок"""
@@ -234,7 +234,7 @@ class MainWindow(QMainWindow):
             self.leftPanel.btnGantt: self.navigation.PAGE_GANTT,
             self.leftPanel.btnAnalytics: self.navigation.PAGE_ANALYTICS,
             self.leftPanel.btnChat: self.navigation.PAGE_CHAT,
-            self.leftPanel.btnOvertime: self.navigation.PAGE_OVERTIME,
+            self.leftPanel.btnOvertime: self.navigation.PAGE_OVERTIME,  # <-- ДОБАВИТЬ ЭТУ СТРОКУ
             self.leftPanel.btnSettings: self.navigation.PAGE_SETTINGS
         }
         if hasattr(self.leftPanel, 'btnArchive'):
@@ -242,6 +242,8 @@ class MainWindow(QMainWindow):
 
         for btn, index in self.nav_map.items():
             btn.clicked.connect(lambda checked, i=index: self.navigation.switch_page(i))
+
+        # ... остальной код
 
         if hasattr(self, 'btnCreateProject'):
             self.btnCreateProject.clicked.connect(self.project_handler.create_project)
@@ -276,7 +278,6 @@ class MainWindow(QMainWindow):
     def _show_notifications(self):
         print("Показать уведомления...")
 
-    # Прокси-методы для доступа из обработчиков
     def refresh_projects_view(self):
         self.project_handler.refresh_projects_view()
 

@@ -599,11 +599,18 @@ class ProjectsCrudService:
                                owner_filter: bool = False) -> List[ProjectCardDTO]:
         """Получить проекты для карточек, отсортированные по дате создания (новые сверху)"""
         try:
-            all_projects = self.project_repo.get_all(exclude_archived=True)
+            # Если транзакция повреждена, откатываем её
+            try:
+                all_projects = self.project_repo.get_all(exclude_archived=True)
+            except Exception as e:
+                self.session.rollback()
+                print(f"⚠️ Ошибка при загрузке проектов, транзакция откатана: {e}")
+                return []
 
             # Фильтруем проекты
             filtered_projects = []
             for proj in all_projects:
+                # owner_filter теперь проверяет created_by
                 if owner_filter and proj.created_by != self.current_user_id:
                     continue
                 if search_query and search_query.lower() not in proj.name.lower():
@@ -627,22 +634,18 @@ class ProjectsCrudService:
                 admin_count = 0
                 if hasattr(proj, 'members'):
                     for m in proj.members:
-                        # Получаем значение role
                         role_value = getattr(m, 'role', None)
-                        # Если role это строка - сравниваем напрямую
                         if role_value == 'project_manager':
                             admin_count += 1
-                        # Если это Enum - берем его значение
                         elif hasattr(role_value, 'value') and role_value.value == 'project_manager':
                             admin_count += 1
-                        # Для надежности - приводим к строке и сравниваем
                         elif str(role_value) == 'project_manager':
                             admin_count += 1
 
                 column_ids = self.project_repo.get_selected_column_ids(proj.id)
                 columns_count = len(column_ids) if column_ids else 0
 
-                # Получаем имя владельца
+                # Получаем имя владельца (created_by)
                 owner_name = "Не назначен"
                 if proj.created_by:
                     owner = self.employee_repo.get_by_id(proj.created_by)
@@ -672,7 +675,7 @@ class ProjectsCrudService:
                     member_count=member_count,
                     admin_count=admin_count,
                     owner_name=owner_name,
-                    owner_id=proj.created_by,
+                    owner_id=proj.created_by,  # owner_id → created_by
                     created_at=created_at_str,
                     columns_count=columns_count,
                     manager_name=manager_name

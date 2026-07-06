@@ -82,15 +82,15 @@ class ProjectsService:
     def get_user_projects_with_roles(self, user_id: int) -> List[Dict]:
         stmt = text("""
             SELECT 
-                p.id,
-                p.name,
-                p.is_archived,
-                ep.is_admin,
-                CASE 
-                    WHEN p.manager_id = :user_id THEN 'curator'
-                    WHEN ep.is_admin = true THEN 'project_manager'
-                    ELSE 'member'
-                END as role_in_project
+    p.id,
+    p.name,
+    p.is_archived,
+    ep.role,  # ← используем role
+    CASE 
+        WHEN p.manager_id = :user_id THEN 'curator'
+        WHEN ep.role = 'project_manager' THEN 'project_manager'
+        ELSE 'member'
+    END as role_in_project
             FROM public.projects p
             LEFT JOIN public.employees_projects ep 
                 ON ep.project_id = p.id AND ep.employee_id = :user_id
@@ -160,18 +160,19 @@ class ProjectsService:
                 return ProjectRole.CURATOR
 
             # 2. Проверяем, является ли пользователь администратором проекта
+            # ✅ ПРАВИЛЬНО - используем role
             stmt = text("""
-                SELECT is_admin FROM public.employees_projects 
+                SELECT role FROM public.employees_projects 
                 WHERE project_id = :project_id AND employee_id = :user_id
             """)
-            result = self.session.execute(stmt, {
-                'project_id': project_id,
-                'user_id': user_id
-            }).first()
+            result = self.session.execute(stmt, {...}).first()
 
             if result:
-                if result[0]:  # is_admin = True
+                role_str = result[0]
+                if role_str == 'project_manager':
                     return ProjectRole.PROJECT_MANAGER
+                elif role_str == 'curator':
+                    return ProjectRole.CURATOR
                 else:
                     return ProjectRole.MEMBER
 

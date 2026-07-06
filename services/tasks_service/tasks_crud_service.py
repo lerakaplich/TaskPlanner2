@@ -900,3 +900,23 @@ class TasksCrudService:
             return datetime.strptime(date_str, "%Y-%m-%d")
         except (ValueError, TypeError):
             return None
+
+    def get_tasks_for_user(self, user_id: int, project_id: int, permission_service=None) -> List[Dict]:
+        """
+        Получает задачи для пользователя с учетом прав
+        """
+        # Получаем все задачи проекта
+        all_tasks = self.get_by_project(project_id, load_column=True)
+
+        if not permission_service:
+            return all_tasks
+
+        # Определяем фильтр видимости
+        visibility_filter = permission_service.get_task_visibility_filter(project_id)
+
+        if visibility_filter == 'all':
+            # Руководитель/куратор - видят все задачи
+            return all_tasks
+        else:
+            # Участник - видит только свои задачи
+            return [task for task in all_tasks if task.get('created_by') == user_id]

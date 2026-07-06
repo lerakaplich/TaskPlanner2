@@ -17,7 +17,7 @@ class ThemesAnalytics(AnalyticsBaseService):
 
     def get_themes_stats(self) -> List[Dict[str, Any]]:
         """Получить статистику по всем темам (тегам)"""
-        all_tags = self.tag_repo.get_all(include_archived=False)
+        all_tags = self.tag_repo.get_all()
         result = []
 
         for tag in all_tags:

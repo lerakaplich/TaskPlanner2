@@ -290,12 +290,23 @@ class EmployeeService:
     def delete_employee(self, employee_id: int) -> bool:
         """Мягкое удаление сотрудника (только в EmployeeData)"""
         try:
+            # 1. Сначала обновляем EmployeeData (taskplanner)
             result = self.employee_data_repo.set_active(employee_id, False)
             if result:
                 self.tasks_session.commit()
+
+            # 2. Также обновляем запись в employees (если есть поле is_active)
+            employee = self.employee_repo.get_by_id(employee_id)
+            if employee:
+                # Если в модели Employee есть поле is_active, обновляем его
+                if hasattr(employee, 'is_active'):
+                    employee.is_active = False
+                    self.session.commit()
+
             return result
         except Exception as e:
             self.tasks_session.rollback()
+            self.session.rollback()
             print(f"❌ Ошибка при удалении сотрудника: {e}")
             return False
 
@@ -303,23 +314,47 @@ class EmployeeService:
         """Полное удаление сотрудника из обеих БД"""
         try:
             # 1. Удаляем из EmployeeData (taskplanner)
-            # Сначала проверяем, есть ли записи
             emp_data = self.employee_data_repo.get_by_id(employee_id)
             if emp_data:
                 self.tasks_session.delete(emp_data)
+                self.tasks_session.commit()
 
             # 2. Удаляем из employees
             result = self.employee_repo.hard_delete(employee_id)
+            if result:
+                self.session.commit()
 
-            # 3. Коммитим
-            self.session.commit()
-            self.tasks_session.commit()
             return result
         except Exception as e:
             self.session.rollback()
             self.tasks_session.rollback()
             print(f"❌ Ошибка при полном удалении сотрудника: {e}")
             return False
+
+    def delete_employee_by_id_with_check(self, employee_id: int) -> Dict[str, Any]:
+        """Удаляет сотрудника с проверками (мягкое удаление)"""
+        try:
+            # Проверяем, есть ли активные задачи
+            from models.tasks import Task
+            tasks_count = self.tasks_session.query(Task).filter(
+                Task.assigned_to == employee_id,
+                Task.is_archived == False
+            ).count()
+
+            if tasks_count > 0:
+                return {
+                    'success': False,
+                    'message': f'Нельзя удалить сотрудника, у которого есть {tasks_count} активных задач. Сначала переназначьте задачи.'
+                }
+
+            # Выполняем мягкое удаление
+            result = self.delete_employee(employee_id)
+            if result:
+                return {'success': True, 'message': 'Сотрудник успешно удалён'}
+            else:
+                return {'success': False, 'message': 'Ошибка при удалении сотрудника'}
+        except Exception as e:
+            return {'success': False, 'message': str(e)}
 
     def save_employee_from_dialog(self, employee_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """Сохраняет сотрудника из диалога (создание или обновление)"""
@@ -571,29 +606,6 @@ class EmployeeService:
         if employee:
             return self.base._get_full_name(employee)
         return 'Неизвестный'
-
-    def delete_employee_by_id_with_check(self, employee_id: int) -> Dict[str, Any]:
-        """Удаляет сотрудника с проверками"""
-        try:
-            from models.tasks import Task
-            tasks_count = self.tasks_session.query(Task).filter(
-                Task.assigned_to == employee_id,
-                Task.is_archived == False
-            ).count()
-
-            if tasks_count > 0:
-                return {
-                    'success': False,
-                    'message': f'Нельзя удалить сотрудника, у которого есть {tasks_count} активных задач. Сначала переназначьте задачи.'
-                }
-
-            result = self.delete_employee(employee_id)
-            if result:
-                return {'success': True, 'message': 'Сотрудник успешно удалён'}
-            else:
-                return {'success': False, 'message': 'Ошибка при удалении сотрудника'}
-        except Exception as e:
-            return {'success': False, 'message': str(e)}
 
     # =====================================================
     # Методы каскадного удаления

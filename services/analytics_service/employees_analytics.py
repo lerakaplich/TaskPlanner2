@@ -17,6 +17,18 @@ class EmployeesAnalytics(AnalyticsBaseService):
         super().__init__(session)
         self.overtime_session = overtime_session
 
+    def filter_employees_by_department(self, employees_data: List[Dict], department_id: Optional[int]) -> List[Dict]:
+        """Фильтрует сотрудников по отделу"""
+        if department_id is None or department_id == "all" or department_id == 0:
+            return employees_data
+        # Если пришла строка "dept_X", извлекаем ID
+        if isinstance(department_id, str) and department_id.startswith("dept_"):
+            try:
+                department_id = int(department_id.split("_")[1])
+            except (ValueError, IndexError):
+                return employees_data
+        return [emp for emp in employees_data if emp.get("department_id") == department_id]
+
     def get_employee_card_data(self, employee_id: int) -> Dict[str, Any]:
         """Получить данные сотрудника для карточки EmployeeCard"""
         emp = self.employees_session.get(Employee, employee_id)
@@ -262,12 +274,6 @@ class EmployeesAnalytics(AnalyticsBaseService):
             "subordinates_count": len(subordinates_ids),
             "subordinates": subordinates_data
         }
-
-    def filter_employees_by_department(self, employees_data: List[Dict], department_id: Optional[int]) -> List[Dict]:
-        """Фильтрует сотрудников по отделу"""
-        if not department_id or department_id == 0:
-            return employees_data
-        return [emp for emp in employees_data if emp.get("department_id") == department_id]
 
     def get_departments_list(self) -> List[Dict[str, Any]]:
         """Получить список всех отделов"""

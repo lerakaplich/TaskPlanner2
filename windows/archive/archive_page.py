@@ -33,7 +33,7 @@ class ArchivePage(QWidget):
         self.current_search_text = ""
         self.current_project_id = None
         self._is_initialized = False
-        self._resize_timer = None
+        self._resize_timer = QTimer()  # ✅ Инициализируем сразу
 
         # Загрузка UI
         ui_path = os.path.join(
@@ -180,7 +180,8 @@ class ArchivePage(QWidget):
     def resizeEvent(self, event):
         super().resizeEvent(event)
         if hasattr(self, '_resize_timer'):
-            self._resize_timer.stop()
+            if self._resize_timer is not None:
+                self._resize_timer.stop()
         self._resize_timer = QTimer()
         self._resize_timer.setSingleShot(True)
         self._resize_timer.timeout.connect(lambda: self.refresh_current_view())

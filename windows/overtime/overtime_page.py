@@ -81,15 +81,21 @@ class OvertimePage(QWidget):
 
         # 3. Кнопка экспорта - только для админа и суперадмина
         if hasattr(self, 'btnExport'):
-            # Используем ту же проверку, что и для добавления (админ/суперадмин)
             can_export = self.permission_service.can_add_overtime()
             self.btnExport.setVisible(can_export)
             self.btnExport.setEnabled(can_export)
             print(f"   btnExport visible: {can_export}")
 
-        # 4. Вкладка "Все переработки" - только для начальников
+        # 4. Вкладка "Все переработки" - только для суперадмина, админа и начальников
         if hasattr(self, 'tabWidget'):
-            can_view_all = self.permission_service.can_show_overtime_tab_all()
+            # Используем app_manager для проверки прав
+            role = self.permission_service.app_manager.role
+            can_view_all = role in (AppRole.SUPER_ADMIN, AppRole.ADMIN)
+
+            # ИЛИ через CombinedRole
+            # combined = self.permission_service.get_combined_role()
+            # can_view_all = combined.can_view_all_overtime()
+
             if self.tabWidget.count() > 1:
                 self.tabWidget.setTabVisible(1, can_view_all)
                 print(f"   Вкладка 'Все переработки' visible: {can_view_all}")

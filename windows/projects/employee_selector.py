@@ -220,6 +220,7 @@ class EmployeeSelectorDialog(QDialog):
         if self.service and not self.readonly_mode:
             data = self.service.load_employee_selector_data()
             self.all_employees = data.get('employees', self.all_employees)
+            # ⭐ ВАЖНО: сохраняем выбранные ID
             selected_ids = self.selected_employees.copy()
             self.selected_employees = selected_ids
         self.apply_filters()
@@ -350,7 +351,7 @@ class EmployeeSelectorDialog(QDialog):
                     layout.addWidget(checkbox)
                     self.checkboxes.append(checkbox)
         else:
-            # Режим редактирования
+            # ⭐ РЕЖИМ РЕДАКТИРОВАНИЯ - выбранные сотрудники ВСЕГДА показываются сверху
             if selected_emps:
                 separator = QLabel("✓ ВЫБРАННЫЕ")
                 separator.setStyleSheet("""
@@ -452,6 +453,9 @@ class EmployeeSelectorDialog(QDialog):
             self.selected_employees.discard(emp_id)
 
         self.update_selected_count()
+        # ⭐ ВАЖНО: после изменения состояния пересортировываем и обновляем отображение
+        self.sort_employees()
+        self.display_employees()
 
     def on_select_all_changed(self, state):
         """Обработка изменения состояния чекбокса 'Выбрать всех'"""
@@ -472,6 +476,7 @@ class EmployeeSelectorDialog(QDialog):
 
         self.selectAllCheckBox.blockSignals(False)
         self.sort_employees()
+        self.display_employees()  # ⭐ Добавлен вызов для обновления списка
 
     def update_selected_count(self):
         """Обновление счетчика выбранных сотрудников"""

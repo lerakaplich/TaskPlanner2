@@ -13,10 +13,6 @@ class TagRepo:
     def __init__(self, session: Session):
         self.session = session
 
-    # =========================
-    # CRUD для тегов
-    # =========================
-
     def get_by_id(self, tag_id: int) -> Optional[Tag]:
         return self.session.get(Tag, tag_id)
 
@@ -78,10 +74,6 @@ class TagRepo:
                 'updated_at': tag.updated_at
             })
         return result
-
-    # =========================
-    # Связи тегов с задачами
-    # =========================
 
     def add_tag_to_task(self, task_id: int, tag_id: int) -> bool:
         existing = self.session.query(TaskTag).filter(

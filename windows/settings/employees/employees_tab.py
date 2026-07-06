@@ -152,6 +152,12 @@ class EmployeesTab(BaseTab):
             QMessageBox.information(self, "Информация", "В режиме просмотра добавление недоступно")
             return
 
+        # Проверяем, может ли пользователь добавлять сотрудников
+        if self._permission_service and not self._permission_service.can_show_add_buttons_in_settings():
+            QMessageBox.information(self, "Доступ запрещён",
+                                    "У вас нет прав на добавление сотрудников")
+            return
+
         if not self.employee_service:
             QMessageBox.warning(self, "Ошибка", "Сервис не инициализирован")
             return
@@ -186,7 +192,8 @@ class EmployeesTab(BaseTab):
                 employee_data=employee,
                 employee_service=self.employee_service,
                 is_registration_mode=False,
-                read_only=self._read_only_mode
+                read_only=self._read_only_mode,
+                permission_service=self._permission_service  # <-- ДОБАВЛЯЕМ
             )
             if not self._read_only_mode:
                 dialog.employee_saved.connect(lambda data: self.on_employee_updated(employee_id, data))
@@ -213,6 +220,12 @@ class EmployeesTab(BaseTab):
             QMessageBox.information(self, "Информация", "В режиме просмотра удаление недоступно")
             return
 
+        # Проверяем, может ли пользователь удалять этого сотрудника
+        if self._permission_service and not self._permission_service.can_delete_employee(employee_id):
+            QMessageBox.warning(self, "Доступ запрещён",
+                                "У вас нет прав на удаление этого сотрудника")
+            return
+
         self.confirm_delete(
             title="Удаление сотрудника",
             message="Вы уверены, что хотите удалить этого сотрудника?\nЭто действие нельзя отменить.",
@@ -234,9 +247,10 @@ class EmployeesTab(BaseTab):
                 QMessageBox.warning(self, "Ошибка", result.get('message', "Не удалось удалить сотрудника"))
 
     def load_employees(self):
-        """Загрузка сотрудников через сервис"""
+        """Загрузка сотрудников - все сотрудники, независимо от роли"""
         if self.employee_service:
             employees = self.employee_service.get_employee_card_data()
+
             self.employees = employees if employees else []
             self.refresh_cards()
 
@@ -268,7 +282,8 @@ class EmployeesTab(BaseTab):
                 employee,
                 self.employee_service,
                 parent=self,
-                read_only=self._read_only_mode
+                read_only=self._read_only_mode,
+                permission_service=self._permission_service  # <-- ПЕРЕДАЁМ
             )
             card.edit_clicked.connect(self.on_edit_clicked)
             if not self._read_only_mode:

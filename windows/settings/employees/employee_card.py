@@ -1,7 +1,7 @@
 # windows/settings/employees/employee_card.py
 
 from PyQt6 import uic
-from PyQt6.QtWidgets import QFrame
+from PyQt6.QtWidgets import QFrame, QMessageBox
 from PyQt6.QtCore import pyqtSignal
 import os
 
@@ -12,12 +12,14 @@ class EmployeeCard(QFrame):
     edit_clicked = pyqtSignal(int)
     delete_clicked = pyqtSignal(int)
 
-    def __init__(self, employee_data, employee_service, parent=None, read_only=False):
+    def __init__(self, employee_data, employee_service, parent=None, read_only=False, permission_service=None):
         super().__init__(parent)
         self.employee_data = employee_data
         self.employee_service = employee_service
         self.employee_id = employee_data.get('id', 0)
         self.read_only = read_only
+        self.permission_service = permission_service
+        self._can_view_contacts = self._check_contact_permission()
 
         # Загрузка UI
         ui_path = os.path.join(
@@ -30,6 +32,47 @@ class EmployeeCard(QFrame):
         self.fill_data()
         self.connect_signals()
         self._apply_read_only_state()
+        self._apply_contact_visibility()
+
+    def _check_contact_permission(self) -> bool:
+        """
+        Проверяет, может ли пользователь видеть контакты этого сотрудника
+        """
+        if not self.permission_service:
+            return True  # Если сервис прав не передан - показываем всё
+
+        # Проверяем, может ли пользователь видеть контакты
+        return self.permission_service.can_view_contacts(self.employee_id)
+
+    def _apply_contact_visibility(self):
+        """
+        Применяет видимость контактной информации
+        Если пользователь не может видеть контакты - скрывает телефон и email
+        """
+        if not self._can_view_contacts:
+            # Скрываем телефон
+            if hasattr(self, 'mobilePhoneValue'):
+                self.mobilePhoneValue.hide()
+            if hasattr(self, 'mobilePhoneLabel'):
+                self.mobilePhoneLabel.hide()
+
+            # Скрываем рабочий телефон
+            if hasattr(self, 'workPhoneValue'):
+                self.workPhoneValue.hide()
+            if hasattr(self, 'workPhoneLabel'):
+                self.workPhoneLabel.hide()
+
+            # Скрываем email
+            if hasattr(self, 'emailValue'):
+                self.emailValue.hide()
+            if hasattr(self, 'emailLabel'):
+                self.emailLabel.hide()
+
+            # Добавляем подсказку, что контакты скрыты
+            if hasattr(self, 'contactInfoLabel'):
+                self.contactInfoLabel.setText("🔒 Контактная информация скрыта")
+                self.contactInfoLabel.setStyleSheet("color: #999; font-size: 11px;")
+                self.contactInfoLabel.setVisible(True)
 
     def _apply_read_only_state(self):
         """Применяет состояние только просмотра"""
@@ -110,29 +153,33 @@ class EmployeeCard(QFrame):
                 self.divisionSectionLabel.setVisible(has_div)
             self.divisionValue.setVisible(has_div)
 
-        # Мобильный телефон
+        # Мобильный телефон (показываем только если есть право)
         display_phone = display_data.get('display_phone', '—')
         if hasattr(self, 'mobilePhoneValue'):
             self.mobilePhoneValue.setText(display_phone)
             has_phone = display_phone != '—'
-            self.mobilePhoneValue.setVisible(has_phone)
+            # Показываем телефон только если есть право и номер не пустой
+            show_phone = has_phone and self._can_view_contacts
+            self.mobilePhoneValue.setVisible(show_phone)
             if hasattr(self, 'mobilePhoneLabel'):
-                self.mobilePhoneLabel.setVisible(has_phone)
+                self.mobilePhoneLabel.setVisible(show_phone)
 
-        # Рабочий телефон
+        # Рабочий телефон (показываем только если есть право)
         work_phone = display_data.get('work_number', '')
         if hasattr(self, 'workPhoneValue'):
-            self.workPhoneValue.setText(work_phone if work_phone else '—')
             has_work_phone = bool(work_phone)
-            self.workPhoneValue.setVisible(has_work_phone)
+            show_work_phone = has_work_phone and self._can_view_contacts
+            self.workPhoneValue.setText(work_phone if work_phone else '—')
+            self.workPhoneValue.setVisible(show_work_phone)
             if hasattr(self, 'workPhoneLabel'):
-                self.workPhoneLabel.setVisible(has_work_phone)
+                self.workPhoneLabel.setVisible(show_work_phone)
 
-        # Email
+        # Email (показываем только если есть право)
         email = display_data.get('email', '')
         if hasattr(self, 'emailValue'):
-            self.emailValue.setText(email if email else '—')
             has_email = bool(email)
-            self.emailValue.setVisible(has_email)
+            show_email = has_email and self._can_view_contacts
+            self.emailValue.setText(email if email else '—')
+            self.emailValue.setVisible(show_email)
             if hasattr(self, 'emailLabel'):
-                self.emailLabel.setVisible(has_email)
+                self.emailLabel.setVisible(show_email)

@@ -33,6 +33,16 @@ class TagService:
                 tag_dict['usage_count'] = self.repo.get_tag_usage_count(tag.id)
                 result.append(tag_dict)
             return result
+        except TypeError:
+            # Если метод не поддерживает include_archived
+            tags = self.repo.get_all()
+            result = []
+            for tag in tags:
+                if include_archived or not getattr(tag, 'is_archived', False):
+                    tag_dict = self._tag_to_dict(tag)
+                    tag_dict['usage_count'] = self.repo.get_tag_usage_count(tag.id)
+                    result.append(tag_dict)
+            return result
         except Exception as e:
             print(f"❌ Ошибка загрузки тегов: {e}")
             return []
@@ -121,7 +131,6 @@ class TagService:
             'id': tag.id,
             'name': tag.name,
             'color': tag.color,
-            'is_archived': tag.is_archived,
             'created_at': tag.created_at.isoformat() if tag.created_at else None,
             'updated_at': tag.updated_at.isoformat() if tag.updated_at else None,
         }

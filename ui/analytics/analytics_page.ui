@@ -73,7 +73,7 @@ QTabWidget::pane {
 }</string>
      </property>
      <property name="currentIndex">
-      <number>0</number>
+      <number>3</number>
      </property>
      <widget class="QWidget" name="employeesTab">
       <attribute name="title">
@@ -337,7 +337,7 @@ QComboBox::drop-down {
           <string notr="true">font-size: 18px; color: #666;</string>
          </property>
          <property name="text">
-          <string>Здесь будет аналитика по темам</string>
+          <string/>
          </property>
         </widget>
        </item>
@@ -354,7 +354,7 @@ QComboBox::drop-down {
           <string notr="true">font-size: 18px; color: #666;</string>
          </property>
          <property name="text">
-          <string>Здесь будет аналитика по проектам</string>
+          <string/>
          </property>
         </widget>
        </item>

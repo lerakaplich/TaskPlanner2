@@ -7,6 +7,8 @@ from PyQt6 import uic, QtCore
 from PyQt6.QtCore import QDate, pyqtSignal
 from PyQt6.QtGui import QValidator
 
+from services.permissions import permission_service
+
 
 class PhoneValidator(QValidator):
     """Валидатор для номера телефона (только цифры, максимум 9)"""
@@ -37,6 +39,8 @@ class EmployeeDialog(QDialog):
         self.employee_data = employee_data
         self.is_registration_mode = is_registration_mode
         self.read_only = read_only
+        self.permission_service = permission_service
+        self._can_view_contacts = self._check_contact_permission()
 
         # Определяем путь к UI файлу
         ui_path = os.path.join(
@@ -74,6 +78,17 @@ class EmployeeDialog(QDialog):
 
         self.dateEditBirthDate.setMaximumDate(QDate.currentDate())
 
+    def _check_contact_permission(self) -> bool:
+        """Проверяет, может ли пользователь видеть контакты этого сотрудника"""
+        if not self.permission_service:
+            return True
+
+        employee_id = self.employee_data.get('id') if self.employee_data else None
+        if not employee_id:
+            return True
+
+        return self.permission_service.can_view_contacts(employee_id)
+
     def _apply_read_only_state(self):
         """Применяет состояние только просмотра к диалогу"""
         if self.read_only:
@@ -96,6 +111,27 @@ class EmployeeDialog(QDialog):
             # Скрываем комбобокс ролей (если есть)
             if hasattr(self, 'comboBoxRole'):
                 self.comboBoxRole.setEnabled(False)
+
+            # Если пользователь не может видеть контакты - скрываем телефон и email
+            if not self._can_view_contacts:
+                # Скрываем поля телефона и email
+                if hasattr(self, 'lineEditMobilePhone'):
+                    self.lineEditMobilePhone.setVisible(False)
+                if hasattr(self, 'lineEditWorkPhone'):
+                    self.lineEditWorkPhone.setVisible(False)
+                if hasattr(self, 'lineEditEmail'):
+                    self.lineEditEmail.setVisible(False)
+
+                # Скрываем соответствующие метки
+                for label_name in ['labelMobilePhone', 'labelWorkPhone', 'labelEmail']:
+                    if hasattr(self, label_name):
+                        getattr(self, label_name).setVisible(False)
+
+                # Добавляем пояснение
+                if hasattr(self, 'infoLabel'):
+                    self.infoLabel.setText("🔒 Контактная информация недоступна")
+                    self.infoLabel.setStyleSheet("color: #999; font-size: 12px;")
+                    self.infoLabel.setVisible(True)
 
     def _set_all_fields_read_only(self):
         """Блокирует все поля ввода"""

@@ -66,14 +66,35 @@ class OthersTasksPage(QWidget):
     # ПРАВА ДОСТУПА
     # ==========================================================
 
-    def _can_edit_or_delete_task(self) -> bool:
-        return self._handlers.can_edit_or_delete_task()
+    def _can_edit_or_delete_task(self, task_creator_id: int = None) -> bool:
+        """Проверяет, может ли пользователь редактировать/удалять задачу"""
+        if not self.permission_service:
+            return True
+
+        # Проверяем права в проекте
+        if self._current_project_id:
+            return self.permission_service.can_edit_task(
+                self._current_project_id,
+                task_creator_id
+            )
+        return False
 
     def _can_create_task(self) -> bool:
         return self._handlers.can_create_task()
 
-    def _can_archive_task(self) -> bool:
-        return self._handlers.can_archive_task()
+    def _can_archive_task(self, task_creator_id: int = None) -> bool:
+        """Проверяет, может ли пользователь архивировать задачу"""
+        if not self.permission_service:
+            return True
+
+        # Проверяем права в проекте
+        if self._current_project_id:
+            # Для архивации используем права на редактирование
+            return self.permission_service.can_edit_task(
+                self._current_project_id,
+                task_creator_id
+            )
+        return False
 
     def _setup_permission_ui(self):
         if hasattr(self, 'btnCreateTask'):
@@ -104,14 +125,18 @@ class OthersTasksPage(QWidget):
     # ==========================================================
 
     def create_task_card(self, task_data: Dict) -> OthersTaskCard:
-        is_creator = task_data.get('created_by') == self.current_user.get('id')
+        """Создает карточку задачи с учетом прав"""
+        task_creator_id = task_data.get('created_by')
+
+        can_edit = self._can_edit_or_delete_task(task_creator_id)
+        can_archive = self._can_archive_task(task_creator_id)
 
         card = OthersTaskCard(
             task_data,
             service=self.service,
-            is_creator=is_creator,
-            can_edit_delete=self._can_edit_or_delete_task(),
-            can_archive=self._can_archive_task()
+            is_creator=(task_creator_id == self.current_user.get('id')),
+            can_edit_delete=can_edit,
+            can_archive=can_archive
         )
         return card
 

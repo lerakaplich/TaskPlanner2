@@ -58,11 +58,15 @@ class AnalyticsFilterService:
         """Извлекает ID отдела из значения фильтра"""
         if isinstance(filter_value, int):
             return filter_value
-        if isinstance(filter_value, str) and filter_value.startswith("dept_"):
-            return int(filter_value.split("_")[1])
+        if isinstance(filter_value, str):
+            if filter_value.startswith("dept_"):
+                try:
+                    return int(filter_value.split("_")[1])
+                except (ValueError, IndexError):
+                    return None
+            if filter_value.isdigit():
+                return int(filter_value)
         return None
-
-    # ==================== ЗАДАЧИ ЗА ПЕРИОД ====================
 
     def get_tasks_for_period(self, start_date: datetime, end_date: datetime) -> Dict[int, Dict]:
         """

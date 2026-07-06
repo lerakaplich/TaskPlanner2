@@ -44,14 +44,12 @@ class AnalyticsPage(QWidget):
 
         self._setup_ui()
         self._setup_filters()
-        self._setup_containers()
+        # self._setup_containers()  # УДАЛИТЬ - контейнеры создаются в _setup_ui_from_file
 
         if self.service:
             self.load_all_data()
         else:
             self._show_placeholder()
-
-    # ==================== НАСТРОЙКА UI ====================
 
     def _setup_ui(self):
         """Загружает UI файл или создаёт программно"""
@@ -161,7 +159,8 @@ class AnalyticsPage(QWidget):
             self.department_filter.clear()
             self.department_filter.addItem("Все отделы", "all")
             self.department_filter.setEditable(True)
-            self.department_filter.currentTextChanged.connect(self._on_employee_filter_changed)
+            self.department_filter.setCurrentIndex(0)
+            self.department_filter.currentIndexChanged.connect(self._on_employee_filter_changed)
 
     def _setup_rating_filter(self):
         """Настраивает фильтр для рейтинга"""
@@ -170,7 +169,8 @@ class AnalyticsPage(QWidget):
             self.rating_department_filter.clear()
             self.rating_department_filter.addItem("Все отделы", "all")
             self.rating_department_filter.setEditable(True)
-            self.rating_department_filter.currentTextChanged.connect(self._on_rating_filter_changed)
+            self.rating_department_filter.setCurrentIndex(0)  # ✅ Устанавливаем "Все отделы"
+            self.rating_department_filter.currentIndexChanged.connect(self._on_rating_filter_changed)
 
     def _setup_period_filter(self):
         """Настраивает фильтр периода"""
@@ -179,10 +179,10 @@ class AnalyticsPage(QWidget):
             self.period_filter.clear()
             for option in self.service.get_period_options() if self.service else []:
                 self.period_filter.addItem(option["name"], option["value"])
-            self.period_filter.setEditable(True)
-            self.period_filter.currentTextChanged.connect(self._on_period_filter_changed)
-
-    # ==================== ОБРАБОТЧИКИ ФИЛЬТРОВ ====================
+            # ❌ Убираем editable - запрещаем ввод текста
+            # self.period_filter.setEditable(True)
+            self.period_filter.setCurrentIndex(0)  # ✅ Устанавливаем "Все время"
+            self.period_filter.currentIndexChanged.connect(self._on_period_filter_changed)
 
     def _on_employee_filter_changed(self, text: str):
         """Фильтр по отделу для сотрудников"""
@@ -209,19 +209,28 @@ class AnalyticsPage(QWidget):
         """Получает значение фильтра"""
         current_data = combo.currentData()
         if current_data is not None:
+            # Если это строка вида "dept_X", извлекаем ID
+            if isinstance(current_data, str) and current_data.startswith("dept_"):
+                try:
+                    return int(current_data.split("_")[1])
+                except (ValueError, IndexError):
+                    return "all"
             return current_data
-        return text if text else "all"
-
-    # ==================== ПРИМЕНЕНИЕ ФИЛЬТРОВ ====================
+        return "all"  # Всегда возвращаем "all" или число
 
     def _apply_employee_filter(self):
         """Применяет фильтр к сотрудникам"""
         if not self._employees_raw_data:
             return
 
+        # Получаем ID отдела
+        dept_id = self._current_department_filter
+        if dept_id == "all":
+            dept_id = None
+
         filtered = self.service.filter_employees_by_department(
             self._employees_raw_data,
-            self._current_department_filter
+            dept_id
         ) if self.service else self._employees_raw_data
 
         self._employees_data = filtered
@@ -232,25 +241,31 @@ class AnalyticsPage(QWidget):
         if not self._employees_raw_data:
             return
 
+        filtered = self._employees_raw_data
+
         # Фильтр по периоду
         if self._current_period_filter and self._current_period_filter != "all":
             filtered = self.service.filter_employees_by_period(
-                self._employees_raw_data,
-                self._current_period_filter
-            ) if self.service else self._employees_raw_data
-        else:
-            filtered = self._employees_raw_data
-
-        # Фильтр по отделу
-        if self._current_rating_department_filter and self._current_rating_department_filter != "all":
-            filtered = self.service.filter_employees_by_department(
                 filtered,
-                self._current_rating_department_filter
+                self._current_period_filter
             ) if self.service else filtered
 
-        self.views.display_rating(filtered)
+        # Фильтр по отделу
+        dept_id = self._current_rating_department_filter
+        if dept_id and dept_id != "all":
+            # Убеждаемся, что это число
+            if isinstance(dept_id, str) and dept_id.startswith("dept_"):
+                try:
+                    dept_id = int(dept_id.split("_")[1])
+                except (ValueError, IndexError):
+                    dept_id = None
+            if dept_id:
+                filtered = self.service.filter_employees_by_department(
+                    filtered,
+                    dept_id
+                ) if self.service else filtered
 
-    # ==================== ЗАГРУЗКА ДАННЫХ ====================
+        self.views.display_rating(filtered)
 
     def load_all_data(self):
         """Загружает данные через сервис"""

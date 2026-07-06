@@ -62,7 +62,7 @@ class OvertimeCrudService:
                     or_(
                         Project.id.in_(subq),
                         Project.created_by == user_id,
-                        Project.owner == user_id,
+                        # Project.owner == user_id,  # ← УДАЛИТЬ ЭТУ СТРОКУ
                         Project.manager_id == user_id
                     )
                 )
@@ -81,6 +81,8 @@ class OvertimeCrudService:
             return sorted(result, key=lambda x: x['name'])
         except Exception as e:
             print(f"❌ Ошибка при загрузке проектов: {e}")
+            import traceback
+            traceback.print_exc()
             return []
 
     def get_tasks_for_project(self, project_id: int) -> List[Dict]:

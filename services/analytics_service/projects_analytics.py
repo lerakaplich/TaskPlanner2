@@ -167,10 +167,13 @@ class ProjectsAnalytics(AnalyticsBaseService):
                     1 for t in emp_tasks if not (t.column and t.column.is_done_column) and not t.is_archived)
                 completed = sum(1 for t in emp_tasks if (t.column and t.column.is_done_column) or t.is_archived)
 
+                # ✅ ИСПРАВЛЕНО: проверяем роль вместо is_admin
+                is_admin = member.role == 'project_manager'
+
                 employees.append({
                     "id": emp.id,
                     "name": self._format_employee_name(emp),
-                    "is_admin": member.is_admin or False,
+                    "is_admin": is_admin,
                     "active_tasks": active,
                     "completed_tasks": completed,
                     "active": active,
@@ -222,7 +225,7 @@ class ProjectsAnalytics(AnalyticsBaseService):
                 emp_dict = {
                     "id": getattr(emp, 'id', 0),
                     "name": self._format_employee_name(emp) if hasattr(emp, 'last_name') else str(emp),
-                    "is_admin": getattr(emp, 'is_admin', False),
+                    "is_admin": getattr(emp, 'is_admin', False),  # ✅ уже использует getattr с дефолтом
                     "active_tasks": getattr(emp, 'active_tasks', 0),
                     "completed_tasks": getattr(emp, 'completed_tasks', 0),
                     "active": getattr(emp, 'active', 0),

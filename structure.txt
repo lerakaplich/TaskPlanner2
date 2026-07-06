@@ -108,12 +108,14 @@
 |  |  +-- employee_service.py
 |  |  +-- tag_service.py
 |  +-- gantt_service
+|  |  +-- __pycache__
 |  |  +-- gantt_base_service.py
 |  |  +-- gantt_data_service.py
 |  |  +-- gantt_dependency_service.py
 |  |  +-- gantt_export_service.py
 |  |  +-- gantt_filter_service.py
 |  |  +-- gantt_service.py
+|  +-- navigation_service.py
 |  +-- overtime_service
 |  |  +-- __pycache__
 |  |  +-- overtime_base_service.py
@@ -130,7 +132,9 @@
 |  +-- profile_service.py
 |  +-- projects_service
 |  |  +-- __pycache__
+|  |  +-- project_dialog_service.py
 |  |  +-- project_role_service.py
+|  |  +-- project_view_service.py
 |  |  +-- projects_columns_service.py
 |  |  +-- projects_crud_service.py
 |  |  +-- projects_members_service.py
