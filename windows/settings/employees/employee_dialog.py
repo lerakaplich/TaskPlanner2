@@ -7,8 +7,6 @@ from PyQt6 import uic, QtCore
 from PyQt6.QtCore import QDate, pyqtSignal
 from PyQt6.QtGui import QValidator
 
-from services.permissions import permission_service
-
 
 class PhoneValidator(QValidator):
     """Валидатор для номера телефона (только цифры, максимум 9)"""
@@ -32,14 +30,14 @@ class EmployeeDialog(QDialog):
     employee_saved = pyqtSignal(dict)
 
     def __init__(self, parent=None, employee_data=None, employee_service=None,
-                 is_registration_mode=False, read_only=False):
+                 is_registration_mode=False, read_only=False, permission_service=None):  # <-- ДОБАВЛЯЕМ
         super().__init__(parent)
 
         self.employee_service = employee_service
         self.employee_data = employee_data
         self.is_registration_mode = is_registration_mode
         self.read_only = read_only
-        self.permission_service = permission_service
+        self.permission_service = permission_service  # <-- СОХРАНЯЕМ
         self._can_view_contacts = self._check_contact_permission()
 
         # Определяем путь к UI файлу

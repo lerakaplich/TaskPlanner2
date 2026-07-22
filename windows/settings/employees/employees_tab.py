@@ -283,11 +283,31 @@ class EmployeesTab(BaseTab):
                 self.employee_service,
                 parent=self,
                 read_only=self._read_only_mode,
-                permission_service=self._permission_service  # <-- ПЕРЕДАЁМ
+                permission_service=self._permission_service
             )
             card.edit_clicked.connect(self.on_edit_clicked)
+            card.open_clicked.connect(self.on_open_clicked)  # <-- ДОБАВЛЯЕМ
             if not self._read_only_mode:
                 card.delete_clicked.connect(self.on_delete_clicked)
             self.add_card_to_grid(card, i)
 
         self.set_last_row_stretch()
+
+    def on_open_clicked(self, employee_id: int):
+        """Открытие профиля сотрудника (кнопка Открыть)"""
+        from windows.profile.profile_page import ProfilePage
+
+        employee = self.employee_service.get_employee_full_info(employee_id)
+        if employee:
+            main_window = self.window()
+            if hasattr(main_window, 'navigation'):
+                # Получаем текущего пользователя из главного окна
+                current_user = getattr(main_window, 'current_user', None)
+
+                profile_page = ProfilePage(
+                    employee_id=employee_id,
+                    current_user=current_user,  # <-- ПЕРЕДАЁМ ТЕКУЩЕГО ПОЛЬЗОВАТЕЛЯ
+                    parent=main_window
+                )
+                main_window.contentStack.addWidget(profile_page)
+                main_window.contentStack.setCurrentWidget(profile_page)

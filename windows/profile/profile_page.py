@@ -13,25 +13,11 @@ from windows.profile.edit_profile import EditProfileDialog
 from windows.profile.projects_page import ProjectsPage
 
 
-# windows/profile/profile_page.py
-
-from PyQt6 import uic
-from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QTableWidgetItem,
-                             QMessageBox, QFrame, QLabel, QProgressBar, QHBoxLayout)
-from PyQt6.QtCore import Qt, pyqtSignal, QDate, QTimer
-
-from services.analytics_service.analytics_service import AnalyticsService
-from services.profile_service import ProfileService
-from windows.profile.chart_widget import ChartWidget
-from windows.profile.edit_profile import EditProfileDialog
-from windows.profile.projects_page import ProjectsPage
-
-
 class ProfilePage(QWidget):
     """Страница профиля сотрудника (только UI)"""
 
     edit_profile_requested = pyqtSignal()
-    logout_requested = pyqtSignal()  # НОВЫЙ СИГНАЛ ДЛЯ ВЫХОДА
+    logout_requested = pyqtSignal()
 
     def __init__(self, employee_id=None, parent=None, current_user=None, service=None):
         super().__init__(parent)
@@ -69,7 +55,6 @@ class ProfilePage(QWidget):
             self.btnCompletedProjects.clicked.connect(self._show_completed_projects)
         if hasattr(self, 'btnRefresh'):
             self.btnRefresh.clicked.connect(self.refresh_data)
-        # НОВАЯ СТРОКА - подключаем кнопку выхода
         if hasattr(self, 'btnExit'):
             self.btnExit.clicked.connect(self._on_logout)
 
@@ -109,6 +94,45 @@ class ProfilePage(QWidget):
         # Обновляем UI
         self._update_ui()
         print("   UI обновлен")
+
+        # Применяем права доступа
+        self._apply_permissions()
+
+    def _apply_permissions(self):
+        """Применяет права доступа к кнопкам профиля"""
+        # Определяем, свой ли это профиль
+        is_own_profile = False
+        if self.current_user and self.employee_id:
+            is_own_profile = (self.employee_id == self.current_user.get('id'))
+
+        # Если профиль чужой - скрываем кнопки редактирования и выхода
+        if not is_own_profile:
+            # Скрываем кнопку редактирования
+            if hasattr(self, 'btnEditProfile'):
+                self.btnEditProfile.setVisible(False)
+                self.btnEditProfile.hide()
+
+            # Скрываем кнопку выхода
+            if hasattr(self, 'btnExit'):
+                self.btnExit.setVisible(False)
+                self.btnExit.hide()
+
+            # Меняем заголовок
+            if hasattr(self, 'label_3'):
+                employee_name = self.employee_data.get('full_name', 'Сотрудник')
+                self.label_3.setText(f"Профиль сотрудника: {employee_name}")
+        else:
+            # Свой профиль - показываем все кнопки
+            if hasattr(self, 'btnEditProfile'):
+                self.btnEditProfile.setVisible(True)
+                self.btnEditProfile.show()
+
+            if hasattr(self, 'btnExit'):
+                self.btnExit.setVisible(True)
+                self.btnExit.show()
+
+            if hasattr(self, 'label_3'):
+                self.label_3.setText("Профиль сотрудника")
 
     def _update_ui(self):
         """Обновляет UI из self.employee_data"""
@@ -283,7 +307,6 @@ class ProfilePage(QWidget):
         )
 
         if reply == QMessageBox.StandardButton.Yes:
-            # Эмитируем сигнал выхода
             self.logout_requested.emit()
 
     def _open_edit_profile(self):

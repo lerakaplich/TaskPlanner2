@@ -93,6 +93,60 @@ class PermissionService:
                 self._project_role_cache[project_id] = None
         return self._project_role_cache[project_id]
 
+    # services/permissions/permission_service.py
+
+    def can_edit_employee(self, target_employee_id: int) -> bool:
+        """Проверяет, может ли пользователь редактировать указанного сотрудника"""
+        combined = self.get_combined_role()
+
+        # Суперадмин может редактировать всех
+        if combined.is_super_admin:
+            return True
+
+        # Администратор может редактировать всех, кроме суперадминов
+        if combined.is_admin:
+            try:
+                from sqlalchemy import text
+                if self.session:
+                    stmt = text("SELECT role FROM public.employees_data WHERE employee_id = :user_id")
+                    result = self.session.execute(stmt, {'user_id': target_employee_id}).first()
+                    if result and str(result[0]).strip().lower() == 'superadmin':
+                        return False
+            except:
+                pass
+            return True
+
+        # Пользователь может редактировать только себя
+        if combined.is_user:
+            return target_employee_id == self.user_id
+
+        return False
+
+    def can_delete_employee(self, target_employee_id: int) -> bool:
+        """Проверяет, может ли пользователь удалять указанного сотрудника"""
+        combined = self.get_combined_role()
+
+        # Суперадмин может удалять всех
+        if combined.is_super_admin:
+            return True
+
+        # Администратор может удалять всех, кроме суперадминов и админов
+        if combined.is_admin:
+            try:
+                from sqlalchemy import text
+                if self.session:
+                    stmt = text("SELECT role FROM public.employees_data WHERE employee_id = :user_id")
+                    result = self.session.execute(stmt, {'user_id': target_employee_id}).first()
+                    if result:
+                        role = str(result[0]).strip().lower()
+                        if role in ('superadmin', 'admin'):
+                            return False
+            except:
+                pass
+            return True
+
+        # Пользователь не может удалять никого
+        return False
 
     def _get_system_role(self) -> SystemRole:
         """Определяет системную роль пользователя"""

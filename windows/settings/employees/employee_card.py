@@ -5,12 +5,15 @@ from PyQt6.QtWidgets import QFrame, QMessageBox
 from PyQt6.QtCore import pyqtSignal
 import os
 
+from services.permissions.app_permissions import AppRole
+
 
 class EmployeeCard(QFrame):
     """Карточка сотрудника на всю ширину"""
 
     edit_clicked = pyqtSignal(int)
     delete_clicked = pyqtSignal(int)
+    open_clicked = pyqtSignal(int)  # <-- ДОБАВЛЯЕМ СИГНАЛ ДЛЯ btnOpen
 
     def __init__(self, employee_data, employee_service, parent=None, read_only=False, permission_service=None):
         super().__init__(parent)
@@ -35,61 +38,106 @@ class EmployeeCard(QFrame):
         self._apply_contact_visibility()
 
     def _check_contact_permission(self) -> bool:
-        """
-        Проверяет, может ли пользователь видеть контакты этого сотрудника
-        """
+        """Проверяет, может ли пользователь видеть контакты этого сотрудника"""
         if not self.permission_service:
-            return True  # Если сервис прав не передан - показываем всё
-
-        # Проверяем, может ли пользователь видеть контакты
+            return True
         return self.permission_service.can_view_contacts(self.employee_id)
 
     def _apply_contact_visibility(self):
-        """
-        Применяет видимость контактной информации
-        Если пользователь не может видеть контакты - скрывает телефон и email
-        """
+        """Применяет видимость контактной информации"""
         if not self._can_view_contacts:
-            # Скрываем телефон
             if hasattr(self, 'mobilePhoneValue'):
                 self.mobilePhoneValue.hide()
             if hasattr(self, 'mobilePhoneLabel'):
                 self.mobilePhoneLabel.hide()
-
-            # Скрываем рабочий телефон
             if hasattr(self, 'workPhoneValue'):
                 self.workPhoneValue.hide()
             if hasattr(self, 'workPhoneLabel'):
                 self.workPhoneLabel.hide()
-
-            # Скрываем email
             if hasattr(self, 'emailValue'):
                 self.emailValue.hide()
             if hasattr(self, 'emailLabel'):
                 self.emailLabel.hide()
-
-            # Добавляем подсказку, что контакты скрыты
             if hasattr(self, 'contactInfoLabel'):
                 self.contactInfoLabel.setText("🔒 Контактная информация скрыта")
                 self.contactInfoLabel.setStyleSheet("color: #999; font-size: 11px;")
                 self.contactInfoLabel.setVisible(True)
 
     def _apply_read_only_state(self):
-        """Применяет состояние только просмотра"""
+        """Применяет состояние только просмотра с учётом прав"""
+        # По умолчанию
+        show_open = True
+        show_edit = True
+        show_delete = True
+        edit_text = "Редактировать"
+
+        if self.permission_service:
+            # Проверяем права
+            can_edit = self.permission_service.can_edit_employee(self.employee_id)
+            can_delete = self.permission_service.can_delete_employee(self.employee_id)
+
+            # Если это суперадмин (target) и пользователь - администратор
+            target_role = self.employee_data.get('rights', '')
+            user_role = self.permission_service.get_app_role()
+
+            if user_role == AppRole.ADMIN and target_role == 'superadmin':
+                # Для админа у суперадмина: ТОЛЬКО "Открыть"
+                show_edit = False
+                show_delete = False
+                show_open = True
+            elif not can_edit:
+                show_edit = False
+                show_delete = False
+                show_open = True
+            elif not can_delete:
+                show_delete = False
+                show_open = True
+
+        # Применяем read_only режим
         if self.read_only:
-            # Скрываем кнопку удаления
-            if hasattr(self, 'deleteButton'):
+            show_edit = False
+            show_delete = False
+            show_open = True
+
+        # Настраиваем кнопку "Открыть"
+        if hasattr(self, 'btnOpen'):
+            self.btnOpen.setVisible(show_open)
+            if show_open:
+                self.btnOpen.show()
+            else:
+                self.btnOpen.hide()
+
+        # Настраиваем кнопку редактирования
+        if hasattr(self, 'editButton'):
+            if show_edit:
+                self.editButton.setText(edit_text)
+                self.editButton.setVisible(True)
+                self.editButton.show()
+            else:
+                self.editButton.setVisible(False)
+                self.editButton.hide()
+
+        # Настраиваем кнопку удаления
+        if hasattr(self, 'deleteButton'):
+            if show_delete:
+                self.deleteButton.setVisible(True)
+                self.deleteButton.show()
+            else:
                 self.deleteButton.setVisible(False)
                 self.deleteButton.hide()
 
-            # Переименовываем кнопку редактирования
-            if hasattr(self, 'editButton'):
-                self.editButton.setText("Подробнее")
-
     def connect_signals(self):
         """Подключение сигналов"""
-        self.editButton.clicked.connect(lambda: self.edit_clicked.emit(self.employee_id))
-        if not self.read_only:
+        # Кнопка "Открыть" - всегда ведёт в профиль
+        if hasattr(self, 'btnOpen'):
+            self.btnOpen.clicked.connect(lambda: self.open_clicked.emit(self.employee_id))
+
+        # Кнопка "Редактировать" - ведёт в диалог редактирования
+        if hasattr(self, 'editButton'):
+            self.editButton.clicked.connect(lambda: self.edit_clicked.emit(self.employee_id))
+
+        # Кнопка "Удалить"
+        if hasattr(self, 'deleteButton') and self.deleteButton.isVisible():
             self.deleteButton.clicked.connect(lambda: self.delete_clicked.emit(self.employee_id))
 
     def fill_data(self):
@@ -158,7 +206,6 @@ class EmployeeCard(QFrame):
         if hasattr(self, 'mobilePhoneValue'):
             self.mobilePhoneValue.setText(display_phone)
             has_phone = display_phone != '—'
-            # Показываем телефон только если есть право и номер не пустой
             show_phone = has_phone and self._can_view_contacts
             self.mobilePhoneValue.setVisible(show_phone)
             if hasattr(self, 'mobilePhoneLabel'):
