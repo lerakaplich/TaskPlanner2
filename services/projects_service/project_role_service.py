@@ -94,53 +94,40 @@ class ProjectRoleService:
         return self.get_project_role(user_id, project_id) is not None
 
     def get_user_projects_with_roles(self, user_id: int) -> List[Dict]:
-        """Возвращает список проектов пользователя с их ролями"""
-        try:
-            stmt = text("""
-                SELECT 
-                    p.id,
-                    p.name,
-                    p.is_archived,
-                    COALESCE(ep.role, 'member') as role,
-                    p.created_by,
-                    p.manager_id
-                FROM public.projects p
-                LEFT JOIN public.employees_projects ep 
-                    ON ep.project_id = p.id AND ep.employee_id = :user_id
-                WHERE p.is_archived = false
-                AND (
-                    ep.employee_id IS NOT NULL 
-                    OR p.manager_id = :user_id 
-                    OR p.created_by = :user_id
-                )
-            """)
+        stmt = text("""
+            SELECT 
+                p.id,
+                p.name,
+                p.is_archived,
+                ep.role,
+                CASE 
+                    WHEN p.manager_id = :user_id THEN 'curator'
+                    WHEN ep.role = 'project_manager' THEN 'project_manager'
+                    ELSE 'member'
+                END as role_in_project
+            FROM public.projects p
+            LEFT JOIN public.employees_projects ep 
+                ON ep.project_id = p.id AND ep.employee_id = :user_id
+            WHERE p.is_archived = false
+            AND (
+                ep.employee_id IS NOT NULL 
+                OR p.manager_id = :user_id 
+                OR p.created_by = :user_id
+            )
+        """)
 
-            result = self.session.execute(stmt, {'user_id': user_id}).all()
+        result = self.session.execute(stmt, {'user_id': user_id}).all()
 
-            projects = []
-            for row in result:
-                # Определяем реальную роль
-                if row[1] == user_id:  # manager_id
-                    role = 'curator'
-                elif row[2] == 'project_manager':  # role из ep
-                    role = 'project_manager'
-                elif row[3] == user_id:  # created_by
-                    role = 'project_manager'
-                else:
-                    role = 'member'
-
-                projects.append({
-                    'id': row[0],
-                    'name': row[1],
-                    'is_archived': row[2],
-                    'role': role
-                })
-
-            return projects
-
-        except Exception as e:
-            print(f"⚠️ Ошибка получения проектов пользователя: {e}")
-            return []
+        return [
+            {
+                'id': row[0],
+                'name': row[1],
+                'is_archived': row[2],
+                'role': row[3],  # ← исправлено
+                'role_in_project': row[4]
+            }
+            for row in result
+        ]
 
     def clear_cache(self):
         """Очищает кэш ролей"""

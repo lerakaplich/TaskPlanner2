@@ -82,6 +82,9 @@ class MainWindow(QMainWindow):
                 employee_service=None,
                 session=self.session
             )
+            # ✅ ВАЖНО: Очищаем кэш после инициализации
+            self.permission_service.clear_cache()
+
             print(f"🔐 Сервис прав инициализирован для пользователя {self.current_user_id}")
             print(f"   Роль в приложении: {self.permission_service.app_manager.role.value}")
         except Exception as e:
@@ -109,8 +112,6 @@ class MainWindow(QMainWindow):
             if 'middle_name' not in self.current_user:
                 self.current_user['middle_name'] = ''
 
-    # windows/projects/main_window.py
-
     def _setup_permission_ui(self):
         """Настраивает UI в зависимости от прав пользователя"""
         if not self.permission_service:
@@ -119,6 +120,8 @@ class MainWindow(QMainWindow):
         # 1. Кнопка создания проекта
         if hasattr(self, 'btnCreateProject'):
             can_create = self.permission_service.can_show_create_project_button()
+            print(f"   🔍 can_show_create_project_button = {can_create}")
+            print(f"   🔍 combined_role = {self.permission_service.get_combined_role()}")
             self.btnCreateProject.setVisible(can_create)
             print(f"   btnCreateProject visible: {can_create}")
 

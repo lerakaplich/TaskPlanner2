@@ -11,6 +11,7 @@ from models.schemas.tasks_dto import TaskPriority
 from models.tasks import Task
 from repositories.task_repo import TaskRepo
 from services.employee_service.column_service import ColumnService
+from services.tasks_service.task_data_collector import get_task_data_collector
 
 
 class TasksCrudService:
@@ -304,6 +305,19 @@ class TasksCrudService:
             new_task = self.repo.create(**task_data)
             self.db_session.commit()
 
+            # === НОВЫЙ КОД: Сбор данных для обучения ===
+            try:
+                collector = get_task_data_collector()
+                task_dict = self._task_to_dict(new_task)
+                collector.save_task_data(
+                    task_data=task_dict,
+                    user_id=data.get('created_by', 0),
+                    project_id=data.get('project_id', 0)
+                )
+                print(f"📊 Данные задачи {new_task.id} сохранены для обучения")
+            except Exception as e:
+                print(f"⚠️ Ошибка сбора данных: {e}")
+
             # === СОХРАНЯЕМ ТЕГИ ===
             tags = data.get("tags", [])
             if tags:
@@ -328,16 +342,21 @@ class TasksCrudService:
         task = self.repo.update_progress(task_id, progress_percent)
         if task:
             self.db_session.commit()
-            print(f"   - транзакция закоммичена")
-            # Обновляем КПД сотрудника если задача завершена
-            if progress_percent >= 100 and task.assigned_to:
-                print(f"   - задача завершена, обновляем КПД сотрудника {task.assigned_to}")
-                self._update_employee_kpd(task.assigned_to)
 
-            result = self._task_to_dict(task)
-            print(f"   - результат преобразован в dict")
-            print(f"🔍 [DEBUG] update_task_progress: конец, возвращаем dict\n")
-            return result
+            # === НОВЫЙ КОД: Обновление данных для обучения ===
+            try:
+                collector = get_task_data_collector()
+                task_dict = self._task_to_dict(task)
+                collector.save_task_data(
+                    task_data=task_dict,
+                    user_id=task.created_by or 0,
+                    project_id=task.project_id
+                )
+            except Exception as e:
+                print(f"⚠️ Ошибка обновления данных: {e}")
+
+            return self._task_to_dict(task)
+
 
         print(f"🔍 [DEBUG] update_task_progress: конец, задача не найдена\n")
         return None

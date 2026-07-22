@@ -3,12 +3,7 @@
 from enum import Enum
 from typing import Set, Optional, List
 
-
-class AppRole(Enum):
-    """Роли на уровне приложения"""
-    SUPER_ADMIN = "superadmin"
-    ADMIN = "admin"
-    USER = "user"
+from services.permissions.app_permissions import AppRole
 
 
 class ProjectRole(Enum):

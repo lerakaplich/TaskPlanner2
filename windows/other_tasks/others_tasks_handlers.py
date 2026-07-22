@@ -12,10 +12,6 @@ class OthersTasksHandlers:
     def __init__(self, page):
         self.page = page
 
-    # ==========================================================
-    # ПРОВЕРКА ПРАВ
-    # ==========================================================
-
     def can_edit_or_delete_task(self) -> bool:
         """Может ли пользователь редактировать/удалять чужие задачи"""
         if not self.page.permission_service:
@@ -260,6 +256,8 @@ class OthersTasksHandlers:
         else:
             QMessageBox.warning(self.page, "Ошибка", "Не удалось отметить задачу как выполненную")
 
+    # windows/other_tasks/others_tasks_handlers.py
+
     def on_task_dropped(self, task_id: int, target_column_id: int):
         """Обработчик drop из KanbanColumn"""
         target_column = None
@@ -280,13 +278,21 @@ class OthersTasksHandlers:
         if old_status == new_status:
             return
 
+        # Проверяем права (суперадмин всегда может)
+        if not self.page._can_edit_or_delete_task(task.get("created_by")):
+            QMessageBox.warning(self.page, "Ошибка", "У вас нет прав для перемещения этой задачи")
+            return
+
         result = self.page.service.move_task_to_column(task_id, target_column_id)
 
         if result:
             self.page.update_task_card(result)
             self.page.update_statistics()
             self.page.taskUpdated.emit()
-            QTimer.singleShot(150, self.load_tasks)
+            # Не перезагружаем все задачи, просто обновляем карточку
+            self.page.updateGeometry()
+        else:
+            QMessageBox.warning(self.page, "Ошибка", "Не удалось переместить задачу")
 
     def on_create_task(self):
         """Создание новой задачи"""

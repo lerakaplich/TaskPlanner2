@@ -1,8 +1,10 @@
 # main.py
+import atexit
 import sys
 from PyQt6.QtWidgets import QApplication
 from PyQt6.QtCore import QTimer
 
+from services.tasks_service.task_data_collector import get_task_data_collector
 from windows.login.login_window import LoginWindow
 from windows.projects.main_window import MainWindow
 from database import get_tasks_session
@@ -53,6 +55,17 @@ def main():
 
         login_window.login_success.connect(on_login_success)
         login_window.show()
+
+    # Регистрируем сохранение данных при выходе
+    def on_exit():
+        try:
+            collector = get_task_data_collector()
+            collector.flush_cache()
+            print("📊 Данные для обучения сохранены")
+        except Exception as e:
+            print(f"⚠️ Ошибка сохранения данных: {e}")
+
+    atexit.register(on_exit)
 
     sys.exit(app.exec())
 

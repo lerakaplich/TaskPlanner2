@@ -1,11 +1,10 @@
 # windows/overtime/edit_overtime_dialog.py
 
 import os
-import re
 from typing import Dict, Optional
 from PyQt6 import uic
 from PyQt6.QtWidgets import QDialog, QMessageBox
-from PyQt6.QtCore import QDate, QTime
+from PyQt6.QtCore import QDate, QTime, QTimer
 
 
 class EditOvertimeDialog(QDialog):
@@ -33,6 +32,8 @@ class EditOvertimeDialog(QDialog):
 
         self._load_employees()
         self._load_projects()
+
+        # Загружаем данные переработки
         self._load_overtime_data()
 
         self.comboProject.currentIndexChanged.connect(self._on_project_changed)
@@ -57,6 +58,7 @@ class EditOvertimeDialog(QDialog):
                         break
 
     def _load_projects(self):
+        self.comboProject.blockSignals(True)
         self.comboProject.clear()
         self.comboProject.addItem("Выберите проект", None)
         if self.service:
@@ -64,87 +66,148 @@ class EditOvertimeDialog(QDialog):
             for project in projects:
                 self.comboProject.addItem(project['name'], project['id'])
         self.comboProject.addItem("Без проекта", -1)
+        self.comboProject.blockSignals(False)
 
     def _load_overtime_data(self):
+        """Загружает данные переработки в поля диалога"""
         if not self.overtime_data:
             return
 
+        print(f"[DEBUG] Загрузка данных переработки: {self.overtime_data}")
+
+        # 1. Дата
         date_str = self.overtime_data.get('date')
         if date_str:
             qdate = QDate.fromString(date_str, "dd.MM.yyyy")
             if qdate.isValid():
                 self.dateEdit.setDate(qdate)
 
+        # 2. Время начала
         start_time = self.overtime_data.get('start_time')
         if start_time and ':' in start_time:
             parts = start_time.split(':')
             if len(parts) >= 2:
                 self.timeStart.setTime(QTime(int(parts[0]), int(parts[1])))
 
+        # 3. Время окончания
         end_time = self.overtime_data.get('end_time')
         if end_time and ':' in end_time:
             parts = end_time.split(':')
             if len(parts) >= 2:
                 self.timeEnd.setTime(QTime(int(parts[0]), int(parts[1])))
 
+        # 4. Описание
         description = self.overtime_data.get('description', '')
+        self.textDescription.setPlainText(description)
 
-        # Извлекаем проект и задачу из описания
-        project_name = None
-        task_title = None
+        # 5. Проект
+        project_id = self.overtime_data.get('project_id')
+        print(f"[DEBUG] project_id из данных: {project_id}")
 
-        if description:
-            project_match = re.search(r'\[Проект: (.*?)\]', description)
-            if project_match:
-                project_name = project_match.group(1)
-            task_match = re.search(r'\[Задача: (.*?)\]', description)
-            if task_match:
-                task_title = task_match.group(1)
+        self.comboProject.blockSignals(True)
 
-            # Очищаем описание от маркеров
-            clean_description = re.sub(r'\[Проект: .*?\]\s*', '', description)
-            clean_description = re.sub(r'\[Задача: .*?\]\s*', '', clean_description)
-            self.textDescription.setPlainText(clean_description.strip())
-        else:
-            self.textDescription.setPlainText(description)
-
-        # Устанавливаем проект в комбобокс
-        if project_name:
+        if project_id:
+            found = False
             for i in range(self.comboProject.count()):
-                if self.comboProject.itemText(i) == project_name:
+                if self.comboProject.itemData(i) == project_id:
                     self.comboProject.setCurrentIndex(i)
-                    self.current_project_id = self.comboProject.itemData(i)
+                    self.current_project_id = project_id
+                    print(f"[DEBUG] Проект найден: {self.comboProject.itemText(i)}")
+                    found = True
                     break
 
-        # Загружаем задачи и устанавливаем выбранную задачу
-        project_id = self.comboProject.currentData()
-        if project_id and project_id != -1:
-            self._load_tasks(project_id)
-            if task_title:
-                for i in range(self.comboTask.count()):
-                    if self.comboTask.itemText(i) == task_title:
-                        self.comboTask.setCurrentIndex(i)
-                        self.current_task_id = self.comboTask.itemData(i)
-                        break
+            if not found:
+                project_name = self.overtime_data.get('project')
+                if project_name:
+                    for i in range(self.comboProject.count()):
+                        if self.comboProject.itemText(i) == project_name:
+                            self.comboProject.setCurrentIndex(i)
+                            self.current_project_id = self.comboProject.itemData(i)
+                            print(f"[DEBUG] Проект найден по названию: {project_name}")
+                            found = True
+                            break
+
+        self.comboProject.blockSignals(False)
+
+        # 6. Задача - используем отложенную установку
+        task_id = self.overtime_data.get('task_id')
+        task_title = self.overtime_data.get('task')
+        print(f"[DEBUG] task_id из данных: {task_id}, task_title: {task_title}")
+
+        # Если выбран проект, загружаем задачи и устанавливаем задачу с задержкой
+        selected_project_id = self.comboProject.currentData()
+        if selected_project_id and selected_project_id != -1:
+            # Загружаем задачи
+            self.comboTask.blockSignals(True)
+            self._load_tasks_internal(selected_project_id)
+            self.comboTask.blockSignals(False)
+
+            # Устанавливаем задачу с задержкой, чтобы UI успел обновиться
+            if task_id or task_title:
+                QTimer.singleShot(50, lambda: self._set_task(task_id, task_title))
+
+    def _set_task(self, task_id: Optional[int], task_title: Optional[str]):
+        """Устанавливает задачу в комбобоксе"""
+        print(f"[DEBUG] _set_task: task_id={task_id}, task_title={task_title}")
+
+        self.comboTask.blockSignals(True)
+
+        found = False
+
+        # Сначала ищем по ID
+        if task_id:
+            for i in range(self.comboTask.count()):
+                if self.comboTask.itemData(i) == task_id:
+                    self.comboTask.setCurrentIndex(i)
+                    self.current_task_id = task_id
+                    print(f"[DEBUG] Задача найдена по ID: {task_id} (индекс {i})")
+                    found = True
+                    break
+
+        # Если не найдена по ID, ищем по названию
+        if not found and task_title:
+            for i in range(self.comboTask.count()):
+                if self.comboTask.itemText(i) == task_title:
+                    self.comboTask.setCurrentIndex(i)
+                    self.current_task_id = self.comboTask.itemData(i)
+                    print(f"[DEBUG] Задача найдена по названию: {task_title} (индекс {i})")
+                    found = True
+                    break
+
+        # Если не найдена - добавляем вручную
+        if not found and task_title:
+            print(f"[DEBUG] Задача '{task_title}' не найдена, добавляем вручную")
+            self.comboTask.addItem(task_title, task_id)
+            self.comboTask.setCurrentIndex(self.comboTask.count() - 1)
+            self.current_task_id = task_id
+
+        self.comboTask.blockSignals(False)
+
+    def _load_tasks_internal(self, project_id: int):
+        """Внутренний метод загрузки задач"""
+        self.comboTask.clear()
+        self.comboTask.addItem("Выберите задачу", None)
+
+        if self.service:
+            tasks = self.service.get_tasks_for_project(project_id)
+            for task in tasks:
+                self.comboTask.addItem(task['title'], task['id'])
+
+        self.comboTask.addItem("Без задачи", -1)
+        self.comboTask.setEnabled(True)
 
     def _on_project_changed(self, index):
+        """Обработчик смены проекта"""
         project_id = self.comboProject.currentData()
         if project_id is None or project_id == -1:
             self.comboTask.setEnabled(False)
             self.comboTask.clear()
             self.comboTask.addItem("Нет задач", None)
             return
-        self._load_tasks(project_id)
 
-    def _load_tasks(self, project_id: int):
-        self.comboTask.clear()
-        self.comboTask.addItem("Выберите задачу", None)
-        if self.service:
-            tasks = self.service.get_tasks_for_project(project_id)
-            for task in tasks:
-                self.comboTask.addItem(task['title'], task['id'])
-        self.comboTask.addItem("Без задачи", -1)
-        self.comboTask.setEnabled(True)
+        self.comboTask.blockSignals(True)
+        self._load_tasks_internal(project_id)
+        self.comboTask.blockSignals(False)
         self.comboTask.setCurrentIndex(0)
 
     def get_overtime_data(self) -> Dict:

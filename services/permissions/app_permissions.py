@@ -42,7 +42,7 @@ class AppPermissionManager:
             'can_view_analytics',  # Может видеть страницу аналитики
             'can_view_settings',  # Может видеть страницу настроек
             'can_edit_settings',  # Может редактировать настройки
-            'can_view_own_overtime',  # <-- ДОБАВИТЬ
+            'can_view_own_overtime',  # <--       ДОБАВИТЬ
             'can_view_all_overtime',  # <-- ДОБАВИТЬ (для просмотра всех)
 
             # Задачи
@@ -62,11 +62,7 @@ class AppPermissionManager:
             # НЕ может удалять админов
             # НЕ может создавать/удалять суперадминов
 
-            # Управление колонками - НЕ МОЖЕТ
-            # 'can_create_columns',
-            # 'can_edit_columns',
-            # 'can_delete_columns',
-
+              
             # Управление проектами
             'can_create_project',
             'can_edit_any_project',

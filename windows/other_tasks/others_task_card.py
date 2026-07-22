@@ -27,13 +27,14 @@ class OthersTaskCard(TaskCard):
     resumeRequested = pyqtSignal(int)
 
     def __init__(self, task_data, service: Optional[TasksService] = None,
-                 is_creator=False, parent=None, can_edit_delete=False, can_archive=False):
+                 is_creator=False, parent=None, can_edit_delete=False, can_archive=False, can_drag=False):
         super().__init__(task_data, parent)
 
         self.is_creator = is_creator
         self.service = service
-        self.can_edit_delete = can_edit_delete  # <-- ДОБАВИТЬ
-        self.can_archive = can_archive  # <-- ДОБАВИТЬ
+        self.can_edit_delete = can_edit_delete
+        self.can_archive = can_archive
+        self._can_drag = can_drag
         self.drag_start_position = None
 
         self._disconnect_parent_signals()
@@ -229,6 +230,14 @@ class OthersTaskCard(TaskCard):
         if (event.pos() - self.drag_start_position).manhattanLength() < QApplication.startDragDistance():
             return
 
+        print(f"🐛 mouseMoveEvent: _can_drag = {self._can_drag}, task_id = {self.task_data.get('id')}")
+
+        if not self._can_drag:
+            print(f"   ⛔ Drag запрещён (can_drag=False)")
+            return
+
+        print(f"   ✅ Drag разрешён, начинаем перетаскивание")
+
         self.drag_started.emit(self.task_data)
 
         drag = QDrag(self)
@@ -247,13 +256,6 @@ class OthersTaskCard(TaskCard):
 
         drag.setPixmap(pixmap)
         drag.setHotSpot(event.pos())
-        drag.exec(Qt.DropAction.MoveAction)
 
-    def dragEnterEvent(self, event):
-        event.acceptProposedAction()
-
-    def dragMoveEvent(self, event):
-        event.acceptProposedAction()
-
-    def dropEvent(self, event):
-        event.acceptProposedAction()
+        result = drag.exec(Qt.DropAction.MoveAction)
+        print(f"   🏁 Drag завершён с результатом: {result}")

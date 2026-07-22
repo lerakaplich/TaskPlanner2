@@ -82,15 +82,15 @@ class ProjectsService:
     def get_user_projects_with_roles(self, user_id: int) -> List[Dict]:
         stmt = text("""
             SELECT 
-    p.id,
-    p.name,
-    p.is_archived,
-    ep.role,  # ← используем role
-    CASE 
-        WHEN p.manager_id = :user_id THEN 'curator'
-        WHEN ep.role = 'project_manager' THEN 'project_manager'
-        ELSE 'member'
-    END as role_in_project
+                p.id,
+                p.name,
+                p.is_archived,
+                ep.role,
+                CASE 
+                    WHEN p.manager_id = :user_id THEN 'curator'
+                    WHEN ep.role = 'project_manager' THEN 'project_manager'
+                    ELSE 'member'
+                END as role_in_project
             FROM public.projects p
             LEFT JOIN public.employees_projects ep 
                 ON ep.project_id = p.id AND ep.employee_id = :user_id
@@ -98,7 +98,7 @@ class ProjectsService:
             AND (
                 ep.employee_id IS NOT NULL 
                 OR p.manager_id = :user_id 
-                OR p.created_by = :user_id  -- ← owner → created_by
+                OR p.created_by = :user_id
             )
         """)
 
@@ -109,8 +109,8 @@ class ProjectsService:
                 'id': row[0],
                 'name': row[1],
                 'is_archived': row[2],
-                'is_admin': row[3],
-                'role': row[4]
+                'role': row[3],  # ← исправлено
+                'role_in_project': row[4]
             }
             for row in result
         ]
@@ -129,9 +129,11 @@ class ProjectsService:
         try:
             stmt = text("SELECT role FROM public.employees_data WHERE employee_id = :user_id")
             result = self.session.execute(stmt, {'user_id': user_id}).first()
+            print(f"🔍 get_app_role: user_id={user_id}, result={result}")
 
             if result:
                 role_str = result[0]
+                print(f"🔍 role_str={role_str}")
                 if role_str == 'superadmin':
                     return AppRole.SUPER_ADMIN
                 elif role_str == 'admin':
@@ -140,6 +142,8 @@ class ProjectsService:
                     return AppRole.USER
         except Exception as e:
             print(f"⚠️ Ошибка получения роли пользователя {user_id}: {e}")
+            import traceback
+            traceback.print_exc()
 
         return AppRole.USER
 
@@ -159,13 +163,15 @@ class ProjectsService:
             if result and result[0] == user_id:
                 return ProjectRole.CURATOR
 
-            # 2. Проверяем, является ли пользователь администратором проекта
-            # ✅ ПРАВИЛЬНО - используем role
+            # 2. Проверяем роль из таблицы employees_projects
             stmt = text("""
                 SELECT role FROM public.employees_projects 
                 WHERE project_id = :project_id AND employee_id = :user_id
             """)
-            result = self.session.execute(stmt, {...}).first()
+            result = self.session.execute(stmt, {
+                'project_id': project_id,
+                'user_id': user_id
+            }).first()  # ← исправлено
 
             if result:
                 role_str = result[0]

@@ -704,20 +704,46 @@ class NavigationHandler(QObject):
             self.PAGE_CHAT
         )
 
+    # windows/projects/main_window_handlers.py
+
     def get_overtime_page(self):
+        """Возвращает страницу переработок - принудительно пересоздаем для свежих данных"""
         from windows.overtime.overtime_page import OvertimePage
 
         employee_service = EmployeeService()
 
-        return self._get_or_create_page(
-            'overtime',
-            lambda: OvertimePage(
-                service=self.main.overtime_service,
-                employee_service=employee_service,
-                permission_service=self.main.permission_service
-            ),
-            self.PAGE_OVERTIME
+        # Принудительно пересоздаем страницу переработок при каждом запросе
+        if 'overtime' in self.pages:
+            # Удаляем старую страницу
+            old_page = self.pages['overtime']
+            index = self.main.contentStack.indexOf(old_page)
+            if index >= 0:
+                self.main.contentStack.removeWidget(old_page)
+            old_page.deleteLater()
+            del self.pages['overtime']
+            print("   🗑️ Старая страница Переработки удалена")
+
+        # Создаем новую страницу
+        print("   🏗️ Создаём OvertimePage...")
+        page = OvertimePage(
+            service=self.main.overtime_service,
+            employee_service=employee_service,
+            permission_service=self.main.permission_service
         )
+
+        # ✅ ВАЖНО: Вставляем страницу на правильную позицию
+        # Проверяем, что на позиции PAGE_OVERTIME (6) нет другой страницы
+        existing_widget = self.main.contentStack.widget(self.PAGE_OVERTIME)
+        if existing_widget:
+            self.main.contentStack.removeWidget(existing_widget)
+            existing_widget.deleteLater()
+
+        self.main.contentStack.insertWidget(self.PAGE_OVERTIME, page)
+        self.pages['overtime'] = page
+        print(f"   📌 Вставлена в contentStack на позицию {self.PAGE_OVERTIME}")
+        print("   ✅ OvertimePage создана и вставлена")
+
+        return page
 
     def get_settings_page(self):
         """Возвращает страницу настроек с сервисом прав"""

@@ -3,7 +3,8 @@
 from typing import Optional, Dict, List, Set
 from functools import lru_cache
 
-from models.permissions import AppRole, ProjectRole, SystemRole, CombinedRole
+from models.permissions import ProjectRole, SystemRole, CombinedRole
+from services.permissions.app_permissions import AppRole
 from services.permissions.system_permissions import SystemPermissionManager
 from services.projects_service.project_role_service import ProjectRoleService
 
@@ -41,10 +42,42 @@ class PermissionService:
         else:
             self.role_service = None
 
+    # services/permissions/permission_service.py
+
     def _get_app_role(self) -> AppRole:
         """Получает роль на уровне приложения"""
-        if self.app_service and hasattr(self.app_service, 'get_app_role'):
-            return self.app_service.get_app_role(self.user_id)
+        # ПРОВЕРЯЕМ СНАЧАЛА В БД
+        try:
+            from sqlalchemy import text
+            if self.session:
+                stmt = text("SELECT role FROM public.employees_data WHERE employee_id = :user_id")
+                result = self.session.execute(stmt, {'user_id': self.user_id}).first()
+                if result:
+                    role_str = str(result[0]).strip().lower()
+                    if role_str in ('super_admin', 'superadmin'):
+                        return AppRole.SUPER_ADMIN
+                    elif role_str == 'admin':
+                        return AppRole.ADMIN
+                    elif role_str == 'user':
+                        return AppRole.USER
+        except Exception as e:
+            print(f"⚠️ Ошибка получения роли из БД: {e}")
+
+        # Если не нашли в БД, пробуем через сервис
+        if self.app_service:
+            if hasattr(self.app_service, 'get_app_role'):
+                try:
+                    result = self.app_service.get_app_role(self.user_id)
+                    if isinstance(result, AppRole):
+                        return result
+                except TypeError:
+                    try:
+                        result = self.app_service.get_app_role()
+                        if isinstance(result, AppRole):
+                            return result
+                    except:
+                        pass
+
         return AppRole.USER
 
     def _get_project_role(self, project_id: int) -> Optional[ProjectRole]:
@@ -60,7 +93,6 @@ class PermissionService:
                 self._project_role_cache[project_id] = None
         return self._project_role_cache[project_id]
 
-    # services/permissions/permission_service.py
 
     def _get_system_role(self) -> SystemRole:
         """Определяет системную роль пользователя"""
@@ -72,28 +104,13 @@ class PermissionService:
         return SystemRole.EMPLOYEE
 
     def get_combined_role(self, project_id: Optional[int] = None) -> CombinedRole:
-        """
-        Возвращает комбинированную роль для пользователя
-        Если project_id указан - учитывается роль в проекте
-        """
-        cache_key = f"{self.user_id}_{project_id}"
-
-        if self._combined_role_cache and cache_key in self._combined_role_cache:
-            return self._combined_role_cache[cache_key]
-
+        """Возвращает комбинированную роль для пользователя"""
+        # Всегда получаем свежую роль из БД
         app_role = self._get_app_role()
         project_role = self._get_project_role(project_id) if project_id else None
         system_role = self._get_system_role()
 
-        combined = CombinedRole(app_role, project_role, system_role)
-
-        if self._combined_role_cache is None:
-            self._combined_role_cache = {}
-        self._combined_role_cache[cache_key] = combined
-
-        return combined
-
-    # ===== МЕТОДЫ ДЛЯ ОБРАТНОЙ СОВМЕСТИМОСТИ =====
+        return CombinedRole(app_role, project_role, system_role)
 
     def has_permission(self, permission: str) -> bool:
         """Проверяет наличие права (для обратной совместимости)"""
@@ -108,10 +125,13 @@ class PermissionService:
             return combined.can_add_overtime()
         return False
 
-    # ===== МЕТОДЫ, ИСПОЛЬЗУЮЩИЕ COMBINED_ROLE =====
-
     def can_show_create_project_button(self) -> bool:
         combined = self.get_combined_role()
+        print(f"🔍 combined.app_role = {combined.app_role}")
+        print(f"🔍 combined.app_role type = {type(combined.app_role)}")
+        print(f"🔍 AppRole.SUPER_ADMIN = {AppRole.SUPER_ADMIN}")
+        print(f"🔍 AppRole.SUPER_ADMIN type = {type(AppRole.SUPER_ADMIN)}")
+        print(f"🔍 combined.is_super_admin = {combined.is_super_admin}")
         return combined.is_super_admin or combined.is_admin
 
     def can_create_project(self) -> bool:

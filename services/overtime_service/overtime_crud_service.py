@@ -62,7 +62,6 @@ class OvertimeCrudService:
                     or_(
                         Project.id.in_(subq),
                         Project.created_by == user_id,
-                        # Project.owner == user_id,  # ← УДАЛИТЬ ЭТУ СТРОКУ
                         Project.manager_id == user_id
                     )
                 )
@@ -224,6 +223,30 @@ class OvertimeCrudService:
 
         return my_overtimes, all_overtimes
 
+    def _find_project_by_name(self, project_name: str) -> Optional[int]:
+        """Находит ID проекта по названию"""
+        try:
+            projects = self.project_repo.get_all(exclude_archived=True)
+            for project in projects:
+                if project.name == project_name:
+                    return project.id
+            return None
+        except Exception as e:
+            print(f"[DEBUG] Ошибка поиска проекта: {e}")
+            return None
+
+    def _find_task_by_name(self, project_id: int, task_title: str) -> Optional[int]:
+        """Находит ID задачи по названию и ID проекта"""
+        try:
+            tasks = self.task_repo.get_by_project(project_id)
+            for task in tasks:
+                if task.title == task_title:
+                    return task.id
+            return None
+        except Exception as e:
+            print(f"[DEBUG] Ошибка поиска задачи: {e}")
+            return None
+
     def _note_to_dict(self, note, is_mine: bool, user_id: int) -> Dict:
         """Преобразует ORM-объект в словарь для карточки"""
         employee_name = "Неизвестен"
@@ -240,24 +263,33 @@ class OvertimeCrudService:
         # Извлекаем проект и задачу из описания
         project_name = None
         task_title = None
+        project_id = None
+        task_id = None
         description = note.note_text or ""
 
-        # ===== ИСПРАВЛЕНИЕ: если description пустой или только маркеры =====
-        # Регулярное выражение для извлечения проекта и задачи
+        # ===== ИСПРАВЛЕНИЕ: извлекаем проект и задачу из описания =====
         if description:
             project_match = re.search(r'\[Проект: (.*?)\]', description)
             if project_match:
                 project_name = project_match.group(1).strip()
+                # Находим ID проекта по названию
+                project_id = self._find_project_by_name(project_name)
+                print(f"[DEBUG] Найден проект '{project_name}' с ID={project_id}")
+
             task_match = re.search(r'\[Задача: (.*?)\]', description)
             if task_match:
                 task_title = task_match.group(1).strip()
+                # Находим ID задачи по названию и проекту
+                if project_id:
+                    task_id = self._find_task_by_name(project_id, task_title)
+                    print(f"[DEBUG] Найдена задача '{task_title}' с ID={task_id}")
 
             # Удаляем маркеры из описания для отображения
             clean_description = re.sub(r'\[Проект: .*?\]\s*', '', description)
             clean_description = re.sub(r'\[Задача: .*?\]\s*', '', clean_description)
             description = clean_description.strip()
 
-            # ===== ИСПРАВЛЕНИЕ: если после очистки остался только "Без описания" =====
+            # Если после очистки остался только "Без описания"
             if not description or description == "Без описания":
                 description = ""
 
@@ -274,6 +306,8 @@ class OvertimeCrudService:
             "description": description,
             "project": project_name,
             "task": task_title,
+            "project_id": project_id,  # <-- ДОБАВЛЯЕМ
+            "task_id": task_id,        # <-- ДОБАВЛЯЕМ
             "is_mine": is_mine
         }
 

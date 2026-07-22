@@ -4,7 +4,8 @@ from enum import Enum
 from typing import Set, Dict, Optional, List
 from functools import lru_cache
 
-from models.permissions import AppRole, CombinedRole, SystemRole
+from models.permissions import CombinedRole, SystemRole
+from services.permissions.app_permissions import AppRole
 
 
 class ProjectRole(Enum):
