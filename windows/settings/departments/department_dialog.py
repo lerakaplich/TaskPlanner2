@@ -10,8 +10,18 @@ from PyQt6.QtCore import pyqtSignal, Qt, QEvent
 class DepartmentDialog(QDialog):
     department_saved = pyqtSignal(dict)
 
-    def __init__(self, parent=None, department_data=None, employee_service=None, read_only=False):
+    def __init__(self, parent=None, department_data=None, employee_service=None,
+                 read_only=False, permission_service=None):
         super().__init__(parent)
+
+        self.permission_service = permission_service
+
+        # Если есть permission_service, проверяем реальные права
+        if self.permission_service and department_data:
+            actual_read_only = not self._can_edit_this_department(department_data)
+            self.read_only = read_only or actual_read_only
+        else:
+            self.read_only = read_only
 
         self.employee_service = employee_service
         self.department_data = department_data
@@ -49,6 +59,35 @@ class DepartmentDialog(QDialog):
 
         # Применяем режим только просмотра
         self._apply_read_only_state()
+
+    def _can_edit_this_department(self, department_data: dict) -> bool:
+        """Проверяет, может ли пользователь редактировать этот отдел"""
+        if not self.permission_service:
+            return not self.read_only
+
+        user_id = self.permission_service.user_id
+        combined = self.permission_service.get_combined_role()
+
+        if combined.is_super_admin or combined.is_admin:
+            return True
+
+        if combined.is_department_head:
+            boss_ids = department_data.get('boss_ids', [])
+            return user_id in boss_ids
+
+        if combined.is_division_head:
+            if not self.employee_service:
+                return False
+            divisions = self.employee_service.get_all_divisions()
+            user_division_ids = []
+            for div in divisions:
+                boss_ids = div.get('boss_ids', [])
+                if user_id in boss_ids:
+                    user_division_ids.append(div.get('id'))
+            department_division_id = department_data.get('division_id')
+            return department_division_id in user_division_ids
+
+        return False
 
     def _apply_read_only_state(self):
         """Применяет состояние только просмотра к диалогу"""

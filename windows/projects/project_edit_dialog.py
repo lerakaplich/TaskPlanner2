@@ -1,6 +1,7 @@
 # windows/projects/project_edit_dialog.py
+
 from windows.projects.base_project_dialog import BaseProjectDialog
-from PyQt6.QtWidgets import QMessageBox
+from PyQt6.QtWidgets import QMessageBox, QDialog
 from PyQt6.QtCore import QDate
 
 
@@ -11,6 +12,7 @@ class ProjectEditDialog(BaseProjectDialog):
         self.original_data = project_data
         self.project_id = None
         self.permission_service = None  # Будет передан извне
+        self._is_readonly_mode = False  # Флаг для режима просмотра
 
         super().__init__(parent, title="Редактирование проекта", project_data=project_data, service=service)
 
@@ -38,23 +40,25 @@ class ProjectEditDialog(BaseProjectDialog):
             can_edit = self.permission_service.can_edit_project(project_id)
             if not can_edit:
                 # Режим только для просмотра
+                self._is_readonly_mode = True
                 self.setWindowTitle(f"Просмотр проекта: {self.project_data.get('name', '')}")
                 self.titleLabel.setText("Просмотр проекта")
                 self.createBtn.setText("Закрыть")
-                self.createBtn.setEnabled(True)  # Кнопка будет закрывать диалог
+                self.createBtn.setEnabled(True)
 
-                # Отключаем все поля ввода
-                self._set_readonly_mode(True)
+                # Отключаем поля ввода (кроме кнопок участников/админов)
+                self._set_fields_readonly(True)
 
                 # Меняем обработчик кнопки
                 self.createBtn.clicked.disconnect()
                 self.createBtn.clicked.connect(self.reject)
             else:
                 # Режим редактирования
-                self._set_readonly_mode(False)
+                self._is_readonly_mode = False
+                self._set_fields_readonly(False)
 
-    def _set_readonly_mode(self, readonly: bool):
-        """Устанавливает режим только для чтения для всех полей"""
+    def _set_fields_readonly(self, readonly: bool):
+        """Устанавливает режим только для чтения для полей ввода (НЕ отключает кнопки)"""
         # Отключаем поля ввода
         if hasattr(self, 'nameInput'):
             self.nameInput.setReadOnly(readonly)
@@ -65,15 +69,56 @@ class ProjectEditDialog(BaseProjectDialog):
         if hasattr(self, 'comboManager'):
             self.comboManager.setEnabled(not readonly)
 
-        # Отключаем кнопки выбора участников
-        if hasattr(self, 'participantsBtn'):
-            self.participantsBtn.setEnabled(not readonly)
-        if hasattr(self, 'adminsBtn'):
-            self.adminsBtn.setEnabled(not readonly)
+        # ВАЖНО: НЕ отключаем кнопки участников и администраторов!
+        # Они должны оставаться кликабельными для просмотра
+        # if hasattr(self, 'participantsBtn'):
+        #     self.participantsBtn.setEnabled(not readonly)
+        # if hasattr(self, 'adminsBtn'):
+        #     self.adminsBtn.setEnabled(not readonly)
 
         # Отключаем чекбоксы колонок
         for checkbox in self.column_checkboxes.values():
             checkbox.setEnabled(not readonly)
+
+    def select_participants(self):
+        """Переопределяем выбор участников - в режиме просмотра открываем только для чтения"""
+        from windows.projects.employee_selector import EmployeeSelectorDialog
+
+        dialog = EmployeeSelectorDialog(self, service=self.project_service, mode="participants")
+        if self.participants:
+            preselected_ids = [p.get('id') if isinstance(p, dict) else p for p in self.participants]
+            dialog.set_preselected(preselected_ids)
+
+        # Если режим просмотра - включаем read-only
+        if self._is_readonly_mode:
+            dialog.set_readonly_mode(True)
+            dialog.setWindowTitle("Участники проекта (просмотр)")
+
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            # В режиме просмотра не сохраняем изменения
+            if not self._is_readonly_mode:
+                self.participants = dialog.get_selected_employees()
+                self._update_participants_button_text()
+
+    def select_admins(self):
+        """Переопределяем выбор администраторов - в режиме просмотра открываем только для чтения"""
+        from windows.projects.employee_selector import EmployeeSelectorDialog
+
+        dialog = EmployeeSelectorDialog(self, service=self.project_service, mode="admins")
+        if self.admins:
+            preselected_ids = [a.get('id') if isinstance(a, dict) else a for a in self.admins]
+            dialog.set_preselected(preselected_ids)
+
+        # Если режим просмотра - включаем read-only
+        if self._is_readonly_mode:
+            dialog.set_readonly_mode(True)
+            dialog.setWindowTitle("Администраторы проекта (просмотр)")
+
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            # В режиме просмотра не сохраняем изменения
+            if not self._is_readonly_mode:
+                self.admins = dialog.get_selected_employees()
+                self._update_admins_button_text()
 
     def load_project_data(self):
         """Загружает данные для редактирования"""

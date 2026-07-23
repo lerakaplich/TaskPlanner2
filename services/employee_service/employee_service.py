@@ -1,5 +1,5 @@
 # services/employee_service.py (исправленный фасад)
-
+from select import select
 from typing import List, Optional, Dict, Any
 from sqlalchemy.orm import Session
 from database import get_employees_session, get_tasks_session
@@ -32,15 +32,48 @@ class EmployeeService:
         self.tags = TagService(self.tasks_session)
         self.columns = ColumnService(self.tasks_session)
 
+    def get_system_role(self, user_id: int):
+        """
+        Определяет системную роль пользователя (начальник отдела, подразделения и т.д.)
+        """
+        from services.permissions.system_permissions import SystemRole
+        from sqlalchemy import select
+        from models.employees import Department, Division
+
+        user_id_str = str(user_id)
+
+        # Проверяем, является ли пользователь начальником отдела
+        try:
+            departments = self.session.query(Department).all()
+            for department in departments:
+                if department.boss:
+                    boss_ids = self.base._parse_boss_ids(department.boss)
+                    if user_id in boss_ids:
+                        print(f"🔍 Пользователь {user_id} является начальником отдела '{department.name}'")
+                        return SystemRole.DEPARTMENT_HEAD
+        except Exception as e:
+            print(f"⚠️ Ошибка проверки начальника отдела: {e}")
+
+        # Проверяем, является ли пользователь начальником подразделения
+        try:
+            divisions = self.session.query(Division).all()
+            for division in divisions:
+                if division.boss:
+                    boss_ids = self.base._parse_boss_ids(division.boss)
+                    if user_id in boss_ids:
+                        print(f"🔍 Пользователь {user_id} является начальником подразделения '{division.name}'")
+                        return SystemRole.DIVISION_HEAD
+        except Exception as e:
+            print(f"⚠️ Ошибка проверки начальника подразделения: {e}")
+
+        return SystemRole.EMPLOYEE
+
     def close(self):
         if self._own_session and self.session:
             self.session.close()
         if self.tasks_session:
             self.tasks_session.close()
 
-    # =====================================================
-    # Вспомогательные методы преобразования
-    # =====================================================
     def _employee_to_dict(self, employee: Employee) -> Dict[str, Any]:
         """Преобразует модель Employee в словарь"""
         if employee is None:
@@ -151,9 +184,6 @@ class EmployeeService:
             'is_active': emp_data.is_active if emp_data else True,
         }
 
-    # =====================================================
-    # Прокси для сотрудников (синхронизация двух БД)
-    # =====================================================
     def get_all_employees(self) -> List[Dict[str, Any]]:
         """Получить всех сотрудников из БД employees с данными из EmployeeData"""
         employees = self.employee_repo.get_all()
@@ -332,28 +362,58 @@ class EmployeeService:
             return False
 
     def delete_employee_by_id_with_check(self, employee_id: int) -> Dict[str, Any]:
-        """Удаляет сотрудника с проверками (мягкое удаление)"""
+        """Удаляет сотрудника с проверками (полное удаление из БД)"""
         try:
-            # Проверяем, есть ли активные задачи
             from models.tasks import Task
-            tasks_count = self.tasks_session.query(Task).filter(
-                Task.assigned_to == employee_id,
-                Task.is_archived == False
-            ).count()
 
-            if tasks_count > 0:
-                return {
-                    'success': False,
-                    'message': f'Нельзя удалить сотрудника, у которого есть {tasks_count} активных задач. Сначала переназначьте задачи.'
-                }
+            # === 1. Удаляем задачи сотрудника ===
+            all_tasks = self.tasks_session.query(Task).filter(
+                Task.assigned_to == employee_id
+            ).all()
+            print(f"🔍 Найдено задач у сотрудника {employee_id}: {len(all_tasks)}")
 
-            # Выполняем мягкое удаление
-            result = self.delete_employee(employee_id)
-            if result:
-                return {'success': True, 'message': 'Сотрудник успешно удалён'}
+            if all_tasks:
+                task_ids = [task.id for task in all_tasks]
+
+                from models.tasks import TaskTag
+                self.tasks_session.query(TaskTag).filter(
+                    TaskTag.task_id.in_(task_ids)
+                ).delete(synchronize_session=False)
+
+                self.tasks_session.query(Task).filter(
+                    Task.id.in_(task_ids)
+                ).delete(synchronize_session=False)
+
+                self.tasks_session.commit()
+                print(f"🗑️ Удалено {len(task_ids)} задач сотрудника {employee_id}")
+
+            # === 2. Удаляем EmployeeData (taskplanner) ===
+            emp_data = self.employee_data_repo.get_by_id(employee_id)
+            if emp_data:
+                self.tasks_session.delete(emp_data)
+                self.tasks_session.commit()
+                print(f"🗑️ Удалена запись EmployeeData для {employee_id}")
+
+            # === 3. Удаляем Employee (employees) ===
+            from sqlalchemy import delete
+
+            # ПРАВИЛЬНЫЙ СПОСОБ: передаём модель напрямую
+            stmt = delete(Employee).where(Employee.id == employee_id)
+            result = self.session.execute(stmt)
+            self.session.commit()
+
+            if result.rowcount > 0:
+                print(f"🗑️ Удалена запись Employee для {employee_id}")
+                return {'success': True, 'message': f'Сотрудник успешно удалён вместе с {len(all_tasks)} задачами'}
             else:
-                return {'success': False, 'message': 'Ошибка при удалении сотрудника'}
+                return {'success': False, 'message': 'Ошибка при удалении сотрудника из employees'}
+
         except Exception as e:
+            self.tasks_session.rollback()
+            self.session.rollback()
+            print(f"❌ Ошибка при удалении сотрудника: {e}")
+            import traceback
+            traceback.print_exc()
             return {'success': False, 'message': str(e)}
 
     def save_employee_from_dialog(self, employee_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:

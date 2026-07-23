@@ -34,6 +34,7 @@ class EmployeeBaseService:
         if not boss_field:
             return []
         if isinstance(boss_field, str):
+            # Проверяем, что строка содержит только цифры, запятые и пробелы
             if all(c.isdigit() or c == ',' or c.isspace() for c in boss_field):
                 ids = []
                 for part in boss_field.split(','):

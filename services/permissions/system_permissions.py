@@ -231,7 +231,7 @@ class SystemPermissionManager:
 
         return False
 
-    # ===== ПРОВЕРКИ ПРАВ =====
+    # services/permissions/system_permissions.py
 
     def can_manage_employee(self, target_employee_id: int) -> bool:
         """
@@ -259,6 +259,16 @@ class SystemPermissionManager:
 
         return False
 
+    def can_edit_employee(self, target_employee_id: int) -> bool:
+        """Может ли пользователь редактировать сотрудника"""
+        # Начальники могут редактировать только подчинённых
+        return self.can_manage_employee(target_employee_id)
+
+    def can_delete_employee(self, target_employee_id: int) -> bool:
+        """Может ли пользователь удалять сотрудника"""
+        # Начальники могут удалять только подчинённых
+        return self.can_manage_employee(target_employee_id)
+
     def can_view_employee(self, target_employee_id: int) -> bool:
         """
         Может ли пользователь просматривать сотрудника
@@ -280,16 +290,6 @@ class SystemPermissionManager:
             return self.is_in_my_department(target_employee_id)
 
         return False
-
-    def can_edit_employee(self, target_employee_id: int) -> bool:
-        """Может ли пользователь редактировать сотрудника"""
-        # Начальники могут редактировать только подчинённых
-        return self.can_manage_employee(target_employee_id)
-
-    def can_delete_employee(self, target_employee_id: int) -> bool:
-        """Может ли пользователь удалять сотрудника"""
-        # Начальники могут удалять только подчинённых
-        return self.can_manage_employee(target_employee_id)
 
     def can_manage_department(self, department_id: int) -> bool:
         """Может ли пользователь управлять отделом"""

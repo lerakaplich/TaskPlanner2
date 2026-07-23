@@ -1,7 +1,8 @@
 # windows/projects/project_view_page.py
+
 import os
 from typing import Dict, List
-from PyQt6.QtWidgets import QWidget, QLabel, QPushButton, QScrollArea, QHBoxLayout, QVBoxLayout, QMessageBox
+from PyQt6.QtWidgets import QWidget, QLabel, QPushButton, QScrollArea, QHBoxLayout, QVBoxLayout, QMessageBox, QFrame
 from PyQt6.QtCore import Qt, pyqtSignal, QTimer
 from PyQt6 import uic
 
@@ -23,7 +24,7 @@ class ProjectViewPage(QWidget):
         self.project_id = project_id
         self.columns = {}
         self.column_widgets = []
-        self.parent_window = parent  # Сохраняем ссылку на родительское окно
+        self.parent_window = parent
 
         # Получаем текущего пользователя
         current_user = self._get_current_user(parent)
@@ -57,12 +58,8 @@ class ProjectViewPage(QWidget):
 
     def _on_go_back(self):
         """Обработчик нажатия кнопки назад"""
-        # ✅ ЭМИТИМ СИГНАЛ ДЛЯ ВОЗВРАТА
         self.go_back.emit()
-
-        # ✅ ИЛИ ПРЯМО ВОЗВРАЩАЕМСЯ НА СТРАНИЦУ ПРОЕКТОВ
         if self.parent_window and hasattr(self.parent_window, 'contentStack'):
-            # Находим индекс страницы проектов (обычно 0)
             self.parent_window.contentStack.setCurrentIndex(0)
 
     def _setup_ui(self):
@@ -82,6 +79,114 @@ class ProjectViewPage(QWidget):
         if hasattr(self, 'statusLabel'):
             self.statusLabel.setText(status_text)
             self.statusLabel.setStyleSheet(status_style)
+
+        # Ищем или создаём кнопки для участников и администраторов
+        self._setup_members_buttons()
+
+    def _setup_members_buttons(self):
+        """Создаёт или находит кнопки для участников и администраторов"""
+        # Ищем существующие кнопки в UI
+        participants_btn = None
+        admins_btn = None
+
+        # Проверяем различные возможные имена кнопок
+        btn_names_participants = ['participantsBtn', 'btnParticipants', 'btnMembers', 'membersBtn']
+        btn_names_admins = ['adminsBtn', 'btnAdmins', 'btnManagers', 'managersBtn']
+
+        for name in btn_names_participants:
+            if hasattr(self, name):
+                participants_btn = getattr(self, name)
+                break
+
+        for name in btn_names_admins:
+            if hasattr(self, name):
+                admins_btn = getattr(self, name)
+                break
+
+        # Если кнопки не найдены в UI, создаём их программно
+        if participants_btn is None or admins_btn is None:
+            # Ищем контейнер для кнопок (обычно это layout или frame вверху страницы)
+            container = self._find_button_container()
+
+            if container:
+                # Создаём кнопки, если их нет
+                if participants_btn is None:
+                    participants_btn = QPushButton("👥 Участники")
+                    participants_btn.setObjectName("participantsBtn")
+                    participants_btn.setStyleSheet("""
+                        QPushButton {
+                            background-color: #1B232A;
+                            color: white;
+                            border: none;
+                            border-radius: 8px;
+                            padding: 8px 16px;
+                            font-size: 13px;
+                            font-weight: bold;
+                        }
+                        QPushButton:hover {
+                            background-color: #2C3640;
+                        }
+                    """)
+                    container.addWidget(participants_btn)
+
+                if admins_btn is None:
+                    admins_btn = QPushButton("👑 Администраторы")
+                    admins_btn.setObjectName("adminsBtn")
+                    admins_btn.setStyleSheet("""
+                        QPushButton {
+                            background-color: #1B232A;
+                            color: white;
+                            border: none;
+                            border-radius: 8px;
+                            padding: 8px 16px;
+                            font-size: 13px;
+                            font-weight: bold;
+                        }
+                        QPushButton:hover {
+                            background-color: #2C3640;
+                        }
+                    """)
+                    container.addWidget(admins_btn)
+
+        # Подключаем сигналы
+        if participants_btn:
+            participants_btn.clicked.connect(self._show_participants)
+        if admins_btn:
+            admins_btn.clicked.connect(self._show_admins)
+
+    def _find_button_container(self):
+        """Находит контейнер для кнопок в UI"""
+        # Проверяем, есть ли специальный контейнер для кнопок
+        if hasattr(self, 'buttonContainer'):
+            return self.buttonContainer
+
+        # Проверяем, есть ли панель инструментов
+        if hasattr(self, 'toolbar'):
+            return self.toolbar
+
+        # Проверяем, есть ли верхний layout
+        if hasattr(self, 'topLayout'):
+            return self.topLayout
+
+        # Ищем первый QHBoxLayout в верхней части страницы
+        for child in self.children():
+            if isinstance(child, QWidget):
+                layout = child.layout()
+                if layout and isinstance(layout, QHBoxLayout):
+                    return layout
+
+        # Если ничего не нашли, создаём новый контейнер в верхней части страницы
+        # Ищем главный layout
+        main_layout = self.layout()
+        if main_layout is None:
+            # Создаём главный layout, если его нет
+            main_layout = QVBoxLayout(self)
+            self.setLayout(main_layout)
+
+        # Создаём контейнер для кнопок
+        container = QHBoxLayout()
+        main_layout.insertLayout(0, container)
+        return container
 
     def setup_kanban(self):
         """Создаёт колонки канбан-доски"""
@@ -253,3 +358,60 @@ class ProjectViewPage(QWidget):
     def showEvent(self, event):
         super().showEvent(event)
         QTimer.singleShot(100, self.load_tasks)
+
+    def _show_participants(self):
+        """Показывает участников проекта в режиме просмотра"""
+        from windows.projects.employee_selector import EmployeeSelectorDialog
+
+        participants = self._get_project_participants()
+        if not participants:
+            QMessageBox.information(self, "Участники", "В проекте нет участников")
+            return
+
+        dialog = EmployeeSelectorDialog(self, service=self.view_service.project_service, mode="participants")
+        dialog.set_preselected([p.get('id') for p in participants])
+        dialog.set_readonly_mode(True)
+        dialog.setWindowTitle("Участники проекта")
+        dialog.exec()
+
+    def _show_admins(self):
+        """Показывает администраторов проекта в режиме просмотра"""
+        from windows.projects.employee_selector import EmployeeSelectorDialog
+
+        admins = self._get_project_admins()
+        if not admins:
+            QMessageBox.information(self, "Администраторы", "В проекте нет администраторов")
+            return
+
+        dialog = EmployeeSelectorDialog(self, service=self.view_service.project_service, mode="admins")
+        dialog.set_preselected([a.get('id') for a in admins])
+        dialog.set_readonly_mode(True)
+        dialog.setWindowTitle("Администраторы проекта")
+        dialog.exec()
+
+    def _get_project_participants(self) -> List[Dict]:
+        """Возвращает список участников проекта"""
+        if self.project_data and hasattr(self.project_data, 'members'):
+            return [
+                {
+                    'id': member.employee_id,
+                    'full_name': member.full_name,
+                    'role': member.role
+                }
+                for member in self.project_data.members
+            ]
+        return []
+
+    def _get_project_admins(self) -> List[Dict]:
+        """Возвращает список администраторов проекта"""
+        if self.project_data and hasattr(self.project_data, 'members'):
+            return [
+                {
+                    'id': member.employee_id,
+                    'full_name': member.full_name,
+                    'role': member.role
+                }
+                for member in self.project_data.members
+                if member.role == 'project_manager'
+            ]
+        return []

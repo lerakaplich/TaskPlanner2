@@ -1,11 +1,10 @@
 # windows/settings/employees/employee_card.py
 
-from PyQt6 import uic
-from PyQt6.QtWidgets import QFrame, QMessageBox
-from PyQt6.QtCore import pyqtSignal
 import os
 
-from services.permissions.app_permissions import AppRole
+from PyQt6 import uic
+from PyQt6.QtCore import pyqtSignal
+from PyQt6.QtWidgets import QFrame
 
 
 class EmployeeCard(QFrame):
@@ -13,7 +12,7 @@ class EmployeeCard(QFrame):
 
     edit_clicked = pyqtSignal(int)
     delete_clicked = pyqtSignal(int)
-    open_clicked = pyqtSignal(int)  # <-- ДОБАВЛЯЕМ СИГНАЛ ДЛЯ btnOpen
+    open_clicked = pyqtSignal(int)
 
     def __init__(self, employee_data, employee_service, parent=None, read_only=False, permission_service=None):
         super().__init__(parent)
@@ -33,8 +32,8 @@ class EmployeeCard(QFrame):
         uic.loadUi(ui_path, self)
 
         self.fill_data()
-        self.connect_signals()
         self._apply_read_only_state()
+        self.connect_signals()
         self._apply_contact_visibility()
 
     def _check_contact_permission(self) -> bool:
@@ -64,67 +63,38 @@ class EmployeeCard(QFrame):
                 self.contactInfoLabel.setVisible(True)
 
     def _apply_read_only_state(self):
-        """Применяет состояние только просмотра с учётом прав"""
-        # По умолчанию
-        show_open = True
-        show_edit = True
-        show_delete = True
-        edit_text = "Редактировать"
-
-        if self.permission_service:
-            # Проверяем права
-            can_edit = self.permission_service.can_edit_employee(self.employee_id)
-            can_delete = self.permission_service.can_delete_employee(self.employee_id)
-
-            # Если это суперадмин (target) и пользователь - администратор
-            target_role = self.employee_data.get('rights', '')
-            user_role = self.permission_service.get_app_role()
-
-            if user_role == AppRole.ADMIN and target_role == 'superadmin':
-                # Для админа у суперадмина: ТОЛЬКО "Открыть"
-                show_edit = False
-                show_delete = False
-                show_open = True
-            elif not can_edit:
-                show_edit = False
-                show_delete = False
-                show_open = True
-            elif not can_delete:
-                show_delete = False
-                show_open = True
-
-        # Применяем read_only режим
+        """
+        Применяет состояние только просмотра с учётом прав
+        read_only уже содержит правильное значение из employees_tab
+        """
+        # Если read_only=True - только просмотр
         if self.read_only:
+            show_open = True
             show_edit = False
             show_delete = False
+        else:
+            # Если read_only=False - показываем все кнопки
             show_open = True
+            show_edit = True
+            show_delete = True
+
+            # Если это текущий пользователь - скрываем кнопку удаления
+            if self.permission_service and self.employee_id == self.permission_service.user_id:
+                show_delete = False  # Не показываем кнопку удаления для себя
 
         # Настраиваем кнопку "Открыть"
         if hasattr(self, 'btnOpen'):
             self.btnOpen.setVisible(show_open)
-            if show_open:
-                self.btnOpen.show()
-            else:
-                self.btnOpen.hide()
 
         # Настраиваем кнопку редактирования
         if hasattr(self, 'editButton'):
+            self.editButton.setVisible(show_edit)
             if show_edit:
-                self.editButton.setText(edit_text)
-                self.editButton.setVisible(True)
-                self.editButton.show()
-            else:
-                self.editButton.setVisible(False)
-                self.editButton.hide()
+                self.editButton.setText("Редактировать")
 
         # Настраиваем кнопку удаления
         if hasattr(self, 'deleteButton'):
-            if show_delete:
-                self.deleteButton.setVisible(True)
-                self.deleteButton.show()
-            else:
-                self.deleteButton.setVisible(False)
-                self.deleteButton.hide()
+            self.deleteButton.setVisible(show_delete)
 
     def connect_signals(self):
         """Подключение сигналов"""
@@ -132,12 +102,12 @@ class EmployeeCard(QFrame):
         if hasattr(self, 'btnOpen'):
             self.btnOpen.clicked.connect(lambda: self.open_clicked.emit(self.employee_id))
 
-        # Кнопка "Редактировать" - ведёт в диалог редактирования
+        # Кнопка "Редактировать" - ВСЕГДА ПОДКЛЮЧАЕМ
         if hasattr(self, 'editButton'):
             self.editButton.clicked.connect(lambda: self.edit_clicked.emit(self.employee_id))
 
-        # Кнопка "Удалить"
-        if hasattr(self, 'deleteButton') and self.deleteButton.isVisible():
+        # Кнопка "Удалить" - ВСЕГДА ПОДКЛЮЧАЕМ
+        if hasattr(self, 'deleteButton'):
             self.deleteButton.clicked.connect(lambda: self.delete_clicked.emit(self.employee_id))
 
     def fill_data(self):
@@ -201,7 +171,7 @@ class EmployeeCard(QFrame):
                 self.divisionSectionLabel.setVisible(has_div)
             self.divisionValue.setVisible(has_div)
 
-        # Мобильный телефон (показываем только если есть право)
+        # Мобильный телефон
         display_phone = display_data.get('display_phone', '—')
         if hasattr(self, 'mobilePhoneValue'):
             self.mobilePhoneValue.setText(display_phone)
@@ -211,7 +181,7 @@ class EmployeeCard(QFrame):
             if hasattr(self, 'mobilePhoneLabel'):
                 self.mobilePhoneLabel.setVisible(show_phone)
 
-        # Рабочий телефон (показываем только если есть право)
+        # Рабочий телефон
         work_phone = display_data.get('work_number', '')
         if hasattr(self, 'workPhoneValue'):
             has_work_phone = bool(work_phone)
@@ -221,7 +191,7 @@ class EmployeeCard(QFrame):
             if hasattr(self, 'workPhoneLabel'):
                 self.workPhoneLabel.setVisible(show_work_phone)
 
-        # Email (показываем только если есть право)
+        # Email
         email = display_data.get('email', '')
         if hasattr(self, 'emailValue'):
             has_email = bool(email)

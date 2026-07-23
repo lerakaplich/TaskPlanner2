@@ -63,6 +63,7 @@
 |  +-- chat.py
 |  +-- employees.py
 |  +-- gantt_data.py
+|  +-- permissions.py
 |  +-- projects.py
 |  +-- schemas
 |  |  +-- __pycache__
@@ -82,6 +83,7 @@
 |  +-- project_repo.py
 |  +-- tag_repo.py
 |  +-- task_repo.py
++-- requirements
 +-- script.iss
 +-- ServerApp.spec
 +-- services
@@ -144,6 +146,7 @@
 |  |  +-- projects_tasks_service.py
 |  +-- tasks_service
 |  |  +-- __pycache__
+|  |  +-- task_data_collector.py
 |  |  +-- tasks_bulk_service.py
 |  |  +-- tasks_crud_service.py
 |  |  +-- tasks_executor_suggestion_service.py
@@ -290,6 +293,9 @@
 |  |  +-- chat_text_edit.py
 |  |  +-- chat_view.py
 |  |  +-- employee_selection_dialog.py
+|  +-- data
+|  |  +-- training
+|  |  |  +-- tasks_data_20260707_112216.json
 |  +-- gantt
 |  |  +-- __pycache__
 |  |  +-- calendar_widget.py

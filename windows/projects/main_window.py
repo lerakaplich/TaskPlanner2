@@ -70,16 +70,21 @@ class MainWindow(QMainWindow):
         self.analytics_service.set_current_user_id(self.current_user_id)
         self.overtime_service.set_current_user_id(self.current_user_id)
 
-    # windows/projects/main_window.py
-
     def _init_permission_service(self):
         """Инициализация сервиса прав доступа"""
         try:
+            # СОЗДАЁМ EmployeeService ДЛЯ ОПРЕДЕЛЕНИЯ СИСТЕМНОЙ РОЛИ
+            from services.employee_service.employee_service import EmployeeService
+            from database import get_employees_session
+
+            employees_session = get_employees_session()
+            employee_service = EmployeeService(employees_session)
+
             self.permission_service = PermissionService(
                 user_id=self.current_user_id,
                 app_service=self.project_service,
                 project_service=self.project_service,
-                employee_service=None,
+                employee_service=employee_service,  # <-- ПЕРЕДАЁМ
                 session=self.session
             )
             # ✅ ВАЖНО: Очищаем кэш после инициализации
@@ -87,8 +92,15 @@ class MainWindow(QMainWindow):
 
             print(f"🔐 Сервис прав инициализирован для пользователя {self.current_user_id}")
             print(f"   Роль в приложении: {self.permission_service.app_manager.role.value}")
+
+            # Получаем системную роль для отладки
+            system_role = self.permission_service._get_system_role()
+            print(f"   Системная роль: {system_role.value if system_role else 'None'}")
+
         except Exception as e:
             print(f"⚠️ Ошибка инициализации сервиса прав: {e}")
+            import traceback
+            traceback.print_exc()
             # Создаём минимальный сервис прав
             from services.permissions.app_permissions import AppPermissionManager, AppRole
             self.permission_service = PermissionService(

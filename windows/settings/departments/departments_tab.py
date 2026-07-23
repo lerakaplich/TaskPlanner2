@@ -55,13 +55,29 @@ class DepartmentsTab(BaseTab):
     def setup_permission_ui(self):
         """
         Настройка UI в зависимости от прав пользователя
-        Для USER - только просмотр (read-only)
-        Для ADMIN и SUPER_ADMIN - полный доступ
         """
-        # Определяем режим на основе роли
-        if self._permission_service:
-            is_read_only = self._permission_service.is_departments_tab_read_only()
-            self._read_only_mode = is_read_only
+        # ПРЯМАЯ ПРОВЕРКА: проверяем, является ли пользователь начальником отдела
+        is_department_head = False
+        if self._permission_service and self.employee_service:
+            from services.permissions.system_permissions import SystemRole
+            try:
+                system_role = self.employee_service.get_system_role(self._permission_service.user_id)
+                is_department_head = (system_role == SystemRole.DEPARTMENT_HEAD)
+                print(f"🔍 Прямая проверка: is_department_head = {is_department_head}")
+            except Exception as e:
+                print(f"⚠️ Ошибка проверки: {e}")
+
+        # Если пользователь начальник отдела - НЕ включаем read-only режим
+        if is_department_head:
+            self._read_only_mode = False
+            print(f"   ✅ Начальник отдела - режим редактирования включен")
+        else:
+            # Обычная проверка через permission_service
+            if self._permission_service:
+                is_read_only = self._permission_service.is_departments_tab_read_only()
+                self._read_only_mode = is_read_only
+            else:
+                self._read_only_mode = False
 
         # Применяем состояние
         self._apply_read_only_state()
@@ -69,12 +85,6 @@ class DepartmentsTab(BaseTab):
         # Скрываем или показываем кнопку добавления
         if self.btnAdd:
             self.btnAdd.setVisible(self._should_show_add_buttons())
-
-        # Фильтры НЕ блокируем — пользователь должен иметь возможность фильтровать
-
-        # Если режим просмотра - переименовываем кнопки
-        if self._read_only_mode:
-            self._rename_edit_buttons()
 
         # Обновляем карточки только если данные уже загружены
         if self.departments:
@@ -145,6 +155,11 @@ class DepartmentsTab(BaseTab):
             departments = self.employee_service.get_department_card_data()
             self.departments = departments if departments else []
             print(f"📊 Загружено отделов: {len(self.departments)}")
+
+            # ОТЛАДКА: проверяем boss_ids для каждого отдела
+            for dept in self.departments:
+                print(f"   Отдел: {dept.get('name')}, boss_ids: {dept.get('boss_ids')}")
+
             self.refresh_cards()
 
     def load_data(self, departments: list):
@@ -161,26 +176,89 @@ class DepartmentsTab(BaseTab):
             for div in self.all_divisions:
                 self.filterSubDepartment.addItem(div.get('name', ''), div.get('id'))
 
+    # windows/settings/departments/departments_tab.py
+
     def refresh_cards(self):
         """Обновление карточек с применением фильтров"""
         self.clear_cards()
+
+        # ОТЛАДКА
+        print(f"🔍 refresh_cards: self._read_only_mode = {self._read_only_mode}")
+        print(f"🔍 refresh_cards: self._permission_service = {self._permission_service}")
+        if self._permission_service:
+            print(f"🔍 refresh_cards: user_id = {self._permission_service.user_id}")
 
         filtered_departments = self.get_filtered_departments()
         print(f"🔄 Обновление карточек отделов: отображается {len(filtered_departments)} из {len(self.departments)}")
 
         for i, department in enumerate(filtered_departments):
+            # Проверяем, может ли пользователь редактировать этот отдел
+            can_edit = self._can_edit_department(department)
+            print(f"   Отдел: {department.get('name')}, can_edit={can_edit}")
+
             card = DepartmentCard(
                 department,
                 self.employee_service,
                 parent=self,
-                read_only=self._read_only_mode
+                read_only=not can_edit,
+                permission_service=self._permission_service
             )
             card.edit_clicked.connect(self.on_edit_clicked)
-            if not self._read_only_mode:
+            if can_edit and not self._read_only_mode:
                 card.delete_clicked.connect(self.on_delete_clicked)
             self.add_card_to_grid(card, i)
 
         self.set_last_row_stretch()
+
+    def _can_edit_department(self, department: dict) -> bool:
+        """Проверяет, может ли пользователь редактировать отдел"""
+        if self._read_only_mode:
+            return False
+
+        if not self._permission_service:
+            return True
+
+        user_id = self._permission_service.user_id
+
+        # ПРЯМАЯ ПРОВЕРКА через employee_service (минуя CombinedRole)
+        if self.employee_service:
+            from services.permissions.system_permissions import SystemRole
+            try:
+                system_role = self.employee_service.get_system_role(user_id)
+                print(f"🔍 Прямая проверка: system_role = {system_role}")
+                print(f"🔍 SystemRole.DEPARTMENT_HEAD = {SystemRole.DEPARTMENT_HEAD}")
+                print(f"🔍 Равны? {system_role == SystemRole.DEPARTMENT_HEAD}")
+
+                # Если пользователь - начальник отдела
+                if system_role == SystemRole.DEPARTMENT_HEAD:
+                    boss_ids = department.get('boss_ids', [])
+                    can_edit = user_id in boss_ids
+                    print(
+                        f"   {'✅' if can_edit else '❌'} Начальник отдела: user_id {user_id} in boss_ids {boss_ids} = {can_edit}")
+                    return can_edit
+
+            except Exception as e:
+                print(f"⚠️ Ошибка прямой проверки: {e}")
+
+        # Если не начальник отдела - проверяем через CombinedRole
+        combined = self._permission_service.get_combined_role()
+
+        if combined.is_super_admin or combined.is_admin:
+            return True
+
+        if combined.is_division_head:
+            if not self.employee_service:
+                return False
+            divisions = self.employee_service.get_all_divisions()
+            user_division_ids = []
+            for div in divisions:
+                boss_ids = div.get('boss_ids', [])
+                if user_id in boss_ids:
+                    user_division_ids.append(div.get('id'))
+            department_division_id = department.get('division_id')
+            return department_division_id in user_division_ids
+
+        return False
 
     def get_filtered_departments(self) -> list:
         """Возвращает отфильтрованный список отделов"""
@@ -208,9 +286,10 @@ class DepartmentsTab(BaseTab):
                 parent=self,
                 department_data=department,
                 employee_service=self.employee_service,
-                read_only=self._read_only_mode
+                read_only=self._read_only_mode,
+                permission_service=self._permission_service  # <-- Добавляем
             )
-            if not self._read_only_mode:
+            if not self._read_only_mode and self._can_edit_department(department):
                 dialog.department_saved.connect(lambda data: self.on_department_updated(department_id, data))
             dialog.exec()
 

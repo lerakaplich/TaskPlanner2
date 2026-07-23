@@ -40,6 +40,11 @@ class EmployeeDialog(QDialog):
         self.permission_service = permission_service  # <-- СОХРАНЯЕМ
         self._can_view_contacts = self._check_contact_permission()
 
+        # Флаги для редактирования себя
+        self.is_self_editing = False
+        self.department_read_only = False
+        self.division_read_only = False
+
         # Определяем путь к UI файлу
         ui_path = os.path.join(
             os.path.dirname(__file__),
@@ -75,6 +80,27 @@ class EmployeeDialog(QDialog):
         self.comboBoxDivision.currentIndexChanged.connect(self.on_division_changed)
 
         self.dateEditBirthDate.setMaximumDate(QDate.currentDate())
+
+        self.allowed_department_ids = None  # <-- ДОБАВЛЯЕМ
+
+        # После загрузки данных, если есть ограничение, применяем его
+        if self.allowed_department_ids and not self.read_only:
+            self._apply_department_restriction()
+
+    def _apply_department_restriction(self):
+        """Применяет ограничение по отделам для начальника"""
+        if not self.allowed_department_ids:
+            return
+
+        # Если только один отдел - блокируем выбор
+        if len(self.allowed_department_ids) == 1:
+            dept_id = self.allowed_department_ids[0]
+            # Ищем и выбираем отдел
+            for i in range(self.comboBoxDepartment.count()):
+                if self.comboBoxDepartment.itemData(i) == dept_id:
+                    self.comboBoxDepartment.setCurrentIndex(i)
+                    self.comboBoxDepartment.setEnabled(False)
+                    break
 
     def _check_contact_permission(self) -> bool:
         """Проверяет, может ли пользователь видеть контакты этого сотрудника"""
@@ -129,6 +155,18 @@ class EmployeeDialog(QDialog):
                 if hasattr(self, 'infoLabel'):
                     self.infoLabel.setText("🔒 Контактная информация недоступна")
                     self.infoLabel.setStyleSheet("color: #999; font-size: 12px;")
+                    self.infoLabel.setVisible(True)
+        else:
+            # Если это редактирование себя - блокируем отдел и подразделение
+            if self.is_self_editing:
+                if hasattr(self, 'comboBoxDepartment') and self.department_read_only:
+                    self.comboBoxDepartment.setEnabled(False)
+                if hasattr(self, 'comboBoxDivision') and self.division_read_only:
+                    self.comboBoxDivision.setEnabled(False)
+                # Добавляем пояснение
+                if hasattr(self, 'infoLabel'):
+                    self.infoLabel.setText("ℹ️ Отдел и подразделение нельзя изменить")
+                    self.infoLabel.setStyleSheet("color: #666; font-size: 11px;")
                     self.infoLabel.setVisible(True)
 
     def _set_all_fields_read_only(self):

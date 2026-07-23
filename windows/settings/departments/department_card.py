@@ -12,12 +12,13 @@ class DepartmentCard(QFrame):
     edit_clicked = pyqtSignal(int)
     delete_clicked = pyqtSignal(int)
 
-    def __init__(self, department_data, employee_service, parent=None, read_only=False):
+    def __init__(self, department_data, employee_service, parent=None, read_only=False, permission_service=None):
         super().__init__(parent)
         self.department_data = department_data
         self.employee_service = employee_service
         self.department_id = department_data.get('id', 0)
         self.read_only = read_only
+        self.permission_service = permission_service
 
         # Загрузка UI
         ui_path = os.path.join(
@@ -31,17 +32,53 @@ class DepartmentCard(QFrame):
         self.connect_signals()
         self._apply_read_only_state()
 
+    def _can_edit_this_department(self) -> bool:
+        """Проверяет, может ли пользователь редактировать этот отдел"""
+        if not self.permission_service:
+            return not self.read_only
+
+        user_id = self.permission_service.user_id
+
+        # Если пользователь - начальник отдела, он может редактировать ТОЛЬКО свой отдел
+        combined = self.permission_service.get_combined_role()
+
+        if combined.is_department_head:
+            # Проверяем, является ли пользователь начальником ЭТОГО отдела
+            boss_ids = self.department_data.get('boss_ids', [])
+            return user_id in boss_ids
+
+        # Для суперадмина и админа - можно редактировать всё
+        if combined.is_super_admin or combined.is_admin:
+            return True
+
+        # Для начальника подразделения - можно редактировать отделы в своём подразделении
+        if combined.is_division_head:
+            # Проверяем, принадлежит ли отдел подразделению пользователя
+            # Для этого нужно получить подразделения, где пользователь - начальник
+            divisions = self.employee_service.get_all_divisions() if self.employee_service else []
+            user_division_ids = []
+            for div in divisions:
+                boss_ids = div.get('boss_ids', [])
+                if user_id in boss_ids:
+                    user_division_ids.append(div.get('id'))
+
+            department_division_id = self.department_data.get('division_id')
+            return department_division_id in user_division_ids
+
+        return False
+
     def _apply_read_only_state(self):
         """Применяет состояние только просмотра"""
+        # Если read_only = True, значит пользователь не может редактировать этот отдел
         if self.read_only:
-            # Скрываем кнопку удаления
             if hasattr(self, 'deleteButton'):
                 self.deleteButton.setVisible(False)
                 self.deleteButton.hide()
-
-            # Переименовываем кнопку редактирования
             if hasattr(self, 'editButton'):
                 self.editButton.setText("Подробнее")
+        else:
+            if hasattr(self, 'editButton'):
+                self.editButton.setText("Редактировать")
 
     def connect_signals(self):
         """Подключение сигналов"""

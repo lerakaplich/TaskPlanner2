@@ -1,4 +1,4 @@
-# models/permissions.py (новый файл)
+# models/permissions.py
 
 from enum import Enum
 from typing import Set, Optional, List
@@ -31,6 +31,10 @@ class CombinedRole:
         self.app_role = app_role
         self.project_role = project_role
         self.system_role = system_role
+        print(f"🔍 CombinedRole.__init__: app_role={app_role}, project_role={project_role}, system_role={system_role}")
+
+    def __repr__(self) -> str:
+        return f"CombinedRole(app_role={self.app_role}, project_role={self.project_role}, system_role={self.system_role})"
 
     @property
     def is_super_admin(self) -> bool:
@@ -70,9 +74,13 @@ class CombinedRole:
 
     @property
     def is_employee(self) -> bool:
+        """Является ли пользователь обычным сотрудником (не начальником)"""
         return self.system_role == SystemRole.EMPLOYEE
 
-    # ===== КОМБИНИРОВАННЫЕ ПРОВЕРКИ =====
+    @property
+    def is_manager(self) -> bool:
+        """Является ли пользователь начальником (любого уровня)"""
+        return self.system_role in (SystemRole.ORGANIZATION_HEAD, SystemRole.DIVISION_HEAD, SystemRole.DEPARTMENT_HEAD)
 
     def can_edit_project(self, project_id: int = None) -> bool:
         """Может редактировать проект"""

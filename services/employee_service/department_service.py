@@ -171,6 +171,22 @@ class DepartmentService(EmployeeBaseService):
             result['division_name'] = '—'
         return result
 
+    def debug_department_boss(self, department_id: int):
+        """Отладочный метод для проверки поля boss"""
+        try:
+            department = self.session.get(Department, department_id)
+            if department:
+                print(f"🔍 Отладка отдела ID={department_id}")
+                print(f"   Название: {department.name}")
+                print(f"   boss (сырое значение): '{department.boss}'")
+                print(f"   boss тип: {type(department.boss)}")
+                boss_ids = self._parse_boss_ids(department.boss)
+                print(f"   boss_ids (распарсенные): {boss_ids}")
+                return boss_ids
+        except Exception as e:
+            print(f"❌ Ошибка отладки: {e}")
+        return []
+
     def _department_to_card_dict(self, department: Department) -> Dict[str, Any]:
         if department is None:
             return {}
@@ -184,7 +200,7 @@ class DepartmentService(EmployeeBaseService):
             except Exception:
                 pass
 
-        boss_ids = self._parse_boss_ids(department.boss)
+        boss_ids = self._parse_boss_ids(department.boss)  # <-- Парсит boss_ids
         boss_names = []
         for emp_id in boss_ids:
             emp_name = self.get_employee_short_name(emp_id)
@@ -196,7 +212,7 @@ class DepartmentService(EmployeeBaseService):
             'number': department.number,
             'name': department.name,
             'boss': department.boss,
-            'boss_ids': boss_ids,
+            'boss_ids': boss_ids,  # <-- Возвращает boss_ids
             'boss_names': boss_names,
             'phone_number': department.phone_number,
             'division_id': department.division_id,

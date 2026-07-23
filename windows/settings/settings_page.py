@@ -81,22 +81,27 @@ class SettingsPage(QWidget, UIPermissionMixin):
         """Применяет read-only режим ко всем вкладкам"""
         tabs = [
             getattr(self, 'employees_tab', None),
-            getattr(self, 'departments_tab', None),
+            getattr(self, 'departments_tab', None),  # <-- ЭТУ ВКЛАДКУ НЕ БЛОКИРУЕМ
             getattr(self, 'divisions_tab', None),
             getattr(self, 'columns_tab', None),
             getattr(self, 'tags_tab', None),
         ]
 
         for tab in tabs:
-            if tab and hasattr(tab, 'set_read_only_mode'):
-                tab.set_read_only_mode(True)
-            elif tab and hasattr(tab, '_read_only_mode'):
-                tab._read_only_mode = True
-                if hasattr(tab, 'setup_permission_ui'):
-                    tab.setup_permission_ui()
+            if tab:
+                # Пропускаем вкладку отделов - у неё своя логика прав
+                if tab is self.departments_tab:
+                    continue
 
-        # Переименовываем кнопки во всех вкладках
-        self._rename_all_edit_buttons()
+                if hasattr(tab, 'set_read_only_mode'):
+                    tab.set_read_only_mode(True)
+                elif hasattr(tab, '_read_only_mode'):
+                    tab._read_only_mode = True
+                    if hasattr(tab, 'setup_permission_ui'):
+                        tab.setup_permission_ui()
+
+        # Переименовываем кнопки для всех вкладок, кроме отделов
+        self._rename_all_edit_buttons_except_departments()
 
     def _rename_all_edit_buttons(self):
         """Переименовывает все кнопки редактирования на 'Подробнее'"""
