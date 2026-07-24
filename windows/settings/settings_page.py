@@ -45,6 +45,12 @@ class SettingsPage(QWidget, UIPermissionMixin):
         # НЕ вызываем setup_permission_ui здесь,
         # так как сервис прав ещё не установлен
 
+    def showEvent(self, event):
+        """Срабатывает при каждом показе страницы"""
+        super().showEvent(event)
+        print("🔍 SettingsPage.showEvent - обновляем содержимое")
+        QTimer.singleShot(100, self._refresh_all_tabs)
+
     def set_permission_service(self, permission_service):
         """Устанавливает сервис прав и передаёт его во все вкладки"""
         self._permission_service = permission_service

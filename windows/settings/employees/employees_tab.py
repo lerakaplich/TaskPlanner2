@@ -177,6 +177,8 @@ class EmployeesTab(BaseTab):
         # Проверяем права на добавление
         can_add = False
         user_department_ids = []
+        user_division_id = None
+        is_department_head = False
 
         if self._permission_service and self.employee_service:
             from services.permissions.system_permissions import SystemRole
@@ -187,13 +189,17 @@ class EmployeesTab(BaseTab):
                 if system_role == SystemRole.DEPARTMENT_HEAD:
                     # Начальник отдела может добавлять сотрудников
                     can_add = True
-                    # Получаем ID его отделов
+                    is_department_head = True
+                    # Получаем ID его отделов и подразделение
                     departments = self.employee_service.get_department_card_data()
                     for dept in departments:
                         boss_ids = dept.get('boss_ids', [])
                         if user_id in boss_ids:
                             user_department_ids.append(dept.get('id'))
-                    print(f"🔍 Начальник отдела: может добавлять в отделы {user_department_ids}")
+                            # Получаем подразделение этого отдела
+                            if dept.get('division_id'):
+                                user_division_id = dept.get('division_id')
+                    print(f"🔍 Начальник отдела: может добавлять в отделы {user_department_ids}, подразделение {user_division_id}")
                 elif self._permission_service.can_show_add_buttons_in_settings():
                     can_add = True
             except Exception as e:
@@ -217,26 +223,78 @@ class EmployeesTab(BaseTab):
             permission_service=self._permission_service
         )
 
-        # Если начальник отдела - передаём ID его отделов для ограничения
+        # Если начальник отдела - передаём ID его отделов и подразделения для ограничения
         if user_department_ids:
             dialog.allowed_department_ids = user_department_ids
 
-            # Блокируем выбор отдела (если только один отдел)
-            if len(user_department_ids) == 1:
-                # Устанавливаем отдел в комбобоксе
-                QTimer.singleShot(100, lambda: self._set_department_for_dialog(dialog, user_department_ids[0]))
+            # Сохраняем данные для установки после загрузки комбобоксов
+            dialog._preset_division_id = user_division_id
+            dialog._preset_department_id = user_department_ids[0] if user_department_ids else None
+
+            # Устанавливаем значения после загрузки UI
+            # Используем несколько таймеров для гарантии загрузки
+            QTimer.singleShot(100, lambda: self._set_department_for_dialog(dialog, user_department_ids[0], user_division_id))
 
         dialog.employee_saved.connect(self.on_employee_saved)
         dialog.exec()
 
-    def _set_department_for_dialog(self, dialog, department_id):
-        """Устанавливает отдел в диалоге и блокирует его"""
-        if hasattr(dialog, 'comboBoxDepartment'):
-            for i in range(dialog.comboBoxDepartment.count()):
-                if dialog.comboBoxDepartment.itemData(i) == department_id:
-                    dialog.comboBoxDepartment.setCurrentIndex(i)
-                    dialog.comboBoxDepartment.setEnabled(False)
-                    break
+    def _set_department_for_dialog(self, dialog, department_id, division_id=None):
+        """
+        Устанавливает подразделение и отдел в диалоге и блокирует их
+        """
+        try:
+            print(f"🔍 _set_department_for_dialog: department_id={department_id}, division_id={division_id}")
+
+            # Проверяем, загружены ли данные в комбобоксы
+            if hasattr(dialog, 'comboBoxDivision') and dialog.comboBoxDivision.count() <= 1:
+                # Данные ещё не загружены, повторяем попытку через 100 мс
+                print("⏳ Данные ещё не загружены, повторяем попытку...")
+                QTimer.singleShot(100, lambda: self._set_department_for_dialog(dialog, department_id, division_id))
+                return
+
+            # 1. Устанавливаем подразделение
+            if division_id and hasattr(dialog, 'comboBoxDivision'):
+                for i in range(dialog.comboBoxDivision.count()):
+                    if dialog.comboBoxDivision.itemData(i) == division_id:
+                        dialog.comboBoxDivision.setCurrentIndex(i)
+                        print(f"✅ Установлено подразделение: {dialog.comboBoxDivision.currentText()}")
+                        break
+
+            # 2. Ждём загрузки отделов и устанавливаем отдел
+            if hasattr(dialog, 'comboBoxDepartment'):
+                # Даём время на загрузку отделов после выбора подразделения
+                QTimer.singleShot(150, lambda: self._select_and_lock_department(dialog, department_id))
+
+        except Exception as e:
+            print(f"⚠️ Ошибка установки отдела: {e}")
+
+    def _select_and_lock_department(self, dialog, department_id):
+        """Выбирает и блокирует отдел в диалоге"""
+        try:
+            print(f"🔍 _select_and_lock_department: department_id={department_id}")
+
+            if hasattr(dialog, 'comboBoxDepartment'):
+                # Проверяем, загружены ли отделы
+                if dialog.comboBoxDepartment.count() <= 1:
+                    # Отделы ещё не загружены, повторяем попытку через 100 мс
+                    print("⏳ Отделы ещё не загружены, повторяем попытку...")
+                    QTimer.singleShot(100, lambda: self._select_and_lock_department(dialog, department_id))
+                    return
+
+                for i in range(dialog.comboBoxDepartment.count()):
+                    if dialog.comboBoxDepartment.itemData(i) == department_id:
+                        dialog.comboBoxDepartment.setCurrentIndex(i)
+                        dialog.comboBoxDepartment.setEnabled(False)
+                        print(f"✅ Установлен и заблокирован отдел: {dialog.comboBoxDepartment.currentText()}")
+                        break
+
+            # Также блокируем подразделение
+            if hasattr(dialog, 'comboBoxDivision'):
+                dialog.comboBoxDivision.setEnabled(False)
+
+            print(f"✅ Отдел {department_id} установлен и заблокирован")
+        except Exception as e:
+            print(f"⚠️ Ошибка блокировки отдела: {e}")
 
     def on_employee_saved(self, employee_data: dict):
         """Вызывается после успешного сохранения сотрудника"""
@@ -259,6 +317,8 @@ class EmployeesTab(BaseTab):
             from services.permissions.system_permissions import SystemRole
             can_edit = False
             read_only = True  # По умолчанию только просмотр
+            user_department_ids = []
+            user_division_id = None
 
             if self._permission_service and self.employee_service:
                 try:
@@ -270,10 +330,14 @@ class EmployeesTab(BaseTab):
                         # Получаем ID отделов пользователя
                         departments = self.employee_service.get_department_card_data()
                         user_department_ids = []
+                        user_division_id = None
                         for dept in departments:
                             boss_ids = dept.get('boss_ids', [])
                             if user_id in boss_ids:
                                 user_department_ids.append(dept.get('id'))
+                                # Получаем подразделение этого отдела
+                                if dept.get('division_id'):
+                                    user_division_id = dept.get('division_id')
 
                         # Проверяем, принадлежит ли сотрудник к одному из этих отделов
                         employee_dept_id = employee.get('department_id')
@@ -307,6 +371,19 @@ class EmployeesTab(BaseTab):
                 read_only=read_only,
                 permission_service=self._permission_service
             )
+
+            # Если пользователь - начальник отдела, передаём ID его отделов для ограничения
+            if can_edit and user_department_ids:
+                dialog.allowed_department_ids = user_department_ids
+                # Если только один отдел - устанавливаем его как предустановленный
+                if len(user_department_ids) == 1:
+                    dialog._preset_department_id = user_department_ids[0]
+                    dialog._preset_division_id = user_division_id
+                    # Применяем ограничение
+                    QTimer.singleShot(100, lambda: dialog._apply_department_restriction())
+                else:
+                    # Несколько отделов - просто применяем фильтрацию
+                    QTimer.singleShot(100, lambda: dialog._filter_departments_by_allowed())
 
             # Передаём флаг, что это редактирование самого себя (для блокировки отдела/подразделения)
             if employee_id == self._permission_service.user_id:
@@ -523,7 +600,7 @@ class EmployeesTab(BaseTab):
 
                 profile_page = ProfilePage(
                     employee_id=employee_id,
-                    current_user=current_user,  # <-- ПЕРЕДАЁМ ТЕКУЩЕГО ПОЛЬЗОВАТЕЛЯ
+                    current_user=current_user,
                     parent=main_window
                 )
                 main_window.contentStack.addWidget(profile_page)

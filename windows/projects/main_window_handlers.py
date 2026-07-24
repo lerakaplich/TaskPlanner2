@@ -318,29 +318,19 @@ class NavigationHandler(QObject):
         print(f"   🎯 Целевая страница: {page_name}")
 
         try:
-            # Флаг, была ли страница создана сейчас
-            page_was_created = False
-
             # Создаем страницу при первом открытии
             if page_index == self.PAGE_MY_TASKS:
                 print("   📄 Создаём/получаем страницу Мои задачи...")
                 page_was_created = 'my_tasks' not in self.pages
                 self.get_my_tasks_page()
 
-                # Перезагружаем задачи при повторном открытии
                 if not page_was_created and 'my_tasks' in self.pages:
                     print("   🔄 Страница уже была в кэше, перезагружаем задачи...")
                     self.pages['my_tasks'].load_tasks()
 
             elif page_index == self.PAGE_OTHER_TASKS:
                 print("   📄 Создаём/получаем страницу Чужие задачи...")
-                page_was_created = 'other_tasks' not in self.pages
                 self.get_other_tasks_page()
-
-                # ВАЖНО: Даже если страница уже была в кэше, перезагружаем задачи
-                if not page_was_created and 'other_tasks' in self.pages:
-                    print("   🔄 Страница уже была в кэше, перезагружаем задачи...")
-                    self.pages['other_tasks'].load_tasks()
 
             elif page_index == self.PAGE_GANTT:
                 print("   📄 Создаём/получаем страницу Гант...")
@@ -356,21 +346,26 @@ class NavigationHandler(QObject):
                 self.get_overtime_page()
             elif page_index == self.PAGE_SETTINGS:
                 print("   📄 Создаём/получаем страницу Настройки...")
-                self.get_settings_page()
+                # Используем try-except для обработки ошибок
+                try:
+                    self.get_settings_page()
+                except RuntimeError as e:
+                    print(f"   ⚠️ Ошибка при получении страницы Настройки: {e}")
+                    # Если произошла ошибка, удаляем страницу из кэша и пробуем снова
+                    if 'settings' in self.pages:
+                        del self.pages['settings']
+                    self.get_settings_page()
             elif page_index == self.PAGE_ARCHIVE:
                 print("   📄 Создаём/получаем страницу Архив...")
-                page_was_created = 'archive' not in self.pages
                 self.get_archive_page()
 
                 if 'archive' in self.pages:
                     print("   📂 Показываем список проектов в архиве...")
-                    # ВАЖНО: Принудительно обновляем содержимое архива
                     if hasattr(self.pages['archive'], 'refresh_current_view'):
                         self.pages['archive'].refresh_current_view()
                     elif hasattr(self.pages['archive'], 'show_projects_list'):
                         self.pages['archive'].show_projects_list()
                     else:
-                        # Если нет метода, просто показываем список проектов
                         self.pages['archive']._update_projects_view()
 
             elif page_index == self.PAGE_PROJECTS:
@@ -380,14 +375,12 @@ class NavigationHandler(QObject):
             print(f"   📺 Переключаем contentStack на индекс {page_index}")
             self.main.contentStack.setCurrentIndex(page_index)
 
-            # Проверяем, успешно ли переключилось
             current_idx = self.main.contentStack.currentIndex()
             if current_idx == page_index:
                 print(f"   ✅ Успешно переключено на {page_name} (индекс {current_idx})")
             else:
                 print(f"   ⚠️ Ожидался индекс {page_index}, но текущий {current_idx}")
 
-            # Обновляем состояние кнопок навигации
             self._update_nav_buttons_state(page_index)
 
         except Exception as e:
@@ -704,8 +697,6 @@ class NavigationHandler(QObject):
             self.PAGE_CHAT
         )
 
-    # windows/projects/main_window_handlers.py
-
     def get_overtime_page(self):
         """Возвращает страницу переработок - принудительно пересоздаем для свежих данных"""
         from windows.overtime.overtime_page import OvertimePage
@@ -745,27 +736,61 @@ class NavigationHandler(QObject):
 
         return page
 
+    # windows/projects/main_window_handlers.py
+
     def get_settings_page(self):
         """Возвращает страницу настроек с сервисом прав"""
         from windows.settings.settings_page import SettingsPage
 
-        # Принудительно пересоздаём страницу для применения прав
+        # Проверяем, существует ли страница в кэше и не удалена ли она
         if 'settings' in self.pages:
-            old_page = self.pages['settings']
-            index = self.main.contentStack.indexOf(old_page)
-            if index >= 0:
-                self.main.contentStack.removeWidget(old_page)
-            old_page.deleteLater()
-            del self.pages['settings']
+            try:
+                old_page = self.pages['settings']
+                # Проверяем, что страница ещё существует (не удалена)
+                if old_page:
+                    # Принудительно пересоздаём страницу для обновления
+                    # или обновляем её содержимое
+                    try:
+                        # Если страница уже есть, обновляем её содержимое
+                        if hasattr(old_page, '_refresh_all_tabs'):
+                            old_page._refresh_all_tabs()
+                        # Принудительно показываем страницу
+                        old_page.show()
+                        old_page.update()
+                        return old_page
+                    except Exception as e:
+                        print(f"   ⚠️ Ошибка при обновлении страницы: {e}")
+                        # Если не удалось обновить, пересоздаём
+                        del self.pages['settings']
+            except RuntimeError:
+                # Страница была удалена, удаляем из кэша
+                if 'settings' in self.pages:
+                    del self.pages['settings']
+                print("   🗑️ Старая страница Настройки была удалена, пересоздаём...")
 
-        # Создаём новую страницу
-        self.pages['settings'] = SettingsPage(session=self.main.session)
+        # Если страницы нет в кэше или она была удалена
+        if 'settings' not in self.pages:
+            print("   🏗️ Создаём новую страницу Настройки...")
 
-        # Передаём сервис прав
-        if hasattr(self.main, 'permission_service'):
-            self.pages['settings'].set_permission_service(self.main.permission_service)
+            # Проверяем, есть ли уже виджет на позиции PAGE_SETTINGS
+            existing_widget = self.main.contentStack.widget(self.PAGE_SETTINGS)
+            if existing_widget:
+                try:
+                    self.main.contentStack.removeWidget(existing_widget)
+                    existing_widget.deleteLater()
+                except RuntimeError:
+                    pass
 
-        self.main.contentStack.insertWidget(self.PAGE_SETTINGS, self.pages['settings'])
+            # Создаём новую страницу
+            self.pages['settings'] = SettingsPage(session=self.main.session)
+
+            # Передаём сервис прав
+            if hasattr(self.main, 'permission_service'):
+                self.pages['settings'].set_permission_service(self.main.permission_service)
+
+            # Вставляем в contentStack
+            self.main.contentStack.insertWidget(self.PAGE_SETTINGS, self.pages['settings'])
+            print(f"   📌 Вставлена в contentStack на позицию {self.PAGE_SETTINGS}")
 
         return self.pages['settings']
 

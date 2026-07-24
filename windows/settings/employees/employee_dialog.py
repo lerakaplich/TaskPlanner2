@@ -4,7 +4,7 @@ import os
 from datetime import date
 from PyQt6.QtWidgets import QDialog, QMessageBox
 from PyQt6 import uic, QtCore
-from PyQt6.QtCore import QDate, pyqtSignal
+from PyQt6.QtCore import QDate, pyqtSignal, QTimer
 from PyQt6.QtGui import QValidator
 
 
@@ -30,20 +30,29 @@ class EmployeeDialog(QDialog):
     employee_saved = pyqtSignal(dict)
 
     def __init__(self, parent=None, employee_data=None, employee_service=None,
-                 is_registration_mode=False, read_only=False, permission_service=None):  # <-- ДОБАВЛЯЕМ
+                 is_registration_mode=False, read_only=False, permission_service=None):
         super().__init__(parent)
 
         self.employee_service = employee_service
         self.employee_data = employee_data
         self.is_registration_mode = is_registration_mode
         self.read_only = read_only
-        self.permission_service = permission_service  # <-- СОХРАНЯЕМ
+        self.permission_service = permission_service
         self._can_view_contacts = self._check_contact_permission()
 
         # Флаги для редактирования себя
         self.is_self_editing = False
         self.department_read_only = False
         self.division_read_only = False
+
+        # ID для предустановки (для начальника отдела)
+        self._preset_division_id = None
+        self._preset_department_id = None
+        self.allowed_department_ids = None  # Список ID отделов, которые может выбирать начальник
+
+        # Сохраняем данные сотрудника для восстановления после загрузки комбобоксов
+        self._saved_division_id = None
+        self._saved_department_id = None
 
         # Определяем путь к UI файлу
         ui_path = os.path.join(
@@ -64,6 +73,11 @@ class EmployeeDialog(QDialog):
         # Определяем режим
         self.is_edit_mode = employee_data is not None and employee_data.get('id') is not None
 
+        # Сохраняем ID отдела и подразделения из данных сотрудника
+        if self.is_edit_mode and employee_data:
+            self._saved_division_id = employee_data.get('division_id')
+            self._saved_department_id = employee_data.get('department_id')
+
         # Настраиваем UI в зависимости от режима
         self.setup_ui_mode()
 
@@ -81,25 +95,84 @@ class EmployeeDialog(QDialog):
 
         self.dateEditBirthDate.setMaximumDate(QDate.currentDate())
 
-        self.allowed_department_ids = None  # <-- ДОБАВЛЯЕМ
+        # Применяем предустановленные значения
+        QTimer.singleShot(200, self._apply_preset_values)
 
-        # После загрузки данных, если есть ограничение, применяем его
-        if self.allowed_department_ids and not self.read_only:
-            self._apply_department_restriction()
+    def _apply_preset_values(self):
+        """
+        Применяет предустановленные значения подразделения и отдела
+        Вызывается после полной загрузки комбобоксов
+        """
+        print(f"🔍 _apply_preset_values: saved_division_id={self._saved_division_id}, saved_department_id={self._saved_department_id}")
+        print(f"   preset_division_id={self._preset_division_id}, preset_department_id={self._preset_department_id}")
+        print(f"   allowed_department_ids={self.allowed_department_ids}")
 
-    def _apply_department_restriction(self):
-        """Применяет ограничение по отделам для начальника"""
-        if not self.allowed_department_ids:
+        # Определяем, что устанавливать: сохранённые данные или предустановленные
+        division_id = self._preset_division_id or self._saved_division_id
+        department_id = self._preset_department_id or self._saved_department_id
+
+        # 1. Устанавливаем подразделение
+        if division_id and hasattr(self, 'comboBoxDivision'):
+            for i in range(self.comboBoxDivision.count()):
+                if self.comboBoxDivision.itemData(i) == division_id:
+                    self.comboBoxDivision.setCurrentIndex(i)
+                    print(f"✅ Установлено подразделение: {self.comboBoxDivision.currentText()}")
+                    break
+
+        # 2. Устанавливаем отдел (после загрузки списка отделов)
+        if department_id and hasattr(self, 'comboBoxDepartment'):
+            QTimer.singleShot(150, lambda: self._apply_preset_department(department_id))
+
+        # 3. Применяем ограничения для начальника отдела
+        self._apply_department_restriction()
+
+    def _filter_departments_by_allowed(self):
+        """Фильтрует список отделов, оставляя только разрешённые для начальника"""
+        if not self.allowed_department_ids or not hasattr(self, 'comboBoxDepartment'):
             return
 
-        # Если только один отдел - блокируем выбор
-        if len(self.allowed_department_ids) == 1:
-            dept_id = self.allowed_department_ids[0]
-            # Ищем и выбираем отдел
+        current_text = self.comboBoxDepartment.currentText()
+        current_data = self.comboBoxDepartment.currentData()
+
+        # Сохраняем текущий индекс
+        self.comboBoxDepartment.blockSignals(True)
+        self.comboBoxDepartment.clear()
+        self.comboBoxDepartment.addItem("Выберите отдел", None)
+
+        # Добавляем только разрешённые отделы
+        current_division_id = self.comboBoxDivision.currentData()
+        if current_division_id and current_division_id in self.departments_by_division:
+            for dept in self.departments_by_division[current_division_id]:
+                dept_id = dept.get('id')
+                if dept_id in self.allowed_department_ids:
+                    self.comboBoxDepartment.addItem(dept.get("name", "Без названия"), dept_id)
+
+        # Восстанавливаем выбор
+        for i in range(self.comboBoxDepartment.count()):
+            if self.comboBoxDepartment.itemData(i) == current_data:
+                self.comboBoxDepartment.setCurrentIndex(i)
+                break
+
+        self.comboBoxDepartment.blockSignals(False)
+        print(f"✅ Отфильтрованы отделы: разрешены только {self.allowed_department_ids}")
+
+    def _apply_preset_department(self, department_id):
+        """Применяет предустановленный отдел и блокирует комбобоксы"""
+        if not department_id:
+            return
+
+        if hasattr(self, 'comboBoxDepartment'):
+            # Проверяем, загружены ли отделы
+            if self.comboBoxDepartment.count() <= 1:
+                # Отделы ещё не загружены, повторяем попытку
+                print("⏳ Отделы ещё не загружены, повторяем попытку...")
+                QTimer.singleShot(100, lambda: self._apply_preset_department(department_id))
+                return
+
             for i in range(self.comboBoxDepartment.count()):
-                if self.comboBoxDepartment.itemData(i) == dept_id:
+                if self.comboBoxDepartment.itemData(i) == department_id:
                     self.comboBoxDepartment.setCurrentIndex(i)
-                    self.comboBoxDepartment.setEnabled(False)
+                    print(f"✅ Установлен отдел: {self.comboBoxDepartment.currentText()}")
                     break
 
     def _check_contact_permission(self) -> bool:
@@ -244,16 +317,15 @@ class EmployeeDialog(QDialog):
             self.setWindowTitle("Просмотр сотрудника")
             if hasattr(self, 'titleLabel'):
                 self.titleLabel.setText("Просмотр сотрудника")
-            # Загружаем данные для просмотра
             if self.employee_data:
-                self.load_employee_data_for_edit()
+                self._load_employee_personal_data()
             return
 
         if self.is_edit_mode:
             self.setWindowTitle("Редактирование сотрудника")
             if hasattr(self, 'titleLabel'):
                 self.titleLabel.setText("Редактирование сотрудника")
-            self.load_employee_data_for_edit()
+            self._load_employee_personal_data()
             if hasattr(self, 'comboBoxRole'):
                 self.comboBoxRole.setEnabled(True)
             self.btnAddDivision.setVisible(True)
@@ -279,29 +351,8 @@ class EmployeeDialog(QDialog):
             self.btnAddDivision.setVisible(True)
             self.btnAddDepartment.setVisible(True)
 
-    def load_divisions_combo(self):
-        """Загрузка подразделений в комбобокс"""
-        self.comboBoxDivision.clear()
-        self.comboBoxDivision.addItem("Выберите подразделение", None)
-
-        for division in self.all_divisions:
-            self.comboBoxDivision.addItem(division.get("name", "Без названия"), division.get("id"))
-
-    def on_division_changed(self, index):
-        """Обработчик изменения выбранного подразделения"""
-        self.comboBoxDepartment.clear()
-        self.comboBoxDepartment.addItem("Выберите отдел", None)
-
-        if index <= 0:
-            return
-
-        division_id = self.comboBoxDivision.currentData()
-        if division_id in self.departments_by_division:
-            for department in self.departments_by_division[division_id]:
-                self.comboBoxDepartment.addItem(department.get("name", "Без названия"), department.get("id"))
-
-    def load_employee_data_for_edit(self):
-        """Загружает данные сотрудника для редактирования"""
+    def _load_employee_personal_data(self):
+        """Загружает только личные данные сотрудника (без отделов)"""
         if not self.employee_data:
             return
 
@@ -321,18 +372,6 @@ class EmployeeDialog(QDialog):
                             QDate(int(birth_parts[0]), int(birth_parts[1]), int(birth_parts[2])))
                 except:
                     pass
-
-        division_id = self.employee_data.get("division_id")
-        if division_id:
-            for i in range(self.comboBoxDivision.count()):
-                if self.comboBoxDivision.itemData(i) == division_id:
-                    self.comboBoxDivision.setCurrentIndex(i)
-                    break
-
-        department_id = self.employee_data.get("department_id")
-        if department_id:
-            from PyQt6.QtCore import QTimer
-            QTimer.singleShot(50, lambda: self.select_department(department_id))
 
         self.lineEditPosition.setText(self.employee_data.get("position", ""))
 
@@ -354,12 +393,69 @@ class EmployeeDialog(QDialog):
         self.lineEditWorkPhone.setText(self.employee_data.get("work_number", ""))
         self.lineEditEmail.setText(self.employee_data.get("email", ""))
 
-    def select_department(self, department_id):
-        """Выбор отдела в комбобоксе после загрузки"""
-        for i in range(self.comboBoxDepartment.count()):
-            if self.comboBoxDepartment.itemData(i) == department_id:
-                self.comboBoxDepartment.setCurrentIndex(i)
-                break
+    def load_divisions_combo(self):
+        """Загрузка подразделений в комбобокс"""
+        self.comboBoxDivision.clear()
+        self.comboBoxDivision.addItem("Выберите подразделение", None)
+
+        for division in self.all_divisions:
+            self.comboBoxDivision.addItem(division.get("name", "Без названия"), division.get("id"))
+
+    def on_division_changed(self, index):
+        """Обработчик изменения выбранного подразделения"""
+        if index <= 0:
+            self.comboBoxDepartment.clear()
+            self.comboBoxDepartment.addItem("Выберите отдел", None)
+            return
+
+        division_id = self.comboBoxDivision.currentData()
+        self._load_departments_for_division(division_id)
+
+        # После загрузки отделов применяем фильтрацию для начальника
+        if self.allowed_department_ids:
+            QTimer.singleShot(50, self._filter_departments_by_allowed)
+
+    def _load_departments_for_division(self, division_id):
+        """Загружает отделы для указанного подразделения"""
+        self.comboBoxDepartment.clear()
+        self.comboBoxDepartment.addItem("Выберите отдел", None)
+
+        if division_id in self.departments_by_division:
+            for department in self.departments_by_division[division_id]:
+                self.comboBoxDepartment.addItem(department.get("name", "Без названия"), department.get("id"))
+
+    def _apply_department_restriction(self):
+        """
+        Применяет ограничение по отделам для начальника.
+        Если начальник управляет только одним отделом - блокируем выбор.
+        Если несколькими - оставляем выбор только между ними.
+        """
+        if not self.allowed_department_ids:
+            return
+
+        # Проверяем, загружены ли комбобоксы
+        if hasattr(self, 'comboBoxDepartment') and self.comboBoxDepartment.count() <= 1:
+            # Данные ещё не загружены, повторяем попытку
+            QTimer.singleShot(100, self._apply_department_restriction)
+            return
+
+        # Если только один отдел - блокируем полностью
+        if len(self.allowed_department_ids) == 1:
+            dept_id = self.allowed_department_ids[0]
+            # Устанавливаем этот отдел и блокируем
+            if hasattr(self, 'comboBoxDepartment'):
+                for i in range(self.comboBoxDepartment.count()):
+                    if self.comboBoxDepartment.itemData(i) == dept_id:
+                        self.comboBoxDepartment.setCurrentIndex(i)
+                        self.comboBoxDepartment.setEnabled(False)
+                        break
+            if hasattr(self, 'comboBoxDivision'):
+                self.comboBoxDivision.setEnabled(False)
+            print(f"🔒 Начальник одного отдела: отдел {dept_id} заблокирован")
+        else:
+            # Несколько отделов - фильтруем список отделов
+            print(f"🔓 Начальник нескольких отделов: доступны {self.allowed_department_ids}")
+            self._filter_departments_by_allowed()
 
     def add_division(self):
         """Открытие диалога добавления подразделения"""
