@@ -42,8 +42,9 @@ class MyTasksPage(QWidget):
         self.columns = {}
         self.column_widgets = []
         self.current_user = current_user
+        self._current_user_id = self.current_user.get('id')
 
-        # Инициализация обработчиков
+
         from windows.my_tasks.my_tasks_handlers import MyTasksHandlers
         self._handlers = MyTasksHandlers(self)
 
@@ -55,19 +56,13 @@ class MyTasksPage(QWidget):
 
         self._load_projects_for_filter()
 
-    # ==========================================================
-    # ПРАВА ДОСТУПА (делегирует обработчику)
-    # ==========================================================
-
     def _can_delete_task(self) -> bool:
         return self._handlers.can_delete_task()
 
     def _can_archive_task(self) -> bool:
         return self._handlers.can_archive_task()
 
-    # ==========================================================
-    # ПОДКЛЮЧЕНИЕ СИГНАЛОВ КАРТОЧКИ
-    # ==========================================================
+    # windows/my_tasks/my_tasks_page.py
 
     def _connect_task_card_signals(self, card):
         """Подключает сигналы карточки"""
@@ -83,16 +78,13 @@ class MyTasksPage(QWidget):
         else:
             card.set_archive_button_visible(False)
 
+        # ⭐ ВАЖНО: Подключаем дублирование и паузу
         card.duplicate_requested.connect(self._handlers.on_duplicate_task)
         card.pause_requested.connect(self._handlers.on_pause_task)
         card.resume_requested.connect(self._handlers.on_resume_task)
         card.drag_started.connect(self._on_drag_started)
         card.progress_changed.connect(self._handlers.on_progress_changed)
         card.project_clicked.connect(self._handlers.on_project_clicked)
-
-    # ==========================================================
-    # ЗАГРУЗКА ПРОЕКТОВ ДЛЯ ФИЛЬТРА
-    # ==========================================================
 
     def _load_projects_for_filter(self):
         """Загружает проекты для выпадающего списка"""
@@ -109,15 +101,50 @@ class MyTasksPage(QWidget):
             self.projectFilter.addItem(project["name"], project["id"])
         self.projectFilter.blockSignals(False)
 
-    # ==========================================================
-    # ФИЛЬТРЫ
-    # ==========================================================
-
     def _on_project_filter_changed(self):
         project_id = self.projectFilter.currentData()
         self._current_project_id = project_id
         self._rebuild_board_for_project(project_id)
         self._load_tasks_for_current_project()
+
+    from windows.my_tasks.task_card import TaskCard  # <-- Импортируем TaskCard
+
+    def create_task_card(self, task_data: Dict) -> TaskCard:
+        """Создает карточку задачи с учетом прав"""
+        task_creator_id = task_data.get('created_by')
+        is_creator = (task_creator_id == self._current_user_id)
+
+        # В "Моих задачах" пользователь всегда может редактировать свои задачи
+        can_edit_delete = is_creator
+        can_archive = is_creator
+        can_move = is_creator
+
+        # ДЛЯ МОИХ ЗАДАЧ: Дублирование и пауза ТОЛЬКО для создателя
+        can_duplicate = is_creator
+        can_pause = is_creator
+
+        # Но если пользователь суперадмин/админ - он тоже может
+        if self.permission_service:
+            app_role = self.permission_service.app_manager.role
+            if app_role.value in ('super_admin', 'superadmin', 'admin'):
+                can_duplicate = True
+                can_pause = True
+
+        # Создаем карточку и передаем все параметры
+        card = TaskCard(task_data)
+
+        # Устанавливаем права на дублирование и паузу
+        card.can_duplicate = can_duplicate
+        card.can_pause = can_pause
+
+        # Устанавливаем права на редактирование/удаление/архивацию
+        card._delete_enabled = can_edit_delete
+        card._archive_enabled = can_archive
+
+        # Сохраняем флаг создателя
+        card.is_creator = is_creator
+
+        return card
 
     def _on_filter_changed(self):
         self.filter_tasks()
@@ -138,10 +165,6 @@ class MyTasksPage(QWidget):
             for card in column.get_tasks():
                 card.setVisible(card.task_id in filtered_ids)
 
-    # ==========================================================
-    # ЗАГРУЗКА ЗАДАЧ
-    # ==========================================================
-
     def _load_tasks_for_current_project(self):
         if self._is_loading:
             return
@@ -160,7 +183,8 @@ class MyTasksPage(QWidget):
             for task in filtered_tasks:
                 column_name = task.get("status")
                 if column_name and column_name in self.columns:
-                    task_card = TaskCard(task)
+                    # ⭐ ИСПОЛЬЗУЕМ create_task_card
+                    task_card = self.create_task_card(task)
                     self._connect_task_card_signals(task_card)
                     self.columns[column_name].add_task(task_card)
 
@@ -198,7 +222,8 @@ class MyTasksPage(QWidget):
                 if not column_name or column_name not in self.columns:
                     continue
 
-                task_card = TaskCard(task)
+                # ⭐ ИСПОЛЬЗУЕМ create_task_card вместо прямого создания
+                task_card = self.create_task_card(task)
                 self._connect_task_card_signals(task_card)
                 self.columns[column_name].add_task(task_card)
 
@@ -216,10 +241,6 @@ class MyTasksPage(QWidget):
                 column.setUpdatesEnabled(True)
         finally:
             self._is_loading = False
-
-    # ==========================================================
-    # ПОСТРОЕНИЕ ДОСКИ
-    # ==========================================================
 
     def setup_board(self):
         self._rebuild_columns_ui(self.service.get_columns_for_board())
@@ -282,10 +303,6 @@ class MyTasksPage(QWidget):
         vertical_scroll.setWidget(scroll_area)
         self.kanbanLayout.addWidget(vertical_scroll)
 
-    # ==========================================================
-    # СТАТИСТИКА
-    # ==========================================================
-
     def update_statistics(self):
         all_tasks = []
         for column in self.column_widgets:
@@ -310,10 +327,6 @@ class MyTasksPage(QWidget):
         for column in self.column_widgets:
             tasks_count = self.service.crud.get_column_tasks_count(column.column_name, all_tasks)
             column.update_count(tasks_count)
-
-    # ==========================================================
-    # ОБНОВЛЕНИЕ КАРТОЧЕК
-    # ==========================================================
 
     def update_task_card(self, updated_task: Dict):
         task_id = updated_task.get("id")
@@ -378,10 +391,6 @@ class MyTasksPage(QWidget):
                 return col
         return None
 
-    # ==========================================================
-    # ВСПОМОГАТЕЛЬНЫЕ МЕТОДЫ
-    # ==========================================================
-
     def clear_all_columns(self):
         for column in self.column_widgets:
             column.clear_tasks()
@@ -398,6 +407,8 @@ class MyTasksPage(QWidget):
 
     def _on_drag_started(self, task_data: dict):
         pass
+
+    # windows/my_tasks/my_tasks_page.py
 
     def refresh_columns(self):
         if self._is_refreshing:
@@ -417,7 +428,8 @@ class MyTasksPage(QWidget):
             self.setup_board()
 
             for task in all_tasks:
-                task_card = TaskCard(task)
+                # ⭐ ИСПОЛЬЗУЕМ create_task_card
+                task_card = self.create_task_card(task)
                 self._connect_task_card_signals(task_card)
                 column_name = task.get("status")
                 if column_name in self.columns:
@@ -436,10 +448,6 @@ class MyTasksPage(QWidget):
         if self._first_show:
             self._first_show = False
             QTimer.singleShot(10, self.load_tasks)
-
-    # ==========================================================
-    # DRAG & DROP
-    # ==========================================================
 
     def dragEnterEvent(self, event: QDragEnterEvent):
         if event.mimeData().hasFormat("application/x-task"):

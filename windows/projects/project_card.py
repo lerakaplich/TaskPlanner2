@@ -92,11 +92,13 @@ class ProjectCard(QFrame):
         button_text = "Редактировать" if self.is_editable else "Подробнее"
         self.btnEdit.setText(button_text)
 
-        # Меняем иконку (опционально)
+        # Меняем подсказку
         if not self.is_editable:
             self.btnEdit.setToolTip("Просмотр информации о проекте")
         else:
             self.btnEdit.setToolTip("Редактировать проект")
+
+        # Проверяем возможность архивации
         can_archive = self.permission_service.can_archive_project(self.project_id) if self.permission_service else True
         if hasattr(self, 'menuButton'):
             self.menuButton.setVisible(can_archive)

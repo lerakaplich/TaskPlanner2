@@ -193,12 +193,27 @@ class CombinedRole:
         ]
         return sys_value in manager_values
 
+    # models/permissions.py
+
+    def can_create_task_in_project(self) -> bool:
+        """
+        Может ли пользователь создавать задачи в проекте
+        - Руководитель проекта (PROJECT_MANAGER) - может
+        - Куратор (CURATOR) - может
+        - Обычный участник (MEMBER) - НЕ может
+        """
+        if self.is_super_admin or self.is_admin:
+            return True
+        if self.project_role in (ProjectRole.PROJECT_MANAGER, ProjectRole.CURATOR):
+            return True
+        return False
+
     def can_edit_project(self, project_id: int = None) -> bool:
         """Может редактировать проект"""
         # Суперадмин всегда может
         if self.is_super_admin:
             return True
-        # Админ может редактировать любые проекты
+        # Админ может редактировать любые проекты (в системе)
         if self.is_admin:
             return True
         # Руководитель проекта может редактировать
@@ -213,6 +228,9 @@ class CombinedRole:
         """Может архивировать проект"""
         # Суперадмин всегда может
         if self.is_super_admin:
+            return True
+        # Админ может архивировать любые проекты
+        if self.is_admin:
             return True
         # Руководитель проекта может архивировать
         if self.is_project_manager:

@@ -15,17 +15,19 @@ class ProjectRoleService:
         self.session = session
         self._cache = {}
 
+    # services/projects_service/project_role_service.py
+
     def get_project_role(self, user_id: int, project_id: int) -> Optional[ProjectRole]:
         """
         Определяет роль пользователя в проекте.
-        Возвращает ProjectRole или None, если пользователь не участник.
+        Приоритет: куратор > руководитель > участник
         """
         cache_key = (user_id, project_id)
         if cache_key in self._cache:
             return self._cache[cache_key]
 
         try:
-            # 1. Проверяем, является ли пользователь куратором
+            # 1. Проверяем, является ли пользователь куратором проекта
             stmt = text("""
                 SELECT manager_id FROM public.projects WHERE id = :project_id
             """)
@@ -64,15 +66,6 @@ class ProjectRoleService:
             result = self.session.execute(stmt, {'project_id': project_id}).first()
 
             if result and result[0] == user_id:
-                self._cache[cache_key] = ProjectRole.PROJECT_MANAGER
-                return ProjectRole.PROJECT_MANAGER
-
-            result = self.session.execute(stmt, {
-                'project_id': project_id,
-                'user_id': user_id
-            }).first()
-
-            if result and result[0]:
                 self._cache[cache_key] = ProjectRole.PROJECT_MANAGER
                 return ProjectRole.PROJECT_MANAGER
 

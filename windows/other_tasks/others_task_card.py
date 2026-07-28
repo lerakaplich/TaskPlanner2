@@ -27,14 +27,16 @@ class OthersTaskCard(TaskCard):
     resumeRequested = pyqtSignal(int)
 
     def __init__(self, task_data, service: Optional[TasksService] = None,
-                 is_creator=False, parent=None, can_edit_delete=False, can_archive=False, can_drag=False):
+                 is_creator=False, parent=None, can_edit_delete=False,
+                 can_archive=False, can_move=False, can_drag=False):
         super().__init__(task_data, parent)
 
         self.is_creator = is_creator
         self.service = service
         self.can_edit_delete = can_edit_delete
         self.can_archive = can_archive
-        self._can_drag = can_drag
+        self.can_move = can_move  # <-- ДОБАВЛЯЕМ
+        self._can_drag = can_move  # <-- Перетаскивание = can_move
         self.drag_start_position = None
 
         self._disconnect_parent_signals()

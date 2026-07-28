@@ -1,7 +1,7 @@
 # windows/projects/project_view_page.py
 
 import os
-from typing import Dict, List
+from typing import Dict, List, Optional
 from PyQt6.QtWidgets import QWidget, QLabel, QPushButton, QScrollArea, QHBoxLayout, QVBoxLayout, QMessageBox, QFrame
 from PyQt6.QtCore import Qt, pyqtSignal, QTimer
 from PyQt6 import uic
@@ -25,9 +25,28 @@ class ProjectViewPage(QWidget):
         self.columns = {}
         self.column_widgets = []
         self.parent_window = parent
+        self._permission_service = None
+
+        # Получаем сервис прав из родительского окна
+        if parent and hasattr(parent, 'permission_service'):
+            self._permission_service = parent.permission_service
 
         # Получаем текущего пользователя
         current_user = self._get_current_user(parent)
+        self.current_user_id = current_user.get('id') if current_user else None
+
+        # Определяем роль пользователя в проекте
+        self._project_role = self._get_project_role()
+        self._can_manage_project = self._check_can_manage_project()
+        self._can_view_all_tasks = self._check_can_view_all_tasks()
+        self._can_edit_any_task = self._check_can_edit_any_task()
+        self._can_manage_columns = self._check_can_manage_columns()
+
+        print(f"🔍 ProjectViewPage: project_id={project_id}, user_id={self.current_user_id}")
+        print(f"   role={self._project_role}")
+        print(f"   can_manage_project={self._can_manage_project}")
+        print(f"   can_view_all_tasks={self._can_view_all_tasks}")
+        print(f"   can_edit_any_task={self._can_edit_any_task}")
 
         # Создаём сервис
         self.view_service = ProjectViewService(session, project_service, current_user)
@@ -45,10 +64,144 @@ class ProjectViewPage(QWidget):
         self.is_archived_project = self.view_service.is_project_archived(project_id)
         self.project_columns = self.view_service.get_project_columns(project_id)
 
+        # Настраиваем UI в зависимости от прав
+        self._setup_permission_ui()
+
         # Настраиваем UI
         self._setup_ui()
         self.setup_kanban()
         self.load_tasks()
+
+    def _get_project_role(self) -> Optional[str]:
+        """Получает роль пользователя в проекте"""
+        if self._permission_service:
+            role = self._permission_service.get_user_project_role(self.project_id)
+            if role:
+                return role.value
+        return None
+
+    def _check_can_manage_project(self) -> bool:
+        """Проверяет, может ли пользователь управлять проектом"""
+        if self._permission_service:
+            return self._permission_service.can_manage_project(self.project_id)
+        return True
+
+    def _check_can_view_all_tasks(self) -> bool:
+        """Проверяет, может ли пользователь видеть все задачи"""
+        if self._permission_service:
+            return self._permission_service.can_view_all_tasks(self.project_id)
+        return True
+
+    def _check_can_edit_any_task(self) -> bool:
+        """Проверяет, может ли пользователь редактировать любые задачи"""
+        if self._permission_service:
+            return self._permission_service.can_edit_any_task(self.project_id)
+        return True
+
+    def _check_can_manage_columns(self) -> bool:
+        """Проверяет, может ли пользователь управлять колонками"""
+        if self._permission_service:
+            return self._permission_service.can_manage_columns(self.project_id)
+        return True
+
+    def _setup_permission_ui(self):
+        """Настраивает UI в зависимости от прав пользователя"""
+        # Кнопка редактирования проекта (если есть)
+        if hasattr(self, 'editProjectBtn'):
+            can_edit = self._permission_service.can_edit_project(self.project_id) if self._permission_service else True
+            self.editProjectBtn.setVisible(can_edit)
+            self.editProjectBtn.setText("Редактировать" if can_edit else "Просмотр")
+            print(f"🔍 editProjectBtn visible: {can_edit}")
+
+        # Кнопка управления участниками (если есть)
+        if hasattr(self, 'manageMembersBtn'):
+            can_manage = self._permission_service.can_manage_project(
+                self.project_id) if self._permission_service else True
+            self.manageMembersBtn.setVisible(can_manage)
+
+        # Кнопка управления колонками (если есть)
+        if hasattr(self, 'manageColumnsBtn'):
+            can_manage = self._permission_service.can_manage_columns(
+                self.project_id) if self._permission_service else True
+            self.manageColumnsBtn.setVisible(can_manage)
+
+        # Кнопка архивации (если есть)
+        if hasattr(self, 'archiveBtn'):
+            can_archive = self._permission_service.can_archive_project(
+                self.project_id) if self._permission_service else True
+            self.archiveBtn.setVisible(can_archive)
+            print(f"🔍 archiveBtn visible: {can_archive}")
+
+    def _create_task_card(self, task_data: Dict):
+        """Создаёт карточку задачи с учётом прав"""
+        is_archived = task_data.get('is_archived', False)
+        task_creator_id = task_data.get('created_by')
+        is_creator = (task_creator_id == self.current_user_id)
+
+        # Определяем, может ли пользователь редактировать эту задачу
+        can_edit_task = self._can_edit_any_task or is_creator
+        can_delete_task = self._can_edit_any_task or is_creator
+        can_archive_task = self._can_edit_any_task or is_creator
+        can_move_task = self._can_edit_any_task or is_creator
+
+        if is_archived or self.is_archived_project:
+            card = ArchivedTaskCard(task_data, self)
+            card.restore_requested.connect(self._on_restore_task)
+            card.delete_permanently_requested.connect(self._on_delete_task_permanently)
+            return card
+        else:
+            tasks_service = self.view_service.get_tasks_service()
+
+            card = OthersTaskCard(
+                task_data,
+                service=tasks_service,
+                is_creator=is_creator,
+                can_edit=can_edit_task,
+                can_delete=can_delete_task,
+                can_archive=can_archive_task,
+                can_move=can_move_task
+            )
+            card.editRequested.connect(self._on_edit_task)
+            card.deleteRequested.connect(self._on_delete_task)
+            card.archiveRequested.connect(self._on_archive_task)
+            card.moveToDoneColumn.connect(self._on_move_to_done)
+            return card
+
+    def load_tasks(self):
+        """Загружает задачи с фильтрацией по правам"""
+        if not self.project_id:
+            return
+
+        tasks = self.view_service.get_project_tasks(self.project_id, self.is_archived_project)
+
+        # Фильтруем задачи в зависимости от прав
+        if not self._can_view_all_tasks:
+            # Участник видит только свои задачи
+            tasks = [t for t in tasks if t.get('created_by') == self.current_user_id]
+            print(f"🔍 Фильтр: участник видит {len(tasks)} своих задач")
+
+        # Очищаем колонки
+        for column in self.column_widgets:
+            column.clear_tasks()
+
+        # Группируем задачи
+        tasks_by_column = self.view_service.group_tasks_by_column(tasks)
+
+        # Добавляем задачи в колонки
+        all_tasks = []
+        for col_data in self.project_columns:
+            column_name = col_data['name']
+            col_widget = self.columns.get(column_name)
+            if col_widget:
+                column_tasks = tasks_by_column.get(column_name, [])
+                for task_dict in column_tasks:
+                    card = self._create_task_card(task_dict)
+                    if card:
+                        col_widget.add_task(card)
+                        all_tasks.append(task_dict)
+                col_widget.update_count(len(column_tasks))
+
+        self._update_statistics(all_tasks)
 
     def _get_current_user(self, parent) -> Dict:
         """Извлекает текущего пользователя из родительского окна"""

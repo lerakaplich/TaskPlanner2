@@ -24,9 +24,59 @@ class GanttDataService(GanttBaseService):
         self._cached_projects: List[ProjectDTO] = []
         self._available_project_ids: Optional[set] = None
 
-    # ==========================================================
-    # ЗАГРУЗКА ДАННЫХ
-    # ==========================================================
+    def get_manageable_projects(self) -> List[Dict[str, Any]]:
+        """
+        Возвращает список проектов, где пользователь может управлять задачами
+        (администратор или куратор проекта)
+        """
+        from models.permissions import ProjectRole
+
+        if not self.permission_service or not self.current_user_id:
+            return []
+
+        try:
+            from models.projects import Project, EmployeeProject
+            from sqlalchemy import select, or_
+
+            # Получаем все проекты, где пользователь является участником
+            stmt = select(Project).where(
+                Project.is_archived == False,
+                or_(
+                    Project.created_by == self.current_user_id,
+                    Project.id.in_(
+                        select(EmployeeProject.project_id).where(
+                            EmployeeProject.employee_id == self.current_user_id
+                        )
+                    )
+                )
+            )
+            projects = self.session.scalars(stmt).all()
+
+            manageable_projects = []
+            for project in projects:
+                # Проверяем роль пользователя в проекте
+                project_role = self.permission_service.get_user_project_role(project.id)
+
+                # Только администратор (PROJECT_MANAGER) или куратор (CURATOR)
+                if project_role in (ProjectRole.PROJECT_MANAGER, ProjectRole.CURATOR):
+                    manageable_projects.append({
+                        "id": project.id,
+                        "name": project.name,
+                        "description": project.description or ""
+                    })
+                # Если пользователь создатель проекта - он тоже может управлять
+                elif project.created_by == self.current_user_id:
+                    manageable_projects.append({
+                        "id": project.id,
+                        "name": project.name,
+                        "description": project.description or ""
+                    })
+
+            return manageable_projects
+
+        except Exception as e:
+            print(f"⚠️ Ошибка получения проектов для управления: {e}")
+            return []
 
     def load_data(self, project_id: Optional[int] = None) -> None:
         """Загружает данные из БД"""

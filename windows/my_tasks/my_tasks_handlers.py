@@ -10,9 +10,25 @@ class MyTasksHandlers:
     def __init__(self, page):
         self.page = page
 
-    # ==========================================================
-    # ДЕЙСТВИЯ С ЗАДАЧАМИ
-    # ==========================================================
+    def can_pause_task(self) -> bool:
+        """
+        Проверяет, может ли пользователь ставить задачу на паузу
+        - В Моих задачах только создатель может ставить на паузу
+        """
+        if not self.page.permission_service:
+            return True
+        # В Моих задачах пауза доступна только создателю (проверяется в карточке)
+        return True  # Возвращаем True, так как проверка is_creator делается в карточке
+
+    def can_duplicate_task(self) -> bool:
+        """
+        Проверяет, может ли пользователь дублировать задачу
+        - В Моих задачах только создатель может дублировать
+        """
+        if not self.page.permission_service:
+            return True
+        # В Моих задачах дублирование доступно только создателю (проверяется в карточке)
+        return True
 
     def on_edit_task(self, task_id: int):
         """Редактирование задачи"""
@@ -40,8 +56,8 @@ class MyTasksHandlers:
         """Дублирование задачи"""
         new_task = self.page.service.duplicate_task(task_id)
         if new_task:
-            from windows.my_tasks.task_card import TaskCard
-            task_card = TaskCard(new_task)
+            # ⭐ ИСПОЛЬЗУЕМ create_task_card
+            task_card = self.page.create_task_card(new_task)
             self.page._connect_task_card_signals(task_card)
             column_name = new_task.get("status")
             if column_name in self.page.columns:

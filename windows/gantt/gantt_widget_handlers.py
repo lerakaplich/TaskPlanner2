@@ -70,24 +70,44 @@ class GanttWidgetHandlers:
             self.widget.gantt_canvas.set_date_range(start, end)
         self.widget.gantt_canvas.update()
 
-    # ==========================================================
-    # ДЕЙСТВИЯ С ЗАДАЧАМИ
-    # ==========================================================
+    # windows/gantt/gantt_widget_handlers.py
 
     def on_add_task(self) -> None:
+        """Создание новой задачи"""
         if not self.widget._service.can_create_task():
             QMessageBox.warning(self.widget, "Доступ запрещён", "У вас нет прав на создание задач.")
             return
 
-        is_valid, project_id, error = self.widget._service.validate_project_selected(
-            self.widget._current_project_filter
-        )
+        # ✅ Получаем проекты, где пользователь может управлять задачами
+        manageable_projects = self.widget._service.get_manageable_projects()
 
-        if not is_valid:
-            QMessageBox.warning(self.widget, "Выберите проект", error)
+        if not manageable_projects:
+            QMessageBox.warning(
+                self.widget,
+                "Нет доступных проектов",
+                "У вас нет проектов, где вы являетесь администратором или куратором.\n"
+                "Для создания задач в проекте вам нужна роль 'Руководитель проекта' или 'Куратор'."
+            )
             return
 
-        project_name = self.widget._service.get_project_name(project_id)
+        # Проверяем, есть ли проекты для выбранного фильтра
+        if self.widget._current_project_filter != "all":
+            project_id = None
+            if isinstance(self.widget._current_project_filter, str) and self.widget._current_project_filter.startswith(
+                    "project_"):
+                project_id = int(self.widget._current_project_filter.split("_")[1])
+
+            if project_id:
+                # Проверяем, есть ли выбранный проект в списке доступных
+                project_exists = any(p["id"] == project_id for p in manageable_projects)
+                if not project_exists:
+                    QMessageBox.warning(
+                        self.widget,
+                        "Доступ запрещён",
+                        "У вас нет прав на создание задач в выбранном проекте.\n"
+                        "Выберите проект, где вы являетесь администратором или куратором."
+                    )
+                    return
 
         from windows.other_tasks.task_dialog import TaskDialog
         from services.tasks_service.tasks_service import TasksService
@@ -100,7 +120,21 @@ class GanttWidgetHandlers:
             column_service=ColumnService(self.widget.session)
         )
 
-        task_data = {"project_id": project_id, "project_name": project_name}
+        # Открываем диалог с предустановленным проектом (если выбран)
+        task_data = {}
+        if self.widget._current_project_filter != "all":
+            project_id = None
+            if isinstance(self.widget._current_project_filter, str) and self.widget._current_project_filter.startswith(
+                    "project_"):
+                project_id = int(self.widget._current_project_filter.split("_")[1])
+            if project_id:
+                project_name = self.widget._service.get_project_name(project_id)
+                # Проверяем, доступен ли проект
+                if any(p["id"] == project_id for p in manageable_projects):
+                    task_data = {"project_id": project_id, "project_name": project_name}
+                else:
+                    task_data = {"project_id": manageable_projects[0]["id"],
+                                 "project_name": manageable_projects[0]["name"]}
 
         dialog = TaskDialog(
             parent=self.widget,
@@ -108,8 +142,27 @@ class GanttWidgetHandlers:
             mode="create",
             current_user={"id": self.widget.current_user_id, "last_name": "", "first_name": ""}
         )
+
         dialog.set_service(task_service)
-        dialog.task_saved.connect(lambda tid, data: self.on_task_created(project_id, data))
+
+        # ✅ Фильтруем комбобокс проектов в диалоге
+        if hasattr(dialog, 'comboBoxProject'):
+            dialog.comboBoxProject.blockSignals(True)
+            dialog.comboBoxProject.clear()
+            dialog.comboBoxProject.addItem("Выберите проект", None)
+            for project in manageable_projects:
+                dialog.comboBoxProject.addItem(project["name"], project["id"])
+
+            # Если есть предустановленный проект - выбираем его
+            if task_data.get("project_id"):
+                for i in range(dialog.comboBoxProject.count()):
+                    if dialog.comboBoxProject.itemData(i) == task_data["project_id"]:
+                        dialog.comboBoxProject.setCurrentIndex(i)
+                        break
+
+            dialog.comboBoxProject.blockSignals(False)
+
+        dialog.task_saved.connect(lambda tid, data: self.on_task_created(task_data.get("project_id"), data))
         dialog.exec()
 
     def on_task_created(self, project_id: int, form_data: dict) -> None:

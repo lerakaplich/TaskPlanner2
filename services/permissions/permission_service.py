@@ -1,6 +1,6 @@
 # services/permissions/permission_service.py
 
-from typing import Optional, Dict, List, Set
+from typing import Optional, Dict, List, Set, Any
 from functools import lru_cache
 
 from models.permissions import ProjectRole, SystemRole, CombinedRole
@@ -299,6 +299,16 @@ class PermissionService:
         """
         return self._get_project_role(project_id)
 
+    def can_manage_tasks_in_project(self, project_id: int) -> bool:
+        """
+        Может ли пользователь управлять задачами в проекте (создавать, редактировать, удалять)
+        - Руководитель проекта (PROJECT_MANAGER) - может
+        - Куратор (CURATOR) - может
+        - Обычный участник (MEMBER) - НЕ может
+        """
+        combined = self.get_combined_role(project_id)
+        return combined.can_manage_project()  # или combined.is_project_manager or combined.is_curator
+
     def can_view_all_tasks(self, project_id: int) -> bool:
         """
         Может ли пользователь видеть все задачи в проекте
@@ -312,13 +322,6 @@ class PermissionService:
         """
         combined = self.get_combined_role(project_id)
         return combined.can_edit_any_task()
-
-    def can_manage_project(self, project_id: int) -> bool:
-        """
-        Может ли пользователь управлять проектом (редактировать, архивировать, управлять участниками)
-        """
-        combined = self.get_combined_role(project_id)
-        return combined.can_manage_project()
 
     def can_manage_columns(self, project_id: int) -> bool:
         """
@@ -354,10 +357,29 @@ class PermissionService:
         return combined.is_super_admin or combined.is_admin
 
     def can_edit_project(self, project_id: int) -> bool:
+        """
+        Проверяет, может ли пользователь редактировать проект
+        Учитывает:
+        - Роль в приложении (superadmin, admin)
+        - Роль в проекте (project_manager, curator)
+        """
         combined = self.get_combined_role(project_id)
         return combined.can_edit_project()
 
+    def can_manage_project(self, project_id: int) -> bool:
+        """
+        Может ли пользователь управлять проектом (редактировать, архивировать, управлять участниками)
+        """
+        combined = self.get_combined_role(project_id)
+        return combined.can_manage_project()
+
     def can_archive_project(self, project_id: int) -> bool:
+        """
+        Проверяет, может ли пользователь архивировать проект
+        Учитывает:
+        - Роль в приложении (superadmin)
+        - Роль в проекте (project_manager, curator)
+        """
         combined = self.get_combined_role(project_id)
         return combined.can_archive_project()
 
@@ -566,7 +588,6 @@ class PermissionService:
         if combined.is_org_head:
             return True
 
-        # Начальник подразделения может удалять только отделы в своём подразделении
         if combined.is_division_head:
             return self._is_department_in_my_division(department_id)
 
@@ -796,6 +817,42 @@ class PermissionService:
                 self.session.rollback()
             except:
                 pass
+            return []
+
+    def can_create_task_in_project(self, project_id: int) -> bool:
+        """
+        Может ли пользователь создавать задачи в проекте
+        - Руководитель проекта (PROJECT_MANAGER) - может
+        - Куратор (CURATOR) - может
+        - Обычный участник (MEMBER) - НЕ может
+        """
+        combined = self.get_combined_role(project_id)
+        return combined.can_create_task_in_project()
+
+    def get_manageable_projects(self) -> List[Dict[str, Any]]:
+        """
+        Возвращает проекты, где пользователь может управлять задачами
+        """
+        if not self.project_service:
+            return []
+
+        # Используем существующий метод в GanttService
+        # или реализуем свою логику через project_service
+        try:
+            # Получаем все проекты пользователя
+            user_projects = self.project_service.get_user_projects_with_roles(self.user_id)
+            manageable = []
+            for project in user_projects:
+                project_id = project.get('id')
+                role = self.get_user_project_role(project_id)
+                if role in (ProjectRole.PROJECT_MANAGER, ProjectRole.CURATOR):
+                    manageable.append({
+                        'id': project_id,
+                        'name': project.get('name', f"Проект #{project_id}")
+                    })
+            return manageable
+        except Exception as e:
+            print(f"⚠️ Ошибка получения проектов: {e}")
             return []
 
 

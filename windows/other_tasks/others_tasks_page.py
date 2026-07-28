@@ -9,6 +9,7 @@ from PyQt6.QtGui import QDragEnterEvent, QDropEvent, QDragMoveEvent
 from PyQt6.QtWidgets import QWidget, QScrollArea, QHBoxLayout, QSizePolicy, QMessageBox
 
 from database import get_tasks_session
+from models.permissions import ProjectRole
 from services.tasks_service.tasks_service import TasksService
 from windows.other_tasks.others_task_card import OthersTaskCard
 from windows.widgets.kanban_column import KanbanColumn
@@ -30,6 +31,7 @@ class OthersTasksPage(QWidget):
         self.permission_service = permission_service
 
         self.current_user = current_user
+        self._current_user_id = current_user.get('id') if current_user else None
 
         ui_path = os.path.join(os.path.dirname(__file__), "..", "..", "ui", "other_tasks")
         uic.loadUi(os.path.join(ui_path, "others_tasks_page.ui"), self)
@@ -58,34 +60,36 @@ class OthersTasksPage(QWidget):
         self._connect_signals()
 
     def _can_edit_or_delete_task(self, task_creator_id: int = None) -> bool:
-        """Проверяет, может ли пользователь редактировать/удалять задачу"""
+        """
+        Проверяет, может ли пользователь редактировать/удалять задачу
+        - Руководитель проекта (PROJECT_MANAGER) - может всё
+        - Куратор (CURATOR) - может всё
+        - Обычный участник (MEMBER) - НЕ может редактировать/удалять чужие задачи
+        """
         if not self.permission_service:
-            print("⚠️ _can_edit_or_delete_task: permission_service отсутствует -> True")
-            return True
+            print("⚠️ _can_edit_or_delete_task: permission_service отсутствует -> False")
+            return False
 
-        # ✅ СНАЧАЛА ПРОВЕРЯЕМ РОЛЬ ПРИЛОЖЕНИЯ
-        app_role = self.permission_service.app_manager.role
-        print(f"🔍 _can_edit_or_delete_task: app_role = {app_role}, task_creator_id = {task_creator_id}")
-
-        if app_role.value in ('super_admin', 'superadmin', 'admin'):
-            print(f"   ✅ Суперадмин/админ -> True")
-            return True
-
-        # Затем проверяем права в проекте
+        # Проверяем роль в проекте
         if self._current_project_id:
-            result = self.permission_service.can_edit_task(
-                self._current_project_id,
-                task_creator_id
-            )
-            print(f"   🔍 can_edit_task({self._current_project_id}) = {result}")
-            return result
+            project_role = self.permission_service.get_user_project_role(self._current_project_id)
+            print(f"🔍 _can_edit_or_delete_task: project_role = {project_role}")
 
-        print(f"   ❌ Нет прав -> False")
+            # Руководитель и куратор могут всё
+            if project_role in (ProjectRole.PROJECT_MANAGER, ProjectRole.CURATOR):
+                print(f"   ✅ Руководитель/куратор -> True")
+                return True
+
+            # Обычный участник - не может редактировать/удалять чужие задачи
+            print(f"   ❌ Участник -> False")
+            return False
+
+        # Если проект не выбран - проверяем роль в приложении
+        app_role = self.permission_service.app_manager.role
+        if app_role.value in ('super_admin', 'superadmin', 'admin'):
+            return True
+
         return False
-
-    # windows/other_tasks/others_tasks_page.py
-
-    # Добавьте эти методы в класс OthersTasksPage:
 
     def dragEnterEvent(self, event):
         """Обработка входа drag в страницу"""
@@ -178,33 +182,60 @@ class OthersTasksPage(QWidget):
             event.ignore()
 
     def _can_create_task(self) -> bool:
-        return self._handlers.can_create_task()
+        """
+        Проверяет, может ли пользователь создавать задачи в чужих задачах
+        - Руководитель проекта (PROJECT_MANAGER) - может
+        - Куратор (CURATOR) - может
+        - Обычный участник (MEMBER) - НЕ может
+        """
+        if not self.permission_service:
+            return False
+
+        if self._current_project_id:
+            project_role = self.permission_service.get_user_project_role(self._current_project_id)
+            return project_role in (ProjectRole.PROJECT_MANAGER, ProjectRole.CURATOR)
+
+        # Если проект не выбран - проверяем роль в приложении
+        app_role = self.permission_service.app_manager.role
+        return app_role.value in ('super_admin', 'superadmin', 'admin')
 
     def _can_archive_task(self, task_creator_id: int = None) -> bool:
-        """Проверяет, может ли пользователь архивировать задачу"""
+        """
+        Проверяет, может ли пользователь архивировать задачу
+        - Руководитель проекта (PROJECT_MANAGER) - может
+        - Куратор (CURATOR) - может
+        - Обычный участник (MEMBER) - НЕ может
+        """
         if not self.permission_service:
-            return True
+            return False
 
-        # ✅ СНАЧАЛА ПРОВЕРЯЕМ РОЛЬ ПРИЛОЖЕНИЯ
-        app_role = self.permission_service.app_manager.role
-        if app_role.value in ('super_admin', 'superadmin', 'admin'):
-            return True
-
-        # Затем проверяем права в проекте
         if self._current_project_id:
-            return self.permission_service.can_edit_task(
-                self._current_project_id,
-                task_creator_id
-            )
-        return False
+            project_role = self.permission_service.get_user_project_role(self._current_project_id)
+            return project_role in (ProjectRole.PROJECT_MANAGER, ProjectRole.CURATOR)
+
+        app_role = self.permission_service.app_manager.role
+        return app_role.value in ('super_admin', 'superadmin', 'admin')
+
+    def _can_move_task(self, task_creator_id: int = None) -> bool:
+        """
+        Проверяет, может ли пользователь перемещать задачу (drag & drop)
+        - Руководитель проекта (PROJECT_MANAGER) - может
+        - Куратор (CURATOR) - может
+        - Обычный участник (MEMBER) - НЕ может (только просмотр)
+        """
+        if not self.permission_service:
+            return False
+
+        if self._current_project_id:
+            project_role = self.permission_service.get_user_project_role(self._current_project_id)
+            return project_role in (ProjectRole.PROJECT_MANAGER, ProjectRole.CURATOR)
+
+        app_role = self.permission_service.app_manager.role
+        return app_role.value in ('super_admin', 'superadmin', 'admin')
 
     def _setup_permission_ui(self):
         if hasattr(self, 'btnCreateTask'):
             self.btnCreateTask.setVisible(self._can_create_task())
-
-    # ==========================================================
-    # ПОДКЛЮЧЕНИЕ СИГНАЛОВ
-    # ==========================================================
 
     def _connect_signals(self):
         self.priorityFilter.currentTextChanged.connect(self._on_filter_changed)
@@ -222,27 +253,23 @@ class OthersTasksPage(QWidget):
         self._rebuild_board_for_project(project_id)
         self._handlers.load_tasks_for_current_project()
 
-    # ==========================================================
-    # СОЗДАНИЕ КАРТОЧЕК
-    # ==========================================================
-
     def create_task_card(self, task_data: Dict) -> OthersTaskCard:
         """Создает карточку задачи с учетом прав"""
         task_creator_id = task_data.get('created_by')
 
         can_edit = self._can_edit_or_delete_task(task_creator_id)
         can_archive = self._can_archive_task(task_creator_id)
-        can_drag = can_edit  # <-- ДОБАВЛЯЕМ: перетаскивать можно только если есть права на редактирование
+        can_move = self._can_move_task(task_creator_id)  # <-- ДОБАВЛЯЕМ
 
-        print(f"🐛 create_task_card: task_id={task_data.get('id')}, can_edit={can_edit}, can_drag={can_drag}")
+        print(f"🐛 create_task_card: task_id={task_data.get('id')}, can_edit={can_edit}, can_move={can_move}")
 
         card = OthersTaskCard(
             task_data,
             service=self.service,
-            is_creator=(task_creator_id == self.current_user.get('id')),
+            is_creator=(task_creator_id == self._current_user_id),
             can_edit_delete=can_edit,
             can_archive=can_archive,
-            can_drag=can_drag  # <-- ПЕРЕДАЕМ
+            can_move=can_move  # <-- ПЕРЕДАЁМ
         )
         return card
 

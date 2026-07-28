@@ -31,6 +31,8 @@ class ProjectEditDialog(BaseProjectDialog):
 
         self.createBtn.clicked.connect(self._on_save)
 
+    # windows/projects/project_edit_dialog.py
+
     def setup_edit_mode(self, project_id: int):
         """Настраивает диалог в режиме редактирования/просмотра"""
         self.project_id = project_id
@@ -38,6 +40,8 @@ class ProjectEditDialog(BaseProjectDialog):
         # Проверяем права на редактирование
         if self.permission_service:
             can_edit = self.permission_service.can_edit_project(project_id)
+            print(f"🔍 ProjectEditDialog: can_edit={can_edit}")
+
             if not can_edit:
                 # Режим только для просмотра
                 self._is_readonly_mode = True
@@ -46,16 +50,25 @@ class ProjectEditDialog(BaseProjectDialog):
                 self.createBtn.setText("Закрыть")
                 self.createBtn.setEnabled(True)
 
-                # Отключаем поля ввода (кроме кнопок участников/админов)
+                # Отключаем поля ввода
                 self._set_fields_readonly(True)
 
                 # Меняем обработчик кнопки
-                self.createBtn.clicked.disconnect()
+                try:
+                    self.createBtn.clicked.disconnect()
+                except:
+                    pass
                 self.createBtn.clicked.connect(self.reject)
             else:
                 # Режим редактирования
                 self._is_readonly_mode = False
                 self._set_fields_readonly(False)
+                self.createBtn.setText("Сохранить изменения")
+                try:
+                    self.createBtn.clicked.disconnect()
+                except:
+                    pass
+                self.createBtn.clicked.connect(self._on_save)
 
     def _set_fields_readonly(self, readonly: bool):
         """Устанавливает режим только для чтения для полей ввода (НЕ отключает кнопки)"""

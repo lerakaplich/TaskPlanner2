@@ -114,9 +114,41 @@ class TaskCard(QFrame):
         self.fill_ui()
         self._connect_signals()
 
-    # ==========================================================
-    # НАСТРОЙКА UI
-    # ==========================================================
+        self.can_pause = True  # По умолчанию можно ставить на паузу
+        self.can_duplicate = True  # По умолчанию можно дублировать
+
+    def _show_context_menu(self):
+        menu = QMenu(self)
+        menu.setStyleSheet(TaskCardStyles.MENU_STYLE)
+
+        # ⭐ ДУБЛИРОВАНИЕ - с проверкой can_duplicate
+        duplicate_action = menu.addAction("Дублировать")
+        duplicate_action.setEnabled(self.can_duplicate)  # <-- ДОБАВЛЯЕМ
+
+        is_paused = self.task_data.get("is_paused", False)
+        is_completed = self.task_data.get("completed", False)
+
+        pause_action = None
+        if not is_completed:
+            pause_action = menu.addAction("Возобновить" if is_paused else "Пауза")
+            pause_action.setEnabled(self.can_pause)  # <-- ДОБАВЛЯЕМ
+
+        archive_action = menu.addAction("Архивировать") if self._archive_enabled else None
+        delete_action = menu.addAction("Удалить") if self._delete_enabled else None
+
+        action = menu.exec(self.menuButton.mapToGlobal(QPoint(0, self.menuButton.height())))
+
+        if action == duplicate_action:
+            self.duplicate_requested.emit(self.task_id)
+        elif pause_action and action == pause_action:
+            if is_paused:
+                self.resume_requested.emit(self.task_id)
+            else:
+                self.pause_requested.emit(self.task_id)
+        elif archive_action and action == archive_action:
+            self.archive_requested.emit(self.task_id)
+        elif delete_action and action == delete_action:
+            self.delete_requested.emit(self.task_id)
 
     def _setup_widget_flags(self):
         """Настройка флагов виджета"""
@@ -185,19 +217,11 @@ class TaskCard(QFrame):
         self.menuButton.clicked.connect(self._show_context_menu)
         self.projectButton.clicked.connect(self._on_project_clicked)
 
-    # ==========================================================
-    # УПРАВЛЕНИЕ ВИДИМОСТЬЮ КНОПОК
-    # ==========================================================
-
     def set_delete_button_visible(self, visible: bool):
         self._delete_enabled = visible
 
     def set_archive_button_visible(self, visible: bool):
         self._archive_enabled = visible
-
-    # ==========================================================
-    # ЗАПОЛНЕНИЕ ДАННЫМИ
-    # ==========================================================
 
     def fill_ui(self):
         """Заполнение карточки данными"""

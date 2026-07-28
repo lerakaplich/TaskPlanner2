@@ -16,6 +16,26 @@ class ProjectViewService:
         self.current_user = current_user
         self.current_user_id = current_user.get('id') if current_user else None
 
+    def get_project_tasks_for_user(self, project_id: int, user_id: int,
+                                   include_archived: bool = False,
+                                   view_all: bool = True) -> List[Dict]:
+        """
+        Получает задачи проекта с учётом прав пользователя
+
+        Args:
+            project_id: ID проекта
+            user_id: ID пользователя
+            include_archived: включать архивные задачи
+            view_all: если True - все задачи, если False - только свои
+        """
+        tasks = self.get_project_tasks(project_id, include_archived)
+
+        if not view_all:
+            # Показываем только задачи, созданные пользователем
+            tasks = [t for t in tasks if t.get('created_by') == user_id]
+
+        return tasks
+
     def get_project_data(self, project_id: int) -> Optional[ProjectWithMembersDTO]:
         """Получает данные проекта"""
         return self.project_service.get_project_for_edit(project_id)

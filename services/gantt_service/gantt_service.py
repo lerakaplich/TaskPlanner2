@@ -98,13 +98,6 @@ class GanttService(GanttBaseService):
     def get_task_info_text(self, task: TaskGanttData) -> str:
         return self.export.get_task_info_text(task)
 
-    def can_create_task(self) -> bool:
-        """Проверяет права на создание задач"""
-        if not self.permission_service:
-            return False
-        from services.permissions.app_permissions import AppRole
-        return self.permission_service.app_manager.role == AppRole.SUPER_ADMIN
-
     def can_create_link(self) -> bool:
         """Проверяет права на создание связей"""
         if not self.permission_service:
@@ -148,3 +141,27 @@ class GanttService(GanttBaseService):
         except Exception as e:
             print(f"❌ Ошибка создания задачи: {e}")
             return None
+
+    # services/gantt_service/gantt_service.py
+
+    def get_manageable_projects(self) -> List[Dict[str, Any]]:
+        """Возвращает проекты, где пользователь может управлять задачами"""
+        return self.data.get_manageable_projects()
+
+    def can_create_task(self) -> bool:
+        """
+        Проверяет, может ли пользователь создавать задачи
+        """
+        if not self.permission_service:
+            return False
+
+        from services.permissions.app_permissions import AppRole
+        app_role = self.permission_service.app_manager.role
+
+        # Суперадмин и админ могут создавать
+        if app_role in (AppRole.SUPER_ADMIN, AppRole.ADMIN):
+            return True
+
+        # Проверяем, есть ли у пользователя проекты, где он администратор или куратор
+        manageable_projects = self.get_manageable_projects()
+        return len(manageable_projects) > 0

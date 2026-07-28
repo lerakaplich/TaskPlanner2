@@ -12,31 +12,21 @@ class OthersTasksHandlers:
     def __init__(self, page):
         self.page = page
 
-    def can_edit_or_delete_task(self) -> bool:
+    def can_edit_or_delete_task(self, task_creator_id: int = None) -> bool:
         """Может ли пользователь редактировать/удалять чужие задачи"""
-        if not self.page.permission_service:
-            return True
-        app_role = self.page.permission_service.app_manager.role
-        return app_role.value in ('super_admin', 'superadmin', 'admin')
+        return self.page._can_edit_or_delete_task(task_creator_id)
 
     def can_create_task(self) -> bool:
         """Может ли пользователь создавать задачи в чужих задачах"""
-        if not self.page.permission_service:
-            return True
-        # ✅ ИСПРАВЛЕНО: проверяем обе возможные роли
-        app_role = self.page.permission_service.app_manager.role
-        return app_role.value in ('super_admin', 'superadmin', 'admin')
+        return self.page._can_create_task()
 
-    def can_archive_task(self) -> bool:
+    def can_archive_task(self, task_creator_id: int = None) -> bool:
         """Может ли пользователь архивировать чужие задачи"""
-        if not self.page.permission_service:
-            return True
-        app_role = self.page.permission_service.app_manager.role
-        return app_role.value in ('super_admin', 'superadmin', 'admin')
+        return self.page._can_archive_task(task_creator_id)
 
-    # ==========================================================
-    # ЗАГРУЗКА И ОБНОВЛЕНИЕ
-    # ==========================================================
+    def can_move_task(self, task_creator_id: int = None) -> bool:
+        """Может ли пользователь перемещать чужие задачи"""
+        return self.page._can_move_task(task_creator_id)
 
     def load_tasks(self):
         """Загружает чужие задачи"""
@@ -256,8 +246,6 @@ class OthersTasksHandlers:
         else:
             QMessageBox.warning(self.page, "Ошибка", "Не удалось отметить задачу как выполненную")
 
-    # windows/other_tasks/others_tasks_handlers.py
-
     def on_task_dropped(self, task_id: int, target_column_id: int):
         """Обработчик drop из KanbanColumn"""
         target_column = None
@@ -278,8 +266,8 @@ class OthersTasksHandlers:
         if old_status == new_status:
             return
 
-        # Проверяем права (суперадмин всегда может)
-        if not self.page._can_edit_or_delete_task(task.get("created_by")):
+        # ✅ Проверяем права на перемещение
+        if not self.can_move_task(task.get("created_by")):
             QMessageBox.warning(self.page, "Ошибка", "У вас нет прав для перемещения этой задачи")
             return
 
@@ -289,7 +277,6 @@ class OthersTasksHandlers:
             self.page.update_task_card(result)
             self.page.update_statistics()
             self.page.taskUpdated.emit()
-            # Не перезагружаем все задачи, просто обновляем карточку
             self.page.updateGeometry()
         else:
             QMessageBox.warning(self.page, "Ошибка", "Не удалось переместить задачу")
