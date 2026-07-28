@@ -31,22 +31,57 @@ class EmployeeBaseService:
 
     def _parse_boss_ids(self, boss_field) -> List[int]:
         """Парсит поле boss и возвращает список ID сотрудников"""
+        print(f"🔍 _parse_boss_ids: boss_field='{boss_field}', type={type(boss_field)}")
+
         if not boss_field:
+            print(f"   boss_field пустой, возвращаем []")
             return []
+
+        # Если это уже список
+        if isinstance(boss_field, list):
+            result = [int(x) for x in boss_field if x]
+            print(f"   это список, возвращаем {result}")
+            return result
+
+        # Если это число или строка с числом
+        if isinstance(boss_field, (int, float)):
+            result = [int(boss_field)]
+            print(f"   это число, возвращаем {result}")
+            return result
+
+        # Если это строка
         if isinstance(boss_field, str):
-            # Проверяем, что строка содержит только цифры, запятые и пробелы
-            if all(c.isdigit() or c == ',' or c.isspace() for c in boss_field):
+            # Убираем пробелы
+            boss_field = boss_field.strip()
+            print(f"   строка после strip: '{boss_field}'")
+            if not boss_field:
+                return []
+
+            # Если строка содержит запятые - разделяем
+            if ',' in boss_field:
                 ids = []
                 for part in boss_field.split(','):
                     part = part.strip()
                     if part and part.isdigit():
                         ids.append(int(part))
+                print(f"   с запятыми, возвращаем {ids}")
                 return ids
-            return []
-        elif isinstance(boss_field, (int, float)):
-            return [int(boss_field)]
-        elif isinstance(boss_field, list):
-            return boss_field
+
+            # Если это одно число
+            if boss_field.isdigit():
+                result = [int(boss_field)]
+                print(f"   одно число, возвращаем {result}")
+                return result
+
+            # Если это не число - пробуем найти цифры
+            import re
+            digits = re.findall(r'\d+', boss_field)
+            if digits:
+                result = [int(d) for d in digits]
+                print(f"   найдены цифры re: {result}")
+                return result
+
+        print(f"   ничего не подошло, возвращаем []")
         return []
 
     def get_employee_short_name(self, employee_id: int) -> str:

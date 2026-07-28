@@ -41,6 +41,10 @@ class DivisionCard(QFrame):
             # Переименовываем кнопку редактирования
             if hasattr(self, 'editButton'):
                 self.editButton.setText("Подробнее")
+        else:
+            # В режиме редактирования
+            if hasattr(self, 'editButton'):
+                self.editButton.setText("Редактировать")
 
     def connect_signals(self):
         """Подключение сигналов"""

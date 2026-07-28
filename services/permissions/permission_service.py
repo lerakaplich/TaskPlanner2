@@ -42,8 +42,6 @@ class PermissionService:
         else:
             self.role_service = None
 
-    # services/permissions/permission_service.py
-
     def _get_app_role(self) -> AppRole:
         """Получает роль на уровне приложения"""
         # ПРОВЕРЯЕМ СНАЧАЛА В БД
@@ -256,15 +254,31 @@ class PermissionService:
 
     def _get_system_role(self) -> SystemRole:
         """Определяет системную роль пользователя"""
+        print(f"🔍 _get_system_role: self.employee_service = {self.employee_service}")
+
         if self.employee_service and hasattr(self.employee_service, 'get_system_role'):
             try:
                 role = self.employee_service.get_system_role(self.user_id)
-                print(f"🔍 _get_system_role: user_id={self.user_id}, role={role}")
+                print(f"🔍 _get_system_role: user_id={self.user_id}, role={role}, type={type(role)}")
+
+                # Если role - строка, преобразуем в Enum
+                if isinstance(role, str):
+                    from services.permissions.system_permissions import SystemRole
+                    try:
+                        role = SystemRole(role)
+                        print(f"🔍 _get_system_role: преобразовано в Enum: {role}")
+                    except ValueError:
+                        print(f"⚠️ Неизвестная роль: {role}")
+                        return SystemRole.EMPLOYEE
+
                 return role
             except Exception as e:
                 print(f"⚠️ Ошибка получения системной роли: {e}")
                 import traceback
                 traceback.print_exc()
+        else:
+            print(f"⚠️ _get_system_role: employee_service не доступен!")
+
         return SystemRole.EMPLOYEE
 
     def get_combined_role(self, project_id: Optional[int] = None) -> CombinedRole:
@@ -272,9 +286,46 @@ class PermissionService:
         # Всегда получаем свежую роль из БД
         app_role = self._get_app_role()
         project_role = self._get_project_role(project_id) if project_id else None
+
+        # ВАЖНО: получаем системную роль через employee_service
         system_role = self._get_system_role()
+        print(f"🔍 get_combined_role: system_role = {system_role}")
 
         return CombinedRole(app_role, project_role, system_role)
+
+    def get_user_project_role(self, project_id: int) -> Optional[ProjectRole]:
+        """
+        Возвращает роль пользователя в проекте
+        """
+        return self._get_project_role(project_id)
+
+    def can_view_all_tasks(self, project_id: int) -> bool:
+        """
+        Может ли пользователь видеть все задачи в проекте
+        """
+        combined = self.get_combined_role(project_id)
+        return combined.can_view_all_tasks()
+
+    def can_edit_any_task(self, project_id: int) -> bool:
+        """
+        Может ли пользователь редактировать любые задачи в проекте
+        """
+        combined = self.get_combined_role(project_id)
+        return combined.can_edit_any_task()
+
+    def can_manage_project(self, project_id: int) -> bool:
+        """
+        Может ли пользователь управлять проектом (редактировать, архивировать, управлять участниками)
+        """
+        combined = self.get_combined_role(project_id)
+        return combined.can_manage_project()
+
+    def can_manage_columns(self, project_id: int) -> bool:
+        """
+        Может ли пользователь управлять колонками проекта
+        """
+        combined = self.get_combined_role(project_id)
+        return combined.can_manage_columns()
 
     def has_permission(self, permission: str) -> bool:
         """Проверяет наличие права (для обратной совместимости)"""
@@ -458,6 +509,152 @@ class PermissionService:
 
         return [emp for emp in employees if emp.get('id') in visible_ids]
 
+    def can_add_division(self) -> bool:
+        """
+        Проверяет, может ли пользователь добавлять подразделения
+        ТОЛЬКО суперадмин и админ могут добавлять подразделения
+        """
+        combined = self.get_combined_role()
+
+        # Только суперадмин и админ могут добавлять подразделения
+        if combined.is_super_admin or combined.is_admin:
+            return True
+
+        # Начальник организации НЕ может добавлять
+        # Начальник подразделения НЕ может добавлять
+        # Обычный пользователь НЕ может добавлять
+
+        return False
+
+    # services/permissions/permission_service.py
+
+    def can_edit_department(self, department_id: int) -> bool:
+        """
+        Проверяет, может ли пользователь редактировать отдел
+        """
+        combined = self.get_combined_role()
+
+        # Суперадмин и админ могут редактировать всё
+        if combined.is_super_admin or combined.is_admin:
+            return True
+
+        # Начальник организации может редактировать всё
+        if combined.is_org_head:
+            return True
+
+        # Начальник подразделения может редактировать только отделы в своём подразделении
+        if combined.is_division_head:
+            return self._is_department_in_my_division(department_id)
+
+        # Начальник отдела может редактировать только свой отдел
+        if combined.is_department_head:
+            return self._is_department_managed_by_user(department_id)
+
+        return False
+
+    def can_delete_department(self, department_id: int) -> bool:
+        """
+        Проверяет, может ли пользователь удалять отдел
+        """
+        combined = self.get_combined_role()
+
+        # Суперадмин и админ могут удалять всё
+        if combined.is_super_admin or combined.is_admin:
+            return True
+
+        # Начальник организации может удалять всё
+        if combined.is_org_head:
+            return True
+
+        # Начальник подразделения может удалять только отделы в своём подразделении
+        if combined.is_division_head:
+            return self._is_department_in_my_division(department_id)
+
+        # Начальник отдела может удалять только свой отдел
+        if combined.is_department_head:
+            return self._is_department_managed_by_user(department_id)
+
+        return False
+
+    def can_add_department(self) -> bool:
+        """
+        Проверяет, может ли пользователь добавлять отделы
+        """
+        combined = self.get_combined_role()
+
+        # Суперадмин и админ могут добавлять везде
+        if combined.is_super_admin or combined.is_admin:
+            return True
+
+        # Начальник организации может добавлять везде
+        if combined.is_org_head:
+            return True
+
+        # Начальник подразделения может добавлять только в своём подразделении
+        if combined.is_division_head:
+            return True
+
+        # Начальник отдела НЕ может добавлять отделы
+        if combined.is_department_head:
+            return False
+
+        return False
+
+    def _is_department_in_my_division(self, department_id: int) -> bool:
+        """Проверяет, находится ли отдел в подразделении пользователя (начальника подразделения)"""
+        try:
+            from sqlalchemy import text
+            from database import get_employees_session
+
+            with get_employees_session() as emp_session:
+                # Получаем отдел
+                stmt = text("SELECT division_id FROM departments WHERE id = :dept_id")
+                result = emp_session.execute(stmt, {'dept_id': department_id}).first()
+                if not result:
+                    return False
+
+                division_id = result[0]
+
+                # Проверяем, является ли пользователь начальником этого подразделения
+                stmt2 = text("SELECT boss FROM divisions WHERE id = :div_id")
+                result2 = emp_session.execute(stmt2, {'div_id': division_id}).first()
+                if not result2:
+                    return False
+
+                boss_value = result2[0]
+                if boss_value is None:
+                    return False
+
+                boss_ids = [int(x.strip()) for x in str(boss_value).split(',') if x.strip().isdigit()]
+                return self.user_id in boss_ids
+
+        except Exception as e:
+            print(f"⚠️ Ошибка в _is_department_in_my_division: {e}")
+            return False
+
+    def _is_department_managed_by_user(self, department_id: int) -> bool:
+        """Проверяет, управляет ли пользователь отделом (начальник отдела)"""
+        try:
+            from sqlalchemy import text
+            from database import get_employees_session
+
+            with get_employees_session() as emp_session:
+                stmt = text("SELECT boss FROM departments WHERE id = :dept_id")
+                result = emp_session.execute(stmt, {'dept_id': department_id}).first()
+                if not result:
+                    return False
+
+                boss_value = result[0]
+                if boss_value is None:
+                    return False
+
+                boss_ids = [int(x.strip()) for x in str(boss_value).split(',') if x.strip().isdigit()]
+                return self.user_id in boss_ids
+
+        except Exception as e:
+            print(f"⚠️ Ошибка в _is_department_managed_by_user: {e}")
+            return False
+
     def get_filtered_departments(self, departments: List[Dict]) -> List[Dict]:
         """
         Фильтрует список отделов в зависимости от прав пользователя.
@@ -487,6 +684,119 @@ class PermissionService:
             session=self.session
         )
         return system_manager.get_filtered_divisions(divisions)
+
+    def can_edit_division(self, division_id: int) -> bool:
+        """
+        Проверяет, может ли пользователь редактировать подразделение
+        """
+        combined = self.get_combined_role()
+
+        # Суперадмин и админ могут редактировать все
+        if combined.is_super_admin or combined.is_admin:
+            return True
+
+        # Начальник организации может редактировать все
+        if combined.is_org_head:
+            return True
+
+        # Начальник подразделения может редактировать только своё
+        if combined.is_division_head:
+            return self._is_division_managed_by_user(division_id)
+
+        return False
+
+    def can_delete_division(self, division_id: int) -> bool:
+        """
+        Проверяет, может ли пользователь удалять подразделение
+        ТОЛЬКО суперадмин и админ могут удалять подразделения
+        """
+        combined = self.get_combined_role()
+
+        # Только суперадмин и админ могут удалять подразделения
+        if combined.is_super_admin or combined.is_admin:
+            return True
+
+        # Начальник организации НЕ может удалять
+        # Начальник подразделения НЕ может удалять
+        # Обычный пользователь НЕ может удалять
+
+        return False
+
+    def _is_division_managed_by_user(self, division_id: int) -> bool:
+        """Проверяет, управляет ли пользователь указанным подразделением"""
+        try:
+            from sqlalchemy import text
+            from database import get_employees_session
+
+            # ✅ ИСПРАВЛЕНО: используем отдельную сессию для employees БД
+            with get_employees_session() as emp_session:
+                stmt = text("""
+                    SELECT id, boss FROM divisions 
+                    WHERE id = :div_id
+                """)
+
+                result = emp_session.execute(stmt, {'div_id': division_id}).first()
+                if not result:
+                    print(f"⚠️ Подразделение {division_id} не найдено")
+                    return False
+
+                boss_value = result[1]
+                print(
+                    f"🔍 _is_division_managed_by_user: division_id={division_id}, boss='{boss_value}', user_id={self.user_id}")
+
+                if boss_value is None:
+                    return False
+
+                boss_str = str(boss_value)
+                boss_ids = [int(x.strip()) for x in boss_str.split(',') if x.strip().isdigit()]
+                print(f"🔍 boss_ids: {boss_ids}")
+
+                return self.user_id in boss_ids
+
+        except Exception as e:
+            print(f"⚠️ Ошибка в _is_division_managed_by_user: {e}")
+            import traceback
+            traceback.print_exc()
+            return False
+
+    def get_editable_division_ids(self, user_id: int) -> List[int]:
+        """
+        Возвращает ID подразделений, которые пользователь может редактировать.
+        """
+        if not user_id:
+            return []
+
+        try:
+            from database import get_employees_session
+            from sqlalchemy import text
+
+            with get_employees_session() as emp_session:
+                stmt = text("""
+                    SELECT id, boss FROM divisions 
+                    WHERE boss LIKE :pattern1 
+                    OR boss LIKE :pattern2
+                    OR boss = :exact
+                """)
+
+                results = emp_session.execute(
+                    stmt,
+                    {
+                        'pattern1': f'%,{user_id},%',
+                        'pattern2': f'{user_id},%',
+                        'exact': str(user_id)
+                    }
+                ).fetchall()
+
+                return [row[0] for row in results]
+
+        except Exception as e:
+            print(f"⚠️ Ошибка в get_editable_division_ids: {e}")
+            # Откатываем транзакцию основной сессии, если она была прервана
+            try:
+                self.session.rollback()
+            except:
+                pass
+            return []
 
 
 class _AppManagerProxy:

@@ -21,20 +21,95 @@ class SystemRole(Enum):
     EMPLOYEE = "employee"
 
 
+# models/permissions.py
+
+# models/permissions.py
+
 class CombinedRole:
-    """
-    Комбинированная роль, объединяющая все три уровня прав
-    """
+    """Комбинированная роль, объединяющая все три уровня прав"""
 
     def __init__(self, app_role: AppRole, project_role: Optional[ProjectRole] = None,
                  system_role: Optional[SystemRole] = None):
+        # Приводим к Enum, если передана строка
+        if isinstance(app_role, str):
+            try:
+                app_role = AppRole(app_role)
+            except ValueError:
+                app_role = AppRole.USER
+
+        if isinstance(project_role, str) and project_role:
+            try:
+                project_role = ProjectRole(project_role)
+            except ValueError:
+                project_role = None
+
+        if isinstance(system_role, str) and system_role:
+            try:
+                system_role = SystemRole(system_role)
+            except ValueError:
+                system_role = SystemRole.EMPLOYEE
+
         self.app_role = app_role
         self.project_role = project_role
         self.system_role = system_role
-        print(f"🔍 CombinedRole.__init__: app_role={app_role}, project_role={project_role}, system_role={system_role}")
+
+        # Отладочный вывод для проверки типов
+        print(f"🔍 CombinedRole.__init__: app_role={app_role} (type={type(app_role)}), "
+              f"project_role={project_role} (type={type(project_role)}), "
+              f"system_role={system_role} (type={type(system_role)})")
+
+        # Дополнительная отладка для system_role
+        if system_role:
+            print(f"🔍 system_role value: {system_role.value if hasattr(system_role, 'value') else system_role}")
 
     def __repr__(self) -> str:
         return f"CombinedRole(app_role={self.app_role}, project_role={self.project_role}, system_role={self.system_role})"
+
+    def can_view_all_tasks(self) -> bool:
+        """Может ли пользователь видеть все задачи в проекте"""
+        # Суперадмин, админ, руководитель проекта, куратор
+        if self.is_super_admin or self.is_admin:
+            return True
+        if self.project_role in (ProjectRole.PROJECT_MANAGER, ProjectRole.CURATOR):
+            return True
+        return False
+
+    def can_edit_any_task(self) -> bool:
+        """Может ли пользователь редактировать любые задачи в проекте"""
+        # Суперадмин, админ, руководитель проекта, куратор
+        if self.is_super_admin or self.is_admin:
+            return True
+        if self.project_role in (ProjectRole.PROJECT_MANAGER, ProjectRole.CURATOR):
+            return True
+        return False
+
+    def can_manage_project(self) -> bool:
+        """Может ли пользователь управлять проектом"""
+        # Суперадмин, админ, руководитель проекта, куратор
+        if self.is_super_admin or self.is_admin:
+            return True
+        if self.project_role in (ProjectRole.PROJECT_MANAGER, ProjectRole.CURATOR):
+            return True
+        return False
+
+    def can_manage_columns(self) -> bool:
+        """Может ли пользователь управлять колонками проекта"""
+        # Суперадмин, админ, руководитель проекта, куратор
+        if self.is_super_admin or self.is_admin:
+            return True
+        if self.project_role in (ProjectRole.PROJECT_MANAGER, ProjectRole.CURATOR):
+            return True
+        return False
+
+    def get_task_visibility_filter(self) -> str:
+        """
+        Возвращает фильтр для отображения задач:
+        - 'all': показывать все задачи
+        - 'own': показывать только свои задачи
+        """
+        if self.can_view_all_tasks():
+            return 'all'
+        return 'own'
 
     @property
     def is_super_admin(self) -> bool:
@@ -62,25 +137,61 @@ class CombinedRole:
 
     @property
     def is_org_head(self) -> bool:
-        return self.system_role == SystemRole.ORGANIZATION_HEAD
+        # Используем строковое сравнение для надёжности
+        if self.system_role is None:
+            return False
+        # Получаем значение для сравнения
+        sys_value = self.system_role.value if hasattr(self.system_role, 'value') else str(self.system_role)
+        target_value = SystemRole.ORGANIZATION_HEAD.value if hasattr(SystemRole.ORGANIZATION_HEAD, 'value') else str(
+            SystemRole.ORGANIZATION_HEAD)
+        return sys_value == target_value
 
     @property
     def is_division_head(self) -> bool:
-        return self.system_role == SystemRole.DIVISION_HEAD
+        # Используем строковое сравнение для надёжности
+        if self.system_role is None:
+            return False
+        # Получаем значение для сравнения
+        sys_value = self.system_role.value if hasattr(self.system_role, 'value') else str(self.system_role)
+        target_value = SystemRole.DIVISION_HEAD.value if hasattr(SystemRole.DIVISION_HEAD, 'value') else str(
+            SystemRole.DIVISION_HEAD)
+        result = sys_value == target_value
+        print(f"🔍 is_division_head: sys_value='{sys_value}', target_value='{target_value}', result={result}")
+        return result
 
     @property
     def is_department_head(self) -> bool:
-        return self.system_role == SystemRole.DEPARTMENT_HEAD
+        if self.system_role is None:
+            return False
+        sys_value = self.system_role.value if hasattr(self.system_role, 'value') else str(self.system_role)
+        target_value = SystemRole.DEPARTMENT_HEAD.value if hasattr(SystemRole.DEPARTMENT_HEAD, 'value') else str(
+            SystemRole.DEPARTMENT_HEAD)
+        return sys_value == target_value
 
     @property
     def is_employee(self) -> bool:
         """Является ли пользователь обычным сотрудником (не начальником)"""
-        return self.system_role == SystemRole.EMPLOYEE
+        if self.system_role is None:
+            return True
+        sys_value = self.system_role.value if hasattr(self.system_role, 'value') else str(self.system_role)
+        target_value = SystemRole.EMPLOYEE.value if hasattr(SystemRole.EMPLOYEE, 'value') else str(SystemRole.EMPLOYEE)
+        return sys_value == target_value
 
     @property
     def is_manager(self) -> bool:
         """Является ли пользователь начальником (любого уровня)"""
-        return self.system_role in (SystemRole.ORGANIZATION_HEAD, SystemRole.DIVISION_HEAD, SystemRole.DEPARTMENT_HEAD)
+        if self.system_role is None:
+            return False
+        sys_value = self.system_role.value if hasattr(self.system_role, 'value') else str(self.system_role)
+        manager_values = [
+            SystemRole.ORGANIZATION_HEAD.value if hasattr(SystemRole.ORGANIZATION_HEAD, 'value') else str(
+                SystemRole.ORGANIZATION_HEAD),
+            SystemRole.DIVISION_HEAD.value if hasattr(SystemRole.DIVISION_HEAD, 'value') else str(
+                SystemRole.DIVISION_HEAD),
+            SystemRole.DEPARTMENT_HEAD.value if hasattr(SystemRole.DEPARTMENT_HEAD, 'value') else str(
+                SystemRole.DEPARTMENT_HEAD),
+        ]
+        return sys_value in manager_values
 
     def can_edit_project(self, project_id: int = None) -> bool:
         """Может редактировать проект"""
@@ -148,16 +259,6 @@ class CombinedRole:
             return True
         # Суперадмин и админ могут создавать
         if self.is_super_admin or self.is_admin:
-            return True
-        return False
-
-    def can_edit_any_task(self) -> bool:
-        """Может редактировать любые задачи"""
-        # Суперадмин и админ могут редактировать любые
-        if self.is_super_admin or self.is_admin:
-            return True
-        # Руководитель и куратор могут редактировать любые
-        if self.is_project_manager or self.is_curator:
             return True
         return False
 

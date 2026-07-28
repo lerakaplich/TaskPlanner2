@@ -56,8 +56,16 @@ class UIPermissionMixin:
         """
         if self._read_only_mode:
             return False
+
         if self._permission_service:
+            # Для вкладки отделов используем специальную проверку
+            if hasattr(self, 'is_departments_tab') and self.is_departments_tab:
+                return self._permission_service.can_add_department()
+            # Для подразделений
+            if hasattr(self, 'is_divisions_tab') and self.is_divisions_tab:
+                return self._permission_service.can_add_division()
             return self._permission_service.can_show_add_buttons_in_settings()
+
         return True
 
     def _should_show_delete_buttons(self) -> bool:

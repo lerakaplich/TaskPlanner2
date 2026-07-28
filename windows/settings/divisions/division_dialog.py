@@ -46,6 +46,8 @@ class DivisionDialog(QDialog):
         # Применяем режим только просмотра
         self._apply_read_only_state()
 
+    # windows/settings/divisions/division_dialog.py
+
     def _apply_read_only_state(self):
         """Применяет состояние только просмотра к диалогу"""
         if self.read_only:
@@ -60,6 +62,21 @@ class DivisionDialog(QDialog):
             # Скрываем комбобокс руководителей
             if hasattr(self, 'comboHeads'):
                 self.comboHeads.setEnabled(False)
+
+            # Изменяем заголовок
+            self.setWindowTitle("Просмотр подразделения")
+            if hasattr(self, 'titleLabel'):
+                self.titleLabel.setText("Просмотр подразделения")
+        else:
+            # В режиме редактирования
+            if self.division_data and self.division_data.get('id'):
+                self.setWindowTitle("Редактирование подразделения")
+                if hasattr(self, 'titleLabel'):
+                    self.titleLabel.setText("Редактирование подразделения")
+            else:
+                self.setWindowTitle("Добавление подразделения")
+                if hasattr(self, 'titleLabel'):
+                    self.titleLabel.setText("Добавление нового подразделения")
 
     def _set_all_fields_read_only(self):
         """Блокирует все поля ввода"""

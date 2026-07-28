@@ -9,13 +9,25 @@ class DivisionService(EmployeeBaseService):
     """Работа с подразделениями"""
 
     def get_all_divisions(self) -> List[Dict[str, Any]]:
-        """Получить все подразделения"""
+        """Получить все подразделения с boss_ids"""
         try:
             divisions = self.session.query(Division).order_by(Division.name).all()
-            return [self._division_to_dict(div) for div in divisions]
+            return [self._division_to_dict_with_boss(div) for div in divisions]
         except Exception as e:
             print(f"❌ Ошибка загрузки подразделений: {e}")
             return []
+
+    def _division_to_dict_with_boss(self, division: Division) -> Dict[str, Any]:
+        """Преобразует подразделение в словарь с boss_ids"""
+        return {
+            'id': division.id,
+            'number': division.number,
+            'name': division.name,
+            'boss': division.boss,
+            'boss_ids': self._parse_boss_ids(division.boss),  # <-- ДОБАВИТЬ
+            'phone_number': division.phone_number,
+            'workshop_code': division.workshop_code,
+        }
 
     def get_division_card_data(self, division_id: int = None) -> Dict[str, Any]:
         """Возвращает данные подразделения для карточки"""

@@ -77,6 +77,11 @@ class SystemPermissionManager:
                 'can_edit_division_departments',
                 'can_delete_division_departments',
 
+                # Управление подразделениями (только своим)
+                'can_edit_division',  # <-- НОВОЕ
+                'can_delete_division',  # <-- НОВОЕ
+                'can_view_division',
+
                 # Статистика (только по своему подразделению)
                 'can_view_division_stats',
                 'can_view_departments_stats_in_division',
@@ -448,3 +453,63 @@ class SystemPermissionManager:
         subordinates = set(self.get_subordinates())
         subordinates.add(self.user_id)  # Добавляем себя
         return subordinates
+
+    def can_edit_division(self, division_id: int) -> bool:
+        """
+        Может ли пользователь редактировать подразделение
+        - Начальник организации: может редактировать все
+        - Начальник подразделения: может редактировать только своё
+        - Начальник отдела: НЕ может редактировать подразделения
+        - Сотрудник: НЕ может
+        """
+        if self.role == SystemRole.ORGANIZATION_HEAD:
+            return self.has_permission('can_manage_all_divisions')
+
+        if self.role == SystemRole.DIVISION_HEAD:
+            if not self.has_permission('can_edit_division'):
+                return False
+            return self._is_my_division(division_id)
+
+        return False
+
+    # services/permissions/system_permissions.py
+
+    def can_delete_division(self, division_id: int) -> bool:
+        """
+        Может ли пользователь удалять подразделение
+        ТОЛЬКО суперадмин и админ могут удалять подразделения
+        """
+        # Проверяем роль в приложении через permission_service
+        if hasattr(self, '_permission_service'):
+            combined = self._permission_service.get_combined_role()
+            if combined.is_super_admin or combined.is_admin:
+                return True
+
+        # Начальник организации НЕ может удалять
+        if self.role == SystemRole.ORGANIZATION_HEAD:
+            return False
+
+        # Начальник подразделения НЕ может удалять
+        if self.role == SystemRole.DIVISION_HEAD:
+            return False
+
+        # Начальник отдела НЕ может удалять
+        if self.role == SystemRole.DEPARTMENT_HEAD:
+            return False
+
+        return False
+
+    def _is_my_division(self, division_id: int) -> bool:
+        """Проверяет, является ли подразделение подчинённым текущему пользователю"""
+        try:
+            from models.employees import Division
+
+            division = self.session.get(Division, division_id)
+            if not division:
+                return False
+
+            boss_ids = self._parse_boss_ids(division.boss)
+            return self.user_id in boss_ids
+        except Exception as e:
+            print(f"⚠️ Ошибка проверки подразделения: {e}")
+            return False

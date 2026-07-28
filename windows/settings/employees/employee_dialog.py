@@ -2,6 +2,8 @@
 
 import os
 from datetime import date
+from typing import Optional, List
+
 from PyQt6.QtWidgets import QDialog, QMessageBox
 from PyQt6 import uic, QtCore
 from PyQt6.QtCore import QDate, pyqtSignal, QTimer
@@ -101,51 +103,41 @@ class EmployeeDialog(QDialog):
     def _apply_preset_values(self):
         """
         Применяет предустановленные значения подразделения и отдела
-        Вызывается после полной загрузки комбобоксов
         """
-        print(f"🔍 _apply_preset_values: saved_division_id={self._saved_division_id}, saved_department_id={self._saved_department_id}")
-        print(f"   preset_division_id={self._preset_division_id}, preset_department_id={self._preset_department_id}")
-        print(f"   allowed_department_ids={self.allowed_department_ids}")
-
-        # Определяем, что устанавливать: сохранённые данные или предустановленные
-        division_id = self._preset_division_id or self._saved_division_id
-        department_id = self._preset_department_id or self._saved_department_id
+        print(
+            f"🔍 _apply_preset_values: preset_division_id={self._preset_division_id}, preset_department_id={self._preset_department_id}")
 
         # 1. Устанавливаем подразделение
-        if division_id and hasattr(self, 'comboBoxDivision'):
+        if self._preset_division_id and hasattr(self, 'comboBoxDivision'):
             for i in range(self.comboBoxDivision.count()):
-                if self.comboBoxDivision.itemData(i) == division_id:
+                if self.comboBoxDivision.itemData(i) == self._preset_division_id:
                     self.comboBoxDivision.setCurrentIndex(i)
                     print(f"✅ Установлено подразделение: {self.comboBoxDivision.currentText()}")
                     break
 
-        # 2. Устанавливаем отдел (после загрузки списка отделов)
-        if department_id and hasattr(self, 'comboBoxDepartment'):
-            QTimer.singleShot(150, lambda: self._apply_preset_department(department_id))
+        # 2. Устанавливаем отдел
+        if self._preset_department_id and hasattr(self, 'comboBoxDepartment'):
+            QTimer.singleShot(150, lambda: self._apply_preset_department(self._preset_department_id))
 
         # 3. Применяем ограничения для начальника отдела
         self._apply_department_restriction()
 
     def _filter_departments_by_allowed(self):
-        """Фильтрует список отделов, оставляя только разрешённые для начальника"""
+        """Фильтрует список отделов, оставляя только разрешённые"""
         if not self.allowed_department_ids or not hasattr(self, 'comboBoxDepartment'):
             return
 
-        current_text = self.comboBoxDepartment.currentText()
         current_data = self.comboBoxDepartment.currentData()
 
-        # Сохраняем текущий индекс
         self.comboBoxDepartment.blockSignals(True)
         self.comboBoxDepartment.clear()
         self.comboBoxDepartment.addItem("Выберите отдел", None)
 
         # Добавляем только разрешённые отделы
-        current_division_id = self.comboBoxDivision.currentData()
-        if current_division_id and current_division_id in self.departments_by_division:
-            for dept in self.departments_by_division[current_division_id]:
-                dept_id = dept.get('id')
-                if dept_id in self.allowed_department_ids:
-                    self.comboBoxDepartment.addItem(dept.get("name", "Без названия"), dept_id)
+        for dept in self.all_departments:
+            dept_id = dept.get('id')
+            if dept_id in self.allowed_department_ids:
+                self.comboBoxDepartment.addItem(dept.get("name", "Без названия"), dept_id)
 
         # Восстанавливаем выбор
         for i in range(self.comboBoxDepartment.count()):
@@ -265,11 +257,90 @@ class EmployeeDialog(QDialog):
                     field.setEnabled(False)
 
     def load_data_from_service(self):
-        """Загружает данные через сервис"""
+        """Загружает данные через сервис с учётом прав"""
         if self.employee_service:
-            filter_data = self.employee_service.get_filter_data()
-            self.all_divisions = filter_data.get('divisions', [])
-            self.all_departments = filter_data.get('departments', [])
+            # Используем get_divisions_for_selector() вместо get_all_divisions()
+            all_divisions = self.employee_service.get_divisions_for_selector()
+            all_departments = self.employee_service.get_all_departments()
+
+            print(
+                f"🔍 load_data_from_service: all_divisions={len(all_divisions)}, all_departments={len(all_departments)}")
+            print(f"   permission_service={self.permission_service is not None}")
+
+            # Если есть permission_service, фильтруем данные
+            if self.permission_service:
+                user_id = self.permission_service.user_id
+                combined = self.permission_service.get_combined_role()
+
+                print(f"   combined.is_division_head={combined.is_division_head}")
+                print(f"   combined.is_department_head={combined.is_department_head}")
+                print(f"   combined.is_super_admin={combined.is_super_admin}")
+                print(f"   combined.is_admin={combined.is_admin}")
+
+                # ===== НАЧАЛЬНИК ПОДРАЗДЕЛЕНИЯ =====
+                if combined.is_division_head:
+                    print("   ✅ НАЧАЛЬНИК ПОДРАЗДЕЛЕНИЯ - фильтруем")
+                    user_division_id = self._get_user_division_id()
+                    print(f"   user_division_id={user_division_id}")
+                    if user_division_id:
+                        # Только его подразделение
+                        self.all_divisions = [div for div in all_divisions
+                                              if div.get('id') == user_division_id]
+                        # Только отделы в его подразделении
+                        self.all_departments = [dept for dept in all_departments
+                                                if dept.get('division_id') == user_division_id]
+                        self._preset_division_id = user_division_id
+                        print(f"🔍 Начальник подразделения: показаны отделы из подразделения {user_division_id}")
+                    else:
+                        self.all_divisions = all_divisions
+                        self.all_departments = all_departments
+                    print(
+                        f"   после фильтрации: divisions={len(self.all_divisions)}, departments={len(self.all_departments)}")
+
+                # ===== НАЧАЛЬНИК ОТДЕЛА =====
+                elif combined.is_department_head:
+                    print("   ✅ НАЧАЛЬНИК ОТДЕЛА - фильтруем")
+                    user_department_ids = self._get_user_department_ids()
+                    print(f"   user_department_ids={user_department_ids}")
+                    if user_department_ids:
+                        # Получаем подразделения этих отделов
+                        division_ids = set()
+                        for dept in all_departments:
+                            if dept.get('id') in user_department_ids:
+                                division_ids.add(dept.get('division_id'))
+
+                        self.all_divisions = [div for div in all_divisions
+                                              if div.get('id') in division_ids]
+                        self.all_departments = [dept for dept in all_departments
+                                                if dept.get('id') in user_department_ids]
+
+                        if len(user_department_ids) == 1:
+                            self._preset_department_id = user_department_ids[0]
+                            for dept in all_departments:
+                                if dept.get('id') == user_department_ids[0]:
+                                    self._preset_division_id = dept.get('division_id')
+                                    break
+
+                        self.allowed_department_ids = user_department_ids
+                        print(f"🔍 Начальник отдела: разрешены отделы {user_department_ids}")
+                    else:
+                        self.all_divisions = all_divisions
+                        self.all_departments = all_departments
+
+                # ===== СУПЕРАДМИН И АДМИН =====
+                elif combined.is_super_admin or combined.is_admin:
+                    print("   ✅ СУПЕРАДМИН/АДМИН - все данные")
+                    self.all_divisions = all_divisions
+                    self.all_departments = all_departments
+
+                else:
+                    print("   ⚠️ Обычный пользователь - все данные (read_only)")
+                    self.all_divisions = all_divisions
+                    self.all_departments = all_departments
+            else:
+                print("   permission_service НЕТ - все данные")
+                self.all_divisions = all_divisions
+                self.all_departments = all_departments
 
             # Группируем отделы по подразделениям
             self.departments_by_division = {}
@@ -284,6 +355,8 @@ class EmployeeDialog(QDialog):
                 self.comboBoxRole.clear()
                 for role in self.employee_service.get_roles_list():
                     self.comboBoxRole.addItem(role)
+
+            print(f"📊 Загружено подразделений: {len(self.all_divisions)}, отделов: {len(self.all_departments)}")
         else:
             self.all_divisions = []
             self.all_departments = []
@@ -393,6 +466,25 @@ class EmployeeDialog(QDialog):
         self.lineEditWorkPhone.setText(self.employee_data.get("work_number", ""))
         self.lineEditEmail.setText(self.employee_data.get("email", ""))
 
+    def _get_user_division_id(self) -> Optional[int]:
+        """Возвращает ID подразделения, где пользователь является начальником."""
+        if not self.permission_service or not self.employee_service:
+            return None
+
+        user_id = self.permission_service.user_id
+        combined = self.permission_service.get_combined_role()
+
+        if combined.is_division_head:
+            divisions = self.employee_service.get_all_divisions()  # <-- ИСПОЛЬЗУЕМ ИСПРАВЛЕННЫЙ МЕТОД
+            print(f"   проверяем {len(divisions)} подразделений")
+            for div in divisions:
+                boss_ids = div.get('boss_ids', [])
+                print(f"   div {div.get('id')}: boss_ids={boss_ids}, user_id={user_id}")
+                if user_id in boss_ids:
+                    print(f"   ✅ найдено подразделение {div.get('id')}")
+                    return div.get('id')
+        return None
+
     def load_divisions_combo(self):
         """Загрузка подразделений в комбобокс"""
         self.comboBoxDivision.clear()
@@ -400,6 +492,36 @@ class EmployeeDialog(QDialog):
 
         for division in self.all_divisions:
             self.comboBoxDivision.addItem(division.get("name", "Без названия"), division.get("id"))
+
+    def _get_user_department_ids(self) -> List[int]:
+        """
+        Возвращает ID отделов, где пользователь является начальником.
+        """
+        if not self.permission_service or not self.employee_service:
+            return []
+
+        user_id = self.permission_service.user_id
+        combined = self.permission_service.get_combined_role()
+
+        # Для начальника отдела - возвращаем его отделы
+        if combined.is_department_head:
+            departments = self.employee_service.get_department_card_data()
+            user_department_ids = []
+            for dept in departments:
+                boss_ids = dept.get('boss_ids', [])
+                if user_id in boss_ids:
+                    user_department_ids.append(dept.get('id'))
+            return user_department_ids
+
+        # Для начальника подразделения - возвращаем все отделы в его подразделении
+        if combined.is_division_head:
+            user_division_id = self._get_user_division_id()
+            if user_division_id:
+                departments = self.employee_service.get_all_departments()
+                return [dept.get('id') for dept in departments
+                        if dept.get('division_id') == user_division_id]
+
+        return []
 
     def on_division_changed(self, index):
         """Обработчик изменения выбранного подразделения"""
@@ -428,21 +550,18 @@ class EmployeeDialog(QDialog):
         """
         Применяет ограничение по отделам для начальника.
         Если начальник управляет только одним отделом - блокируем выбор.
-        Если несколькими - оставляем выбор только между ними.
         """
         if not self.allowed_department_ids:
             return
 
         # Проверяем, загружены ли комбобоксы
         if hasattr(self, 'comboBoxDepartment') and self.comboBoxDepartment.count() <= 1:
-            # Данные ещё не загружены, повторяем попытку
             QTimer.singleShot(100, self._apply_department_restriction)
             return
 
         # Если только один отдел - блокируем полностью
         if len(self.allowed_department_ids) == 1:
             dept_id = self.allowed_department_ids[0]
-            # Устанавливаем этот отдел и блокируем
             if hasattr(self, 'comboBoxDepartment'):
                 for i in range(self.comboBoxDepartment.count()):
                     if self.comboBoxDepartment.itemData(i) == dept_id:
@@ -453,8 +572,7 @@ class EmployeeDialog(QDialog):
                 self.comboBoxDivision.setEnabled(False)
             print(f"🔒 Начальник одного отдела: отдел {dept_id} заблокирован")
         else:
-            # Несколько отделов - фильтруем список отделов
-            print(f"🔓 Начальник нескольких отделов: доступны {self.allowed_department_ids}")
+            # Несколько отделов - оставляем только их
             self._filter_departments_by_allowed()
 
     def add_division(self):

@@ -313,12 +313,12 @@ class EmployeesTab(BaseTab):
 
         employee = self.employee_service.get_employee_full_info(employee_id)
         if employee:
-            # Проверяем, может ли пользователь редактировать этого сотрудника
             from services.permissions.system_permissions import SystemRole
             can_edit = False
-            read_only = True  # По умолчанию только просмотр
+            read_only = True
             user_department_ids = []
             user_division_id = None
+            user_division_only = False  # <-- ДОБАВИТЬ
 
             if self._permission_service and self.employee_service:
                 try:
@@ -327,33 +327,44 @@ class EmployeesTab(BaseTab):
 
                     # Если пользователь - начальник отдела
                     if system_role == SystemRole.DEPARTMENT_HEAD:
-                        # Получаем ID отделов пользователя
                         departments = self.employee_service.get_department_card_data()
                         user_department_ids = []
-                        user_division_id = None
                         for dept in departments:
                             boss_ids = dept.get('boss_ids', [])
                             if user_id in boss_ids:
                                 user_department_ids.append(dept.get('id'))
-                                # Получаем подразделение этого отдела
                                 if dept.get('division_id'):
                                     user_division_id = dept.get('division_id')
 
-                        # Проверяем, принадлежит ли сотрудник к одному из этих отделов
                         employee_dept_id = employee.get('department_id')
 
-                        # Начальник может редактировать СЕБЯ (все поля, кроме отдела/подразделения)
                         if employee_id == user_id:
                             can_edit = True
-                            # Для себя - можно редактировать всё, кроме отдела и подразделения
                             read_only = False
-                            print(f"🔍 Начальник редактирует себя: можно всё, кроме отдела/подразделения")
                         elif employee_dept_id in user_department_ids:
                             can_edit = True
                             read_only = False
-                            print(f"🔍 can_edit для сотрудника {employee.get('full_name')}: {can_edit}")
 
-                        print(f"   employee_dept_id={employee_dept_id}, user_dept_ids={user_department_ids}")
+                    # <-- ДОБАВИТЬ БЛОК ДЛЯ НАЧАЛЬНИКА ПОДРАЗДЕЛЕНИЯ
+                    elif system_role == SystemRole.DIVISION_HEAD:
+                        divisions = self.employee_service.get_divisions_for_selector()
+                        for div in divisions:
+                            boss_ids = div.get('boss_ids', [])
+                            if user_id in boss_ids:
+                                user_division_id = div.get('id')
+                                break
+
+                        employee_division_id = employee.get('division_id')
+
+                        if employee_id == user_id:
+                            can_edit = True
+                            read_only = False
+                        elif employee_division_id == user_division_id:
+                            can_edit = True
+                            read_only = False
+                            user_division_only = True
+                            print(f"🔍 Начальник подразделения редактирует сотрудника из своего подразделения")
+
                 except Exception as e:
                     print(f"⚠️ Ошибка: {e}")
 
@@ -418,12 +429,10 @@ class EmployeesTab(BaseTab):
 
         user_id = self._permission_service.user_id if self._permission_service else None
 
-        # ЗАПРЕЩАЕМ УДАЛЕНИЕ СЕБЯ
         if employee_id == user_id:
             QMessageBox.warning(self, "Доступ запрещён", "Вы не можете удалить самого себя")
             return
 
-        # Проверяем, может ли пользователь удалять этого сотрудника
         if self._permission_service and self.employee_service:
             from services.permissions.system_permissions import SystemRole
 
@@ -432,7 +441,6 @@ class EmployeesTab(BaseTab):
 
             # Проверяем, является ли пользователь начальником отдела
             if system_role == SystemRole.DEPARTMENT_HEAD:
-                # Получаем ID отделов пользователя
                 departments = self.employee_service.get_department_card_data()
                 user_department_ids = []
                 for dept in departments:
@@ -440,22 +448,35 @@ class EmployeesTab(BaseTab):
                     if user_id in boss_ids:
                         user_department_ids.append(dept.get('id'))
 
-                # Получаем информацию о сотруднике
                 employee = self.employee_service.get_employee_full_info(employee_id)
                 if employee:
                     employee_dept_id = employee.get('department_id')
                     can_delete = employee_dept_id in user_department_ids
-                    print(f"🔍 can_delete для сотрудника {employee.get('full_name')}: {can_delete}")
-                    print(f"   employee_dept_id={employee_dept_id}, user_dept_ids={user_department_ids}")
+
+            # <-- ДОБАВИТЬ БЛОК ДЛЯ НАЧАЛЬНИКА ПОДРАЗДЕЛЕНИЯ
+            elif system_role == SystemRole.DIVISION_HEAD:
+                divisions = self.employee_service.get_divisions_for_selector()
+                user_division_id = None
+                for div in divisions:
+                    boss_ids = div.get('boss_ids', [])
+                    if user_id in boss_ids:
+                        user_division_id = div.get('id')
+                        break
+
+                employee = self.employee_service.get_employee_full_info(employee_id)
+                if employee:
+                    employee_division_id = employee.get('division_id')
+                    can_delete = (employee_division_id == user_division_id)
+                    print(
+                        f"🔍 Начальник подразделения: can_delete={can_delete}, emp_div={employee_division_id}, user_div={user_division_id}")
+
             else:
-                # Для админов и суперадминов используем стандартную проверку
                 can_delete = self._permission_service.can_delete_employee(employee_id)
         else:
             can_delete = True
 
         if not can_delete:
-            QMessageBox.warning(self, "Доступ запрещён",
-                                "У вас нет прав на удаление этого сотрудника")
+            QMessageBox.warning(self, "Доступ запрещён", "У вас нет прав на удаление этого сотрудника")
             return
 
         self.confirm_delete(
@@ -506,10 +527,12 @@ class EmployeesTab(BaseTab):
         """Обновление карточек с проверкой прав для каждого сотрудника"""
         self.clear_cards()
 
-        # Получаем ID отделов, которыми управляет пользователь
+        # Получаем ID отделов и подразделений, которыми управляет пользователь
         is_department_head = False
+        is_division_head = False
         user_id = None
         user_department_ids = []
+        user_division_id = None  # <-- ДОБАВИТЬ
 
         if self._permission_service and self.employee_service:
             from services.permissions.system_permissions import SystemRole
@@ -517,6 +540,7 @@ class EmployeesTab(BaseTab):
                 user_id = self._permission_service.user_id
                 system_role = self.employee_service.get_system_role(user_id)
                 is_department_head = (system_role == SystemRole.DEPARTMENT_HEAD)
+                is_division_head = (system_role == SystemRole.DIVISION_HEAD)  # <-- ДОБАВИТЬ
 
                 if is_department_head:
                     departments = self.employee_service.get_department_card_data()
@@ -525,6 +549,17 @@ class EmployeesTab(BaseTab):
                         if user_id in boss_ids:
                             user_department_ids.append(dept.get('id'))
                     print(f"🔍 Начальник отдела: управляет отделами {user_department_ids}")
+
+                # <-- ДОБАВИТЬ БЛОК ДЛЯ НАЧАЛЬНИКА ПОДРАЗДЕЛЕНИЯ
+                if is_division_head:
+                    divisions = self.employee_service.get_divisions_for_selector()
+                    for div in divisions:
+                        boss_ids = div.get('boss_ids', [])
+                        if user_id in boss_ids:
+                            user_division_id = div.get('id')
+                            break
+                    print(f"🔍 Начальник подразделения: управляет подразделением {user_division_id}")
+
             except Exception as e:
                 print(f"⚠️ Ошибка проверки: {e}")
 
@@ -532,11 +567,18 @@ class EmployeesTab(BaseTab):
         print(f"🔄 Обновление карточек сотрудников: отображается {len(filtered_employees)}")
 
         for i, employee in enumerate(filtered_employees):
-            # ДОБАВЛЯЕМ ОТЛАДКУ
-            print(f"   Сотрудник: {employee.get('full_name')}, department_id={employee.get('department_id')}")
+            print(
+                f"   Сотрудник: {employee.get('full_name')}, department_id={employee.get('department_id')}, division_id={employee.get('division_id')}")
 
             # Проверяем, может ли пользователь редактировать ЭТОГО сотрудника
-            can_edit = self._can_edit_employee(employee, is_department_head, user_id, user_department_ids)
+            can_edit = self._can_edit_employee(
+                employee,
+                is_department_head,
+                is_division_head,  # <-- ДОБАВИТЬ
+                user_id,
+                user_department_ids,
+                user_division_id  # <-- ДОБАВИТЬ
+            )
 
             card = EmployeeCard(
                 employee,
@@ -553,8 +595,8 @@ class EmployeesTab(BaseTab):
 
         self.set_last_row_stretch()
 
-    def _can_edit_employee(self, employee: dict, is_department_head: bool, user_id: int,
-                           user_department_ids: list) -> bool:
+    def _can_edit_employee(self, employee: dict, is_department_head: bool, is_division_head: bool,
+                           user_id: int, user_department_ids: list, user_division_id: int = None) -> bool:
         """
         Проверяет, может ли пользователь редактировать сотрудника
         """
@@ -573,16 +615,21 @@ class EmployeesTab(BaseTab):
         # Если пользователь - начальник отдела
         if is_department_head and user_id:
             employee_department_id = employee.get('department_id')
-
-            print(f"🔍 Проверка сотрудника {employee.get('full_name')}:")
-            print(f"   employee_department_id = {employee_department_id}")
-            print(f"   user_department_ids = {user_department_ids}")
-
             can_edit = employee_department_id in user_department_ids
             if can_edit:
                 print(f"   ✅ Начальник отдела может редактировать сотрудника {employee.get('full_name')}")
             else:
                 print(f"   🔍 Только просмотр для сотрудника {employee.get('full_name')}")
+            return can_edit
+
+        # <-- ДОБАВИТЬ БЛОК ДЛЯ НАЧАЛЬНИКА ПОДРАЗДЕЛЕНИЯ
+        if is_division_head and user_id and user_division_id:
+            employee_division_id = employee.get('division_id')
+            can_edit = (employee_division_id == user_division_id)
+            if can_edit:
+                print(f"   ✅ Начальник подразделения может редактировать сотрудника {employee.get('full_name')}")
+            else:
+                print(f"   🔍 Только просмотр для сотрудника {employee.get('full_name')} (чужое подразделение)")
             return can_edit
 
         return False

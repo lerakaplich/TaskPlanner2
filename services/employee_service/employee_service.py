@@ -597,13 +597,19 @@ class EmployeeService:
         return result
 
     def get_divisions_for_selector(self) -> List[Dict[str, Any]]:
+        """Возвращает подразделения для селектора с boss_ids"""
         divisions = self.session.query(Division).all()
         result = []
         for div in divisions:
+            print(f"🔍 get_divisions_for_selector: div {div.id}, boss='{div.boss}', type={type(div.boss)}")
+            boss_ids = self.base._parse_boss_ids(div.boss)
+            print(f"   boss_ids={boss_ids}")
             result.append({
                 'id': div.id,
                 'name': div.name,
                 'number': div.number,
+                'boss': div.boss,
+                'boss_ids': boss_ids,
                 'display_name': f"{div.name}" + (f" (№{div.number})" if div.number else "")
             })
         return result

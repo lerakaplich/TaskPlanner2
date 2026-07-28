@@ -18,6 +18,7 @@ class DivisionsTab(BaseTab):
         # Инициализируем поля ДО вызова super().__init__
         self.divisions = []
         self.employee_service = None
+        self.reassign_combo = None
 
         super().__init__(parent)
 
@@ -34,37 +35,52 @@ class DivisionsTab(BaseTab):
         self.filterDepartment.hide() if hasattr(self, 'filterDepartment') else None
         self.filterSubDepartment.hide() if hasattr(self, 'filterSubDepartment') else None
 
+    def showEvent(self, event):
+        """Обновляет данные при показе вкладки"""
+        super().showEvent(event)
+        if self.employee_service:
+            QTimer.singleShot(50, self.load_divisions)
+
     def setup_permission_ui(self):
         """
         Настройка UI в зависимости от прав пользователя
-        Для USER - только просмотр (read-only)
-        Для ADMIN и SUPER_ADMIN - полный доступ
         """
-        # Определяем режим на основе роли
         if self._permission_service:
-            is_read_only = self._permission_service.is_divisions_tab_read_only()
-            self._read_only_mode = is_read_only
+            can_edit = self._permission_service.can_edit_settings()
 
-        # Применяем состояние
+            if not can_edit:
+                try:
+                    user_id = self._permission_service.user_id
+                    if user_id:
+                        editable_divisions = self._permission_service.get_editable_division_ids(user_id)
+                        can_edit = len(editable_divisions) > 0
+                    else:
+                        can_edit = False
+                except Exception as e:
+                    print(f"⚠️ Ошибка получения редактируемых подразделений: {e}")
+                    can_edit = False
+
+            self._read_only_mode = not can_edit
+
         self._apply_read_only_state()
 
-        # Скрываем или показываем кнопку добавления
         if self.btnAdd:
             self.btnAdd.setVisible(self._should_show_add_buttons())
 
-        # Если режим просмотра - переименовываем кнопки
         if self._read_only_mode:
             self._rename_edit_buttons()
+        else:
+            self._rename_edit_buttons_to_edit()
 
-        # Обновляем карточки только если данные уже загружены
         if self.divisions:
             self.refresh_cards()
+        else:
+            self.load_divisions()
 
     def _apply_read_only_state(self):
         """Применяет состояние только просмотра"""
         super()._apply_read_only_state()
 
-        # Блокируем фильтры в режиме просмотра
         if self._read_only_mode:
             for combo in (self.filterDepartment, self.filterSubDepartment):
                 if combo:
@@ -88,21 +104,20 @@ class DivisionsTab(BaseTab):
     def load_divisions(self):
         """Загрузка подразделений через сервис"""
         if self.employee_service:
-            self.divisions = self.employee_service.get_division_card_data()
-            self.refresh_cards()
+            try:
+                from models.employees import Division
+                all_divs = self.employee_service.session.query(Division).all()
+                print(f"📊 ПРЯМАЯ ПРОВЕРКА БД: найдено {len(all_divs)} подразделений")
+                for div in all_divs:
+                    print(f"   - ID={div.id}, name={div.name}, boss='{div.boss}'")
 
-    def refresh_cards(self):
-        """Обновление карточек"""
-        self.clear_cards()
-
-        for i, division in enumerate(self.divisions):
-            card = DivisionCard(division, parent=self, read_only=self._read_only_mode)
-            card.edit_clicked.connect(self.on_edit_clicked)
-            if not self._read_only_mode:
-                card.delete_clicked.connect(self.on_delete_clicked)
-            self.add_card_to_grid(card, i)
-
-        self.set_last_row_stretch()
+                self.divisions = self.employee_service.get_division_card_data()
+                print(f"📊 Загружено подразделений: {len(self.divisions)}")
+                self.refresh_cards()
+            except Exception as e:
+                print(f"❌ Ошибка загрузки подразделений: {e}")
+                import traceback
+                traceback.print_exc()
 
     def on_add_clicked(self):
         """Открытие диалога добавления подразделения"""
@@ -123,25 +138,6 @@ class DivisionsTab(BaseTab):
         if self.employee_service:
             self.load_divisions()
             QMessageBox.information(self, "Успех", f"Подразделение сохранено")
-
-    def on_edit_clicked(self, division_id: int):
-        """Открытие окна редактирования/просмотра подразделения"""
-        if not self.employee_service:
-            return
-
-        division = self.employee_service.get_division_card_data(division_id)
-        if division:
-            dialog_data = self.employee_service.prepare_division_for_dialog(division_id)
-            if dialog_data:
-                dialog = DivisionDialog(
-                    parent=self,
-                    division_data=dialog_data,
-                    employee_service=self.employee_service,
-                    read_only=self._read_only_mode
-                )
-                if not self._read_only_mode:
-                    dialog.division_saved.connect(lambda data: self.on_division_updated(division_id, data))
-                dialog.exec()
 
     def on_division_updated(self, division_id: int, division_data: dict):
         """Обработка редактирования подразделения"""
@@ -165,6 +161,11 @@ class DivisionsTab(BaseTab):
         if not self.employee_service:
             return
 
+        # Проверяем, может ли пользователь удалять это подразделение
+        if self._permission_service and not self._permission_service.can_delete_division(division_id):
+            QMessageBox.warning(self, "Ошибка", "У вас нет прав на удаление этого подразделения")
+            return
+
         has_departments = self.employee_service.has_departments_in_division(division_id)
         has_employees = self.employee_service.has_employees_in_division(division_id)
 
@@ -184,7 +185,7 @@ class DivisionsTab(BaseTab):
             return
 
         if item_type == "division" and self.employee_service:
-            success = self.employee_service.delete_division_with_options(item_id)
+            success = self.employee_service.delete_division_by_id(item_id, delete_departments=True)
             if success:
                 self.load_divisions()
                 QMessageBox.information(self, "Успех", "Подразделение удалено")
@@ -205,13 +206,11 @@ class DivisionsTab(BaseTab):
         layout.setContentsMargins(25, 20, 25, 20)
         layout.setSpacing(15)
 
-        # Предупреждение
         warning_label = QLabel("⚠️ ВНИМАНИЕ!")
         warning_label.setStyleSheet("font-size: 16px; font-weight: bold; color: #D22730;")
         warning_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(warning_label)
 
-        # Описание зависимостей
         deps_text = "Это подразделение содержит:\n"
         if has_departments:
             deps_text += "• Отделы\n"
@@ -223,7 +222,6 @@ class DivisionsTab(BaseTab):
 
         layout.addSpacing(10)
 
-        # Группа радио-кнопок
         radio_group = QButtonGroup(dialog)
 
         radio_delete_all = QRadioButton("🗑️ Удалить всё (подразделение, все отделы и сотрудников в нём)")
@@ -235,7 +233,6 @@ class DivisionsTab(BaseTab):
         radio_group.addButton(radio_reassign)
         layout.addWidget(radio_reassign)
 
-        # Комбобокс для выбора подразделения
         reassign_layout = QVBoxLayout()
         reassign_label = QLabel("Выберите подразделение для переназначения:")
         reassign_label.setVisible(False)
@@ -244,7 +241,6 @@ class DivisionsTab(BaseTab):
         self.reassign_combo = QComboBox()
         self.reassign_combo.setVisible(False)
 
-        # Загружаем другие подразделения через сервис - ИСПРАВЛЕНО: используем get_other_divisions
         other_divisions = self.employee_service.get_other_divisions(exclude_division_id=division_id)
         self.reassign_combo.addItem("— Выберите подразделение —", None)
         for div in other_divisions:
@@ -263,7 +259,6 @@ class DivisionsTab(BaseTab):
 
         layout.addSpacing(10)
 
-        # Кнопки
         btn_layout = QHBoxLayout()
         btn_layout.setSpacing(15)
 
@@ -295,7 +290,6 @@ class DivisionsTab(BaseTab):
 
         def do_delete():
             if radio_delete_all.isChecked():
-                # ИСПРАВЛЕНО: используем delete_division_by_id
                 success = self.employee_service.delete_division_by_id(division_id, delete_departments=True)
                 if success:
                     self.load_divisions()
@@ -309,7 +303,6 @@ class DivisionsTab(BaseTab):
                     QMessageBox.warning(dialog, "Ошибка", "Выберите подразделение для переназначения")
                     return
 
-                # ИСПРАВЛЕНО: используем delete_division_by_id с переназначением
                 success = self.employee_service.delete_division_by_id(
                     division_id,
                     delete_departments=True,
@@ -388,3 +381,91 @@ class DivisionsTab(BaseTab):
         """Загрузка данных (для совместимости со старым кодом)"""
         self.divisions = divisions
         self.refresh_cards()
+
+    def _rename_edit_buttons_to_edit(self):
+        """Переименовывает кнопки редактирования на 'Редактировать'"""
+        for card in self.cards:
+            if hasattr(card, 'editButton'):
+                card.editButton.setText("Редактировать")
+
+    def refresh_cards(self):
+        """Обновление карточек с учётом прав - ПОКАЗЫВАЕМ ВСЕ ПОДРАЗДЕЛЕНИЯ"""
+        print(f"🔄 refresh_cards: divisions count = {len(self.divisions)}")
+        print(f"🔄 refresh_cards: self._read_only_mode = {self._read_only_mode}")
+        print(f"🔄 refresh_cards: self._permission_service = {self._permission_service}")
+
+        if self._permission_service:
+            print(f"🔄 refresh_cards: user_id = {self._permission_service.user_id}")
+
+        self.clear_cards()
+        if not self.divisions:
+            return
+
+        # Получаем ID подразделений, которые пользователь может редактировать
+        editable_ids = set()
+        user_id = None
+        if self._permission_service:
+            user_id = self._permission_service.user_id
+
+        if self._permission_service and user_id:
+            try:
+                editable_ids = set(self._permission_service.get_editable_division_ids(user_id))
+                print(f"🔍 editable_ids (можно редактировать): {editable_ids}")
+            except Exception as e:
+                print(f"⚠️ Ошибка получения редактируемых подразделений: {e}")
+
+        # ✅ ПОКАЗЫВАЕМ ВСЕ ПОДРАЗДЕЛЕНИЯ, а не только те, которые можно редактировать
+        for i, division in enumerate(self.divisions):
+            division_id = division.get('id')
+
+            # Определяем, может ли пользователь редактировать это подразделение
+            can_edit_this = division_id in editable_ids
+
+            # ✅ НЕ ИСПОЛЬЗУЕМ can_edit_settings для фильтрации подразделений
+            # Если пользователь может редактировать настройки в целом - может редактировать все
+            if self._permission_service and self._permission_service.can_edit_settings():
+                can_edit_this = True
+
+            card_read_only = not can_edit_this
+
+            print(f"   📋 Подразделение: {division.get('name')} (ID={division_id}), can_edit={can_edit_this}")
+
+            card = DivisionCard(division, parent=self, read_only=card_read_only)
+            card.edit_clicked.connect(self.on_edit_clicked)
+
+            # ✅ КНОПКА УДАЛЕНИЯ: только если пользователь может удалять это подразделение
+            can_delete = False
+            if self._permission_service:
+                can_delete = self._permission_service.can_delete_division(division_id)
+
+            if hasattr(card, 'deleteButton'):
+                card.deleteButton.setVisible(can_delete)
+                if can_delete:
+                    card.deleteButton.clicked.connect(lambda checked, did=division_id: self.on_delete_clicked(did))
+
+            self.add_card_to_grid(card, i)
+
+        self.set_last_row_stretch()
+
+    def on_edit_clicked(self, division_id: int):
+        """Открытие окна редактирования/просмотра подразделения"""
+        if not self.employee_service:
+            return
+
+        can_edit = False
+        if self._permission_service:
+            can_edit = self._permission_service.can_edit_division(division_id)
+
+        division = self.employee_service.get_division_card_data(division_id)
+        if division:
+            dialog_data = self.employee_service.prepare_division_for_dialog(division_id)
+            if dialog_data:
+                dialog = DivisionDialog(
+                    parent=self,
+                    division_data=dialog_data,
+                    employee_service=self.employee_service,
+                    read_only=not can_edit
+                )
+                if can_edit:
+                    dialog.division_saved.connect(lambda data: self.on_division_updated(division_id, data))
+                dialog.exec()

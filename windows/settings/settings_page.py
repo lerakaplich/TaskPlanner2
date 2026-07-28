@@ -66,7 +66,10 @@ class SettingsPage(QWidget, UIPermissionMixin):
 
         for tab in tabs:
             if tab and hasattr(tab, 'set_permission_service'):
-                tab.set_permission_service(permission_service)
+                try:
+                    tab.set_permission_service(permission_service)
+                except Exception as e:
+                    print(f"⚠️ Ошибка передачи permission_service в {tab.__class__.__name__}: {e}")
 
         # Настраиваем UI
         self.setup_permission_ui()
@@ -123,18 +126,16 @@ class SettingsPage(QWidget, UIPermissionMixin):
             if tab and hasattr(tab, '_rename_edit_buttons'):
                 tab._rename_edit_buttons()
 
-    def showEvent(self, event):
-        """Срабатывает при каждом показе страницы"""
-        super().showEvent(event)
-        QTimer.singleShot(100, self._refresh_all_tabs)
-
     def _refresh_all_tabs(self):
         """Обновляет все вкладки настроек"""
+        print("🔄 _refresh_all_tabs: обновляем все вкладки")
+
         if hasattr(self, 'employees_tab') and hasattr(self.employees_tab, 'load_employees'):
             self.employees_tab.load_employees()
         if hasattr(self, 'departments_tab') and hasattr(self.departments_tab, 'load_departments'):
             self.departments_tab.load_departments()
         if hasattr(self, 'divisions_tab') and hasattr(self.divisions_tab, 'load_divisions'):
+            print("🔄 Загружаем подразделения...")
             self.divisions_tab.load_divisions()
         if hasattr(self, 'columns_tab') and hasattr(self.columns_tab, 'load_columns'):
             self.columns_tab.load_columns()

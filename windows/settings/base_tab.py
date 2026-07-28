@@ -1,13 +1,14 @@
 # windows/settings/base_tab.py
 
 import os
+
 from PyQt6 import uic
+from PyQt6.QtCore import pyqtSignal, Qt, QTimer
 from PyQt6.QtWidgets import (
     QWidget, QHBoxLayout, QComboBox, QPushButton,
-    QSizePolicy, QMessageBox, QDialog, QVBoxLayout,
+    QMessageBox, QDialog, QVBoxLayout,
     QLabel
 )
-from PyQt6.QtCore import pyqtSignal, Qt
 
 from windows.permissions.ui_permission_mixin import UIPermissionMixin
 
@@ -22,6 +23,7 @@ class BaseTab(QWidget, UIPermissionMixin):
         super().__init__(parent)
         self.cards = []
         self.employee_service = None
+        self.user_id = None
 
         # Загрузка UI
         current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -58,11 +60,20 @@ class BaseTab(QWidget, UIPermissionMixin):
             self.toolsLayout.setContentsMargins(24, 18, 24, 18)
             self.toolsLayout.setAlignment(Qt.AlignmentFlag.AlignVCenter)
 
+    def showEvent(self, event):
+        """Обновляет данные при показе вкладки"""
+        super().showEvent(event)
+        # Если это вкладка подразделений - загружаем данные
+        if hasattr(self, 'load_divisions') and self.employee_service:
+            QTimer.singleShot(50, self.load_divisions)
+
     def set_employee_service(self, service):
         self.employee_service = service
 
     def set_permission_service(self, permission_service):
         self._permission_service = permission_service
+        if permission_service:
+            self.user_id = permission_service.user_id  # <-- ДОБАВИТЬ
         self.setup_permission_ui()
 
     def hide_filters(self):

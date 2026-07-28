@@ -20,9 +20,12 @@ class TagRepo:
         stmt = select(Tag).where(Tag.name == name)
         return self.session.scalar(stmt)
 
-    def get_all(self) -> List[Tag]:
-        """Получить все теги (архивации нет)"""
-        stmt = select(Tag).order_by(Tag.name)
+    def get_all(self, include_archived: bool = False) -> List[Tag]:
+        """Получить все теги"""
+        stmt = select(Tag)
+        # Если нужна фильтрация по архиву (но в модели Tag нет поля is_archived)
+        # Пока просто игнорируем параметр, т.к. в модели нет is_archived
+        stmt = stmt.order_by(Tag.name)
         return list(self.session.scalars(stmt))
 
     def create(self, name: str, color: str = "#ccab6e") -> Tag:

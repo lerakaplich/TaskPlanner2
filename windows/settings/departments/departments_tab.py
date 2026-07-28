@@ -139,7 +139,13 @@ class DepartmentsTab(BaseTab):
             QMessageBox.warning(self, "Ошибка", "Сервис не инициализирован")
             return
 
-        dialog = DepartmentDialog(parent=self, department_data=None, employee_service=self.employee_service, read_only=False)
+        dialog = DepartmentDialog(
+            parent=self,
+            department_data=None,
+            employee_service=self.employee_service,
+            read_only=False,
+            permission_service=self._permission_service  # <-- ДОБАВИТЬ!
+        )
         dialog.department_saved.connect(self.on_department_saved)
         dialog.exec()
 
@@ -176,40 +182,6 @@ class DepartmentsTab(BaseTab):
             for div in self.all_divisions:
                 self.filterSubDepartment.addItem(div.get('name', ''), div.get('id'))
 
-    # windows/settings/departments/departments_tab.py
-
-    def refresh_cards(self):
-        """Обновление карточек с применением фильтров"""
-        self.clear_cards()
-
-        # ОТЛАДКА
-        print(f"🔍 refresh_cards: self._read_only_mode = {self._read_only_mode}")
-        print(f"🔍 refresh_cards: self._permission_service = {self._permission_service}")
-        if self._permission_service:
-            print(f"🔍 refresh_cards: user_id = {self._permission_service.user_id}")
-
-        filtered_departments = self.get_filtered_departments()
-        print(f"🔄 Обновление карточек отделов: отображается {len(filtered_departments)} из {len(self.departments)}")
-
-        for i, department in enumerate(filtered_departments):
-            # Проверяем, может ли пользователь редактировать этот отдел
-            can_edit = self._can_edit_department(department)
-            print(f"   Отдел: {department.get('name')}, can_edit={can_edit}")
-
-            card = DepartmentCard(
-                department,
-                self.employee_service,
-                parent=self,
-                read_only=not can_edit,
-                permission_service=self._permission_service
-            )
-            card.edit_clicked.connect(self.on_edit_clicked)
-            if can_edit and not self._read_only_mode:
-                card.delete_clicked.connect(self.on_delete_clicked)
-            self.add_card_to_grid(card, i)
-
-        self.set_last_row_stretch()
-
     def _can_edit_department(self, department: dict) -> bool:
         """Проверяет, может ли пользователь редактировать отдел"""
         if self._read_only_mode:
@@ -218,47 +190,7 @@ class DepartmentsTab(BaseTab):
         if not self._permission_service:
             return True
 
-        user_id = self._permission_service.user_id
-
-        # ПРЯМАЯ ПРОВЕРКА через employee_service (минуя CombinedRole)
-        if self.employee_service:
-            from services.permissions.system_permissions import SystemRole
-            try:
-                system_role = self.employee_service.get_system_role(user_id)
-                print(f"🔍 Прямая проверка: system_role = {system_role}")
-                print(f"🔍 SystemRole.DEPARTMENT_HEAD = {SystemRole.DEPARTMENT_HEAD}")
-                print(f"🔍 Равны? {system_role == SystemRole.DEPARTMENT_HEAD}")
-
-                # Если пользователь - начальник отдела
-                if system_role == SystemRole.DEPARTMENT_HEAD:
-                    boss_ids = department.get('boss_ids', [])
-                    can_edit = user_id in boss_ids
-                    print(
-                        f"   {'✅' if can_edit else '❌'} Начальник отдела: user_id {user_id} in boss_ids {boss_ids} = {can_edit}")
-                    return can_edit
-
-            except Exception as e:
-                print(f"⚠️ Ошибка прямой проверки: {e}")
-
-        # Если не начальник отдела - проверяем через CombinedRole
-        combined = self._permission_service.get_combined_role()
-
-        if combined.is_super_admin or combined.is_admin:
-            return True
-
-        if combined.is_division_head:
-            if not self.employee_service:
-                return False
-            divisions = self.employee_service.get_all_divisions()
-            user_division_ids = []
-            for div in divisions:
-                boss_ids = div.get('boss_ids', [])
-                if user_id in boss_ids:
-                    user_division_ids.append(div.get('id'))
-            department_division_id = department.get('division_id')
-            return department_division_id in user_division_ids
-
-        return False
+        return self._permission_service.can_edit_department(department.get('id'))
 
     def get_filtered_departments(self) -> list:
         """Возвращает отфильтрованный список отделов"""
@@ -528,3 +460,54 @@ class DepartmentsTab(BaseTab):
                 background-color: #5a6268;
             }
         """
+
+    def _can_delete_department(self, department: dict) -> bool:
+        """Проверяет, может ли пользователь удалять отдел"""
+        if self._read_only_mode:
+            return False
+
+        if not self._permission_service:
+            return True
+
+        return self._permission_service.can_delete_department(department.get('id'))
+
+    def _should_show_add_buttons(self) -> bool:
+        """Переопределяем для отделов"""
+        if self._read_only_mode:
+            return False
+
+        if not self._permission_service:
+            return True
+
+        return self._permission_service.can_add_department()
+
+    def refresh_cards(self):
+        """Обновление карточек с применением фильтров"""
+        self.clear_cards()
+
+        filtered_departments = self.get_filtered_departments()
+        print(f"🔄 Обновление карточек отделов: отображается {len(filtered_departments)} из {len(self.departments)}")
+
+        for i, department in enumerate(filtered_departments):
+            can_edit = self._can_edit_department(department)
+            can_delete = self._can_delete_department(department)
+
+            print(f"   Отдел: {department.get('name')}, can_edit={can_edit}, can_delete={can_delete}")
+
+            card = DepartmentCard(
+                department,
+                self.employee_service,
+                parent=self,
+                read_only=not can_edit,
+                permission_service=self._permission_service
+            )
+            card.edit_clicked.connect(self.on_edit_clicked)
+
+            if hasattr(card, 'deleteButton'):
+                card.deleteButton.setVisible(can_delete)
+                if can_delete:
+                    card.delete_clicked.connect(self.on_delete_clicked)
+
+            self.add_card_to_grid(card, i)
+
+        self.set_last_row_stretch()
