@@ -153,23 +153,21 @@ class AnalyticsPage(QWidget):
         self._setup_period_filter()
 
     def _setup_employee_filter(self):
-        """Настраивает фильтр для сотрудников"""
+        """Настраивает фильтр для сотрудников (ТОЛЬКО ВЫПАДАЮЩИЙ СПИСОК)"""
         if hasattr(self, 'departmentFilter_2'):
             self.department_filter = self.departmentFilter_2
             self.department_filter.clear()
             self.department_filter.addItem("Все отделы", "all")
-            self.department_filter.setEditable(True)
             self.department_filter.setCurrentIndex(0)
             self.department_filter.currentIndexChanged.connect(self._on_employee_filter_changed)
 
     def _setup_rating_filter(self):
-        """Настраивает фильтр для рейтинга"""
+        """Настраивает фильтр для рейтинга (ТОЛЬКО ВЫПАДАЮЩИЙ СПИСОК)"""
         if hasattr(self, 'departmentFilter'):
             self.rating_department_filter = self.departmentFilter
             self.rating_department_filter.clear()
             self.rating_department_filter.addItem("Все отделы", "all")
-            self.rating_department_filter.setEditable(True)
-            self.rating_department_filter.setCurrentIndex(0)  # ✅ Устанавливаем "Все отделы"
+            self.rating_department_filter.setCurrentIndex(0)
             self.rating_department_filter.currentIndexChanged.connect(self._on_rating_filter_changed)
 
     def _setup_period_filter(self):

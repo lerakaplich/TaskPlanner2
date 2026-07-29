@@ -1,6 +1,8 @@
 # windows/profile/chart_widget.py
 
 import os
+from typing import List, Dict
+
 from PyQt6 import uic
 from PyQt6.QtWidgets import QWidget, QMessageBox, QVBoxLayout
 from PyQt6.QtCore import pyqtSignal, QTimer, Qt, QRect
@@ -26,6 +28,8 @@ class BarChartWidget(QWidget):
         self.margin_right = 30
         self.margin_top = 40
         self.margin_bottom = 70
+
+
 
     def set_data(self, topics: list, kpd_values: list):
         """Устанавливает данные для графика"""
@@ -118,6 +122,31 @@ class ChartWidget(QWidget):
 
         self._init_chart()
         self._connect_signals()
+
+    def update_chart_from_analytics(self, tag_analytics: List[Dict]):
+        """
+        Обновляет график из данных аналитики (tag_analytics).
+        Используется вместо get_kpd_chart_data для отображения уже рассчитанных данных.
+        """
+        print(f"\n🔍 [DEBUG] ChartWidget.update_chart_from_analytics")
+        print(f"   tag_analytics: {tag_analytics}")
+
+        if not tag_analytics:
+            print(f"   ❌ Нет данных для графика")
+            if hasattr(self, "bar_chart"):
+                self.bar_chart.set_data(["Нет данных"], [0])
+            return
+
+        topics = [item.get("tag", "Без темы") for item in tag_analytics]
+        kpd_values = [item.get("kpd", 0) for item in tag_analytics]
+
+        print(f"   topics: {topics}")
+        print(f"   kpd_values: {kpd_values}")
+
+        if hasattr(self, "bar_chart"):
+            self.bar_chart.set_data(topics, kpd_values)
+        else:
+            print(f"   ❌ bar_chart не найден!")
 
     def set_profile_service(self, service):
         self.profile_service = service

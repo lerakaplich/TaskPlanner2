@@ -73,7 +73,7 @@ QTabWidget::pane {
 }</string>
      </property>
      <property name="currentIndex">
-      <number>3</number>
+      <number>0</number>
      </property>
      <widget class="QWidget" name="employeesTab">
       <attribute name="title">
@@ -128,10 +128,10 @@ QComboBox::drop-down {
          </string>
            </property>
            <property name="editable">
-            <bool>true</bool>
+            <bool>false</bool>
            </property>
            <property name="placeholderText" stdset="0">
-            <string>Все исполнители</string>
+            <string>Все отделы</string>
            </property>
           </widget>
          </item>
@@ -233,7 +233,7 @@ QComboBox::drop-down {
          </string>
            </property>
            <property name="editable">
-            <bool>true</bool>
+            <bool>false</bool>
            </property>
            <property name="placeholderText" stdset="0">
             <string>Все проекты</string>
@@ -274,10 +274,10 @@ QComboBox::drop-down {
          </string>
            </property>
            <property name="editable">
-            <bool>true</bool>
+            <bool>false</bool>
            </property>
            <property name="placeholderText" stdset="0">
-            <string>Все исполнители</string>
+            <string>Все отделы</string>
            </property>
           </widget>
          </item>

@@ -145,37 +145,29 @@ class ArchivePage(QWidget):
         else:
             self._update_all_tasks_view(force=True)
 
-    # ==========================================================
-    # Обновление представлений (делегирует views)
-    # ==========================================================
-
     def _update_projects_view(self, force=False):
         projects = self.archive_service.search_projects(self.current_search_text)
         self.views.display_projects(
             projects,
-            self.handlers.can_restore(),
-            self.handlers.can_delete_permanently()
+            can_restore=True,  # Не используется, проверяется в views для каждого проекта
+            can_delete=True  # Не используется, проверяется в views для каждого проекта
         )
 
     def _update_tasks_view(self, force=False):
         tasks = self.archive_service.search_tasks(self.current_project_id, self.current_search_text)
         self.views.display_tasks(
             tasks,
-            self.handlers.can_restore(),
-            self.handlers.can_delete_permanently()
+            can_restore=True,  # Не используется, проверяется в views для каждого проекта
+            can_delete=True  # Не используется, проверяется в views для каждого проекта
         )
 
     def _update_all_tasks_view(self, force=False):
         tasks = self.archive_service.search_all_archived_tasks(self.current_search_text)
         self.views.display_tasks(
             tasks,
-            self.handlers.can_restore(),
-            self.handlers.can_delete_permanently()
+            can_restore=True,  # Не используется, проверяется в views для каждого проекта
+            can_delete=True  # Не используется, проверяется в views для каждого проекта
         )
-
-    # ==========================================================
-    # Обработка изменения размера
-    # ==========================================================
 
     def resizeEvent(self, event):
         super().resizeEvent(event)

@@ -67,6 +67,8 @@ class ProjectCard(QFrame):
                     widget.deleteLater()
                     delattr(self, widget_name)
 
+    # windows/analytics/projects/project_card_analytics.py
+
     def _setup_tasks_section(self):
         """Создает секцию с задачами - по умолчанию скрыта"""
         grouped_tasks = self.data.get("grouped_tasks", {})
@@ -105,12 +107,19 @@ class ProjectCard(QFrame):
             panel_layout.addWidget(label)
         else:
             # Создаем группы задач по статусам
+            total_tasks = sum(len(tasks) for tasks in grouped_tasks.values())
+
+            # Обновляем текст кнопки с общим количеством задач
+            btn.setText(f"▶ Задачи ({total_tasks})")
+
             for status_key, tasks in grouped_tasks.items():
                 if not tasks:
                     continue
 
                 status_name = self.analytics_service.get_status_name(
                     status_key) if self.analytics_service else status_key
+
+                # ⭐ Добавляем количество задач в скобочках
                 status_btn = QPushButton(f"▶ {status_name} ({len(tasks)})")
                 status_btn.setCheckable(True)
                 status_btn.setChecked(False)
@@ -170,7 +179,6 @@ class ProjectCard(QFrame):
         """Создает секцию с сотрудниками - по умолчанию скрыта"""
         employees = self.data.get("employees", [])
 
-        # Кнопка-заголовок
         btn = QPushButton(f"▶ Сотрудники ({len(employees)})", self)
         btn.setCheckable(True)
         btn.setChecked(False)

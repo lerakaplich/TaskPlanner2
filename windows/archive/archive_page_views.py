@@ -15,7 +15,10 @@ class ArchivePageViews:
         self.page = page
 
     def display_projects(self, projects: List[Dict], can_restore: bool, can_delete: bool):
-        """Отображает список проектов"""
+        """
+        Отображает список проектов
+        can_restore и can_delete теперь проверяются для каждого проекта отдельно
+        """
         self._clear_projects()
 
         if not projects:
@@ -30,11 +33,17 @@ class ArchivePageViews:
         columns = self._calculate_columns()
 
         for i, project in enumerate(projects):
+            project_id = project.get("id")
+
+            # ⭐ Проверяем права для каждого проекта
+            can_restore_project = self.page.handlers.can_restore_project(project_id)
+            can_delete_project = self.page.handlers.can_delete_project_permanently(project_id)
+
             card = ArchivedProjectCard(
                 project,
                 self.page,
-                can_restore=can_restore,
-                can_delete=can_delete
+                can_restore=can_restore_project,
+                can_delete=can_delete_project
             )
             card.clicked.connect(self.page.handlers.on_project_clicked)
             card.restore_requested.connect(self.page.handlers.on_restore_project)
@@ -47,7 +56,10 @@ class ArchivePageViews:
         self._add_bottom_spacer(len(projects), columns)
 
     def display_tasks(self, tasks: List[Dict], can_restore: bool, can_delete: bool):
-        """Отображает список задач"""
+        """
+        Отображает список задач
+        can_restore и can_delete теперь проверяются для каждой задачи отдельно
+        """
         self._clear_tasks()
 
         if not tasks:
@@ -60,11 +72,17 @@ class ArchivePageViews:
         columns = self._calculate_columns()
 
         for i, task in enumerate(tasks):
+            task_id = task.get("id")
+
+            # ⭐ Проверяем права для каждой задачи
+            can_restore_task = self.page.handlers.can_restore_task(task_id)
+            can_delete_task = self.page.handlers.can_delete_task_permanently(task_id)
+
             card = ArchivedTaskCard(
                 task,
                 self.page,
-                can_restore=can_restore,
-                can_delete=can_delete
+                can_restore=can_restore_task,
+                can_delete=can_delete_task
             )
             card.restore_requested.connect(self.page.handlers.on_restore_task)
             card.delete_permanently_requested.connect(self.page.handlers.on_delete_task_permanently)

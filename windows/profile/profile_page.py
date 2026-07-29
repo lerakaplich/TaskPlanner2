@@ -186,7 +186,8 @@ class ProfilePage(QWidget):
 
         # График
         if hasattr(self, 'chart_widget'):
-            self.chart_widget.load_data(self.employee_id)
+            tag_analytics = data.get('tag_analytics', [])
+            self.chart_widget.update_chart_from_analytics(tag_analytics)
 
     def _update_rating_stars(self, rating: float):
         """Обновляет звёзды рейтинга"""
