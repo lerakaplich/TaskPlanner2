@@ -52,14 +52,10 @@ class DepartmentsTab(BaseTab):
 
         self.filterDepartment.hide() if hasattr(self, 'filterDepartment') else None
 
-    # ==========================================================
-    # МЕТОДЫ ПОИСКА (ПЕРЕОПРЕДЕЛЕНЫ)
-    # ==========================================================
-
     def _get_card_search_text(self, card) -> str:
         """
         Возвращает текст для поиска из карточки отдела.
-        Ищет по: названию, подразделению, руководителям, телефону.
+        Ищет по: названию, номеру, подразделению, руководителям, телефону.
         """
         search_parts = []
 
@@ -67,7 +63,7 @@ class DepartmentsTab(BaseTab):
         if hasattr(card, 'nameLabel'):
             search_parts.append(card.nameLabel.text())
 
-        # Номер отдела
+        # Номер отдела - ДОБАВЛЯЕМ ПОИСК ПО НОМЕРУ
         if hasattr(card, 'numberLabel'):
             number_text = card.numberLabel.text()
             if number_text and number_text != '—':
@@ -97,7 +93,7 @@ class DepartmentsTab(BaseTab):
 
     def _apply_search_to_items(self):
         """
-        Переопределяем для отделов - поиск по названию, подразделению, руководителям, телефону.
+        Переопределяем для отделов - поиск по названию, номеру, подразделению, руководителям, телефону.
         """
         query = self._search_query.lower().strip() if hasattr(self, '_search_query') else ""
 
@@ -264,10 +260,14 @@ class DepartmentsTab(BaseTab):
         if self.filter_division_id:
             filtered = [d for d in filtered if d.get('division_id') == self.filter_division_id]
 
-        # Поиск по названию (используем filter_search_text)
+        # Поиск по названию И НОМЕРУ
         if self.filter_search_text:
             search_lower = self.filter_search_text.lower()
-            filtered = [d for d in filtered if search_lower in d.get('name', '').lower()]
+            filtered = [
+                d for d in filtered
+                if search_lower in d.get('name', '').lower()
+                   or search_lower in str(d.get('number', '')).lower()
+            ]
 
         return filtered
 
@@ -556,7 +556,8 @@ class DepartmentsTab(BaseTab):
             can_edit = self._can_edit_department(department)
             can_delete = self._can_delete_department(department)
 
-            print(f"   Отдел: {department.get('name')}, can_edit={can_edit}, can_delete={can_delete}")
+            print(
+                f"   Отдел: {department.get('name')}, номер: {department.get('number')}, can_edit={can_edit}, can_delete={can_delete}")
 
             card = DepartmentCard(
                 department,

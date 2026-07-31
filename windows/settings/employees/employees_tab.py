@@ -78,7 +78,10 @@ class EmployeesTab(BaseTab):
         return count
 
     def _get_card_search_text(self, card) -> str:
-        """Возвращает текст для поиска из карточки сотрудника"""
+        """
+        Возвращает текст для поиска из карточки сотрудника.
+        Ищет по: ФИО, должности, отделу, подразделению, телефону, email, правам (роли).
+        """
         search_parts = []
 
         # ФИО
@@ -97,36 +100,46 @@ class EmployeesTab(BaseTab):
         if hasattr(card, 'divisionValue'):
             search_parts.append(card.divisionValue.text())
 
-        # Мобильный телефон - ДОБАВЛЯЕМ
+        # Мобильный телефон
         if hasattr(card, 'mobilePhoneValue'):
             phone_text = card.mobilePhoneValue.text()
             if phone_text and phone_text != '—':
                 search_parts.append(phone_text)
 
-        # Рабочий телефон - ДОБАВЛЯЕМ
+        # Рабочий телефон
         if hasattr(card, 'workPhoneValue'):
             work_phone = card.workPhoneValue.text()
             if work_phone and work_phone != '—':
                 search_parts.append(work_phone)
 
-        # Email - ДОБАВЛЯЕМ
+        # Email
         if hasattr(card, 'emailValue'):
             email = card.emailValue.text()
             if email and email != '—':
                 search_parts.append(email)
 
+        # ===== ДОБАВЛЯЕМ ПОИСК ПО ПРАВАМ (РОЛИ) =====
+        if hasattr(card, 'roleLabel'):
+            role_text = card.roleLabel.text()
+            if role_text:
+                search_parts.append(role_text)
+
         return " ".join(search_parts)
 
     def _apply_search_to_items(self):
-        """Переопределяем для сотрудников - поиск по ФИО, должности, отделу, подразделению"""
+        """Переопределяем для сотрудников - поиск по ФИО, должности, отделу, подразделению, телефону, email, правам"""
         query = self._search_query.lower().strip() if hasattr(self, '_search_query') else ""
 
         for card in self.cards:
             if query:
-                search_text = self._get_card_search_text(card)
-                card.setVisible(query in search_text.lower())
+                search_text = self._get_card_search_text(card).lower()
+                card.setVisible(query in search_text)
             else:
                 card.setVisible(True)
+
+    # ==========================================================
+    # ОСТАЛЬНЫЕ МЕТОДЫ (БЕЗ ИЗМЕНЕНИЙ)
+    # ==========================================================
 
     def setup_permission_ui(self):
         """

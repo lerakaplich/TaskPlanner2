@@ -35,6 +35,62 @@ class DivisionsTab(BaseTab):
         self.filterDepartment.hide() if hasattr(self, 'filterDepartment') else None
         self.filterSubDepartment.hide() if hasattr(self, 'filterSubDepartment') else None
 
+    # ==========================================================
+    # МЕТОДЫ ПОИСКА (РАСШИРЕНЫ)
+    # ==========================================================
+
+    def _get_card_search_text(self, card) -> str:
+        """
+        Возвращает текст для поиска из карточки подразделения.
+        Ищет по: названию, номеру, расшифровке (workshop_code), руководителям, телефону.
+        """
+        search_parts = []
+
+        # Название
+        if hasattr(card, 'nameLabel'):
+            search_parts.append(card.nameLabel.text())
+
+        # Номер
+        if hasattr(card, 'numberLabel'):
+            number_text = card.numberLabel.text()
+            if number_text and number_text != '—':
+                search_parts.append(number_text)
+
+        # Расшифровка (workshop_code) - ДОБАВЛЯЕМ
+        if hasattr(card, 'codeValue'):
+            code_text = card.codeValue.text()
+            if code_text and code_text != '—':
+                search_parts.append(code_text)
+
+        # Руководители - ДОБАВЛЯЕМ
+        if hasattr(card, 'bossValue'):
+            boss_text = card.bossValue.text()
+            if boss_text and boss_text != '—':
+                search_parts.append(boss_text)
+
+        # Телефон - ДОБАВЛЯЕМ
+        if hasattr(card, 'phoneValue'):
+            phone_text = card.phoneValue.text()
+            if phone_text and phone_text != '—':
+                search_parts.append(phone_text)
+
+        return " ".join(search_parts)
+
+    def _apply_search_to_items(self):
+        """Переопределяем для подразделений - поиск по всем полям"""
+        query = self._search_query.lower().strip() if hasattr(self, '_search_query') else ""
+
+        for card in self.cards:
+            if query:
+                search_text = self._get_card_search_text(card).lower()
+                card.setVisible(query in search_text)
+            else:
+                card.setVisible(True)
+
+    # ==========================================================
+    # ОСТАЛЬНЫЕ МЕТОДЫ (БЕЗ ИЗМЕНЕНИЙ)
+    # ==========================================================
+
     def showEvent(self, event):
         """Обновляет данные при показе вкладки"""
         super().showEvent(event)
@@ -469,23 +525,3 @@ class DivisionsTab(BaseTab):
                 if can_edit:
                     dialog.division_saved.connect(lambda data: self.on_division_updated(division_id, data))
                 dialog.exec()
-
-    def _get_card_search_text(self, card) -> str:
-        """Возвращает текст для поиска из карточки подразделения"""
-        if hasattr(card, 'nameLabel'):
-            return card.nameLabel.text()
-        return ""
-
-    def _apply_search_to_items(self):
-        """Переопределяем для подразделений"""
-        query = self._search_query.lower().strip() if hasattr(self, '_search_query') else ""
-
-        for card in self.cards:
-            if query:
-                search_text = self._get_card_search_text(card)
-                # Добавляем номер подразделения
-                if hasattr(card, 'numberLabel'):
-                    search_text += " " + card.numberLabel.text()
-                card.setVisible(query in search_text.lower())
-            else:
-                card.setVisible(True)

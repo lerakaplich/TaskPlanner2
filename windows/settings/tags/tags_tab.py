@@ -222,5 +222,3 @@ class TagsTab(BaseTab):
                 card.setVisible(query in search_text.lower())
             else:
                 card.setVisible(True)
-
-        self._update_count()
