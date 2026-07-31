@@ -71,17 +71,20 @@ class GlobalSearchHandler:
             # 7. Поиск по сотрудникам (настройки)
             total_found += self._search_employees(query)
 
-            # 8. Поиск по отделам (настройки) - ДОБАВЛЯЕМ
+            # 8. Поиск по отделам (настройки)
             total_found += self._search_departments(query)
 
-            # 9. Поиск по подразделениям (настройки) - ДОБАВЛЯЕМ
+            # 9. Поиск по подразделениям (настройки)
             total_found += self._search_divisions(query)
 
-            # 10. Поиск по тегам (настройки) - ДОБАВЛЯЕМ
+            # 10. Поиск по тегам (настройки)
             total_found += self._search_tags(query)
 
-            # 11. Поиск по колонкам (настройки) - ДОБАВЛЯЕМ
+            # 11. Поиск по колонкам (настройки)
             total_found += self._search_columns(query)
+
+            # 12. ⭐ ПОИСК ПО АНАЛИТИКЕ (РЕЙТИНГ, СОТРУДНИКИ, ТЕМЫ, ПРОЕКТЫ)
+            total_found += self._search_analytics(query)
 
             # Обновляем статус
             self._update_search_status(query, total_found)
@@ -92,6 +95,18 @@ class GlobalSearchHandler:
             traceback.print_exc()
         finally:
             self._is_searching = False
+
+    def _search_analytics(self, query: str) -> int:
+        """Поиск по аналитике (все вкладки)"""
+        if 'analytics' not in self.main.navigation.pages:
+            return 0
+
+        page = self.main.navigation.pages['analytics']
+        if hasattr(page, 'apply_search_filter'):
+            page.apply_search_filter(query)
+            if hasattr(page, 'get_filtered_count'):
+                return page.get_filtered_count()
+        return 0
 
     def _search_departments(self, query: str) -> int:
         """Поиск по отделам (вкладка Настройки)"""
@@ -299,6 +314,14 @@ class GlobalSearchHandler:
                 page = self.main.navigation.pages[page_name]
                 if hasattr(page, 'clear_search_filter'):
                     page.clear_search_filter()
+
+        # ⭐ Восстанавливаем аналитику
+        if 'analytics' in self.main.navigation.pages:
+            page = self.main.navigation.pages['analytics']
+            if hasattr(page, 'clear_search_filter'):
+                page.clear_search_filter()
+            elif hasattr(page, 'force_refresh_display'):
+                page.force_refresh_display()
 
         # Восстанавливаем все вкладки настроек
         if 'settings' in self.main.navigation.pages:
