@@ -92,6 +92,7 @@ class OvertimePage(QWidget):
         for ot in all_my:
             if self._overtime_matches_search(ot, query):
                 if self.service:
+                    # Проверяем, проходит ли переработка фильтры
                     if self.service.filter_overtimes([ot], **filters):
                         filtered_my.append(ot)
                 else:
@@ -111,15 +112,67 @@ class OvertimePage(QWidget):
         self._update_total_hours_display(filtered_my)
 
     def _overtime_matches_search(self, overtime: dict, query: str) -> bool:
-        """Проверяет, соответствует ли переработка поисковому запросу"""
-        search_fields = [
-            overtime.get('project_name', ''),
-            overtime.get('task', ''),
-            overtime.get('description', ''),
-            overtime.get('employee_name', ''),
-            overtime.get('date_str', ''),
-        ]
-        return any(query in field.lower() for field in search_fields if field)
+        """
+        Проверяет, соответствует ли переработка поисковому запросу.
+        Ищет по: описанию, проекту, задаче, дате, времени, исполнителю, длительности.
+        """
+        search_fields = []
+
+        # Описание (название переработки)
+        desc = overtime.get('description', '')
+        if desc:
+            search_fields.append(desc)
+
+        # Проект
+        project = overtime.get('project', '') or overtime.get('project_name', '')
+        if project:
+            search_fields.append(project)
+
+        # Задача
+        task = overtime.get('task', '') or overtime.get('task_title', '')
+        if task:
+            search_fields.append(task)
+
+        # Дата
+        date_str = overtime.get('date', '') or overtime.get('date_str', '')
+        if date_str:
+            search_fields.append(date_str)
+
+        # Время начала и окончания
+        start_time = overtime.get('start_time', '')
+        if start_time:
+            search_fields.append(start_time)
+
+        end_time = overtime.get('end_time', '')
+        if end_time:
+            search_fields.append(end_time)
+
+        # Временной период (форматированное время)
+        time_period = overtime.get('time_period', '')
+        if time_period:
+            search_fields.append(time_period)
+
+        # Исполнитель (сотрудник)
+        user = overtime.get('user', '') or overtime.get('employee_name', '') or overtime.get('employee', '')
+        if user:
+            search_fields.append(user)
+
+        # Длительность
+        duration = overtime.get('duration', '')
+        if duration:
+            # Преобразуем в строку для поиска
+            duration_str = str(duration).replace('.', ',')
+            search_fields.append(duration_str)
+            search_fields.append(str(duration))
+
+        # ID переработки (если пользователь ищет по ID)
+        ot_id = overtime.get('id')
+        if ot_id:
+            search_fields.append(str(ot_id))
+
+        # Проверяем все поля
+        query_lower = query.lower()
+        return any(query_lower in str(field).lower() for field in search_fields if field)
 
     def clear_search_filter(self):
         """Очищает фильтр поиска"""
@@ -127,13 +180,16 @@ class OvertimePage(QWidget):
         self.display_overtimes()
 
     def get_filtered_count(self) -> int:
-        """Возвращает количество видимых переработок"""
+        """Возвращает количество видимых переработок в текущей вкладке"""
         count = 0
+        # Считаем видимые карточки в сетке "Мои переработки"
         layout = self.gridLayoutMy
         for i in range(layout.count()):
-            widget = layout.itemAt(i).widget()
-            if widget and widget.isVisible():
-                count += 1
+            item = layout.itemAt(i)
+            if item:
+                widget = item.widget()
+                if widget and widget.isVisible():
+                    count += 1
         return count
 
     def _setup_permission_ui(self):
@@ -318,6 +374,13 @@ class OvertimePage(QWidget):
         filtered_all = self.service.filter_overtimes(self.all_overtimes,
                                                      **filters) if self.service else self.all_overtimes
 
+        # Применяем поиск, если он активен
+        has_search = hasattr(self, '_search_query') and self._search_query.strip()
+        if has_search:
+            query = self._search_query.lower().strip()
+            filtered_my = [ot for ot in filtered_my if self._overtime_matches_search(ot, query)]
+            filtered_all = [ot for ot in filtered_all if self._overtime_matches_search(ot, query)]
+
         # Для вкладки "Мои переработки" - передаём флаг is_my_tab=True
         self._display_tab_optimized(self.gridLayoutMy, filtered_my, is_my_tab=True)
         # Для вкладки "Все переработки" - is_my_tab=False
@@ -332,6 +395,8 @@ class OvertimePage(QWidget):
     def _display_tab_optimized(self, layout, overtimes, is_my_tab=False):
         """Оптимизированное отображение карточек с переиспользованием виджетов"""
         existing_widgets = {}
+
+        # Сохраняем существующие виджеты
         while layout.count():
             item = layout.takeAt(0)
             if item.widget():
@@ -340,6 +405,9 @@ class OvertimePage(QWidget):
                     existing_widgets[widget.overtime_id] = widget
                 else:
                     widget.deleteLater()
+
+        # Определяем, активен ли поиск
+        has_search = hasattr(self, '_search_query') and self._search_query.strip()
 
         for i, ot in enumerate(overtimes):
             ot_id = ot.get('id')
@@ -350,7 +418,6 @@ class OvertimePage(QWidget):
             can_delete = False
 
             if self.permission_service:
-                # Проверяем, может ли пользователь редактировать ЭТУ переработку
                 can_edit = self._can_edit_overtime(ot)
                 can_delete = self._can_delete_overtime(ot)
             else:
@@ -364,17 +431,26 @@ class OvertimePage(QWidget):
                 card.can_edit = can_edit
                 card.can_delete = can_delete
                 card._apply_permissions()
+                # Если есть поиск - проверяем соответствие
+                if has_search:
+                    card.setVisible(self._overtime_matches_search(ot, self._search_query))
+                else:
+                    card.setVisible(True)
                 del existing_widgets[ot_id]
             else:
                 card = OvertimeCard(ot, can_edit=can_edit, can_delete=can_delete)
                 card.edit_clicked.connect(self.show_edit_overtime)
                 card.add_details_clicked.connect(self.show_add_details_overtime)
                 card.delete_clicked.connect(self.delete_overtime)
+                # Если есть поиск - проверяем соответствие
+                if has_search:
+                    card.setVisible(self._overtime_matches_search(ot, self._search_query))
 
             row = i // 2
             col = i % 2
             layout.addWidget(card, row, col)
 
+        # Удаляем неиспользуемые виджеты
         for widget in existing_widgets.values():
             widget.deleteLater()
 

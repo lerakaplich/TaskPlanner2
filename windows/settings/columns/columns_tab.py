@@ -37,6 +37,45 @@ class ColumnsTab(BaseTab):
         self.filterDepartment.hide() if hasattr(self, 'filterDepartment') else None
         self.filterSubDepartment.hide() if hasattr(self, 'filterSubDepartment') else None
 
+    # ==========================================================
+    # МЕТОДЫ ПОИСКА
+    # ==========================================================
+
+    def _get_card_search_text(self, card) -> str:
+        """Возвращает текст для поиска из карточки колонки"""
+        search_parts = []
+
+        # Название колонки
+        if hasattr(card, 'nameLabel'):
+            search_parts.append(card.nameLabel.text())
+
+        # Позиция (можно искать по номеру позиции)
+        if hasattr(card, 'positionLabel'):
+            pos_text = card.positionLabel.text()
+            if pos_text:
+                search_parts.append(pos_text)
+
+        return " ".join(search_parts)
+
+    def _apply_search_to_items(self):
+        """Переопределяем для колонок - поиск по названию и позиции"""
+        query = self._search_query.lower().strip() if hasattr(self, '_search_query') else ""
+
+        # Если запрос пустой - показываем все карточки
+        if not query:
+            for card in self.cards:
+                card.setVisible(True)
+            return
+
+        # Фильтруем карточки
+        for card in self.cards:
+            search_text = self._get_card_search_text(card).lower()
+            card.setVisible(query in search_text)
+
+    # ==========================================================
+    # ОСТАЛЬНЫЕ МЕТОДЫ (БЕЗ ИЗМЕНЕНИЙ)
+    # ==========================================================
+
     def setup_permission_ui(self):
         """
         Настройка UI в зависимости от прав пользователя
@@ -221,22 +260,3 @@ class ColumnsTab(BaseTab):
                 if column.get('id') == column_id:
                     column['is_done_column'] = is_done
                     break
-
-    def _get_card_search_text(self, card) -> str:
-        """Возвращает текст для поиска из карточки колонки"""
-        if hasattr(card, 'nameLabel'):
-            return card.nameLabel.text()
-        return ""
-
-    def _apply_search_to_items(self):
-        """Переопределяем для колонок"""
-        query = self._search_query.lower().strip() if hasattr(self, '_search_query') else ""
-
-        for card in self.cards:
-            if query:
-                search_text = self._get_card_search_text(card)
-                card.setVisible(query in search_text.lower())
-            else:
-                card.setVisible(True)
-
-        self._update_count()
