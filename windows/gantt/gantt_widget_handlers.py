@@ -12,10 +12,6 @@ class GanttWidgetHandlers:
     def __init__(self, widget):
         self.widget = widget
 
-    # ==========================================================
-    # НАВИГАЦИЯ И ЗАГРУЗКА
-    # ==========================================================
-
     def load_initial_data(self) -> None:
         self.widget._service.load_data()
         self.widget._refresh_ui()
@@ -212,34 +208,87 @@ class GanttWidgetHandlers:
         )
 
     def on_link_created(self, predecessor_id: int, successor_id: int) -> None:
+        """Обработка создания связи между задачами."""
         if not self.widget._service.can_create_link():
             QMessageBox.warning(self.widget, "Доступ запрещён", "У вас нет прав на создание связей.")
             return
 
-        reply = QMessageBox.question(
-            self.widget, "Создание связи",
-            f"Создать связь между задачами?\nПредшественник ID: {predecessor_id}\nПоследователь ID: {successor_id}",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+        pred_task = self.widget._service.get_task_by_id(predecessor_id)
+        succ_task = self.widget._service.get_task_by_id(successor_id)
+
+        if not pred_task or not succ_task:
+            QMessageBox.warning(self.widget, "Ошибка", "Задачи не найдены")
+            return
+
+        pred_name = pred_task.name
+        succ_name = succ_task.name
+
+        from windows.gantt.link_dialog import LinkDialog
+        show_instruction = not self.widget._dont_show_link_dialog
+
+        dialog = LinkDialog(
+            self.widget,
+            predecessor_name=pred_name,
+            successor_name=succ_name,
+            show_instruction=show_instruction
         )
 
-        if reply == QMessageBox.StandardButton.Yes:
-            if self.widget._service.add_dependency(predecessor_id, successor_id):
-                QMessageBox.information(self.widget, "Успех", "Связь успешно создана!")
-                if hasattr(self.widget, 'gantt_canvas'):
-                    self.widget.gantt_canvas.set_links(self.widget._service.get_all_links())
-                    self.widget.gantt_canvas.update()
-            else:
-                QMessageBox.warning(self.widget, "Ошибка", "Не удалось создать связь")
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            if hasattr(self.widget, 'gantt_canvas'):
+                self.widget.gantt_canvas.clear_selection()
+            return
+
+        link_type = dialog.get_link_type()
+        link_type_name = dialog.LINK_TYPES.get(link_type, "").split(" — ")[0]
+
+        if dialog.get_dont_show():
+            self.widget._dont_show_link_dialog = True
+
+        # Сохраняем старые даты
+        old_start = succ_task.start_date
+        old_end = succ_task.end_date
+
+        success, message = self.widget._service.add_dependency_with_message(
+            predecessor_id, successor_id, 0, link_type
+        )
+
+        if success:
+            # Перезагружаем данные
+            self.widget._service.refresh_all_data()
+            updated_task = self.widget._service.get_task_by_id(successor_id)
+
+            date_changed = ""
+            if updated_task:
+                new_start = updated_task.start_date
+                new_end = updated_task.end_date
+                if old_start != new_start or old_end != new_end:
+                    date_changed = (
+                        f"\n\n📅 Даты задачи '{succ_name}' обновлены:\n"
+                        f"Было: {old_start.strftime('%d.%m.%Y')} - {old_end.strftime('%d.%m.%Y')}\n"
+                        f"Стало: {new_start.strftime('%d.%m.%Y')} - {new_end.strftime('%d.%m.%Y')}\n"
+                        f"Тип связи: {link_type_name}"
+                    )
+
+            QMessageBox.information(
+                self.widget,
+                "Успех",
+                f"✅ Связь успешно создана!\n"
+                f"{pred_name} → {succ_name}"
+                f"{date_changed}"
+            )
+
+            self.widget._refresh_ui()
+        else:
+            QMessageBox.warning(self.widget, "Ошибка", f"Не удалось создать связь:\n{message}")
+
+        if hasattr(self.widget, 'gantt_canvas'):
+            self.widget.gantt_canvas.clear_selection()
 
     def on_task_moved(self, task_id: int, new_start: datetime, new_end: datetime) -> None:
         if self.widget._service.update_task_dates_with_linked(task_id, new_start, new_end):
             if hasattr(self.widget, 'gantt_canvas'):
                 self.widget.gantt_canvas.set_links(self.widget._service.get_all_links())
             print(f"✅ Задача {task_id} перемещена: {new_start.date()} - {new_end.date()}")
-
-    # ==========================================================
-    # ВЗАИМОДЕЙСТВИЕ С UI
-    # ==========================================================
 
     def on_project_item_clicked(self, item, column: int) -> None:
         if item.childCount() > 0:
@@ -252,6 +301,20 @@ class GanttWidgetHandlers:
             if task:
                 self.show_task_info(task)
 
+    def show_link_info(self, predecessor_id: int, successor_id: int) -> None:
+        """Показывает информацию о связи между задачами."""
+        link_info = self.widget._service.get_link_info(predecessor_id, successor_id)
+        if link_info:
+            QMessageBox.information(
+                self.widget,
+                "Информация о связи",
+                f"Связь между задачами:\n"
+                f"Предшественник ID: {predecessor_id}\n"
+                f"Последователь ID: {successor_id}\n"
+                f"Тип связи: {link_info.get('type_name', 'Неизвестный')}\n"
+                f"Описание: {link_info.get('description', '')}"
+            )
+
     def show_task_info(self, task) -> None:
         info_text = self.widget._service.get_task_info_text(task)
         QMessageBox.information(self.widget, f"Задача: {task.name}", info_text)
@@ -260,10 +323,6 @@ class GanttWidgetHandlers:
         task = self.widget._service.get_task_by_id(task_id)
         if task:
             self.show_task_info(task)
-
-    # ==========================================================
-    # ЭКСПОРТ
-    # ==========================================================
 
     def on_export_clicked(self) -> None:
         from windows.gantt.export_dialog import ExportDialog

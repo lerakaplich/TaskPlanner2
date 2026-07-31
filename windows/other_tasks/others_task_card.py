@@ -2,7 +2,7 @@
 
 import json
 from typing import Optional
-from PyQt6.QtWidgets import QMenu, QApplication
+from PyQt6.QtWidgets import QMenu, QApplication, QLabel, QHBoxLayout, QWidget
 from PyQt6.QtCore import pyqtSignal, Qt, QMimeData
 from PyQt6.QtGui import QAction, QPixmap, QPainter, QDrag
 
@@ -12,8 +12,8 @@ from services.tasks_service.tasks_service import TasksService
 
 class OthersTaskCard(TaskCard):
     """
-    UI карточка задачи. Только отображение и сигналы.
-    Вся логика в сервисе.
+    UI карточка задачи для чужих задач.
+    Отображение + прогноз времени + права доступа.
     """
 
     moveToDoneColumn = pyqtSignal(int)
@@ -26,18 +26,29 @@ class OthersTaskCard(TaskCard):
     pauseRequested = pyqtSignal(int)
     resumeRequested = pyqtSignal(int)
 
-    def __init__(self, task_data, service: Optional[TasksService] = None,
-                 is_creator=False, parent=None, can_edit_delete=False,
-                 can_archive=False, can_move=False, can_drag=False):
+    def __init__(
+        self,
+        task_data,
+        service: Optional[TasksService] = None,
+        is_creator=False,
+        parent=None,
+        can_edit_delete=False,
+        can_archive=False,
+        can_move=False,
+        can_drag=False
+    ):
         super().__init__(task_data, parent)
 
         self.is_creator = is_creator
         self.service = service
         self.can_edit_delete = can_edit_delete
         self.can_archive = can_archive
-        self.can_move = can_move  # <-- ДОБАВЛЯЕМ
-        self._can_drag = can_move  # <-- Перетаскивание = can_move
+        self.can_move = can_move
+        self._can_drag = can_move
         self.drag_start_position = None
+
+        # Флаг для прогноза
+        self._prediction_widget = None
 
         self._disconnect_parent_signals()
         self._reconnect_project_signal()
@@ -98,6 +109,124 @@ class OthersTaskCard(TaskCard):
 
         difficulty = self.task_data.get("difficulty", 0)
         self._set_difficulty_display(difficulty)
+
+        # Добавляем прогноз времени
+        self._add_prediction_widget()
+
+    def _add_prediction_widget(self):
+        """Добавляет виджет с прогнозом времени выполнения"""
+        # Удаляем старый виджет если есть
+        if self._prediction_widget:
+            self._prediction_widget.deleteLater()
+            self._prediction_widget = None
+
+        predicted_hours = self.task_data.get("predicted_hours", 0)
+        predicted_days = self.task_data.get("predicted_days", 0)
+        confidence = self.task_data.get("prediction_confidence", 0)
+
+        if predicted_hours <= 0:
+            return
+
+        # Создаём контейнер для прогноза
+        self._prediction_widget = QWidget()
+        pred_layout = QHBoxLayout(self._prediction_widget)
+        pred_layout.setContentsMargins(0, 4, 0, 4)
+        pred_layout.setSpacing(8)
+
+        # Иконка прогноза
+        icon_label = QLabel("⏱")
+        icon_label.setStyleSheet("font-size: 14px; border: none;")
+        pred_layout.addWidget(icon_label)
+
+        # Текст прогноза
+        pred_text = f"Прогноз: {predicted_hours:.1f} ч"
+        if predicted_days > 0:
+            pred_text += f" ({predicted_days:.1f} дн)"
+
+        pred_label = QLabel(pred_text)
+        pred_label.setStyleSheet("""
+            QLabel {
+                font-size: 11px;
+                color: #666;
+                border: none;
+                font-weight: 500;
+            }
+        """)
+        pred_layout.addWidget(pred_label)
+
+        # Индикатор уверенности
+        if confidence > 0:
+            confidence_text = self._get_confidence_text(confidence)
+            confidence_label = QLabel(confidence_text)
+            confidence_label.setStyleSheet(f"""
+                QLabel {{
+                    font-size: 10px;
+                    color: {self._get_confidence_color(confidence)};
+                    border: none;
+                    background-color: {self._get_confidence_bg(confidence)};
+                    border-radius: 8px;
+                    padding: 1px 8px;
+                }}
+            """)
+            pred_layout.addWidget(confidence_label)
+
+        pred_layout.addStretch()
+
+        # Вставляем виджет после описания
+        self._insert_prediction_widget()
+
+    def _get_confidence_text(self, confidence: float) -> str:
+        """Возвращает текстовое описание уверенности"""
+        if confidence >= 0.8:
+            return "✓ Высокая уверенность"
+        elif confidence >= 0.5:
+            return "• Средняя уверенность"
+        else:
+            return "○ Низкая уверенность"
+
+    def _get_confidence_color(self, confidence: float) -> str:
+        """Возвращает цвет для уверенности"""
+        if confidence >= 0.8:
+            return "#2E7D32"
+        elif confidence >= 0.5:
+            return "#F57C00"
+        else:
+            return "#D32F2F"
+
+    def _get_confidence_bg(self, confidence: float) -> str:
+        """Возвращает цвет фона для уверенности"""
+        if confidence >= 0.8:
+            return "#E8F5E9"
+        elif confidence >= 0.5:
+            return "#FFF3E0"
+        else:
+            return "#FFEBEE"
+
+    def _insert_prediction_widget(self):
+        """Вставляет виджет прогноза в layout"""
+        if not self._prediction_widget:
+            return
+
+        layout = self.layout()
+        if not layout:
+            return
+
+        # Ищем позицию для вставки (после описания, перед прогрессом)
+        for i in range(layout.count()):
+            item = layout.itemAt(i)
+            if item and item.widget() == self.descriptionText:
+                layout.insertWidget(i + 1, self._prediction_widget)
+                return
+
+        # Если не нашли описание, вставляем после createdLabel
+        for i in range(layout.count()):
+            item = layout.itemAt(i)
+            if item and hasattr(item.widget(), 'objectName') and item.widget().objectName() == "createdLabel":
+                layout.insertWidget(i + 1, self._prediction_widget)
+                return
+
+        # Или в конец
+        layout.addWidget(self._prediction_widget)
 
     def update_deadline_color(self):
         """Обновляет цвет дедлайна."""
@@ -202,6 +331,17 @@ class OthersTaskCard(TaskCard):
                 lambda: self.archiveRequested.emit(self.task_data["id"])
             )
             menu.addAction(archive_action)
+
+        # ===== ПОКАЗАТЬ ПРОГНОЗ (всегда) =====
+        predicted_hours = self.task_data.get("predicted_hours", 0)
+        if predicted_hours > 0:
+            menu.addSeparator()
+            info_action = QAction(
+                f"⏱ Прогноз: {predicted_hours:.1f} ч ({self.task_data.get('predicted_days', 0):.1f} дн)",
+                self
+            )
+            info_action.setEnabled(False)
+            menu.addAction(info_action)
 
         menu.exec(self.menuButton.mapToGlobal(self.menuButton.rect().bottomLeft()))
 

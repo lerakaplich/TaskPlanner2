@@ -469,3 +469,25 @@ class DivisionsTab(BaseTab):
                 if can_edit:
                     dialog.division_saved.connect(lambda data: self.on_division_updated(division_id, data))
                 dialog.exec()
+
+    def _get_card_search_text(self, card) -> str:
+        """Возвращает текст для поиска из карточки подразделения"""
+        if hasattr(card, 'nameLabel'):
+            return card.nameLabel.text()
+        return ""
+
+    def _apply_search_to_items(self):
+        """Переопределяем для подразделений"""
+        query = self._search_query.lower().strip() if hasattr(self, '_search_query') else ""
+
+        for card in self.cards:
+            if query:
+                search_text = self._get_card_search_text(card)
+                # Добавляем номер подразделения
+                if hasattr(card, 'numberLabel'):
+                    search_text += " " + card.numberLabel.text()
+                card.setVisible(query in search_text.lower())
+            else:
+                card.setVisible(True)
+
+        self._update_count()

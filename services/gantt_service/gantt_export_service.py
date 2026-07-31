@@ -43,10 +43,11 @@ class GanttExportService(GanttBaseService):
             canvas_widget.set_tasks(tasks)
             canvas_widget.set_date_range(start_date, end_date)
 
-            # Фильтруем связи для видимых задач
-            from .gantt_dependency_service import GanttDependencyService
-            dep_service = GanttDependencyService(None, None)
-            # ... логика фильтрации связей
+            # Получаем связи с типами
+            from .gantt_service import GanttService
+            if hasattr(canvas_widget, '_service'):
+                links = canvas_widget._service.get_all_links()
+                canvas_widget.set_links(links)
 
             canvas_widget.updateGeometry()
             canvas_widget.update()

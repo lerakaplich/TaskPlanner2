@@ -18,10 +18,15 @@ class TaskGanttData:
     color: str
     priority: str
     progress: float
-    dependencies: List[Dict]
     project_id: int
     project_name: str
     status: str
+    dependencies: List[Dict] = None  # <-- используем None вместо field
+
+    def __post_init__(self):
+        """Инициализация после создания"""
+        if self.dependencies is None:
+            self.dependencies = []
 
     @property
     def duration_days(self) -> int:

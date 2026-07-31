@@ -5,6 +5,8 @@ import os
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Any
 from pathlib import Path
+import threading
+import time
 
 
 class TaskDataCollector:
@@ -18,6 +20,9 @@ class TaskDataCollector:
         self.data_dir.mkdir(parents=True, exist_ok=True)
         self._cache = []
         self._cache_size = 50  # Сохраняем в файл каждые 50 записей
+        self._training_lock = threading.Lock()
+        self._last_training_time = None
+        self._min_interval_seconds = 10  # Минимальный интервал между дообучениями
 
     def collect_task_data(self, task_data: Dict, user_id: int, project_id: int) -> Dict:
         """
@@ -61,17 +66,12 @@ class TaskDataCollector:
         }
 
         # === 2. ВЫЧИСЛЯЕМЫЕ ХАРАКТЕРИСТИКИ ===
-        # Длительность работы (эффективное время)
         effective_hours = self._calculate_effective_hours(task_info)
         task_info["effective_hours"] = effective_hours
 
-        # Количество пауз
         task_info["pause_count"] = self._count_pauses(task_data)
-
-        # Наличие дедлайна
         task_info["has_deadline"] = task_info.get("deadline") is not None
 
-        # Дней до дедлайна (если есть)
         if task_info.get("deadline"):
             try:
                 deadline = self._parse_date(task_info["deadline"])
@@ -83,20 +83,141 @@ class TaskDataCollector:
             except:
                 task_info["days_to_deadline"] = None
 
-        # Просрочена ли задача
         task_info["is_overdue"] = self._check_overdue(task_info)
-
-        # === 3. КОНТЕКСТНАЯ ИНФОРМАЦИЯ ===
-        # Количество тегов
         task_info["tags_count"] = len(task_info.get("tags", []))
-
-        # Сложность названия (количество слов)
         task_info["title_word_count"] = len(task_info.get("title", "").split())
-
-        # Наличие описания
         task_info["has_description"] = bool(task_info.get("description_length", 0) > 0)
 
+        # === 4. ДОБАВЛЯЕМ ПРОГНОЗ ===
+        try:
+            from ml.task_time_predictor import get_task_predictor
+            predictor = get_task_predictor()
+            prediction = predictor.predict(task_info)
+            task_info["predicted_hours"] = prediction.get("predicted_hours", 0)
+            task_info["predicted_days"] = prediction.get("predicted_days", 0)
+            task_info["prediction_confidence"] = prediction.get("confidence", 0)
+        except Exception as e:
+            print(f"⚠️ Ошибка прогнозирования: {e}")
+            task_info["predicted_hours"] = 0
+            task_info["predicted_days"] = 0
+            task_info["prediction_confidence"] = 0
+
         return task_info
+
+    def _incremental_fit(self, new_data: Dict):
+        """Быстрое инкрементальное дообучение"""
+        with self._training_lock:
+            # Проверяем минимальный интервал между обучениями
+            if self._last_training_time:
+                elapsed = (datetime.now() - self._last_training_time).total_seconds()
+                if elapsed < self._min_interval_seconds:
+                    print(f"   ⏳ Пропускаем дообучение (интервал {elapsed:.1f}с < {self._min_interval_seconds}с)")
+                    return
+
+            try:
+                from ml.task_time_predictor import get_task_predictor
+                predictor = get_task_predictor()
+
+                # Используем быстрое инкрементальное обучение
+                result = predictor.incremental_fit(new_data)
+                print(f"   ✅ Дообучение завершено: {result}")
+                self._last_training_time = datetime.now()
+
+            except Exception as e:
+                print(f"   ❌ Ошибка дообучения: {e}")
+                import traceback
+                traceback.print_exc()
+
+    # services/tasks_service/task_data_collector.py
+
+    def save_task_data(self, task_data: Dict, user_id: int, project_id: int):
+        """Сохраняет данные о задаче в файл для обучения"""
+        data = self.collect_task_data(task_data, user_id, project_id)
+        self._cache.append(data)
+
+        # Проверяем, завершена ли задача и есть ли время
+        is_completed = data.get("completed", False)
+        effective_hours = data.get("effective_hours", 0)
+
+        print(
+            f"📊 save_task_data: task_id={data.get('task_id')}, completed={is_completed}, effective_hours={effective_hours}")
+
+        # === ДООБУЧЕНИЕ ТОЛЬКО ПРИ ЗАВЕРШЕНИИ ===
+        if is_completed and effective_hours > 0:
+            print(f"🧠 Задача {data.get('task_id')} завершена с фактическим временем {effective_hours:.1f}ч")
+
+            # Проверяем, сколько всего завершённых задач в данных
+            all_data = self.get_training_data()
+            completed_tasks = [d for d in all_data if d.get("completed", False) and d.get("effective_hours", 0) > 0]
+
+            print(f"📊 Всего завершённых задач в данных: {len(completed_tasks)}")
+
+            # Если есть минимум 10 завершённых задач — обучаем модель
+            if len(completed_tasks) >= 10:
+                print(f"📊 Достаточно данных ({len(completed_tasks)} завершённых задач), обучаем модель...")
+                self._train_model_on_all_data()
+            else:
+                print(f"⏳ Ждём ещё данных: {len(completed_tasks)}/10 завершённых задач")
+        else:
+            if is_completed:
+                print(f"⚠️ Задача завершена, но effective_hours = {effective_hours} (пропускаем обучение)")
+
+        if len(self._cache) >= self._cache_size:
+            self.flush_cache()
+
+        return data
+
+    def _train_model_on_all_data(self):
+        """Внутренний метод для обучения модели"""
+        with self._training_lock:
+            try:
+                all_data = self.get_training_data()
+                from ml.task_time_predictor import get_task_predictor
+                predictor = get_task_predictor()
+                result = predictor.train(all_data)
+                print(f"   ✅ Модель обучена: {result}")
+                self._last_training_time = datetime.now()
+                return result
+            except Exception as e:
+                print(f"   ❌ Ошибка обучения: {e}")
+                import traceback
+                traceback.print_exc()
+                return {'status': 'error', 'message': str(e)}
+
+    def _incremental_train_with_lock(self, new_data: Dict):
+        """
+        Выполняет инкрементальное дообучение с блокировкой,
+        чтобы избежать одновременного обучения из разных потоков
+        """
+        with self._training_lock:
+            # Проверяем минимальный интервал между обучениями
+            if self._last_training_time:
+                elapsed = (datetime.now() - self._last_training_time).total_seconds()
+                if elapsed < self._min_interval_seconds:
+                    print(f"   ⏳ Пропускаем дообучение (интервал {elapsed:.1f}с < {self._min_interval_seconds}с)")
+                    return
+
+            try:
+                from ml.task_time_predictor import get_task_predictor
+                predictor = get_task_predictor()
+
+                # Получаем все данные для обучения
+                all_data = self.get_training_data()
+
+                # Добавляем новую задачу к данным
+                all_data.append(new_data)
+
+                # Обучаем модель на всех данных
+                result = predictor.train(all_data)
+                print(f"   ✅ Дообучение завершено: {result}")
+                self._last_training_time = datetime.now()
+
+            except Exception as e:
+                print(f"   ❌ Ошибка дообучения: {e}")
+                import traceback
+                traceback.print_exc()
+
+    # services/tasks_service/task_data_collector.py
 
     def _calculate_effective_hours(self, task_info: Dict) -> float:
         """Рассчитывает эффективное время работы (без пауз)"""
@@ -117,14 +238,22 @@ class TaskDataCollector:
                 end_dt = self._parse_datetime(completed)
                 if start_dt and end_dt:
                     total_hours = (end_dt - start_dt).total_seconds() / 3600.0
-                    return max(0, total_hours - paused_hours)
-            except:
-                pass
+                    effective = max(0, total_hours - paused_hours)
+                    # Если effective_hours = 0, но задача завершена, ставим минимальное значение 0.1
+                    if effective == 0 and task_info.get("completed", False):
+                        return 0.1
+                    return effective
+            except Exception as e:
+                print(f"⚠️ Ошибка вычисления effective_hours: {e}")
+
+        # Если задача завершена, но нет started_at и completed_at, ставим 0.1
+        if task_info.get("completed", False):
+            return 0.1
 
         return 0.0
 
     def _count_pauses(self, task_data: Dict) -> int:
-        """Подсчитывает количество пауз (по total_paused_seconds и is_paused)"""
+        """Подсчитывает количество пауз"""
         count = 0
         if task_data.get("total_paused_seconds", 0) > 0:
             count += 1
@@ -140,7 +269,6 @@ class TaskDataCollector:
             return value
         if isinstance(value, str):
             try:
-                # Пробуем разные форматы
                 for fmt in ["%Y-%m-%d %H:%M:%S", "%Y-%m-%d", "%d.%m.%Y", "%d.%m.%Y %H:%M"]:
                     try:
                         return datetime.strptime(value, fmt)
@@ -182,30 +310,14 @@ class TaskDataCollector:
             pass
         return False
 
-    def save_task_data(self, task_data: Dict, user_id: int, project_id: int):
-        """Сохраняет данные о задаче в файл для обучения"""
-        # Собираем данные
-        data = self.collect_task_data(task_data, user_id, project_id)
-
-        # Добавляем в кэш
-        self._cache.append(data)
-
-        # Если кэш заполнен - сохраняем в файл
-        if len(self._cache) >= self._cache_size:
-            self.flush_cache()
-
-        return data
-
     def flush_cache(self):
         """Сохраняет кэш в файл и очищает его"""
         if not self._cache:
             return
 
-        # Генерируем имя файла с датой
         date_str = datetime.now().strftime("%Y%m%d_%H%M%S")
         filename = self.data_dir / f"tasks_data_{date_str}.json"
 
-        # Загружаем существующие данные (если файл есть)
         existing_data = []
         if filename.exists():
             try:
@@ -214,10 +326,8 @@ class TaskDataCollector:
             except:
                 pass
 
-        # Добавляем новые данные
         all_data = existing_data + self._cache
 
-        # Сохраняем
         with open(filename, 'w', encoding='utf-8') as f:
             json.dump(all_data, f, ensure_ascii=False, indent=2, default=str)
 
@@ -234,7 +344,6 @@ class TaskDataCollector:
         """
         all_data = []
 
-        # Читаем все JSON файлы в директории
         for file_path in self.data_dir.glob("*.json"):
             try:
                 with open(file_path, 'r', encoding='utf-8') as f:
@@ -250,6 +359,31 @@ class TaskDataCollector:
             return all_data[:limit]
         return all_data
 
+    def train_model_on_all_data(self) -> Dict:
+        """Принудительное обучение модели на всех данных"""
+        all_data = self.get_training_data()
+        from ml.task_time_predictor import get_task_predictor
+        predictor = get_task_predictor()
+        return predictor.train(all_data)
+
+    def retrain_model_if_needed(self, min_samples: int = 20) -> Dict:
+        """Проверяет и переобучает модель при необходимости"""
+        all_data = self.get_training_data()
+        completed_tasks = [
+            d for d in all_data
+            if d.get("completed", False) and d.get("effective_hours", 0) > 0
+        ]
+
+        if len(completed_tasks) < min_samples:
+            return {
+                'status': 'skipped',
+                'message': f'Недостаточно данных: {len(completed_tasks)}/{min_samples}'
+            }
+
+        from ml.task_time_predictor import get_task_predictor
+        predictor = get_task_predictor()
+        return predictor.train(all_data)
+
     def prepare_for_training(self) -> Dict:
         """
         Подготавливает данные для обучения нейросети.
@@ -261,7 +395,6 @@ class TaskDataCollector:
         targets = []
 
         for record in data:
-            # Признаки
             feature = {
                 "difficulty": record.get("difficulty", 0),
                 "priority": self._encode_priority(record.get("priority", "medium")),
@@ -272,10 +405,8 @@ class TaskDataCollector:
                 "days_to_deadline": record.get("days_to_deadline", 30),
             }
 
-            # Целевое значение - эффективное время в часах
             target = record.get("effective_hours", 0)
 
-            # Пропускаем записи с нулевым временем
             if target > 0:
                 features.append(feature)
                 targets.append(target)
@@ -286,8 +417,18 @@ class TaskDataCollector:
             "total_records": len(features)
         }
 
+    def _encode_priority(self, priority: str) -> int:
+        """Кодирует приоритет в число"""
+        priority_map = {
+            "low": 0,
+            "medium": 1,
+            "high": 2,
+            "critical": 3
+        }
+        return priority_map.get(priority, 1)
 
-# Глобальный экземпляр для использования во всем приложении
+
+# Глобальный экземпляр
 _task_data_collector = None
 
 

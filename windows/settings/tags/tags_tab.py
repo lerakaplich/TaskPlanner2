@@ -205,3 +205,22 @@ class TagsTab(BaseTab):
                         break
                 self.refresh_cards()
                 self.item_color_changed.emit(tag_id, new_color)
+
+    def _get_card_search_text(self, card) -> str:
+        """Возвращает текст для поиска из карточки тега"""
+        if hasattr(card, 'nameLabel'):
+            return card.nameLabel.text()
+        return ""
+
+    def _apply_search_to_items(self):
+        """Переопределяем для тегов"""
+        query = self._search_query.lower().strip() if hasattr(self, '_search_query') else ""
+
+        for card in self.cards:
+            if query:
+                search_text = self._get_card_search_text(card)
+                card.setVisible(query in search_text.lower())
+            else:
+                card.setVisible(True)
+
+        self._update_count()

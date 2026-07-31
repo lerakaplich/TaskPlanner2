@@ -307,16 +307,18 @@ class TasksCrudService:
 
             # === НОВЫЙ КОД: Сбор данных для обучения ===
             try:
-                collector = get_task_data_collector()
+                from ml.task_time_predictor import get_task_predictor
+                predictor = get_task_predictor()
+
                 task_dict = self._task_to_dict(new_task)
-                collector.save_task_data(
-                    task_data=task_dict,
-                    user_id=data.get('created_by', 0),
-                    project_id=data.get('project_id', 0)
-                )
-                print(f"📊 Данные задачи {new_task.id} сохранены для обучения")
+                prediction = predictor.predict(task_dict)
+
+                if prediction.get('predicted_hours', 0) > 0:
+                    new_task.planned_hours = prediction['predicted_hours']
+                    self.db_session.commit()
+                    print(f"📊 Прогноз времени: {prediction['predicted_hours']:.1f}ч")
             except Exception as e:
-                print(f"⚠️ Ошибка сбора данных: {e}")
+                print(f"⚠️ Ошибка прогнозирования: {e}")
 
             # === СОХРАНЯЕМ ТЕГИ ===
             tags = data.get("tags", [])
@@ -369,11 +371,27 @@ class TasksCrudService:
             return self._task_to_dict(task)
         return None
 
+    # services/tasks_service/tasks_crud_service.py
+
     def complete_task(self, task_id: int, actual_hours: float = None) -> Optional[Dict]:
         """Завершить задачу"""
         task = self.repo.complete_task(task_id, actual_hours)
         if task:
             self.db_session.commit()
+
+            # === НОВЫЙ КОД: СОХРАНЯЕМ ДАННЫЕ ===
+            try:
+                collector = get_task_data_collector()
+                task_dict = self._task_to_dict(task)
+                collector.save_task_data(
+                    task_data=task_dict,
+                    user_id=task.created_by or 0,
+                    project_id=task.project_id
+                )
+                print(f"📊 Данные задачи {task_id} сохранены для обучения (завершение)")
+            except Exception as e:
+                print(f"⚠️ Ошибка сохранения данных: {e}")
+
             # Обновляем КПД сотрудника
             if task.assigned_to:
                 self._update_employee_kpd(task.assigned_to)
@@ -421,24 +439,22 @@ class TasksCrudService:
         if not task:
             return None
 
-        # === НОВЫЙ КОД: Обработка изменения статуса ===
+        status_changed = False
+
         if "status" in updated_data:
             new_status_name = updated_data["status"]
-            # Находим колонку по имени
             column = self._get_column_by_name(new_status_name, task.project_id)
             if column and task.column_id != column.id:
                 print(f"🔄 Изменение статуса в БД: {task.column.name if task.column else 'None'} -> {new_status_name}")
                 task.column_id = column.id
+                status_changed = True
 
-                # Если перемещаем в Done колонку - устанавливаем прогресс 100%
                 if column.is_done_column:
                     task.progress_percent = 100.0
                     task.completed_at = datetime.now()
-                    task.completed = True
+                    # ❌ НЕ ИСПОЛЬЗУЙТЕ: task.completed = True
                 elif task.column and task.column.is_done_column:
-                    # Если убираем из Done колонки
                     task.completed_at = None
-                    task.completed = False
 
         if "title" in updated_data:
             task.title = updated_data["title"]
@@ -462,6 +478,20 @@ class TasksCrudService:
 
         task.updated_at = datetime.now()
         self.db_session.commit()
+
+        # === СОХРАНЯЕМ ДАННЫЕ ДЛЯ ОБУЧЕНИЯ ПРИ ИЗМЕНЕНИИ СТАТУСА ===
+        if status_changed:
+            try:
+                collector = get_task_data_collector()
+                task_dict = self._task_to_dict(task)
+                collector.save_task_data(
+                    task_data=task_dict,
+                    user_id=task.created_by or 0,
+                    project_id=task.project_id
+                )
+                print(f"📊 Данные задачи {task_id} сохранены для обучения (изменение статуса)")
+            except Exception as e:
+                print(f"⚠️ Ошибка сохранения данных: {e}")
 
         # === ОБНОВЛЯЕМ ТЕГИ ===
         tags = updated_data.get("tags")

@@ -24,6 +24,7 @@ class BaseTab(QWidget, UIPermissionMixin):
         self.cards = []
         self.employee_service = None
         self.user_id = None
+        self._search_query = ""  # <-- ДОБАВЛЯЕМ
 
         # Загрузка UI
         current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -60,10 +61,58 @@ class BaseTab(QWidget, UIPermissionMixin):
             self.toolsLayout.setContentsMargins(24, 18, 24, 18)
             self.toolsLayout.setAlignment(Qt.AlignmentFlag.AlignVCenter)
 
+    # ==========================================================
+    # МЕТОДЫ ПОИСКА (ДОБАВЛЕНЫ)
+    # ==========================================================
+
+    def apply_search_filter(self, query: str):
+        """
+        Применяет фильтр поиска ко всем элементам вкладки.
+        Должен быть переопределён в дочерних классах, если там есть своя логика.
+        """
+        self._search_query = query
+        self._apply_search_to_items()
+
+    def _apply_search_to_items(self):
+        """
+        Внутренний метод применения поиска.
+        По умолчанию фильтрует карточки по названию.
+        Может быть переопределён в дочерних классах.
+        """
+        query = self._search_query.lower().strip() if hasattr(self, '_search_query') else ""
+
+        for card in self.cards:
+            if query:
+                card_name = self._get_card_search_text(card)
+                card.setVisible(query in card_name.lower())
+            else:
+                card.setVisible(True)
+
+    def _get_card_search_text(self, card) -> str:
+        """
+        Возвращает текст для поиска из карточки.
+        Должен быть переопределён в дочерних классах.
+        """
+        if hasattr(card, 'nameLabel'):
+            return card.nameLabel.text()
+        return ""
+
+    def clear_search_filter(self):
+        """Очищает фильтр поиска"""
+        self._search_query = ""
+        self._apply_search_to_items()
+
+    def get_filtered_count(self) -> int:
+        """Возвращает количество видимых элементов"""
+        count = 0
+        for card in self.cards:
+            if card.isVisible():
+                count += 1
+        return count
+
     def showEvent(self, event):
         """Обновляет данные при показе вкладки"""
         super().showEvent(event)
-        # Если это вкладка подразделений - загружаем данные
         if hasattr(self, 'load_divisions') and self.employee_service:
             QTimer.singleShot(50, self.load_divisions)
 
@@ -73,7 +122,7 @@ class BaseTab(QWidget, UIPermissionMixin):
     def set_permission_service(self, permission_service):
         self._permission_service = permission_service
         if permission_service:
-            self.user_id = permission_service.user_id  # <-- ДОБАВИТЬ
+            self.user_id = permission_service.user_id
         self.setup_permission_ui()
 
     def hide_filters(self):
@@ -97,7 +146,6 @@ class BaseTab(QWidget, UIPermissionMixin):
         """Применяет состояние только просмотра — скрывает кнопку добавления"""
         if self.btnAdd:
             self.btnAdd.setVisible(self._should_show_add_buttons())
-        # Фильтры НЕ блокируем — пользователь должен иметь возможность фильтровать
 
     def confirm_delete(self, title: str, message: str, item_type: str, item_id: int):
         if self._read_only_mode:

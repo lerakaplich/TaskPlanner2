@@ -196,3 +196,53 @@ class SettingsPage(QWidget, UIPermissionMixin):
         tab_names = ["Сотрудники", "Отделы", "Подразделения", "Колонки", "Темы"]
         if index < len(tab_names):
             print(f"Переключено на вкладку: {tab_names[index]}")
+
+    def apply_search_filter(self, query: str):
+        """Применяет поиск ко всем вкладкам"""
+        self._search_query = query
+
+        # Применяем поиск ко всем вкладкам
+        tabs = [
+            getattr(self, 'employees_tab', None),
+            getattr(self, 'departments_tab', None),
+            getattr(self, 'divisions_tab', None),
+            getattr(self, 'columns_tab', None),
+            getattr(self, 'tags_tab', None),
+        ]
+
+        for tab in tabs:
+            if tab and hasattr(tab, 'apply_search_filter'):
+                tab.apply_search_filter(query)
+
+    def clear_search_filter(self):
+        """Очищает поиск во всех вкладках"""
+        self._search_query = ""
+
+        tabs = [
+            getattr(self, 'employees_tab', None),
+            getattr(self, 'departments_tab', None),
+            getattr(self, 'divisions_tab', None),
+            getattr(self, 'columns_tab', None),
+            getattr(self, 'tags_tab', None),
+        ]
+
+        for tab in tabs:
+            if tab and hasattr(tab, 'clear_search_filter'):
+                tab.clear_search_filter()
+
+    def get_filtered_count(self) -> int:
+        """Возвращает общее количество видимых элементов во всех вкладках"""
+        total = 0
+        tabs = [
+            getattr(self, 'employees_tab', None),
+            getattr(self, 'departments_tab', None),
+            getattr(self, 'divisions_tab', None),
+            getattr(self, 'columns_tab', None),
+            getattr(self, 'tags_tab', None),
+        ]
+
+        for tab in tabs:
+            if tab and hasattr(tab, 'get_filtered_count'):
+                total += tab.get_filtered_count()
+
+        return total

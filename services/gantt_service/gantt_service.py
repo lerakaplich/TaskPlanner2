@@ -23,6 +23,44 @@ class GanttService(GanttBaseService):
         self.deps = GanttDependencyService(session, self.data, permission_service)
         self.export = GanttExportService(permission_service)
 
+    # services/gantt_service/gantt_service.py
+
+    def add_dependency_with_message(
+            self,
+            predecessor_id: int,
+            successor_id: int,
+            lag: int = 0,
+            dep_type: str = "FS"
+    ) -> Tuple[bool, str]:
+        """
+        Добавляет связь между задачами и возвращает результат с сообщением.
+        """
+        return self.deps.add_dependency(predecessor_id, successor_id, lag, dep_type)
+
+    def get_link_type_info(self, link_type: str) -> Dict:
+        """Возвращает информацию о типе связи."""
+        return self.deps.get_link_type_info(link_type)
+
+    def get_all_link_types(self) -> Dict[str, Dict]:
+        """Возвращает все доступные типы связей."""
+        return self.deps.get_all_link_types()
+
+    def get_link_info(self, predecessor_id: int, successor_id: int) -> Optional[Dict]:
+        """Возвращает информацию о связи между двумя задачами."""
+        all_links = self.get_all_links()
+        deps = all_links.get(predecessor_id, [])
+        for dep in deps:
+            if dep.get("successor_id") == successor_id:
+                link_type = dep.get("type", "FS")
+                info = self.get_link_type_info(link_type)
+                return {
+                    "type": link_type,
+                    "type_name": info.get("name", "Неизвестный"),
+                    "description": info.get("description", ""),
+                    "symbol": info.get("symbol", "?")
+                }
+        return None
+
     def load_data(self, project_id: Optional[int] = None) -> None:
         self.data.load_data(project_id)
 

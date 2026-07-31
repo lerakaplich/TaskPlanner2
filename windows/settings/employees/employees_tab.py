@@ -1,6 +1,6 @@
 # windows/settings/employees/employees_tab.py
 
-from PyQt6.QtCore import pyqtSignal, QTimer
+from PyQt6.QtCore import pyqtSignal, QTimer, Qt
 from PyQt6.QtWidgets import QMessageBox
 
 from services.permissions.app_permissions import AppRole
@@ -58,6 +58,75 @@ class EmployeesTab(BaseTab):
 
         # Подключаем сигнал удаления
         self.item_deleted.connect(self.delete_item)
+
+    def apply_search_filter(self, query: str):
+        """Применяет фильтр поиска к сотрудникам (работает с карточками)"""
+        self._search_query = query
+        self._apply_search_to_items()
+
+    def clear_search_filter(self):
+        """Очищает фильтр поиска"""
+        self._search_query = ""
+        self._apply_search_to_items()
+
+    def get_filtered_count(self) -> int:
+        """Возвращает количество видимых сотрудников (работает с карточками)"""
+        count = 0
+        for card in self.cards:
+            if card.isVisible():
+                count += 1
+        return count
+
+    def _get_card_search_text(self, card) -> str:
+        """Возвращает текст для поиска из карточки сотрудника"""
+        search_parts = []
+
+        # ФИО
+        if hasattr(card, 'nameLabel'):
+            search_parts.append(card.nameLabel.text())
+
+        # Должность
+        if hasattr(card, 'positionValue'):
+            search_parts.append(card.positionValue.text())
+
+        # Отдел
+        if hasattr(card, 'departmentValue'):
+            search_parts.append(card.departmentValue.text())
+
+        # Подразделение
+        if hasattr(card, 'divisionValue'):
+            search_parts.append(card.divisionValue.text())
+
+        # Мобильный телефон - ДОБАВЛЯЕМ
+        if hasattr(card, 'mobilePhoneValue'):
+            phone_text = card.mobilePhoneValue.text()
+            if phone_text and phone_text != '—':
+                search_parts.append(phone_text)
+
+        # Рабочий телефон - ДОБАВЛЯЕМ
+        if hasattr(card, 'workPhoneValue'):
+            work_phone = card.workPhoneValue.text()
+            if work_phone and work_phone != '—':
+                search_parts.append(work_phone)
+
+        # Email - ДОБАВЛЯЕМ
+        if hasattr(card, 'emailValue'):
+            email = card.emailValue.text()
+            if email and email != '—':
+                search_parts.append(email)
+
+        return " ".join(search_parts)
+
+    def _apply_search_to_items(self):
+        """Переопределяем для сотрудников - поиск по ФИО, должности, отделу, подразделению"""
+        query = self._search_query.lower().strip() if hasattr(self, '_search_query') else ""
+
+        for card in self.cards:
+            if query:
+                search_text = self._get_card_search_text(card)
+                card.setVisible(query in search_text.lower())
+            else:
+                card.setVisible(True)
 
     def setup_permission_ui(self):
         """
@@ -199,7 +268,8 @@ class EmployeesTab(BaseTab):
                             # Получаем подразделение этого отдела
                             if dept.get('division_id'):
                                 user_division_id = dept.get('division_id')
-                    print(f"🔍 Начальник отдела: может добавлять в отделы {user_department_ids}, подразделение {user_division_id}")
+                    print(
+                        f"🔍 Начальник отдела: может добавлять в отделы {user_department_ids}, подразделение {user_division_id}")
                 elif self._permission_service.can_show_add_buttons_in_settings():
                     can_add = True
             except Exception as e:
@@ -233,7 +303,8 @@ class EmployeesTab(BaseTab):
 
             # Устанавливаем значения после загрузки UI
             # Используем несколько таймеров для гарантии загрузки
-            QTimer.singleShot(100, lambda: self._set_department_for_dialog(dialog, user_department_ids[0], user_division_id))
+            QTimer.singleShot(100,
+                              lambda: self._set_department_for_dialog(dialog, user_department_ids[0], user_division_id))
 
         dialog.employee_saved.connect(self.on_employee_saved)
         dialog.exec()
@@ -304,8 +375,6 @@ class EmployeesTab(BaseTab):
             QMessageBox.information(self, "Успех", "Сотрудник добавлен")
             self.employee_added.emit(employee_data)
 
-    # windows/settings/employees/employees_tab.py
-
     def on_edit_clicked(self, employee_id: int):
         """Открытие окна редактирования/просмотра сотрудника"""
         if not self.employee_service:
@@ -318,7 +387,7 @@ class EmployeesTab(BaseTab):
             read_only = True
             user_department_ids = []
             user_division_id = None
-            user_division_only = False  # <-- ДОБАВИТЬ
+            user_division_only = False
 
             if self._permission_service and self.employee_service:
                 try:
@@ -345,7 +414,7 @@ class EmployeesTab(BaseTab):
                             can_edit = True
                             read_only = False
 
-                    # <-- ДОБАВИТЬ БЛОК ДЛЯ НАЧАЛЬНИКА ПОДРАЗДЕЛЕНИЯ
+                    # Блок для начальника подразделения
                     elif system_role == SystemRole.DIVISION_HEAD:
                         divisions = self.employee_service.get_divisions_for_selector()
                         for div in divisions:
@@ -453,7 +522,7 @@ class EmployeesTab(BaseTab):
                     employee_dept_id = employee.get('department_id')
                     can_delete = employee_dept_id in user_department_ids
 
-            # <-- ДОБАВИТЬ БЛОК ДЛЯ НАЧАЛЬНИКА ПОДРАЗДЕЛЕНИЯ
+            # Блок для начальника подразделения
             elif system_role == SystemRole.DIVISION_HEAD:
                 divisions = self.employee_service.get_divisions_for_selector()
                 user_division_id = None
@@ -532,7 +601,7 @@ class EmployeesTab(BaseTab):
         is_division_head = False
         user_id = None
         user_department_ids = []
-        user_division_id = None  # <-- ДОБАВИТЬ
+        user_division_id = None
 
         if self._permission_service and self.employee_service:
             from services.permissions.system_permissions import SystemRole
@@ -540,7 +609,7 @@ class EmployeesTab(BaseTab):
                 user_id = self._permission_service.user_id
                 system_role = self.employee_service.get_system_role(user_id)
                 is_department_head = (system_role == SystemRole.DEPARTMENT_HEAD)
-                is_division_head = (system_role == SystemRole.DIVISION_HEAD)  # <-- ДОБАВИТЬ
+                is_division_head = (system_role == SystemRole.DIVISION_HEAD)
 
                 if is_department_head:
                     departments = self.employee_service.get_department_card_data()
@@ -550,7 +619,7 @@ class EmployeesTab(BaseTab):
                             user_department_ids.append(dept.get('id'))
                     print(f"🔍 Начальник отдела: управляет отделами {user_department_ids}")
 
-                # <-- ДОБАВИТЬ БЛОК ДЛЯ НАЧАЛЬНИКА ПОДРАЗДЕЛЕНИЯ
+                # Блок для начальника подразделения
                 if is_division_head:
                     divisions = self.employee_service.get_divisions_for_selector()
                     for div in divisions:
@@ -574,10 +643,10 @@ class EmployeesTab(BaseTab):
             can_edit = self._can_edit_employee(
                 employee,
                 is_department_head,
-                is_division_head,  # <-- ДОБАВИТЬ
+                is_division_head,
                 user_id,
                 user_department_ids,
-                user_division_id  # <-- ДОБАВИТЬ
+                user_division_id
             )
 
             card = EmployeeCard(
@@ -622,7 +691,7 @@ class EmployeesTab(BaseTab):
                 print(f"   🔍 Только просмотр для сотрудника {employee.get('full_name')}")
             return can_edit
 
-        # <-- ДОБАВИТЬ БЛОК ДЛЯ НАЧАЛЬНИКА ПОДРАЗДЕЛЕНИЯ
+        # Блок для начальника подразделения
         if is_division_head and user_id and user_division_id:
             employee_division_id = employee.get('division_id')
             can_edit = (employee_division_id == user_division_id)

@@ -53,6 +53,28 @@ class ArchivePage(QWidget):
         self.show_projects_list()
         self._is_initialized = True
 
+    def apply_search_filter(self, query: str):
+        """Применяет фильтр поиска в архиве"""
+        self.current_search_text = query
+        self.refresh_current_view()
+
+    def clear_search_filter(self):
+        """Очищает фильтр поиска"""
+        self.current_search_text = ""
+        self.refresh_current_view()
+
+    def get_filtered_count(self) -> int:
+        """Возвращает количество найденных элементов"""
+        if self.current_filter_type == "projects":
+            projects = self.archive_service.search_projects(self.current_search_text)
+            return len(projects)
+        else:
+            if self.current_project_id is not None:
+                tasks = self.archive_service.search_tasks(self.current_project_id, self.current_search_text)
+            else:
+                tasks = self.archive_service.search_all_archived_tasks(self.current_search_text)
+            return len(tasks)
+
     def showEvent(self, event):
         super().showEvent(event)
         self.refresh_current_view()

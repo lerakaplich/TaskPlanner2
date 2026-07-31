@@ -86,6 +86,37 @@ class ChatPage(QWidget):
         # Первичная загрузка
         self.load_chat_list()
 
+    def apply_search_filter(self, query: str):
+        """Применяет фильтр поиска к чатам"""
+        self._search_query = query
+        self._apply_search_to_chats()
+
+    def _apply_search_to_chats(self):
+        """Внутренний метод применения поиска"""
+        query = self._search_query.lower().strip() if hasattr(self, '_search_query') else ""
+
+        for i in range(self.ui.chat_list.count()):
+            item = self.ui.chat_list.item(i)
+            if query:
+                matches = query in item.text().lower()
+                item.setHidden(not matches)
+            else:
+                item.setHidden(False)
+
+    def clear_search_filter(self):
+        """Очищает фильтр поиска"""
+        self._search_query = ""
+        self._apply_search_to_chats()
+
+    def get_filtered_count(self) -> int:
+        """Возвращает количество видимых чатов"""
+        count = 0
+        for i in range(self.ui.chat_list.count()):
+            item = self.ui.chat_list.item(i)
+            if not item.isHidden():
+                count += 1
+        return count
+
     def showEvent(self, event):
         """Срабатывает при каждом показе страницы"""
         super().showEvent(event)

@@ -20,7 +20,9 @@ class GanttWidgetViews:
         self.update_canvas_date_range()
 
         if hasattr(self.widget, 'gantt_canvas'):
-            self.widget.gantt_canvas.set_links(self.widget._service.get_all_links())
+            # Получаем связи с типами
+            links = self.widget._service.get_all_links()
+            self.widget.gantt_canvas.set_links(links)
             self.widget.gantt_canvas.update()
 
         if hasattr(self.widget, 'calendar_widget'):

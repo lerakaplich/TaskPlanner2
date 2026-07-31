@@ -256,56 +256,6 @@ class ProjectViewPage(QWidget):
                 admins_btn = getattr(self, name)
                 break
 
-        # Если кнопки не найдены в UI, создаём их программно
-        if participants_btn is None or admins_btn is None:
-            # Ищем контейнер для кнопок (обычно это layout или frame вверху страницы)
-            container = self._find_button_container()
-
-            if container:
-                # Создаём кнопки, если их нет
-                if participants_btn is None:
-                    participants_btn = QPushButton("👥 Участники")
-                    participants_btn.setObjectName("participantsBtn")
-                    participants_btn.setStyleSheet("""
-                        QPushButton {
-                            background-color: #1B232A;
-                            color: white;
-                            border: none;
-                            border-radius: 8px;
-                            padding: 8px 16px;
-                            font-size: 13px;
-                            font-weight: bold;
-                        }
-                        QPushButton:hover {
-                            background-color: #2C3640;
-                        }
-                    """)
-                    container.addWidget(participants_btn)
-
-                if admins_btn is None:
-                    admins_btn = QPushButton("👑 Администраторы")
-                    admins_btn.setObjectName("adminsBtn")
-                    admins_btn.setStyleSheet("""
-                        QPushButton {
-                            background-color: #1B232A;
-                            color: white;
-                            border: none;
-                            border-radius: 8px;
-                            padding: 8px 16px;
-                            font-size: 13px;
-                            font-weight: bold;
-                        }
-                        QPushButton:hover {
-                            background-color: #2C3640;
-                        }
-                    """)
-                    container.addWidget(admins_btn)
-
-        # Подключаем сигналы
-        if participants_btn:
-            participants_btn.clicked.connect(self._show_participants)
-        if admins_btn:
-            admins_btn.clicked.connect(self._show_admins)
 
     def _find_button_container(self):
         """Находит контейнер для кнопок в UI"""

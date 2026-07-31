@@ -282,3 +282,13 @@ class TasksService:
     def delete_task_by_id(self, task_id: int) -> bool:
         """Удалить задачу по ID (алиас для delete_task)"""
         return self.delete_task(task_id)
+
+    # Добавьте методы для работы с исполнителями
+    def get_task_assignees(self, task_id: int) -> List[Dict]:
+        return self.crud.get_task_assignees(task_id)
+
+    def add_assignee(self, task_id: int, employee_id: int) -> bool:
+        return self.crud.add_assignee(task_id, employee_id)
+
+    def remove_assignee(self, task_id: int, employee_id: int) -> bool:
+        return self.crud.remove_assignee(task_id, employee_id)

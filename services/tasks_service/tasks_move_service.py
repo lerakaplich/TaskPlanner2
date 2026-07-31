@@ -23,9 +23,7 @@ class TasksMoveService:
         """Установка функции конвертации задачи в словарь"""
         self._task_to_dict = converter_func
 
-    # ==========================================================
-    # Перемещение задач
-    # ==========================================================
+    # services/tasks_service/tasks_move_service.py
 
     def move_task(self, task_id: int, new_column_name: str) -> Optional[Tuple]:
         """Переместить задачу в другую колонку по имени"""
@@ -39,15 +37,34 @@ class TasksMoveService:
         if not new_column or task.column_id == new_column.id:
             return None
 
-        # Проверка возможности перемещения
         can_move, error = self.validate_move(task_id, new_column.id)
         if not can_move:
             print(f"❌ Невозможно переместить задачу: {error}")
             return None
 
+        # Обновляем статус и прогресс
+        if new_column.is_done_column:
+            task.progress_percent = 100.0
+            task.completed_at = datetime.now()
+            # ❌ НЕ ИСПОЛЬЗУЙТЕ: task.completed = True
+
         task.column_id = new_column.id
         task.updated_at = datetime.now()
         self.db_session.commit()
+
+        # === СОХРАНЯЕМ ДАННЫЕ ===
+        try:
+            from services.tasks_service.task_data_collector import get_task_data_collector
+            collector = get_task_data_collector()
+            task_dict = self._task_to_dict(task) if self._task_to_dict else None
+            if task_dict:
+                collector.save_task_data(
+                    task_data=task_dict,
+                    user_id=task.created_by or 0,
+                    project_id=task.project_id
+                )
+        except Exception as e:
+            print(f"⚠️ Ошибка сохранения данных: {e}")
 
         return old_column_name, self._task_to_dict(task) if self._task_to_dict else None
 
@@ -58,8 +75,7 @@ class TasksMoveService:
             print(f"❌ move_task_to_column: Задача {task_id} не найдена")
             return None
 
-        print(
-            f"🔧 move_task_to_column: задача={task_id}, target_col={target_column_id}, current_col={task.column_id}")
+        print(f"🔧 move_task_to_column: задача={task_id}, target_col={target_column_id}, current_col={task.column_id}")
 
         if task.column_id == target_column_id:
             print("ℹ️ Задача уже в целевой колонке")
@@ -76,28 +92,42 @@ class TasksMoveService:
             return None
 
         # ===== ЛОГИКА ДЛЯ ПРОГРЕССА ПРИ ПЕРЕМЕЩЕНИИ =====
-        # Если перемещаем в Done колонку - устанавливаем прогресс 100%
         if target_column.is_done_column:
             print(f"✅ Перемещение в Done колонку '{target_column.name}' - устанавливаем прогресс 100%")
             task.progress_percent = 100.0
             task.completed_at = datetime.now()
+            # ❌ НЕ ИСПОЛЬЗУЙТЕ: task.completed = True
             print(f"   Прогресс: {task.progress_percent}%")
             print(f"   Дата завершения: {task.completed_at}")
         else:
-            # Если перемещаем ИЗ Done колонки - не трогаем прогресс, пользователь сам скорректирует
             print(
                 f"📦 Перемещение из колонки '{task.column.name if task.column else 'None'}' в '{target_column.name}' - прогресс не меняется")
 
-        # Если перемещаем из Done колонки - убираем дату завершения
         if task.column and task.column.is_done_column and not target_column.is_done_column:
-            print(f"⚠️ Перемещение из Done колонки - задача возвращена в работу, дата завершения сброшена")
+            print(f"⚠️ Перемещение из Done колонки - задача возвращена в работу")
             task.completed_at = None
+            # ❌ НЕ ИСПОЛЬЗУЙТЕ: task.completed = False
 
         task.column_id = target_column_id
         task.updated_at = datetime.now()
         self.db_session.commit()
 
-        # Обновляем КПД сотрудника при любом перемещении (на всякий случай)
+        # === СОХРАНЯЕМ ДАННЫЕ ДЛЯ ОБУЧЕНИЯ ===
+        try:
+            from services.tasks_service.task_data_collector import get_task_data_collector
+            collector = get_task_data_collector()
+            task_dict = self._task_to_dict(task) if self._task_to_dict else None
+            if task_dict:
+                collector.save_task_data(
+                    task_data=task_dict,
+                    user_id=task.created_by or 0,
+                    project_id=task.project_id
+                )
+                print(f"📊 Данные задачи {task_id} сохранены для обучения (перемещение)")
+        except Exception as e:
+            print(f"⚠️ Ошибка сохранения данных при перемещении: {e}")
+
+        # Обновляем КПД сотрудника при любом перемещении
         if task.assigned_to:
             self._update_employee_kpd(task.assigned_to)
 
@@ -188,8 +218,6 @@ class TasksMoveService:
             print(f"❌ Ошибка переупорядочивания: {e}")
             return False
 
-    # services/tasks_service/tasks_move_service.py
-
     def validate_move(self, task_id: int, target_column_id: int) -> Tuple[bool, str]:
         """Проверить возможность перемещения задачи"""
         task = self.repo.get_by_id(task_id)
@@ -224,10 +252,6 @@ class TasksMoveService:
         # Здесь можно добавить логику проверки подзадач
         return True
 
-    # ==========================================================
-    # Массовые операции с перемещением
-    # ==========================================================
-
     def move_all_tasks_to_column(self, from_column_id: int, to_column_id: int) -> int:
         """Перемещает все задачи из одной колонки в другую"""
         stmt = update(Task).where(
@@ -239,10 +263,6 @@ class TasksMoveService:
         result = self.db_session.execute(stmt)
         self.db_session.commit()
         return result.rowcount
-
-    # ==========================================================
-    # Вспомогательные методы
-    # ==========================================================
 
     def _get_column_by_name(self, column_name: str, project_id: int = None) -> Optional[BoardColumn]:
         """Получить колонку по имени"""

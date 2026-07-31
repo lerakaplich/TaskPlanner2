@@ -25,7 +25,6 @@
         stop:0 #f8f5ed, stop:1 #f0e9d9);
 }</string>
   </property>
-
   <layout class="QVBoxLayout" name="mainLayout">
    <property name="spacing">
     <number>30</number>
@@ -42,14 +41,13 @@
    <property name="bottomMargin">
     <number>50</number>
    </property>
-
-   <!-- Заголовок TaskPlanner -->
    <item>
     <widget class="QLabel" name="titleLabel">
      <property name="font">
       <font>
        <family>Segoe UI</family>
        <pointsize>72</pointsize>
+       <weight>75</weight>
        <bold>true</bold>
       </font>
      </property>
@@ -57,32 +55,23 @@
       <string notr="true">color: #ccab6e; letter-spacing: -3px;</string>
      </property>
      <property name="text">
-      <string>TaskPlanner</string>
+      <string>Импульс</string>
      </property>
      <property name="alignment">
-      <set>Qt::AlignmentFlag::AlignCenter</set>
+      <set>Qt::AlignCenter</set>
      </property>
     </widget>
    </item>
-
-   <!-- Основная горизонтальная раскладка -->
    <item>
     <layout class="QHBoxLayout" name="contentLayout">
      <property name="spacing">
       <number>60</number>
      </property>
-
-     <!-- ====================== ЛЕВАЯ ПАНЕЛЬ ====================== -->
      <item>
       <layout class="QVBoxLayout" name="leftPanel">
        <property name="spacing">
         <number>0</number>
        </property>
-       <property name="alignment">
-        <set>Qt::AlignmentFlag::AlignCenter</set>
-       </property>
-
-       <!-- Воздух сверху -->
        <item>
         <spacer name="leftTopSpacer">
          <property name="orientation">
@@ -99,26 +88,19 @@
          </property>
         </spacer>
        </item>
-
-       <!-- Чекбокс-иконка -->
        <item>
         <widget class="QLabel" name="checkboxImageLabel">
-         <property name="text">
-          <string/>
-         </property>
          <property name="minimumSize">
           <size>
            <width>180</width>
            <height>180</height>
           </size>
          </property>
-         <property name="alignment">
-          <set>Qt::AlignmentFlag::AlignCenter</set>
+         <property name="text">
+          <string/>
          </property>
         </widget>
        </item>
-
-       <!-- Промежуток между иконками -->
        <item>
         <spacer name="leftMiddleSpacer">
          <property name="orientation">
@@ -135,26 +117,19 @@
          </property>
         </spacer>
        </item>
-
-       <!-- QR-код -->
        <item>
         <widget class="QLabel" name="qrImageLabel">
-         <property name="text">
-          <string/>
-         </property>
          <property name="minimumSize">
           <size>
            <width>260</width>
            <height>260</height>
           </size>
          </property>
-         <property name="alignment">
-          <set>Qt::AlignmentFlag::AlignCenter</set>
+         <property name="text">
+          <string/>
          </property>
         </widget>
        </item>
-
-       <!-- Воздух снизу -->
        <item>
         <spacer name="leftBottomSpacer">
          <property name="orientation">
@@ -173,8 +148,6 @@
        </item>
       </layout>
      </item>
-
-     <!-- ====================== ЦЕНТРАЛЬНАЯ КАРТОЧКА ====================== -->
      <item>
       <widget class="QFrame" name="authFrame">
        <property name="maximumSize">
@@ -191,10 +164,7 @@
 }</string>
        </property>
        <property name="frameShape">
-        <enum>QFrame::Shape::StyledPanel</enum>
-       </property>
-       <property name="frameShadow">
-        <enum>QFrame::Shadow::Raised</enum>
+        <enum>QFrame::NoFrame</enum>
        </property>
        <layout class="QVBoxLayout" name="frameLayout">
         <property name="spacing">
@@ -212,13 +182,13 @@
         <property name="bottomMargin">
          <number>65</number>
         </property>
-
         <item>
          <widget class="QLabel" name="authTitle">
           <property name="font">
            <font>
             <family>Segoe UI</family>
             <pointsize>32</pointsize>
+            <weight>75</weight>
             <bold>true</bold>
            </font>
           </property>
@@ -227,9 +197,6 @@
           </property>
           <property name="text">
            <string>Авторизация</string>
-          </property>
-          <property name="alignment">
-           <set>Qt::AlignmentFlag::AlignCenter</set>
           </property>
          </widget>
         </item>
@@ -275,7 +242,7 @@ QLineEdit:focus {
 }</string>
             </property>
             <property name="echoMode">
-             <enum>QLineEdit::EchoMode::Password</enum>
+             <enum>QLineEdit::Normal</enum>
             </property>
             <property name="placeholderText">
              <string>Пароль</string>
@@ -407,18 +374,11 @@ QPushButton:pressed {
        </layout>
       </widget>
      </item>
-
-     <!-- ====================== ПРАВАЯ ПАНЕЛЬ ====================== -->
      <item>
       <layout class="QVBoxLayout" name="rightPanel">
        <property name="spacing">
         <number>0</number>
        </property>
-       <property name="alignment">
-        <set>Qt::AlignmentFlag::AlignCenter</set>
-       </property>
-
-       <!-- Воздух сверху -->
        <item>
         <spacer name="rightTopSpacer">
          <property name="orientation">
@@ -435,26 +395,19 @@ QPushButton:pressed {
          </property>
         </spacer>
        </item>
-
-       <!-- Часы -->
        <item>
         <widget class="QLabel" name="clockImageLabel">
-         <property name="text">
-          <string/>
-         </property>
          <property name="minimumSize">
           <size>
            <width>180</width>
            <height>180</height>
           </size>
          </property>
-         <property name="alignment">
-          <set>Qt::AlignmentFlag::AlignCenter</set>
+         <property name="text">
+          <string/>
          </property>
         </widget>
        </item>
-
-       <!-- Промежуток 1 -->
        <item>
         <spacer name="rightMiddle1Spacer">
          <property name="orientation">
@@ -471,26 +424,19 @@ QPushButton:pressed {
          </property>
         </spacer>
        </item>
-
-       <!-- Шестерёнка -->
        <item>
         <widget class="QLabel" name="gearImageLabel">
-         <property name="text">
-          <string/>
-         </property>
          <property name="minimumSize">
           <size>
            <width>180</width>
            <height>180</height>
           </size>
          </property>
-         <property name="alignment">
-          <set>Qt::AlignmentFlag::AlignCenter</set>
+         <property name="text">
+          <string/>
          </property>
         </widget>
        </item>
-
-       <!-- Промежуток 2 -->
        <item>
         <spacer name="rightMiddle2Spacer">
          <property name="orientation">
@@ -507,15 +453,12 @@ QPushButton:pressed {
          </property>
         </spacer>
        </item>
-
-       <!-- Слоган -->
        <item>
         <widget class="QLabel" name="sloganLabel">
          <property name="font">
           <font>
-           <family>Segoe UI</family>
-           <pointsize>24</pointsize>
-           <italic>true</italic>
+           <weight>62</weight>
+           <bold>true</bold>
           </font>
          </property>
          <property name="styleSheet">
@@ -524,16 +467,11 @@ QPushButton:pressed {
          <property name="text">
           <string>Ваша команда заговорит на языке продуктивности</string>
          </property>
-         <property name="alignment">
-          <set>Qt::AlignmentFlag::AlignCenter</set>
-         </property>
          <property name="wordWrap">
           <bool>true</bool>
          </property>
         </widget>
        </item>
-
-       <!-- Воздух снизу -->
        <item>
         <spacer name="rightBottomSpacer">
          <property name="orientation">
@@ -554,8 +492,6 @@ QPushButton:pressed {
      </item>
     </layout>
    </item>
-
-   <!-- Нижний логотип -->
    <item>
     <layout class="QHBoxLayout" name="logoLayout">
      <item>
@@ -575,9 +511,6 @@ QPushButton:pressed {
       <widget class="QLabel" name="logoLabel">
        <property name="text">
         <string/>
-       </property>
-       <property name="alignment">
-        <set>Qt::AlignmentFlag::AlignCenter</set>
        </property>
       </widget>
      </item>

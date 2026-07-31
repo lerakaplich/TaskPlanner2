@@ -55,6 +55,15 @@ class TaskDependency(Base):
         back_populates="dependencies_as_successor"
     )
 
+class TaskAssignee(Base):
+    __tablename__ = "task_assignees"
+
+    task_id: Mapped[int] = mapped_column(ForeignKey("tasks.id", ondelete="CASCADE"), primary_key=True)
+    employee_id: Mapped[int] = mapped_column(ForeignKey("employees_data.employee_id", ondelete="CASCADE"), primary_key=True)
+    assigned_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
+
+    task: Mapped["Task"] = relationship(back_populates="assignees")
+
 class Task(Base):
     __tablename__ = "tasks"
 
@@ -70,7 +79,16 @@ class Task(Base):
     )
     deadline: Mapped[Optional[datetime]]
     created_by: Mapped[Optional[int]]
-    assigned_to: Mapped[Optional[int]]
+    # Старое поле для одного исполнителя (оставляем для обратной совместимости)
+    assigned_to: Mapped[Optional[int]] = mapped_column(ForeignKey("employees_data.employee_id"), nullable=True)
+
+    # Новое поле для множественных исполнителей
+    assignees: Mapped[List["TaskAssignee"]] = relationship(
+        "TaskAssignee",
+        back_populates="task",
+        cascade="all, delete-orphan",
+        lazy="selectin"
+    )
     created_at: Mapped[datetime]
     updated_at: Mapped[datetime]
     is_archived: Mapped[bool] = mapped_column(Boolean, default=False)

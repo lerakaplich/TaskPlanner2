@@ -3,6 +3,7 @@
 import os
 from PyQt6 import uic
 from PyQt6.QtWidgets import QMainWindow, QMessageBox
+from PyQt6.QtCore import QTimer
 
 from services.analytics_service.analytics_service import AnalyticsService
 from services.archive_service import ArchiveService
@@ -13,7 +14,8 @@ from services.projects_service.projects_service import ProjectsService
 from services.permissions.permission_service import PermissionService
 
 from windows.projects.main_window_handlers import (
-    ProjectViewHandler, NavigationHandler, UIHandler, SocketHandler
+    ProjectViewHandler, NavigationHandler, UIHandler, SocketHandler,
+    GlobalSearchHandler  # <-- НОВЫЙ ИМПОРТ
 )
 
 
@@ -73,7 +75,6 @@ class MainWindow(QMainWindow):
     def _init_permission_service(self):
         """Инициализация сервиса прав доступа"""
         try:
-            # СОЗДАЁМ EmployeeService ДЛЯ ОПРЕДЕЛЕНИЯ СИСТЕМНОЙ РОЛИ
             from services.employee_service.employee_service import EmployeeService
             from database import get_employees_session
 
@@ -84,16 +85,14 @@ class MainWindow(QMainWindow):
                 user_id=self.current_user_id,
                 app_service=self.project_service,
                 project_service=self.project_service,
-                employee_service=employee_service,  # <-- ПЕРЕДАЁМ
+                employee_service=employee_service,
                 session=self.session
             )
-            # ✅ ВАЖНО: Очищаем кэш после инициализации
             self.permission_service.clear_cache()
 
             print(f"🔐 Сервис прав инициализирован для пользователя {self.current_user_id}")
             print(f"   Роль в приложении: {self.permission_service.app_manager.role.value}")
 
-            # Получаем системную роль для отладки
             system_role = self.permission_service._get_system_role()
             print(f"   Системная роль: {system_role.value if system_role else 'None'}")
 
@@ -101,7 +100,6 @@ class MainWindow(QMainWindow):
             print(f"⚠️ Ошибка инициализации сервиса прав: {e}")
             import traceback
             traceback.print_exc()
-            # Создаём минимальный сервис прав
             from services.permissions.app_permissions import AppPermissionManager, AppRole
             self.permission_service = PermissionService(
                 user_id=self.current_user_id,
@@ -129,17 +127,11 @@ class MainWindow(QMainWindow):
         if not self.permission_service:
             return
 
-        # 1. Кнопка создания проекта
         if hasattr(self, 'btnCreateProject'):
             can_create = self.permission_service.can_show_create_project_button()
-            print(f"   🔍 can_show_create_project_button = {can_create}")
-            print(f"   🔍 combined_role = {self.permission_service.get_combined_role()}")
             self.btnCreateProject.setVisible(can_create)
-            print(f"   btnCreateProject visible: {can_create}")
 
-        # 2. Настройка видимости вкладок в левой панели
         visible_tabs = self.permission_service.app_manager.get_visible_tabs()
-        print(f"   📋 visible_tabs: {visible_tabs}")
 
         tab_buttons = {
             'projects': None,
@@ -148,12 +140,11 @@ class MainWindow(QMainWindow):
             'gantt': None,
             'analytics': None,
             'chat': None,
-            'overtime': None,  # ← УБЕДИТЬСЯ, ЧТО ЕСТЬ
+            'overtime': None,
             'settings': None,
             'archive': None
         }
 
-        # Получаем кнопки из левой панели
         if hasattr(self.leftPanel, 'btnMain'):
             tab_buttons['projects'] = self.leftPanel.btnMain
         if hasattr(self.leftPanel, 'btnMyTasks'):
@@ -166,33 +157,29 @@ class MainWindow(QMainWindow):
             tab_buttons['analytics'] = self.leftPanel.btnAnalytics
         if hasattr(self.leftPanel, 'btnChat'):
             tab_buttons['chat'] = self.leftPanel.btnChat
-        if hasattr(self.leftPanel, 'btnOvertime'):  # ← УБЕДИТЬСЯ, ЧТО ЕСТЬ
+        if hasattr(self.leftPanel, 'btnOvertime'):
             tab_buttons['overtime'] = self.leftPanel.btnOvertime
         if hasattr(self.leftPanel, 'btnSettings'):
             tab_buttons['settings'] = self.leftPanel.btnSettings
         if hasattr(self.leftPanel, 'btnArchive'):
             tab_buttons['archive'] = self.leftPanel.btnArchive
 
-        # Применяем видимость
         for tab_name, button in tab_buttons.items():
             if button:
                 is_visible = tab_name in visible_tabs
                 button.setVisible(is_visible)
-                print(f"   {tab_name}: visible={is_visible}")
 
     def _on_columns_updated(self):
         """Обработчик обновления колонок"""
         print("📢 Получен сигнал обновления колонок")
 
         if hasattr(self, 'navigation') and 'my_tasks' in self.navigation.pages:
-            print("   - Прямое обновление страницы Мои задачи")
             my_tasks = self.navigation.pages['my_tasks']
             if hasattr(my_tasks.service.crud, '_column_cache'):
                 my_tasks.service.crud._column_cache = None
             my_tasks.refresh_columns()
 
         if hasattr(self, 'navigation') and 'other_tasks' in self.navigation.pages:
-            print("   - Обновляем страницу Чужие задачи")
             self.navigation.pages['other_tasks'].refresh_columns()
 
         if hasattr(self, 'navigation'):
@@ -206,7 +193,6 @@ class MainWindow(QMainWindow):
 
     def _force_refresh_task_pages(self):
         """Принудительное обновление страниц задач"""
-        print("📢 Принудительное обновление страниц задач")
         if hasattr(self, 'navigation'):
             if 'my_tasks' in self.navigation.pages:
                 self.navigation.pages['my_tasks'].refresh_columns()
@@ -237,6 +223,7 @@ class MainWindow(QMainWindow):
         self.navigation = NavigationHandler(self)
         self.ui_handler = UIHandler(self)
         self.socket_handler = SocketHandler(self)
+        self.global_search = GlobalSearchHandler(self)  # <-- НОВЫЙ ОБРАБОТЧИК
 
         self.page_indices = self.navigation.get_page_index()
 
@@ -249,7 +236,7 @@ class MainWindow(QMainWindow):
             self.leftPanel.btnGantt: self.navigation.PAGE_GANTT,
             self.leftPanel.btnAnalytics: self.navigation.PAGE_ANALYTICS,
             self.leftPanel.btnChat: self.navigation.PAGE_CHAT,
-            self.leftPanel.btnOvertime: self.navigation.PAGE_OVERTIME,  # <-- ДОБАВИТЬ ЭТУ СТРОКУ
+            self.leftPanel.btnOvertime: self.navigation.PAGE_OVERTIME,
             self.leftPanel.btnSettings: self.navigation.PAGE_SETTINGS
         }
         if hasattr(self.leftPanel, 'btnArchive'):
@@ -258,16 +245,23 @@ class MainWindow(QMainWindow):
         for btn, index in self.nav_map.items():
             btn.clicked.connect(lambda checked, i=index: self.navigation.switch_page(i))
 
-        # ... остальной код
-
         if hasattr(self, 'btnCreateProject'):
             self.btnCreateProject.clicked.connect(self.project_handler.create_project)
         if hasattr(self, 'btnProfile'):
             self.btnProfile.clicked.connect(self.navigation.show_profile)
         if hasattr(self.leftPanel, 'btnCollapse'):
             self.leftPanel.btnCollapse.clicked.connect(self.ui_handler.toggle_left_panel)
+
+        # --- ИЗМЕНЕНИЕ: Поиск теперь глобальный ---
         if hasattr(self, 'searchInput'):
-            self.searchInput.textChanged.connect(self.project_handler.search_projects)
+            # Отключаем старую привязку
+            try:
+                self.searchInput.textChanged.disconnect()
+            except:
+                pass
+            # Подключаем глобальный поиск
+            self.searchInput.textChanged.connect(self.global_search.search_all)
+
         if hasattr(self, 'filterCombo'):
             self.filterCombo.currentTextChanged.connect(self.project_handler.filter_projects)
         if hasattr(self, 'btnNotifications'):
@@ -313,7 +307,8 @@ class MainWindow(QMainWindow):
         self.project_handler.view_project(project_id)
 
     def search_projects(self, text):
-        self.project_handler.search_projects(text)
+        """Поиск по проектам (оставляем для обратной совместимости)"""
+        self.global_search.search_all(text)
 
     def filter_projects(self, filter_text):
         self.project_handler.filter_projects(filter_text)

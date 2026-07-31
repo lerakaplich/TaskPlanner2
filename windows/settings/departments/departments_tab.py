@@ -511,3 +511,17 @@ class DepartmentsTab(BaseTab):
             self.add_card_to_grid(card, i)
 
         self.set_last_row_stretch()
+
+    def _get_card_search_text(self, card) -> str:
+        """Возвращает текст для поиска из карточки отдела"""
+        if hasattr(card, 'nameLabel'):
+            return card.nameLabel.text()
+        return ""
+
+    def _apply_search_to_items(self):
+        """Переопределяем для отделов - уже есть своя логика через фильтры"""
+        # В departments_tab уже есть своя логика фильтрации через filter_search_text
+        # Поэтому используем её
+        if hasattr(self, 'filter_search_text'):
+            self.filter_search_text = self._search_query
+            self.refresh_cards()

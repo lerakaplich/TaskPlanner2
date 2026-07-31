@@ -38,6 +38,10 @@
 |  |  +-- warn-TasksServer.txt
 |  |  +-- xref-TasksServer.html
 +-- chat_server.py
++-- cli
+|  +-- train_model.py
++-- data
+|  +-- training
 +-- database.py
 +-- dist
 |  +-- main
@@ -58,6 +62,10 @@
 |  +-- taskplanner_icon.png
 +-- main.py
 +-- main.spec
++-- ml
+|  +-- __pycache__
+|  +-- models
+|  +-- task_time_predictor.py
 +-- models
 |  +-- __pycache__
 |  +-- chat.py
@@ -83,7 +91,7 @@
 |  +-- project_repo.py
 |  +-- tag_repo.py
 |  +-- task_repo.py
-+-- requirements
++-- requirements.txt
 +-- script.iss
 +-- ServerApp.spec
 +-- services
@@ -156,9 +164,9 @@
 |  |  +-- tasks_service.py
 |  |  +-- tasks_statistics_service.py
 |  |  +-- tasks_tag_service.py
+|  +-- training_scheduler.py
 +-- shared_state.py
 +-- structure.txt
-+-- taskplanner.zip
 +-- taskplanner_icon.ico
 +-- taskplanner_icon.png
 +-- TasksServer.spec
@@ -249,6 +257,7 @@
 +-- utils
 |  +-- __pycache__
 |  +-- error_handler.py
+|  +-- model_manager.py
 |  +-- socket_manager.py
 +-- windows
 |  +-- analytics
@@ -296,6 +305,8 @@
 |  +-- data
 |  |  +-- training
 |  |  |  +-- tasks_data_20260707_112216.json
+|  |  |  +-- tasks_data_20260729_092006.json
+|  |  |  +-- tasks_data_20260729_133622.json
 |  +-- gantt
 |  |  +-- __pycache__
 |  |  +-- calendar_widget.py
@@ -312,6 +323,8 @@
 |  +-- login
 |  |  +-- __pycache__
 |  |  +-- login_window.py
+|  +-- ml
+|  |  +-- models
 |  +-- my_tasks
 |  |  +-- __pycache__
 |  |  +-- my_tasks_handlers.py

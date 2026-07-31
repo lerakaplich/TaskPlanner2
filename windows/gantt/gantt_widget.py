@@ -328,9 +328,6 @@ class GanttWidget(QWidget):
         if hasattr(self, 'calendar_widget') and self.calendar_widget:
             self.calendar_widget.task_clicked.connect(self._handlers.on_calendar_task_clicked)
 
-    # ==========================================================
-    # ПУБЛИЧНЫЕ МЕТОДЫ ДЛЯ ОБРАБОТЧИКОВ
-    # ==========================================================
 
     def _refresh_ui(self):
         self._views.refresh_ui()

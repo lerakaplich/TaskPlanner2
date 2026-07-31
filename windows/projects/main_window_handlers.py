@@ -1,7 +1,7 @@
 # windows/projects/main_window_handlers.py
 
-from PyQt6.QtWidgets import QMessageBox, QDialog, QSizePolicy, QSpacerItem
-from PyQt6.QtCore import QObject, pyqtSignal, QTimer
+from PyQt6.QtWidgets import QMessageBox, QDialog, QSizePolicy, QSpacerItem, QApplication
+from PyQt6.QtCore import QObject, pyqtSignal, QTimer, Qt
 
 from services.employee_service.employee_service import EmployeeService
 from windows.other_tasks.others_tasks_page import OthersTasksPage
@@ -10,6 +10,247 @@ from windows.projects.project_edit_dialog import ProjectEditDialog
 from windows.projects.project_creation_dialog import ProjectCreationDialog
 from windows.projects.project_view_page import ProjectViewPage
 
+
+class GlobalSearchHandler:
+    """Обработчик глобального поиска по всем страницам"""
+
+    def __init__(self, main_window):
+        self.main = main_window
+        self.search_timer = QTimer()
+        self.search_timer.setSingleShot(True)
+        self.search_timer.timeout.connect(self._perform_search)
+        self._last_query = ""
+        self._is_searching = False
+        self._search_results = []
+
+    def search_all(self, query: str):
+        """Глобальный поиск по всем страницам с задержкой 300мс"""
+        query = query.strip()
+        self._last_query = query
+        self.search_timer.stop()
+        self.search_timer.start(300)
+
+    def _perform_search(self):
+        """Выполняет поиск по всем страницам"""
+        query = self._last_query.lower().strip()
+
+        if self._is_searching:
+            return
+
+        self._is_searching = True
+
+        try:
+            # Очищаем предыдущие результаты
+            self._clear_search_results()
+
+            if not query:
+                self._restore_default_view()
+                self._update_search_status("")
+                return
+
+            total_found = 0
+
+            # 1. Поиск по проектам
+            total_found += self._search_projects(query)
+
+            # 2. Поиск по задачам (Мои задачи)
+            total_found += self._search_my_tasks(query)
+
+            # 3. Поиск по задачам (Чужие задачи)
+            total_found += self._search_other_tasks(query)
+
+            # 4. Поиск по переработкам
+            total_found += self._search_overtime(query)
+
+            # 5. Поиск по чатам
+            total_found += self._search_chats(query)
+
+            # 6. Поиск по архиву
+            total_found += self._search_archive(query)
+
+            # 7. Поиск по сотрудникам (настройки)
+            total_found += self._search_employees(query)
+
+            # Обновляем статус
+            self._update_search_status(query, total_found)
+
+        except Exception as e:
+            print(f"⚠️ Ошибка при выполнении поиска: {e}")
+            import traceback
+            traceback.print_exc()
+        finally:
+            self._is_searching = False
+
+    def _search_projects(self, query: str) -> int:
+        """Поиск по проектам"""
+        if not hasattr(self.main, 'project_handler'):
+            return 0
+
+        all_projects = self.main.project_service.get_projects_for_cards(
+            search_query="",
+            status_filter="Все",
+            owner_filter=False
+        )
+
+        filtered = []
+        for project in all_projects:
+            if self._project_matches(project, query):
+                filtered.append(project)
+
+        # Если на странице проектов - обновляем
+        if self.main.contentStack.currentIndex() == 0:
+            self._update_projects_view(filtered)
+
+        self._search_results = filtered
+        return len(filtered)
+
+    def _project_matches(self, project, query: str) -> bool:
+        """Проверяет соответствие проекта запросу"""
+        fields = [
+            getattr(project, 'name', '') or '',
+            getattr(project, 'description', '') or '',
+            getattr(project, 'customer', '') or '',
+            getattr(project, 'contract_number', '') or '',
+            getattr(project, 'status', '') or '',
+            getattr(project, 'type', '') or '',
+        ]
+        return any(query in field.lower() for field in fields)
+
+    def _search_my_tasks(self, query: str) -> int:
+        """Поиск по моим задачам"""
+        if 'my_tasks' not in self.main.navigation.pages:
+            return 0
+
+        page = self.main.navigation.pages['my_tasks']
+        if hasattr(page, 'apply_search_filter'):
+            page.apply_search_filter(query)
+            if hasattr(page, 'get_filtered_count'):
+                return page.get_filtered_count()
+        return 0
+
+    def _search_other_tasks(self, query: str) -> int:
+        """Поиск по чужим задачам"""
+        if 'other_tasks' not in self.main.navigation.pages:
+            return 0
+
+        page = self.main.navigation.pages['other_tasks']
+        if hasattr(page, 'apply_search_filter'):
+            page.apply_search_filter(query)
+            if hasattr(page, 'get_filtered_count'):
+                return page.get_filtered_count()
+        return 0
+
+    def _search_overtime(self, query: str) -> int:
+        """Поиск по переработкам"""
+        if 'overtime' not in self.main.navigation.pages:
+            return 0
+
+        page = self.main.navigation.pages['overtime']
+        if hasattr(page, 'apply_search_filter'):
+            page.apply_search_filter(query)
+            if hasattr(page, 'get_filtered_count'):
+                return page.get_filtered_count()
+        return 0
+
+    def _search_chats(self, query: str) -> int:
+        """Поиск по чатам"""
+        if 'chat' not in self.main.navigation.pages:
+            return 0
+
+        page = self.main.navigation.pages['chat']
+        if hasattr(page, 'apply_search_filter'):
+            page.apply_search_filter(query)
+            if hasattr(page, 'get_filtered_count'):
+                return page.get_filtered_count()
+        return 0
+
+    def _search_archive(self, query: str) -> int:
+        """Поиск по архиву"""
+        if 'archive' not in self.main.navigation.pages:
+            return 0
+
+        page = self.main.navigation.pages['archive']
+        if hasattr(page, 'apply_search_filter'):
+            page.apply_search_filter(query)
+            if hasattr(page, 'get_filtered_count'):
+                return page.get_filtered_count()
+        return 0
+
+    def _search_employees(self, query: str) -> int:
+        """Поиск по сотрудникам (вкладка Настройки)"""
+        if 'settings' not in self.main.navigation.pages:
+            return 0
+
+        page = self.main.navigation.pages['settings']
+        if hasattr(page, 'employees_tab'):
+            employees_tab = page.employees_tab
+            if employees_tab is not None and hasattr(employees_tab, 'apply_search_filter'):
+                employees_tab.apply_search_filter(query)
+                if hasattr(employees_tab, 'get_filtered_count'):
+                    return employees_tab.get_filtered_count()
+        return 0
+
+    def _update_projects_view(self, projects):
+        """Обновляет отображение проектов"""
+        if not hasattr(self.main, 'project_cards'):
+            return
+
+        for card in self.main.project_cards:
+            self.main.projectsGrid.removeWidget(card)
+            card.deleteLater()
+        self.main.project_cards = []
+
+        for project in projects:
+            card = ProjectCard(
+                project_id=project.id,
+                project_data=project,
+                parent=None,
+                service=self.main.project_service,
+                permission_service=self.main.permission_service
+            )
+            card.edit_clicked.connect(self.main.edit_project)
+            card.open_clicked.connect(self.main.open_project)
+            card.archive_clicked.connect(self.main.archive_project)
+            card.view_clicked.connect(self.main.view_project)
+            self.main.project_cards.append(card)
+
+        self.main.current_columns = -1
+        self.main.project_handler._adjust_card_columns()
+
+    def _clear_search_results(self):
+        """Очищает результаты поиска"""
+        pass
+
+    def _restore_default_view(self):
+        """Восстанавливает стандартный вид"""
+        if hasattr(self.main, 'project_handler'):
+            self.main.project_handler.refresh_projects_view()
+
+        for page_name in ['my_tasks', 'other_tasks', 'overtime', 'chat', 'archive']:
+            if page_name in self.main.navigation.pages:
+                page = self.main.navigation.pages[page_name]
+                if hasattr(page, 'clear_search_filter'):
+                    page.clear_search_filter()
+
+        # Исправляем: проверяем, есть ли employees_tab и есть ли у него метод clear_search_filter
+        if 'settings' in self.main.navigation.pages:
+            page = self.main.navigation.pages['settings']
+            if hasattr(page, 'employees_tab'):
+                employees_tab = page.employees_tab
+                # Проверяем, что employees_tab это объект, а не None
+                if employees_tab is not None and hasattr(employees_tab, 'clear_search_filter'):
+                    employees_tab.clear_search_filter()
+
+    def _update_search_status(self, query: str, count: int = 0):
+        """Обновляет статусную строку"""
+        if not query:
+            self.main.statusBar().showMessage("Готов")
+            return
+
+        if count > 0:
+            self.main.statusBar().showMessage(f"🔍 Найдено: {count} результатов по запросу '{query}'")
+        else:
+            self.main.statusBar().showMessage(f"🔍 Ничего не найдено по запросу '{query}'")
 
 class ProjectViewHandler:
     """Обработчик операций с проектами (CRUD)"""
@@ -24,17 +265,10 @@ class ProjectViewHandler:
             QMessageBox.warning(self.main, "Ошибка", "Проект не найден")
             return
 
-        # Открываем диалог редактирования в режиме просмотра
         dialog_data = self.main.project_service.prepare_edit_dialog_data(project_dto)
         dialog = ProjectEditDialog(dialog_data, parent=self.main, service=self.main.project_service)
-
-        # Передаём сервис прав в диалог
         dialog.permission_service = self.main.permission_service
-
-        # Настраиваем режим просмотра
         dialog.setup_edit_mode(project_id)
-
-        # Показываем диалог (кнопка сохранения будет скрыта)
         dialog.exec()
 
     def edit_project(self, project_id):
@@ -44,16 +278,12 @@ class ProjectViewHandler:
             QMessageBox.warning(self.main, "Ошибка", "Проект не найден")
             return
 
-        # Проверяем права
         if self.main.permission_service and not self.main.permission_service.can_edit_project(project_id):
-            # Если нет прав на редактирование, открываем в режиме просмотра
             self.view_project(project_id)
             return
 
         dialog_data = self.main.project_service.prepare_edit_dialog_data(project_dto)
         dialog = ProjectEditDialog(dialog_data, parent=self.main, service=self.main.project_service)
-
-        # Передаём сервис прав в диалог
         dialog.permission_service = self.main.permission_service
         dialog.setup_edit_mode(project_id)
 
@@ -96,7 +326,7 @@ class ProjectViewHandler:
                 project_data=dto,
                 parent=None,
                 service=self.main.project_service,
-                permission_service=self.main.permission_service  # <-- ЭТО ВАЖНО!
+                permission_service=self.main.permission_service
             )
             card.edit_clicked.connect(self.main.edit_project)
             card.open_clicked.connect(self.main.open_project)
@@ -148,7 +378,6 @@ class ProjectViewHandler:
         if dialog.exec() == QDialog.DialogCode.Accepted:
             raw_data = dialog.get_project_data()
 
-            # Используем новый метод с автоматическим созданием чата
             new_project_dto = self.main.project_service.create_project_with_chat(
                 raw_data,
                 creator_id=self.main.current_user_id
@@ -157,7 +386,6 @@ class ProjectViewHandler:
             if new_project_dto:
                 self.refresh_projects_view()
 
-                # Обновляем список чатов, если чат-страница уже создана
                 if 'chat' in self.main.pages:
                     self.main.pages['chat'].load_chat_list()
 
@@ -173,7 +401,6 @@ class ProjectViewHandler:
     def archive_project(self, project_id):
         """Архивация проекта с проверкой прав"""
         try:
-            # Проверяем права на архивацию
             if self.main.permission_service and not self.main.permission_service.can_archive_project(project_id):
                 QMessageBox.warning(
                     self.main,
@@ -221,14 +448,14 @@ class ProjectViewHandler:
         project_page = ProjectViewPage(
             session=self.main.session,
             project_id=project_id,
-            project_service=self.main.project_service,  # ← заменить service на project_service
+            project_service=self.main.project_service,
             parent=self.main
         )
         self.main.contentStack.addWidget(project_page)
         self.main.contentStack.setCurrentWidget(project_page)
 
     def search_projects(self, text):
-        """Поиск проектов"""
+        """Поиск проектов (оставлено для обратной совместимости)"""
         self.main.current_search_query = text
         self.refresh_projects_view()
 
@@ -252,8 +479,8 @@ class NavigationHandler(QObject):
         super().__init__()
         self.main = main_window
         self.pages = {}
-        self._is_switching = False  # Флаг для предотвращения множественных переключений
-        self._pending_switch = None  # Ожидаемое переключение
+        self._is_switching = False
+        self._pending_switch = None
         self._loading_pages = set()
 
         # Индексы страниц
@@ -273,35 +500,22 @@ class NavigationHandler(QObject):
         print("🔄 Обновление колонок на страницах задач")
 
         if 'my_tasks' in self.pages:
-            print("   - Обновляем страницу Мои задачи")
             QTimer.singleShot(50, self.pages['my_tasks'].refresh_columns)
-        else:
-            print("   - Страница Мои задачи еще не создана")
 
         if 'other_tasks' in self.pages:
-            print("   - Обновляем страницу Чужие задачи")
             QTimer.singleShot(50, self.pages['other_tasks'].refresh_columns)
-        else:
-            print("   - Страница Чужие задачи еще не создана")
 
     def switch_page(self, page_index):
-        """Переключение между страницами с защитой от быстрых кликов и отладкой"""
+        """Переключение между страницами с защитой от быстрых кликов"""
         print(f"\n{'=' * 60}")
         print(f"🔀 ПЕРЕКЛЮЧЕНИЕ СТРАНИЦЫ: index={page_index}")
-        print(f"   - Текущая страница: {self.main.contentStack.currentIndex()}")
-        print(f"   - Загружено страниц в кэше: {list(self.pages.keys())}")
-        print(f"   - is_switching: {self._is_switching}")
-        print(f"   - pending_switch: {self._pending_switch}")
 
-        # Защита от множественных переключений
         if self._is_switching:
             self._pending_switch = page_index
-            print(f"   ⏳ Переключение уже выполняется, сохраняем pending={page_index}")
             return
 
         self._is_switching = True
 
-        # Определяем имя страницы для отладки
         page_names = {
             self.PAGE_PROJECTS: "Проекты",
             self.PAGE_MY_TASKS: "Мои задачи",
@@ -318,49 +532,34 @@ class NavigationHandler(QObject):
         print(f"   🎯 Целевая страница: {page_name}")
 
         try:
-            # Создаем страницу при первом открытии
             if page_index == self.PAGE_MY_TASKS:
-                print("   📄 Создаём/получаем страницу Мои задачи...")
                 page_was_created = 'my_tasks' not in self.pages
                 self.get_my_tasks_page()
-
                 if not page_was_created and 'my_tasks' in self.pages:
-                    print("   🔄 Страница уже была в кэше, перезагружаем задачи...")
                     self.pages['my_tasks'].load_tasks()
 
             elif page_index == self.PAGE_OTHER_TASKS:
-                print("   📄 Создаём/получаем страницу Чужие задачи...")
                 self.get_other_tasks_page()
 
             elif page_index == self.PAGE_GANTT:
-                print("   📄 Создаём/получаем страницу Гант...")
                 self.get_gantt_page()
             elif page_index == self.PAGE_ANALYTICS:
-                print("   📄 Создаём/получаем страницу Аналитика...")
                 self.get_analytics_page()
             elif page_index == self.PAGE_CHAT:
-                print("   📄 Создаём/получаем страницу Чат...")
                 self.get_chat_page()
             elif page_index == self.PAGE_OVERTIME:
-                print("   📄 Создаём/получаем страницу Переработки...")
                 self.get_overtime_page()
             elif page_index == self.PAGE_SETTINGS:
-                print("   📄 Создаём/получаем страницу Настройки...")
-                # Используем try-except для обработки ошибок
                 try:
                     self.get_settings_page()
                 except RuntimeError as e:
                     print(f"   ⚠️ Ошибка при получении страницы Настройки: {e}")
-                    # Если произошла ошибка, удаляем страницу из кэша и пробуем снова
                     if 'settings' in self.pages:
                         del self.pages['settings']
                     self.get_settings_page()
             elif page_index == self.PAGE_ARCHIVE:
-                print("   📄 Создаём/получаем страницу Архив...")
                 self.get_archive_page()
-
                 if 'archive' in self.pages:
-                    print("   📂 Показываем список проектов в архиве...")
                     if hasattr(self.pages['archive'], 'refresh_current_view'):
                         self.pages['archive'].refresh_current_view()
                     elif hasattr(self.pages['archive'], 'show_projects_list'):
@@ -369,15 +568,13 @@ class NavigationHandler(QObject):
                         self.pages['archive']._update_projects_view()
 
             elif page_index == self.PAGE_PROJECTS:
-                print("   📄 Страница Проекты всегда доступна (индекс 0)")
+                pass
 
-            # Показываем страницу
-            print(f"   📺 Переключаем contentStack на индекс {page_index}")
             self.main.contentStack.setCurrentIndex(page_index)
 
             current_idx = self.main.contentStack.currentIndex()
             if current_idx == page_index:
-                print(f"   ✅ Успешно переключено на {page_name} (индекс {current_idx})")
+                print(f"   ✅ Успешно переключено на {page_name}")
             else:
                 print(f"   ⚠️ Ожидался индекс {page_index}, но текущий {current_idx}")
 
@@ -388,14 +585,12 @@ class NavigationHandler(QObject):
             import traceback
             traceback.print_exc()
         finally:
-            print(f"   🔓 Снимаем блокировку через 300мс")
             QTimer.singleShot(300, self._on_switch_complete)
 
         print(f"{'=' * 60}\n")
 
     def _update_nav_buttons_state(self, active_index):
         """Обновляет состояние кнопок навигации"""
-        # Определяем стили для нормального состояния
         normal_style = """
             QPushButton {
                 color: white;
@@ -412,7 +607,6 @@ class NavigationHandler(QObject):
             }
         """
 
-        # Определяем стили для активного (checked) состояния
         checked_style = """
             QPushButton {
                 color: white;
@@ -426,7 +620,6 @@ class NavigationHandler(QObject):
             }
         """
 
-        # Определяем стили для свернутой панели
         collapsed_normal_style = """
             QPushButton {
                 color: white;
@@ -454,7 +647,6 @@ class NavigationHandler(QObject):
             }
         """
 
-        # Проверяем, свернута ли панель
         is_collapsed = self.main.leftPanel.width() <= 100
 
         for i, btn in enumerate(self.main.nav_buttons):
@@ -473,13 +665,11 @@ class NavigationHandler(QObject):
 
     def _on_switch_complete(self):
         """Обработчик завершения переключения"""
-        print(f"✅ _on_switch_complete: is_switching={self._is_switching}, pending={self._pending_switch}")
         self._is_switching = False
 
         if self._pending_switch is not None:
             pending = self._pending_switch
             self._pending_switch = None
-            print(f"🔄 Выполняем отложенное переключение на {pending}")
             self.switch_page(pending)
 
     def get_my_tasks_page(self):
@@ -491,7 +681,7 @@ class NavigationHandler(QObject):
                 db_session=self.main.session,
                 current_user={"id": self.main.current_user_id, "last_name": "", "first_name": ""},
                 column_service=self.main.column_service,
-                permission_service=self.main.permission_service  # <-- ДОБАВИТЬ
+                permission_service=self.main.permission_service
             )
             self.pages['my_tasks'].open_project_requested.connect(self.open_project_by_id)
             self.main.contentStack.insertWidget(self.PAGE_MY_TASKS, self.pages['my_tasks'])
@@ -499,7 +689,7 @@ class NavigationHandler(QObject):
         return self.pages['my_tasks']
 
     def get_other_tasks_page(self):
-        """Возвращает страницу чужих задач - ВСЕГДА ПЕРЕСОЗДАЁМ для свежих данных"""
+        """Возвращает страницу чужих задач"""
         from windows.other_tasks.others_tasks_page import OthersTasksPage
 
         if 'other_tasks' in self.pages:
@@ -509,7 +699,6 @@ class NavigationHandler(QObject):
                 self.main.contentStack.removeWidget(old_page)
             old_page.deleteLater()
             del self.pages['other_tasks']
-            print("   🗑️ Старая страница Чужие задачи удалена")
 
         current_user = self.main.current_user if self.main.current_user else {
             "id": self.main.current_user_id,
@@ -523,11 +712,10 @@ class NavigationHandler(QObject):
             current_user=current_user,
             project_id=2,
             column_service=self.main.column_service,
-            permission_service=self.main.permission_service  # <-- ДОБАВИТЬ
+            permission_service=self.main.permission_service
         )
         self.pages['other_tasks'].open_project_requested.connect(self.open_project_by_id)
         self.main.contentStack.insertWidget(self.PAGE_OTHER_TASKS, self.pages['other_tasks'])
-        print("   ✅ Новая страница Чужие задачи создана и вставлена")
 
         return self.pages['other_tasks']
 
@@ -538,7 +726,7 @@ class NavigationHandler(QObject):
         project_page = ProjectViewPage(
             session=self.main.session,
             project_id=project_id,
-            project_service=self.main.project_service,  # ← заменить service на project_service
+            project_service=self.main.project_service,
             parent=self.main
         )
         self.main.contentStack.addWidget(project_page)
@@ -559,94 +747,46 @@ class NavigationHandler(QObject):
         }
 
     def _get_or_create_page(self, page_name, creator_func, insert_index):
-        """Универсальный метод для ленивой загрузки страниц с отладкой"""
-        print(f"   🔍 _get_or_create_page: page_name={page_name}, insert_index={insert_index}")
-
+        """Универсальный метод для ленивой загрузки страниц"""
         if page_name not in self.pages:
-            print(f"   📦 Страница {page_name} отсутствует в кэше, создаём...")
-
-            # Проверяем, не создаётся ли уже эта страница
             if page_name in self._loading_pages:
-                print(f"   ⏳ Страница {page_name} уже создаётся, ждём...")
-                # Ждём немного и возвращаем существующую
-                QTimer.singleShot(100, lambda: None)
                 return self.pages.get(page_name)
 
             self._loading_pages.add(page_name)
 
             try:
                 self.pages[page_name] = creator_func()
-                print(f"   ✅ Страница {page_name} создана")
-
                 existing = self.main.contentStack.widget(insert_index)
                 if existing != self.pages[page_name]:
-                    print(f"   📌 Вставляем страницу в contentStack на позицию {insert_index}")
                     self.main.contentStack.insertWidget(insert_index, self.pages[page_name])
-                else:
-                    print(f"   ℹ️ Страница уже была на позиции {insert_index}")
-
             except Exception as e:
                 print(f"   ❌ Ошибка создания страницы {page_name}: {e}")
                 import traceback
                 traceback.print_exc()
             finally:
                 self._loading_pages.discard(page_name)
-        else:
-            print(f"   ✅ Страница {page_name} уже есть в кэше")
 
         return self.pages[page_name]
 
-    def _recreate_page(self, page_name):
-        """Пересоздать страницу (для обновления колонок)"""
-        if page_name in self.pages:
-            # Сохраняем старую страницу
-            old_page = self.pages[page_name]
-
-            # Удаляем из contentStack если она там есть
-            index = self.main.contentStack.indexOf(old_page)
-            if index >= 0:
-                self.main.contentStack.removeWidget(old_page)
-
-            # Удаляем из словаря
-            del self.pages[page_name]
-            old_page.deleteLater()
-
-            # Пересоздаем страницу
-            if page_name == 'my_tasks':
-                self.get_my_tasks_page()
-            elif page_name == 'other_tasks':
-                self.get_other_tasks_page()
-
-            # Если страница была активна, переключаемся на неё
-            if self.main.contentStack.currentIndex() == index:
-                self.main.contentStack.setCurrentWidget(self.pages[page_name])
-
     def get_gantt_page(self):
-        """Возвращает страницу диаграммы Ганта - ВСЕГДА ПЕРЕСОЗДАЁМ для свежих данных"""
+        """Возвращает страницу диаграммы Ганта"""
         from windows.gantt.gantt_widget import GanttWidget
 
-        # ВАЖНО: принудительно пересоздаем страницу Ганта при каждом запросе
         if 'gantt' in self.pages:
-            # Удаляем старую страницу
             old_page = self.pages['gantt']
             index = self.main.contentStack.indexOf(old_page)
             if index >= 0:
                 self.main.contentStack.removeWidget(old_page)
             old_page.deleteLater()
             del self.pages['gantt']
-            print("   🗑️ Старая страница Ганта удалена")
 
-        # Создаем новую страницу
-        print("   🏗️ Создаём GanttWidget...")
         self.pages['gantt'] = GanttWidget(
             session=self.main.session,
             current_user_id=self.main.current_user_id,
             project_service=self.main.project_service,
-            permission_service=self.main.permission_service  # <-- ДОБАВИТЬ ЭТУ СТРОКУ
+            permission_service=self.main.permission_service
         )
-        print(f"   📌 Вставляем в contentStack на позицию {self.PAGE_GANTT}")
         self.main.contentStack.insertWidget(self.PAGE_GANTT, self.pages['gantt'])
-        print("   ✅ GanttWidget создан и вставлен")
 
         return self.pages['gantt']
 
@@ -658,18 +798,15 @@ class NavigationHandler(QObject):
                 current_user=self.main.current_user,
                 parent=self.main
             )
-            # ПОДКЛЮЧАЕМ СИГНАЛ ВЫХОДА
             self.pages['profile'].logout_requested.connect(self.main.logout)
             self.main.contentStack.addWidget(self.pages['profile'])
         return self.pages['profile']
 
     def get_analytics_page(self):
-        """Возвращает страницу аналитики - принудительно пересоздаем для свежих данных"""
+        """Возвращает страницу аналитики"""
         from windows.analytics.analytics_page import AnalyticsPage
 
-        # Принудительно пересоздаем страницу аналитики при каждом запросе
         if 'analytics' in self.pages:
-            # Удаляем старую страницу
             old_page = self.pages['analytics']
             index = self.main.contentStack.indexOf(old_page)
             if index >= 0:
@@ -677,7 +814,6 @@ class NavigationHandler(QObject):
             old_page.deleteLater()
             del self.pages['analytics']
 
-        # Создаем новую страницу
         self.pages['analytics'] = AnalyticsPage(session=self.main.session)
         self.main.contentStack.insertWidget(self.PAGE_ANALYTICS, self.pages['analytics'])
 
@@ -698,32 +834,25 @@ class NavigationHandler(QObject):
         )
 
     def get_overtime_page(self):
-        """Возвращает страницу переработок - принудительно пересоздаем для свежих данных"""
+        """Возвращает страницу переработок"""
         from windows.overtime.overtime_page import OvertimePage
 
         employee_service = EmployeeService()
 
-        # Принудительно пересоздаем страницу переработок при каждом запросе
         if 'overtime' in self.pages:
-            # Удаляем старую страницу
             old_page = self.pages['overtime']
             index = self.main.contentStack.indexOf(old_page)
             if index >= 0:
                 self.main.contentStack.removeWidget(old_page)
             old_page.deleteLater()
             del self.pages['overtime']
-            print("   🗑️ Старая страница Переработки удалена")
 
-        # Создаем новую страницу
-        print("   🏗️ Создаём OvertimePage...")
         page = OvertimePage(
             service=self.main.overtime_service,
             employee_service=employee_service,
             permission_service=self.main.permission_service
         )
 
-        # ✅ ВАЖНО: Вставляем страницу на правильную позицию
-        # Проверяем, что на позиции PAGE_OVERTIME (6) нет другой страницы
         existing_widget = self.main.contentStack.widget(self.PAGE_OVERTIME)
         if existing_widget:
             self.main.contentStack.removeWidget(existing_widget)
@@ -731,48 +860,27 @@ class NavigationHandler(QObject):
 
         self.main.contentStack.insertWidget(self.PAGE_OVERTIME, page)
         self.pages['overtime'] = page
-        print(f"   📌 Вставлена в contentStack на позицию {self.PAGE_OVERTIME}")
-        print("   ✅ OvertimePage создана и вставлена")
 
         return page
 
-    # windows/projects/main_window_handlers.py
-
     def get_settings_page(self):
-        """Возвращает страницу настроек с сервисом прав"""
+        """Возвращает страницу настроек"""
         from windows.settings.settings_page import SettingsPage
 
-        # Проверяем, существует ли страница в кэше и не удалена ли она
         if 'settings' in self.pages:
             try:
                 old_page = self.pages['settings']
-                # Проверяем, что страница ещё существует (не удалена)
                 if old_page:
-                    # Принудительно пересоздаём страницу для обновления
-                    # или обновляем её содержимое
-                    try:
-                        # Если страница уже есть, обновляем её содержимое
-                        if hasattr(old_page, '_refresh_all_tabs'):
-                            old_page._refresh_all_tabs()
-                        # Принудительно показываем страницу
-                        old_page.show()
-                        old_page.update()
-                        return old_page
-                    except Exception as e:
-                        print(f"   ⚠️ Ошибка при обновлении страницы: {e}")
-                        # Если не удалось обновить, пересоздаём
-                        del self.pages['settings']
+                    if hasattr(old_page, '_refresh_all_tabs'):
+                        old_page._refresh_all_tabs()
+                    old_page.show()
+                    old_page.update()
+                    return old_page
             except RuntimeError:
-                # Страница была удалена, удаляем из кэша
                 if 'settings' in self.pages:
                     del self.pages['settings']
-                print("   🗑️ Старая страница Настройки была удалена, пересоздаём...")
 
-        # Если страницы нет в кэше или она была удалена
         if 'settings' not in self.pages:
-            print("   🏗️ Создаём новую страницу Настройки...")
-
-            # Проверяем, есть ли уже виджет на позиции PAGE_SETTINGS
             existing_widget = self.main.contentStack.widget(self.PAGE_SETTINGS)
             if existing_widget:
                 try:
@@ -781,24 +889,19 @@ class NavigationHandler(QObject):
                 except RuntimeError:
                     pass
 
-            # Создаём новую страницу
             self.pages['settings'] = SettingsPage(session=self.main.session)
 
-            # Передаём сервис прав
             if hasattr(self.main, 'permission_service'):
                 self.pages['settings'].set_permission_service(self.main.permission_service)
 
-            # Вставляем в contentStack
             self.main.contentStack.insertWidget(self.PAGE_SETTINGS, self.pages['settings'])
-            print(f"   📌 Вставлена в contentStack на позицию {self.PAGE_SETTINGS}")
 
         return self.pages['settings']
 
     def get_archive_page(self):
-        """Возвращает страницу архива - всегда пересоздаем для свежих данных"""
+        """Возвращает страницу архива"""
         from windows.archive.archive_page import ArchivePage
 
-        # ВАЖНО: принудительно пересоздаем страницу архива при каждом запросе
         if 'archive' in self.pages:
             old_page = self.pages['archive']
             index = self.main.contentStack.indexOf(old_page)
@@ -807,10 +910,9 @@ class NavigationHandler(QObject):
             old_page.deleteLater()
             del self.pages['archive']
 
-        # ✅ Передаём permission_service
         self.pages['archive'] = ArchivePage(
             service=self.main.archive_service,
-            permission_service=self.main.permission_service  # <-- ДОБАВИТЬ ЭТУ СТРОКУ
+            permission_service=self.main.permission_service
         )
         self.main.contentStack.insertWidget(self.PAGE_ARCHIVE, self.pages['archive'])
 

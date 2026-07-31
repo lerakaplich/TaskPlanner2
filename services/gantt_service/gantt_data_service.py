@@ -24,6 +24,32 @@ class GanttDataService(GanttBaseService):
         self._cached_projects: List[ProjectDTO] = []
         self._available_project_ids: Optional[set] = None
 
+    def update_task_dates(self, task_id: int, new_start: datetime, new_end: datetime) -> bool:
+        """Обновляет даты задачи в БД и кэше"""
+        try:
+            from models.tasks import Task
+            task = self.session.query(Task).filter(Task.id == task_id).first()
+            if not task:
+                return False
+
+            # Обновляем created_at как start_date и deadline как end_date
+            task.created_at = new_start
+            task.deadline = new_end
+            self.session.commit()
+
+            # Обновляем в кэше
+            for t in self._cached_tasks:
+                if t.id == task_id:
+                    t.start_date = new_start
+                    t.end_date = new_end
+                    break
+
+            return True
+        except Exception as e:
+            self.session.rollback()
+            print(f"❌ Ошибка обновления дат задачи {task_id}: {e}")
+            return False
+
     def get_manageable_projects(self) -> List[Dict[str, Any]]:
         """
         Возвращает список проектов, где пользователь может управлять задачами
@@ -187,11 +213,17 @@ class GanttDataService(GanttBaseService):
     def _convert_to_gantt_data(self, task: Task) -> Optional[TaskGanttData]:
         """Конвертирует Task в TaskGanttData"""
         try:
-            start_date = task.created_at if task.created_at else datetime.now()
-            end_date = task.deadline if task.deadline else start_date + timedelta(days=7)
+            # Используем created_at как start_date, deadline как end_date
+            start_date = task.created_at.replace(hour=0, minute=0, second=0,
+                                                 microsecond=0) if task.created_at else datetime.now().replace(hour=0,
+                                                                                                               minute=0,
+                                                                                                               second=0,
+                                                                                                               microsecond=0)
 
-            start_date = start_date.replace(hour=0, minute=0, second=0, microsecond=0)
-            end_date = end_date.replace(hour=0, minute=0, second=0, microsecond=0)
+            if task.deadline:
+                end_date = task.deadline.replace(hour=0, minute=0, second=0, microsecond=0)
+            else:
+                end_date = start_date + timedelta(days=7)
 
             if start_date > end_date:
                 start_date, end_date = end_date, start_date + timedelta(days=1)
@@ -212,7 +244,7 @@ class GanttDataService(GanttBaseService):
                 dependencies.append({
                     "successor_id": dep.successor_id,
                     "lag": dep.lag,
-                    "type": dep.type
+                    "type": dep.type or "FS"  # Добавляем тип связи
                 })
 
             project_name = ""

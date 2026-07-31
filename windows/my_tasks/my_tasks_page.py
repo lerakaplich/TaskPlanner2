@@ -56,6 +56,76 @@ class MyTasksPage(QWidget):
 
         self._load_projects_for_filter()
 
+    def apply_search_filter(self, query: str):
+        """Применяет фильтр поиска к задачам"""
+        self._search_query = query
+        self._apply_search_to_tasks()
+
+    def _apply_search_to_tasks(self):
+        """Внутренний метод применения поиска"""
+        query = self._search_query.lower().strip() if hasattr(self, '_search_query') else ""
+
+        if not query:
+            # Показываем все задачи
+            for column in self.column_widgets:
+                for card in column.get_tasks():
+                    card.setVisible(True)
+            self._update_count_labels()
+            return
+
+        # Фильтруем задачи
+        for column in self.column_widgets:
+            visible_count = 0
+            for card in column.get_tasks():
+                task = card.task_data
+                matches = self._task_matches_search(task, query)
+                card.setVisible(matches)
+                if matches:
+                    visible_count += 1
+            # Обновляем счетчик в колонке
+            column.update_count(visible_count)
+
+    def _task_matches_search(self, task: dict, query: str) -> bool:
+        """Проверяет, соответствует ли задача поисковому запросу"""
+        search_fields = [
+            task.get('title', ''),
+            task.get('description', ''),
+            task.get('project_name', ''),
+            task.get('theme', ''),
+            task.get('status', ''),
+        ]
+
+        # Добавляем теги
+        tags = task.get('tags', [])
+        if isinstance(tags, list):
+            for tag in tags:
+                if isinstance(tag, dict):
+                    search_fields.append(tag.get('name', ''))
+                elif isinstance(tag, str):
+                    search_fields.append(tag)
+
+        return any(query in field.lower() for field in search_fields if field)
+
+    def clear_search_filter(self):
+        """Очищает фильтр поиска"""
+        self._search_query = ""
+        self._apply_search_to_tasks()
+
+    def get_filtered_count(self) -> int:
+        """Возвращает количество видимых задач"""
+        count = 0
+        for column in self.column_widgets:
+            for card in column.get_tasks():
+                if card.isVisible():
+                    count += 1
+        return count
+
+    def _update_count_labels(self):
+        """Обновляет счетчики в колонках"""
+        for column in self.column_widgets:
+            visible_count = sum(1 for card in column.get_tasks() if card.isVisible())
+            column.update_count(visible_count)
+
     def _can_delete_task(self) -> bool:
         return self._handlers.can_delete_task()
 

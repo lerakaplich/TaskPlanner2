@@ -60,6 +60,82 @@ class OvertimePage(QWidget):
         self.init_filters()
         self.load_overtimes()
 
+    def apply_search_filter(self, query: str):
+        """Применяет фильтр поиска к переработкам"""
+        self._search_query = query
+        self._apply_search_to_overtimes()
+
+    def _apply_search_to_overtimes(self):
+        """Внутренний метод применения поиска"""
+        query = self._search_query.lower().strip() if hasattr(self, '_search_query') else ""
+
+        if not query:
+            self.display_overtimes()
+            return
+
+        # Фильтруем переработки на основе текущих фильтров
+        filters = {}
+        if self.current_project_filter:
+            filters['project_name'] = self.current_project_filter
+        if self.current_task_filter:
+            filters['task_title'] = self.current_task_filter
+        if self.current_start_date and self.current_end_date:
+            filters['start_date'] = self.current_start_date
+            filters['end_date'] = self.current_end_date
+
+        # Получаем все переработки
+        all_my = self.my_overtimes
+        all_all = self.all_overtimes
+
+        # Применяем поиск
+        filtered_my = []
+        for ot in all_my:
+            if self._overtime_matches_search(ot, query):
+                if self.service:
+                    if self.service.filter_overtimes([ot], **filters):
+                        filtered_my.append(ot)
+                else:
+                    filtered_my.append(ot)
+
+        filtered_all = []
+        for ot in all_all:
+            if self._overtime_matches_search(ot, query):
+                if self.service:
+                    if self.service.filter_overtimes([ot], **filters):
+                        filtered_all.append(ot)
+                else:
+                    filtered_all.append(ot)
+
+        self._display_tab_optimized(self.gridLayoutMy, filtered_my, is_my_tab=True)
+        self._display_tab_optimized(self.gridLayoutAll, filtered_all, is_my_tab=False)
+        self._update_total_hours_display(filtered_my)
+
+    def _overtime_matches_search(self, overtime: dict, query: str) -> bool:
+        """Проверяет, соответствует ли переработка поисковому запросу"""
+        search_fields = [
+            overtime.get('project_name', ''),
+            overtime.get('task', ''),
+            overtime.get('description', ''),
+            overtime.get('employee_name', ''),
+            overtime.get('date_str', ''),
+        ]
+        return any(query in field.lower() for field in search_fields if field)
+
+    def clear_search_filter(self):
+        """Очищает фильтр поиска"""
+        self._search_query = ""
+        self.display_overtimes()
+
+    def get_filtered_count(self) -> int:
+        """Возвращает количество видимых переработок"""
+        count = 0
+        layout = self.gridLayoutMy
+        for i in range(layout.count()):
+            widget = layout.itemAt(i).widget()
+            if widget and widget.isVisible():
+                count += 1
+        return count
+
     def _setup_permission_ui(self):
         """Настройка UI в зависимости от прав пользователя"""
         if not self.permission_service:
