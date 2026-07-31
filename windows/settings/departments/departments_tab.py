@@ -52,6 +52,69 @@ class DepartmentsTab(BaseTab):
 
         self.filterDepartment.hide() if hasattr(self, 'filterDepartment') else None
 
+    # ==========================================================
+    # МЕТОДЫ ПОИСКА (ПЕРЕОПРЕДЕЛЕНЫ)
+    # ==========================================================
+
+    def _get_card_search_text(self, card) -> str:
+        """
+        Возвращает текст для поиска из карточки отдела.
+        Ищет по: названию, подразделению, руководителям, телефону.
+        """
+        search_parts = []
+
+        # Название отдела
+        if hasattr(card, 'nameLabel'):
+            search_parts.append(card.nameLabel.text())
+
+        # Номер отдела
+        if hasattr(card, 'numberLabel'):
+            number_text = card.numberLabel.text()
+            if number_text and number_text != '—':
+                search_parts.append(number_text)
+
+        # Подразделение
+        if hasattr(card, 'divisionValueLabel'):
+            div_text = card.divisionValueLabel.text()
+            if div_text and div_text != '—':
+                search_parts.append(div_text)
+
+        # Телефон
+        if hasattr(card, 'phoneValueLabel'):
+            phone_text = card.phoneValueLabel.text()
+            if phone_text and phone_text != '—':
+                search_parts.append(phone_text)
+
+        # Руководители (из контейнера)
+        if hasattr(card, 'bossesContainer'):
+            # Ищем все QLabel внутри контейнера
+            for child in card.bossesContainer.findChildren(QLabel):
+                text = child.text()
+                if text and text != '—':
+                    search_parts.append(text)
+
+        return " ".join(search_parts)
+
+    def _apply_search_to_items(self):
+        """
+        Переопределяем для отделов - поиск по названию, подразделению, руководителям, телефону.
+        """
+        query = self._search_query.lower().strip() if hasattr(self, '_search_query') else ""
+
+        # Если запрос пустой - показываем все карточки
+        if not query:
+            for card in self.cards:
+                card.setVisible(True)
+            return
+
+        # Фильтруем карточки
+        for card in self.cards:
+            search_text = self._get_card_search_text(card).lower()
+            card.setVisible(query in search_text)
+
+        # Обновляем filter_search_text для совместимости с фильтрацией по подразделению
+        self.filter_search_text = query
+
     def setup_permission_ui(self):
         """
         Настройка UI в зависимости от прав пользователя
@@ -119,9 +182,10 @@ class DepartmentsTab(BaseTab):
                 self.filterSubDepartment.blockSignals(False)
 
     def on_filter_text_changed(self, text):
-        """Обработчик изменения текста поиска"""
-        self.filter_search_text = text if text else ""
-        self.refresh_cards()
+        """Обработчик изменения текста поиска (из поля ввода)"""
+        # Применяем поиск через наш метод
+        self._search_query = text
+        self._apply_search_to_items()
 
     def on_filter_division_changed(self, index):
         """Обработчик изменения выбранного подразделения"""
@@ -144,7 +208,7 @@ class DepartmentsTab(BaseTab):
             department_data=None,
             employee_service=self.employee_service,
             read_only=False,
-            permission_service=self._permission_service  # <-- ДОБАВИТЬ!
+            permission_service=self._permission_service
         )
         dialog.department_saved.connect(self.on_department_saved)
         dialog.exec()
@@ -200,7 +264,7 @@ class DepartmentsTab(BaseTab):
         if self.filter_division_id:
             filtered = [d for d in filtered if d.get('division_id') == self.filter_division_id]
 
-        # Поиск по названию
+        # Поиск по названию (используем filter_search_text)
         if self.filter_search_text:
             search_lower = self.filter_search_text.lower()
             filtered = [d for d in filtered if search_lower in d.get('name', '').lower()]
@@ -219,7 +283,7 @@ class DepartmentsTab(BaseTab):
                 department_data=department,
                 employee_service=self.employee_service,
                 read_only=self._read_only_mode,
-                permission_service=self._permission_service  # <-- Добавляем
+                permission_service=self._permission_service
             )
             if not self._read_only_mode and self._can_edit_department(department):
                 dialog.department_saved.connect(lambda data: self.on_department_updated(department_id, data))
@@ -511,17 +575,3 @@ class DepartmentsTab(BaseTab):
             self.add_card_to_grid(card, i)
 
         self.set_last_row_stretch()
-
-    def _get_card_search_text(self, card) -> str:
-        """Возвращает текст для поиска из карточки отдела"""
-        if hasattr(card, 'nameLabel'):
-            return card.nameLabel.text()
-        return ""
-
-    def _apply_search_to_items(self):
-        """Переопределяем для отделов - уже есть своя логика через фильтры"""
-        # В departments_tab уже есть своя логика фильтрации через filter_search_text
-        # Поэтому используем её
-        if hasattr(self, 'filter_search_text'):
-            self.filter_search_text = self._search_query
-            self.refresh_cards()

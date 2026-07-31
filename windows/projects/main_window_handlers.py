@@ -71,6 +71,18 @@ class GlobalSearchHandler:
             # 7. Поиск по сотрудникам (настройки)
             total_found += self._search_employees(query)
 
+            # 8. Поиск по отделам (настройки) - ДОБАВЛЯЕМ
+            total_found += self._search_departments(query)
+
+            # 9. Поиск по подразделениям (настройки) - ДОБАВЛЯЕМ
+            total_found += self._search_divisions(query)
+
+            # 10. Поиск по тегам (настройки) - ДОБАВЛЯЕМ
+            total_found += self._search_tags(query)
+
+            # 11. Поиск по колонкам (настройки) - ДОБАВЛЯЕМ
+            total_found += self._search_columns(query)
+
             # Обновляем статус
             self._update_search_status(query, total_found)
 
@@ -80,6 +92,62 @@ class GlobalSearchHandler:
             traceback.print_exc()
         finally:
             self._is_searching = False
+
+    def _search_departments(self, query: str) -> int:
+        """Поиск по отделам (вкладка Настройки)"""
+        if 'settings' not in self.main.navigation.pages:
+            return 0
+
+        page = self.main.navigation.pages['settings']
+        if hasattr(page, 'departments_tab'):
+            tab = page.departments_tab
+            if tab is not None and hasattr(tab, 'apply_search_filter'):
+                tab.apply_search_filter(query)
+                if hasattr(tab, 'get_filtered_count'):
+                    return tab.get_filtered_count()
+        return 0
+
+    def _search_divisions(self, query: str) -> int:
+        """Поиск по подразделениям (вкладка Настройки)"""
+        if 'settings' not in self.main.navigation.pages:
+            return 0
+
+        page = self.main.navigation.pages['settings']
+        if hasattr(page, 'divisions_tab'):
+            tab = page.divisions_tab
+            if tab is not None and hasattr(tab, 'apply_search_filter'):
+                tab.apply_search_filter(query)
+                if hasattr(tab, 'get_filtered_count'):
+                    return tab.get_filtered_count()
+        return 0
+
+    def _search_tags(self, query: str) -> int:
+        """Поиск по тегам (вкладка Настройки)"""
+        if 'settings' not in self.main.navigation.pages:
+            return 0
+
+        page = self.main.navigation.pages['settings']
+        if hasattr(page, 'tags_tab'):
+            tab = page.tags_tab
+            if tab is not None and hasattr(tab, 'apply_search_filter'):
+                tab.apply_search_filter(query)
+                if hasattr(tab, 'get_filtered_count'):
+                    return tab.get_filtered_count()
+        return 0
+
+    def _search_columns(self, query: str) -> int:
+        """Поиск по колонкам (вкладка Настройки)"""
+        if 'settings' not in self.main.navigation.pages:
+            return 0
+
+        page = self.main.navigation.pages['settings']
+        if hasattr(page, 'columns_tab'):
+            tab = page.columns_tab
+            if tab is not None and hasattr(tab, 'apply_search_filter'):
+                tab.apply_search_filter(query)
+                if hasattr(tab, 'get_filtered_count'):
+                    return tab.get_filtered_count()
+        return 0
 
     def _search_projects(self, query: str) -> int:
         """Поиск по проектам"""
@@ -232,14 +300,39 @@ class GlobalSearchHandler:
                 if hasattr(page, 'clear_search_filter'):
                     page.clear_search_filter()
 
-        # Исправляем: проверяем, есть ли employees_tab и есть ли у него метод clear_search_filter
+        # Восстанавливаем все вкладки настроек
         if 'settings' in self.main.navigation.pages:
             page = self.main.navigation.pages['settings']
+
+            # Сотрудники
             if hasattr(page, 'employees_tab'):
-                employees_tab = page.employees_tab
-                # Проверяем, что employees_tab это объект, а не None
-                if employees_tab is not None and hasattr(employees_tab, 'clear_search_filter'):
-                    employees_tab.clear_search_filter()
+                tab = page.employees_tab
+                if tab is not None and hasattr(tab, 'clear_search_filter'):
+                    tab.clear_search_filter()
+
+            # Отделы
+            if hasattr(page, 'departments_tab'):
+                tab = page.departments_tab
+                if tab is not None and hasattr(tab, 'clear_search_filter'):
+                    tab.clear_search_filter()
+
+            # Подразделения
+            if hasattr(page, 'divisions_tab'):
+                tab = page.divisions_tab
+                if tab is not None and hasattr(tab, 'clear_search_filter'):
+                    tab.clear_search_filter()
+
+            # Теги
+            if hasattr(page, 'tags_tab'):
+                tab = page.tags_tab
+                if tab is not None and hasattr(tab, 'clear_search_filter'):
+                    tab.clear_search_filter()
+
+            # Колонки
+            if hasattr(page, 'columns_tab'):
+                tab = page.columns_tab
+                if tab is not None and hasattr(tab, 'clear_search_filter'):
+                    tab.clear_search_filter()
 
     def _update_search_status(self, query: str, count: int = 0):
         """Обновляет статусную строку"""
