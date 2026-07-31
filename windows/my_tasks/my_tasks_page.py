@@ -60,6 +60,8 @@ class MyTasksPage(QWidget):
         """Применяет фильтр поиска к задачам"""
         self._search_query = query
         self._apply_search_to_tasks()
+        # Обновляем счетчики после применения поиска
+        self._update_count_labels()
 
     def _apply_search_to_tasks(self):
         """Внутренний метод применения поиска"""
@@ -85,31 +87,65 @@ class MyTasksPage(QWidget):
             # Обновляем счетчик в колонке
             column.update_count(visible_count)
 
-    def _task_matches_search(self, task: dict, query: str) -> bool:
-        """Проверяет, соответствует ли задача поисковому запросу"""
-        search_fields = [
-            task.get('title', ''),
-            task.get('description', ''),
-            task.get('project_name', ''),
-            task.get('theme', ''),
-            task.get('status', ''),
-        ]
-
-        # Добавляем теги
-        tags = task.get('tags', [])
-        if isinstance(tags, list):
-            for tag in tags:
-                if isinstance(tag, dict):
-                    search_fields.append(tag.get('name', ''))
-                elif isinstance(tag, str):
-                    search_fields.append(tag)
-
-        return any(query in field.lower() for field in search_fields if field)
-
     def clear_search_filter(self):
         """Очищает фильтр поиска"""
         self._search_query = ""
         self._apply_search_to_tasks()
+        self._update_count_labels()
+
+    def _task_matches_search(self, task: dict, query: str) -> bool:
+        """Проверяет, соответствует ли задача поисковому запросу (по всей информации)"""
+        query_lower = query.lower()
+
+        # Все поля для поиска
+        search_fields = [
+            task.get('title', ''),  # Название
+            task.get('description', ''),  # Описание
+            task.get('project_name', ''),  # Проект
+            task.get('theme', ''),  # Тема
+            task.get('status', ''),  # Статус
+            task.get('priority_text', ''),  # Приоритет (текст)
+            task.get('deadline_text', ''),  # Дедлайн
+            task.get('created_text', ''),  # Дата создания
+            task.get('updated_text', ''),  # Дата обновления
+            task.get('author_text', ''),  # Автор
+            task.get('executor_text', ''),  # Исполнитель
+        ]
+
+        # Проверяем все поля
+        for field in search_fields:
+            if field and query_lower in field.lower():
+                return True
+
+        # Проверяем ID задачи (как строку)
+        task_id = task.get('id')
+        if task_id and str(task_id) == query:
+            return True
+
+        # Проверяем теги
+        tags = task.get('tags', [])
+        if isinstance(tags, list):
+            for tag in tags:
+                if isinstance(tag, dict):
+                    tag_name = tag.get('name', '')
+                elif isinstance(tag, str):
+                    tag_name = tag
+                else:
+                    continue
+                if query_lower in tag_name.lower():
+                    return True
+
+        # Проверяем сложность
+        difficulty = task.get('difficulty', 0)
+        if difficulty and query_lower in str(difficulty):
+            return True
+
+        # Проверяем прогресс
+        progress = task.get('progress_percent', 0)
+        if progress and query_lower in str(progress):
+            return True
+
+        return False
 
     def get_filtered_count(self) -> int:
         """Возвращает количество видимых задач"""

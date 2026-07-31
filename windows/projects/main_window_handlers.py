@@ -40,7 +40,6 @@ class GlobalSearchHandler:
         self._is_searching = True
 
         try:
-            # Очищаем предыдущие результаты
             self._clear_search_results()
 
             if not query:
@@ -50,43 +49,23 @@ class GlobalSearchHandler:
 
             total_found = 0
 
-            # 1. Поиск по проектам
+            # ... существующие поиски ...
             total_found += self._search_projects(query)
-
-            # 2. Поиск по задачам (Мои задачи)
             total_found += self._search_my_tasks(query)
-
-            # 3. Поиск по задачам (Чужие задачи)
             total_found += self._search_other_tasks(query)
-
-            # 4. Поиск по переработкам
             total_found += self._search_overtime(query)
-
-            # 5. Поиск по чатам
             total_found += self._search_chats(query)
-
-            # 6. Поиск по архиву
             total_found += self._search_archive(query)
-
-            # 7. Поиск по сотрудникам (настройки)
             total_found += self._search_employees(query)
-
-            # 8. Поиск по отделам (настройки)
             total_found += self._search_departments(query)
-
-            # 9. Поиск по подразделениям (настройки)
             total_found += self._search_divisions(query)
-
-            # 10. Поиск по тегам (настройки)
             total_found += self._search_tags(query)
-
-            # 11. Поиск по колонкам (настройки)
             total_found += self._search_columns(query)
-
-            # 12. ⭐ ПОИСК ПО АНАЛИТИКЕ (РЕЙТИНГ, СОТРУДНИКИ, ТЕМЫ, ПРОЕКТЫ)
             total_found += self._search_analytics(query)
 
-            # Обновляем статус
+            # ⭐ ДОБАВЛЯЕМ ПОИСК ПО ГАНТУ
+            total_found += self._search_gantt(query)
+
             self._update_search_status(query, total_found)
 
         except Exception as e:
@@ -323,6 +302,12 @@ class GlobalSearchHandler:
             elif hasattr(page, 'force_refresh_display'):
                 page.force_refresh_display()
 
+        # ⭐ Восстанавливаем Гант
+        if 'gantt' in self.main.navigation.pages:
+            page = self.main.navigation.pages['gantt']
+            if hasattr(page, 'clear_search_filter'):
+                page.clear_search_filter()
+
         # Восстанавливаем все вкладки настроек
         if 'settings' in self.main.navigation.pages:
             page = self.main.navigation.pages['settings']
@@ -367,6 +352,26 @@ class GlobalSearchHandler:
             self.main.statusBar().showMessage(f"🔍 Найдено: {count} результатов по запросу '{query}'")
         else:
             self.main.statusBar().showMessage(f"🔍 Ничего не найдено по запросу '{query}'")
+
+    def _search_gantt(self, query: str) -> int:
+        """Поиск по диаграмме Ганта (задачи, проекты, исполнители)"""
+        if 'gantt' not in self.main.navigation.pages:
+            return 0
+
+        page = self.main.navigation.pages['gantt']
+
+        # Если запрос пустой - очищаем поиск
+        if not query:
+            if hasattr(page, 'clear_search_filter'):
+                page.clear_search_filter()
+            return 0
+
+        # Применяем поиск
+        if hasattr(page, 'apply_search_filter'):
+            page.apply_search_filter(query)
+            if hasattr(page, 'get_filtered_count'):
+                return page.get_filtered_count()
+        return 0
 
 class ProjectViewHandler:
     """Обработчик операций с проектами (CRUD)"""

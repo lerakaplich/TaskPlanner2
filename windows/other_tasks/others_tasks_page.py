@@ -4,9 +4,8 @@ import os
 from typing import Dict, List
 
 from PyQt6 import uic
-from PyQt6.QtCore import Qt, pyqtSignal, QPoint, QTimer
-from PyQt6.QtGui import QDragEnterEvent, QDropEvent, QDragMoveEvent
-from PyQt6.QtWidgets import QWidget, QScrollArea, QHBoxLayout, QSizePolicy, QMessageBox
+from PyQt6.QtCore import Qt, pyqtSignal, QTimer
+from PyQt6.QtWidgets import QWidget, QScrollArea, QHBoxLayout, QSizePolicy
 
 from database import get_tasks_session
 from models.permissions import ProjectRole
@@ -86,26 +85,69 @@ class OthersTasksPage(QWidget):
             column.update_count(visible_count)
 
     def _task_matches_search(self, task: dict, query: str) -> bool:
-        """Проверяет, соответствует ли задача поисковому запросу"""
+        """Проверяет, соответствует ли задача поисковому запросу (по всей информации)"""
+        query_lower = query.lower()
+
+        # Все поля для поиска
         search_fields = [
-            task.get('title', ''),
-            task.get('description', ''),
-            task.get('project_name', ''),
-            task.get('theme', ''),
-            task.get('status', ''),
-            task.get('creator_name', ''),
-            task.get('assignee_name', ''),
+            task.get('title', ''),  # Название
+            task.get('description', ''),  # Описание
+            task.get('project_name', ''),  # Проект
+            task.get('theme', ''),  # Тема
+            task.get('status', ''),  # Статус
+            task.get('priority_text', ''),  # Приоритет (текст)
+            task.get('deadline_text', ''),  # Дедлайн
+            task.get('created_text', ''),  # Дата создания
+            task.get('updated_text', ''),  # Дата обновления
+            task.get('author_text', ''),  # Автор
+            task.get('executor_text', ''),  # Исполнитель
+            task.get('creator_name', ''),  # Имя создателя
+            task.get('assignee_name', ''),  # Имя исполнителя
         ]
 
+        # Проверяем все поля
+        for field in search_fields:
+            if field and query_lower in field.lower():
+                return True
+
+        # Проверяем ID задачи (как строку)
+        task_id = task.get('id')
+        if task_id and str(task_id) == query:
+            return True
+
+        # Проверяем теги
         tags = task.get('tags', [])
         if isinstance(tags, list):
             for tag in tags:
                 if isinstance(tag, dict):
-                    search_fields.append(tag.get('name', ''))
+                    tag_name = tag.get('name', '')
                 elif isinstance(tag, str):
-                    search_fields.append(tag)
+                    tag_name = tag
+                else:
+                    continue
+                if query_lower in tag_name.lower():
+                    return True
 
-        return any(query in field.lower() for field in search_fields if field)
+        # Проверяем сложность
+        difficulty = task.get('difficulty', 0)
+        if difficulty and query_lower in str(difficulty):
+            return True
+
+        # Проверяем прогресс
+        progress = task.get('progress_percent', 0)
+        if progress and query_lower in str(progress):
+            return True
+
+        # Проверяем прогноз (для чужих задач)
+        predicted_hours = task.get('predicted_hours', 0)
+        if predicted_hours and query_lower in str(predicted_hours):
+            return True
+
+        predicted_days = task.get('predicted_days', 0)
+        if predicted_days and query_lower in str(predicted_days):
+            return True
+
+        return False
 
     def clear_search_filter(self):
         """Очищает фильтр поиска"""
@@ -364,10 +406,6 @@ class OthersTasksPage(QWidget):
             self.projectFilter.addItem(project["name"], project["id"])
         self.projectFilter.blockSignals(False)
 
-    # ==========================================================
-    # ПОСТРОЕНИЕ ДОСКИ
-    # ==========================================================
-
     def setup_kanban(self):
         self._rebuild_columns_ui(self.service.get_column_data())
 
@@ -381,8 +419,6 @@ class OthersTasksPage(QWidget):
             column_data = self.service.get_column_data()
 
         self._rebuild_columns_ui(column_data)
-
-    # windows/other_tasks/others_tasks_page.py
 
     def _rebuild_columns_ui(self, column_data: List[Dict]):
         self.clear_layout(self.kanbanLayout)

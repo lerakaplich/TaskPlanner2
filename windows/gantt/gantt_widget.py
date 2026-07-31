@@ -46,6 +46,8 @@ class GanttWidget(QWidget):
         self.btnExport = None
         self.tabWidget = None
 
+        self._current_search_text = ""
+
         # Инициализация обработчиков и представлений
         from windows.gantt.gantt_widget_handlers import GanttWidgetHandlers
         from windows.gantt.gantt_widget_views import GanttWidgetViews
@@ -57,9 +59,17 @@ class GanttWidget(QWidget):
         self._connect_signals()
         self._setup_permission_ui()
 
-    # ==========================================================
-    # ПРАВА ДОСТУПА
-    # ==========================================================
+    def apply_search_filter(self, query: str):
+        """Применяет фильтр поиска к диаграмме Ганта"""
+        self._handlers.on_search_filter(query)
+
+    def clear_search_filter(self):
+        """Очищает фильтр поиска"""
+        self._handlers.clear_search_filter()
+
+    def get_filtered_count(self) -> int:
+        """Возвращает количество найденных элементов"""
+        return self._handlers.get_filtered_count()
 
     def _setup_permission_ui(self):
         if hasattr(self, 'addTaskButton') and self.addTaskButton:

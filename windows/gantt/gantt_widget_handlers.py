@@ -3,7 +3,7 @@
 from datetime import datetime
 from typing import Optional
 from PyQt6.QtCore import QDate, Qt
-from PyQt6.QtWidgets import QDialog, QMessageBox, QApplication
+from PyQt6.QtWidgets import QDialog, QMessageBox, QApplication, QTreeWidgetItem
 
 
 class GanttWidgetHandlers:
@@ -20,10 +20,6 @@ class GanttWidgetHandlers:
         self.widget._service.clear_cache()
         self.widget._service.load_data()
         self.widget._refresh_ui()
-
-    # ==========================================================
-    # ФИЛЬТРЫ
-    # ==========================================================
 
     def on_project_filter_changed(self, text: str) -> None:
         current_data = self.widget.projectFilter.currentData()
@@ -66,7 +62,123 @@ class GanttWidgetHandlers:
             self.widget.gantt_canvas.set_date_range(start, end)
         self.widget.gantt_canvas.update()
 
-    # windows/gantt/gantt_widget_handlers.py
+    def on_search_filter(self, query: str):
+        """Поиск по диаграмме Ганта"""
+        query = query.strip().lower()
+        self.widget._current_search_text = query
+
+        if not query:
+            self.clear_search_filter()
+            return
+
+        self._apply_search(query)
+
+    def clear_search_filter(self):
+        """Очищает поиск и восстанавливает все данные"""
+        self.widget._current_search_text = ""
+        self._restore_all_data()
+
+    def get_filtered_count(self) -> int:
+        """Возвращает количество найденных элементов"""
+        if not hasattr(self.widget, '_current_search_text') or not self.widget._current_search_text:
+            all_tasks = self.widget._service.get_all_tasks()
+            return len(all_tasks)
+
+        # Считаем отфильтрованные задачи
+        filtered_tasks = self.widget._service.get_filtered_tasks(
+            self.widget._current_project_filter,
+            self.widget._current_executor_filter
+        )
+
+        # Фильтруем по поисковому запросу
+        search_text = self.widget._current_search_text
+        result = []
+        for task in filtered_tasks:
+            if self._task_matches_search(task, search_text):
+                result.append(task)
+
+        return len(result)
+
+    def _apply_search(self, query: str):
+        """Применяет поиск к текущим задачам"""
+        all_tasks = self.widget._service.get_filtered_tasks(
+            self.widget._current_project_filter,
+            self.widget._current_executor_filter
+        )
+
+        # Фильтруем задачи по поисковому запросу
+        filtered = []
+        for task in all_tasks:
+            if self._task_matches_search(task, query):
+                filtered.append(task)
+
+        # Обновляем отображение
+        if hasattr(self.widget, 'gantt_canvas'):
+            self.widget.gantt_canvas.set_tasks(filtered)
+
+        if hasattr(self.widget, 'calendar_widget'):
+            self.widget.calendar_widget.set_tasks(filtered)
+
+        # Обновляем дерево проектов
+        self._update_tree_with_search(query)
+
+    def _task_matches_search(self, task, query: str) -> bool:
+        """Проверяет, соответствует ли задача поисковому запросу"""
+        search_fields = [
+            task.name.lower(),
+            task.executor_name.lower() if task.executor_name else "",
+            task.project_name.lower() if task.project_name else "",
+            task.priority.lower() if task.priority else "",
+            task.status.lower() if task.status else "",
+            str(task.id),
+            task.executor_initials.lower() if task.executor_initials else "",
+        ]
+        return any(query in field for field in search_fields)
+
+    def _update_tree_with_search(self, query: str):
+        """Обновляет дерево проектов с учётом поиска"""
+        if not hasattr(self.widget, 'projectsTree'):
+            return
+
+        self.widget.projectsTree.clear()
+        all_tasks = self.widget._service.get_all_tasks()
+
+        # Фильтруем задачи по поиску
+        if query:
+            filtered_tasks = [t for t in all_tasks if self._task_matches_search(t, query)]
+        else:
+            filtered_tasks = all_tasks
+
+        # Группируем по проектам
+        projects_dict = {}
+        for task in filtered_tasks:
+            if task.project_id not in projects_dict:
+                projects_dict[task.project_id] = {
+                    "name": task.project_name,
+                    "tasks": []
+                }
+            projects_dict[task.project_id]["tasks"].append(task)
+
+        # Добавляем в дерево
+        for project_id, data in projects_dict.items():
+            project_item = QTreeWidgetItem(self.widget.projectsTree)
+            project_item.setText(0, f"📁 {data['name']}")
+            project_item.setData(0, Qt.ItemDataRole.UserRole, f"project_{project_id}")
+
+            for task in data['tasks']:
+                task_item = QTreeWidgetItem(project_item)
+                task_item.setText(0, f"{task.name} ({task.executor_name or 'Не назначен'})")
+                task_item.setData(0, Qt.ItemDataRole.UserRole, f"task_{task.id}")
+
+                # Подсветка найденных совпадений
+                if query and self._task_matches_search(task, query):
+                    task_item.setBackground(0, QColor("#FFF3E0"))
+
+            project_item.setExpanded(True)
+
+    def _restore_all_data(self):
+        """Восстанавливает все данные после очистки поиска"""
+        self.widget._views.refresh_ui()
 
     def on_add_task(self) -> None:
         """Создание новой задачи"""
