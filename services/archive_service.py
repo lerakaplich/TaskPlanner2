@@ -3,7 +3,7 @@
 from datetime import datetime
 from typing import List, Dict, Optional
 from PyQt6.QtWidgets import QMessageBox
-from sqlalchemy import select, func, update
+from sqlalchemy import select, func, update, or_
 from models.projects import Project
 from models.tasks import Task
 from models.employees import Employee
@@ -87,7 +87,7 @@ class ArchiveService:
         return task is not None
 
     # ======================================================
-    # Проекты
+    # Проекты - РАСШИРЕННЫЙ ПОИСК
     # ======================================================
 
     def get_archived_projects(self) -> List[Dict]:
@@ -97,16 +97,56 @@ class ArchiveService:
         return [self._prepare_project_data(proj) for proj in projects]
 
     def search_projects(self, text: str) -> List[Dict]:
-        """Поиск по архивным проектам"""
+        """
+        Расширенный поиск по архивным проектам.
+        Ищет по: названию, описанию, дате архивации, количеству задач.
+        """
         if not text:
             return self.get_archived_projects()
 
-        stmt = select(Project).where(
-            Project.is_archived == True,
-            Project.name.ilike(f"%{text}%")
-        ).order_by(Project.updated_at.desc())
+        text_lower = text.lower().strip()
+
+        # Получаем все архивные проекты
+        stmt = select(Project).where(Project.is_archived == True).order_by(Project.updated_at.desc())
         projects = self.session.scalars(stmt).all()
-        return [self._prepare_project_data(proj) for proj in projects]
+
+        # Фильтруем в Python для более гибкого поиска
+        filtered = []
+        for project in projects:
+            data = self._prepare_project_data(project)
+            if self._project_matches_search(data, text_lower):
+                filtered.append(data)
+
+        return filtered
+
+    def _project_matches_search(self, project_data: Dict, search_text: str) -> bool:
+        """
+        Проверяет, соответствует ли проект поисковому запросу.
+        Поиск по: названию, описанию, дате архивации, количеству задач.
+        """
+        # Поиск по названию
+        if search_text in project_data.get("name", "").lower():
+            return True
+
+        # Поиск по описанию
+        if search_text in project_data.get("description", "").lower():
+            return True
+
+        # Поиск по дате архивации
+        archived_at = project_data.get("archived_at", "")
+        if search_text in archived_at.lower():
+            return True
+
+        # Поиск по количеству задач (цифры)
+        tasks_count = str(project_data.get("archived_tasks_count", 0))
+        if search_text in tasks_count:
+            return True
+
+        # Поиск по ID (если ввели цифры)
+        if str(project_data.get("id", "")).startswith(search_text):
+            return True
+
+        return False
 
     def get_project_by_id(self, project_id: int) -> Optional[Dict]:
         """Получает архивный проект по ID (подготовленные данные)"""
@@ -175,28 +215,137 @@ class ArchiveService:
         return project.name if project else ""
 
     # ======================================================
-    # Задачи
+    # Задачи - РАСШИРЕННЫЙ ПОИСК
     # ======================================================
-
-    # services/archive_service.py
 
     def get_project_tasks(self, project_id: int) -> List[Dict]:
         """Возвращает все архивные задачи проекта"""
         stmt = select(Task).where(
             Task.project_id == project_id,
-            Task.is_archived == True  # Только архивированные
+            Task.is_archived == True
         ).order_by(Task.archived_at.desc())
         tasks = self.session.scalars(stmt).all()
         return [self._prepare_task_data(task) for task in tasks]
 
     def search_all_archived_tasks(self, text: str = "") -> List[Dict]:
-        """Поиск по всем архивированным задачам"""
-        stmt = select(Task).where(Task.is_archived == True)
-        if text:
-            stmt = stmt.where(Task.title.ilike(f"%{text}%"))
-        stmt = stmt.order_by(Task.archived_at.desc())
+        """
+        Расширенный поиск по всем архивированным задачам.
+        Ищет по: названию, описанию, статусу, приоритету, исполнителю, проекту, датам, тегам.
+        """
+        if not text:
+            stmt = select(Task).where(Task.is_archived == True).order_by(Task.archived_at.desc())
+            tasks = self.session.scalars(stmt).all()
+            return [self._prepare_task_data(task) for task in tasks]
+
+        text_lower = text.lower().strip()
+
+        # Получаем все архивированные задачи
+        stmt = select(Task).where(Task.is_archived == True).order_by(Task.archived_at.desc())
         tasks = self.session.scalars(stmt).all()
-        return [self._prepare_task_data(task) for task in tasks]
+
+        # Фильтруем в Python для более гибкого поиска
+        filtered = []
+        for task in tasks:
+            data = self._prepare_task_data(task)
+            if self._task_matches_search(data, text_lower):
+                filtered.append(data)
+
+        return filtered
+
+    def search_tasks(self, project_id: int, text: str) -> List[Dict]:
+        """
+        Расширенный поиск по архивным задачам проекта.
+        Ищет по: названию, описанию, статусу, приоритету, исполнителю, датам, тегам.
+        """
+        if not text:
+            return self.get_project_tasks(project_id)
+
+        text_lower = text.lower().strip()
+
+        # Получаем все архивные задачи проекта
+        stmt = select(Task).where(
+            Task.project_id == project_id,
+            Task.is_archived == True
+        ).order_by(Task.archived_at.desc())
+        tasks = self.session.scalars(stmt).all()
+
+        # Фильтруем в Python
+        filtered = []
+        for task in tasks:
+            data = self._prepare_task_data(task)
+            if self._task_matches_search(data, text_lower):
+                filtered.append(data)
+
+        return filtered
+
+    def _task_matches_search(self, task_data: Dict, search_text: str) -> bool:
+        """
+        Проверяет, соответствует ли задача поисковому запросу.
+        Поиск по всем полям карточки.
+        """
+        # Поиск по названию
+        if search_text in task_data.get("title", "").lower():
+            return True
+
+        # Поиск по описанию
+        if search_text in task_data.get("description", "").lower():
+            return True
+
+        # Поиск по статусу
+        if search_text in task_data.get("status", "").lower():
+            return True
+
+        # Поиск по приоритету (русский и английский)
+        priority = task_data.get("priority", "")
+        priority_key = task_data.get("priority_key", "")
+        if search_text in priority.lower() or search_text in priority_key.lower():
+            return True
+
+        # Поиск по исполнителю
+        assignee = task_data.get("assignee_name", "")
+        if search_text in assignee.lower():
+            return True
+
+        # Поиск по проекту
+        project_name = task_data.get("project_name", "")
+        if search_text in project_name.lower():
+            return True
+
+        # Поиск по дедлайну
+        deadline = task_data.get("deadline", "")
+        if search_text in deadline.lower():
+            return True
+
+        # Поиск по дате архивации
+        archived_at = task_data.get("archived_at", "")
+        if search_text in archived_at.lower():
+            return True
+
+        # Поиск по ID
+        if str(task_data.get("id", "")).startswith(search_text):
+            return True
+
+        # Поиск по тегам
+        tags = task_data.get("tags", [])
+        for tag in tags:
+            if search_text in tag.lower():
+                return True
+
+        # Поиск по приоритету (дополнительные варианты)
+        priority_rus = task_data.get("priority", "")
+        priority_map = {
+            "низкий": "low",
+            "средний": "medium",
+            "высокий": "high",
+            "критический": "critical"
+        }
+        for rus, eng in priority_map.items():
+            if search_text in rus and priority_key == eng:
+                return True
+            if search_text in eng and priority_key == eng:
+                return True
+
+        return False
 
     def restore_task(self, task_id: int) -> bool:
         """Восстанавливает задачу из архива"""
@@ -209,22 +358,6 @@ class ArchiveService:
         self.session.commit()
         print(f"🔄 Задача {task_id} восстановлена из архива")
         return True
-
-    def search_tasks(self, project_id: int, text: str) -> List[Dict]:
-        """Поиск по архивным задачам проекта"""
-        if not text:
-            return self.get_project_tasks(project_id)
-
-        if not hasattr(Task, 'is_archived'):
-            return []
-
-        stmt = select(Task).where(
-            Task.project_id == project_id,
-            Task.is_archived == True,
-            Task.title.ilike(f"%{text}%")
-        ).order_by(Task.archived_at.desc())
-        tasks = self.session.scalars(stmt).all()
-        return [self._prepare_task_data(task) for task in tasks]
 
     def _prepare_task_data(self, task: Task) -> Dict:
         """Подготавливает данные задачи для UI"""
@@ -261,6 +394,11 @@ class ArchiveService:
                 if hasattr(tag, 'name'):
                     tags.append(tag.name)
 
+        # Получаем статус из колонки
+        status = "Без статуса"
+        if task.column and task.column.name:
+            status = task.column.name
+
         return {
             "id": task.id,
             "title": task.title,
@@ -268,7 +406,7 @@ class ArchiveService:
             "archived_at": task.archived_at.strftime("%d.%m.%Y") if task.archived_at else "Неизвестно",
             "priority": priority_text,
             "priority_key": priority,
-            "status": task.column.name if task.column and task.column.name else "Без статуса",
+            "status": status,
             "assignee_name": assignee_name or "Не назначен",
             "project_name": project_name,
             "deadline": task.deadline.strftime("%d.%m.%Y") if task.deadline else "",
@@ -300,7 +438,6 @@ class ArchiveService:
 
     def get_restore_project_confirmation(self, project_name: str) -> bool:
         """Показывает диалог подтверждения восстановления проекта"""
-        # Этот метод должен вызываться из UI, но логика перенесена в сервис
         pass
 
     def get_delete_project_confirmation(self, project_name: str) -> bool:
