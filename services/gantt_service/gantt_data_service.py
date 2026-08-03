@@ -240,11 +240,14 @@ class GanttDataService(GanttBaseService):
             color = self.get_priority_color(priority_value)
 
             dependencies = []
+            # Используем dependencies_as_predecessor для получения связей, где эта задача - предшественник
             for dep in task.dependencies_as_predecessor:
+                # Получаем тип связи из атрибута type
+                dep_type = dep.type if hasattr(dep, 'type') and dep.type else "FS"
                 dependencies.append({
                     "successor_id": dep.successor_id,
-                    "lag": dep.lag,
-                    "type": dep.type or "FS"  # Добавляем тип связи
+                    "lag": dep.lag if hasattr(dep, 'lag') else 0,
+                    "type": dep_type  # <-- Убеждаемся, что тип сохраняется
                 })
 
             project_name = ""

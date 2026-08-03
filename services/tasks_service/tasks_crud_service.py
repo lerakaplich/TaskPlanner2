@@ -928,6 +928,10 @@ class TasksCrudService:
             from models.tasks import TaskTag
             self.db_session.query(TaskTag).filter(TaskTag.task_id == task_id).delete()
 
+            # Удаляем связи с исполнителями
+            from models.tasks import TaskAssignee
+            self.db_session.query(TaskAssignee).filter(TaskAssignee.task_id == task_id).delete()
+
             # Затем удаляем саму задачу
             task = self.repo.get_by_id(task_id)
             if task:

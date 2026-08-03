@@ -21,7 +21,7 @@ class GanttWidgetViews:
 
         if hasattr(self.widget, 'gantt_canvas'):
             # Получаем связи с типами
-            links = self.widget._service.get_all_links()
+            links = self.widget._service.get_all_links()  # <-- Теперь возвращает Dict[int, List[Dict]]
             self.widget.gantt_canvas.set_links(links)
             self.widget.gantt_canvas.update()
 

@@ -59,7 +59,7 @@ class TaskAssignee(Base):
     __tablename__ = "task_assignees"
 
     task_id: Mapped[int] = mapped_column(ForeignKey("tasks.id", ondelete="CASCADE"), primary_key=True)
-    employee_id: Mapped[int] = mapped_column(ForeignKey("employees_data.employee_id", ondelete="CASCADE"), primary_key=True)
+    employee_id: Mapped[int] = mapped_column(Integer, nullable=False)  # <-- Убираем ForeignKey
     assigned_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
 
     task: Mapped["Task"] = relationship(back_populates="assignees")
@@ -79,15 +79,14 @@ class Task(Base):
     )
     deadline: Mapped[Optional[datetime]]
     created_by: Mapped[Optional[int]]
-    # Старое поле для одного исполнителя (оставляем для обратной совместимости)
-    assigned_to: Mapped[Optional[int]] = mapped_column(ForeignKey("employees_data.employee_id"), nullable=True)
+    assigned_to: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
 
-    # Новое поле для множественных исполнителей
     assignees: Mapped[List["TaskAssignee"]] = relationship(
         "TaskAssignee",
         back_populates="task",
         cascade="all, delete-orphan",
         lazy="selectin"
+        # confirm_deleted_rows=False  # <-- УДАЛИТЕ эту строку
     )
     created_at: Mapped[datetime]
     updated_at: Mapped[datetime]
@@ -111,7 +110,8 @@ class Task(Base):
         "TaskTag",
         back_populates="task",
         cascade="all, delete-orphan",
-        lazy="selectin"  # <-- ДОБАВЬТЕ ДЛЯ АВТОМАТИЧЕСКОЙ ЗАГРУЗКИ
+        lazy="selectin"
+        # confirm_deleted_rows=False  # <-- УДАЛИТЕ эту строку
     )
 
     # Связи как предшественник

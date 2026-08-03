@@ -415,13 +415,27 @@ class ArchiveService:
 
     def delete_task_permanently(self, task_id: int) -> bool:
         """Полностью удаляет задачу из БД"""
-        task = self.session.get(Task, task_id)
-        if not task:
-            return False
+        try:
+            task = self.session.get(Task, task_id)
+            if not task:
+                return False
 
-        self.session.delete(task)
-        self.session.commit()
-        return True
+            # Сначала удаляем связи с тегами
+            from models.tasks import TaskTag
+            self.session.query(TaskTag).filter(TaskTag.task_id == task_id).delete()
+
+            # Удаляем связи с исполнителями
+            from models.tasks import TaskAssignee
+            self.session.query(TaskAssignee).filter(TaskAssignee.task_id == task_id).delete()
+
+            # Затем удаляем саму задачу
+            self.session.delete(task)
+            self.session.commit()
+            return True
+        except Exception as e:
+            self.session.rollback()
+            print(f"❌ Ошибка удаления задачи {task_id}: {e}")
+            return False
 
     def get_task_title(self, task_id: int) -> str:
         """Возвращает название задачи"""

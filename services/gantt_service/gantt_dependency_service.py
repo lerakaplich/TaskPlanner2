@@ -38,7 +38,7 @@ class GanttDependencyService:
                 links.setdefault(task.id, []).append({
                     "successor_id": dep.get("successor_id"),
                     "lag": dep.get("lag", 0),
-                    "type": dep.get("type", "FS")
+                    "type": dep.get("type", "FS")  # <-- Убедимся, что тип передается
                 })
         return links
 
@@ -51,8 +51,6 @@ class GanttDependencyService:
                     linked.append(task.id)
         return linked
 
-    # services/gantt_service/gantt_dependency_service.py
-
     def add_dependency(
             self,
             predecessor_id: int,
@@ -60,10 +58,7 @@ class GanttDependencyService:
             lag: int = 0,
             dep_type: str = "FS"
     ) -> Tuple[bool, Optional[str]]:
-        """
-        Добавляет связь между задачами с указанным типом.
-        При создании связи автоматически пересчитывает даты задачи-последователя.
-        """
+        """Добавляет связь между задачами"""
         if not self._can_edit_task():
             return False, "Нет прав на создание связей"
 
@@ -71,7 +66,6 @@ class GanttDependencyService:
             return False, f"Неизвестный тип связи: {dep_type}"
 
         try:
-            # Проверяем существование связи
             existing = self.session.query(TaskDependency).filter(
                 TaskDependency.predecessor_id == predecessor_id,
                 TaskDependency.successor_id == successor_id
@@ -80,7 +74,6 @@ class GanttDependencyService:
             if existing:
                 return False, "Связь между этими задачами уже существует"
 
-            # Находим задачи
             pred_task = None
             succ_task = None
             for t in self._data.get_all_tasks():
@@ -92,16 +85,13 @@ class GanttDependencyService:
             if not pred_task or not succ_task:
                 return False, "Одна из задач не найдена"
 
-            # Проверяем, не создаст ли связь циклическую зависимость
             if self._would_create_cycle(predecessor_id, successor_id):
                 return False, "Создание связи создаст циклическую зависимость"
 
-            # Рассчитываем новые даты для задачи-последователя
             new_start, new_end = self._calculate_dates_for_successor(
                 pred_task, succ_task, dep_type, lag
             )
 
-            # Создаём связь в БД
             dependency = TaskDependency(
                 predecessor_id=predecessor_id,
                 successor_id=successor_id,
@@ -109,15 +99,16 @@ class GanttDependencyService:
                 type=dep_type
             )
             self.session.add(dependency)
+            self.session.flush()
 
-            # Обновляем даты задачи-последователя в БД
-            from .gantt_data_service import GanttDataService
-            data_service = GanttDataService(self.session)
-            data_service.update_task_dates(successor_id, new_start, new_end)
-
+            from models.tasks import Task
+            self.session.query(Task).filter(Task.id == successor_id).update({
+                Task.created_at: new_start,
+                Task.deadline: new_end,
+                Task.updated_at: datetime.now()
+            }, synchronize_session=False)
             self.session.commit()
 
-            # Обновляем кэш
             for t in self._data.get_all_tasks():
                 if t.id == predecessor_id:
                     t.dependencies.append({
@@ -127,7 +118,6 @@ class GanttDependencyService:
                     })
                     break
 
-            # Обновляем задачу-последователя в кэше
             for t in self._data.get_all_tasks():
                 if t.id == successor_id:
                     t.start_date = new_start
@@ -138,11 +128,13 @@ class GanttDependencyService:
 
         except Exception as e:
             self.session.rollback()
+            print(f"❌ Ошибка создания связи: {e}")
+            import traceback
+            traceback.print_exc()
             return False, f"Ошибка создания связи: {str(e)}"
 
     def _would_create_cycle(self, predecessor_id: int, successor_id: int) -> bool:
         """Проверяет, не создаст ли связь циклическую зависимость"""
-        # Простая проверка: если уже есть путь от successor к predecessor
         visited = set()
         stack = [successor_id]
 
@@ -155,7 +147,6 @@ class GanttDependencyService:
             if current == predecessor_id:
                 return True
 
-            # Находим все задачи, которые зависят от current
             for task in self._data.get_all_tasks():
                 for dep in task.dependencies:
                     if dep.get("successor_id") == current:
@@ -164,8 +155,6 @@ class GanttDependencyService:
 
         return False
 
-    # services/gantt_service/gantt_dependency_service.py
-
     def _calculate_dates_for_successor(
             self,
             pred_task: TaskGanttData,
@@ -173,42 +162,29 @@ class GanttDependencyService:
             dep_type: str,
             lag: int = 0
     ) -> Tuple[datetime, datetime]:
-        """
-        Рассчитывает новые даты для задачи-последователя в зависимости от типа связи.
-
-        Правила (согласно логике):
-        - FS (Финиш-Старт): succ.start >= pred.end + lag
-        - SS (Старт-Старт): succ.start >= pred.start + lag
-        - FF (Финиш-Финиш): succ.end >= pred.end + lag
-        - SF (Старт-Финиш): succ.end >= pred.start + lag
-        """
+        """Рассчитывает новые даты для задачи-последователя"""
         pred_start = pred_task.start_date
         pred_end = pred_task.end_date
         succ_start = succ_task.start_date
         succ_end = succ_task.end_date
 
-        # Рассчитываем длительность задачи-последователя
         duration = (succ_end - succ_start).days
         if duration <= 0:
-            duration = 1  # Минимум 1 день
+            duration = 1
 
-        if dep_type == "FS":  # Финиш-Старт
-            # Задача-последователь начинается ПОСЛЕ завершения предшественника
+        if dep_type == "FS":
             new_start = pred_end + timedelta(days=lag)
             new_end = new_start + timedelta(days=duration)
 
-        elif dep_type == "SS":  # Старт-Старт
-            # Задача-последователь начинается ОДНОВРЕМЕННО или ПОЗЖЕ предшественника
+        elif dep_type == "SS":
             new_start = max(succ_start, pred_start + timedelta(days=lag))
             new_end = new_start + timedelta(days=duration)
 
-        elif dep_type == "FF":  # Финиш-Финиш
-            # Задача-последователь завершается ОДНОВРЕМЕННО или ПОЗЖЕ предшественника
+        elif dep_type == "FF":
             new_end = max(succ_end, pred_end + timedelta(days=lag))
             new_start = new_end - timedelta(days=duration)
 
-        elif dep_type == "SF":  # Старт-Финиш
-            # Задача-последователь завершается ПОСЛЕ начала предшественника
+        elif dep_type == "SF":
             new_end = max(succ_end, pred_start + timedelta(days=lag))
             new_start = new_end - timedelta(days=duration)
 
@@ -216,35 +192,29 @@ class GanttDependencyService:
             new_start = succ_start
             new_end = succ_end
 
-        # Убеждаемся, что даты корректны
         if new_start > new_end:
             new_start, new_end = new_end, new_start + timedelta(days=1)
 
-        # Округляем до начала дня
         new_start = new_start.replace(hour=0, minute=0, second=0, microsecond=0)
         new_end = new_end.replace(hour=0, minute=0, second=0, microsecond=0)
 
         return new_start, new_end
 
     def update_task_dates_with_linked(
-        self,
-        task_id: int,
-        new_start: datetime,
-        new_end: datetime
-    ) -> Tuple[bool, Optional[str]]:
+            self,
+            task_id: int,
+            new_start: datetime,
+            new_end: datetime
+    ) -> bool:
         """
         Обновляет даты задачи и всех зависимых с учётом типов связей.
-        Возвращает (успех, сообщение).
+        Возвращает True при успехе.
         """
-        from .gantt_data_service import GanttDataService
-
         if not self._can_edit_task():
-            return False, "Нет прав на изменение дат"
+            return False
 
         try:
-            data_service = GanttDataService(self.session)
-
-            # Получаем старые даты задачи
+            # Находим задачу в кэше
             old_task = None
             old_start = None
             for t in self._data.get_all_tasks():
@@ -254,91 +224,71 @@ class GanttDependencyService:
                     break
 
             if not old_task:
-                return False, f"Задача {task_id} не найдена"
+                return False
 
-            # Обновляем даты задачи
-            if not data_service.update_task_dates(task_id, new_start, new_end):
-                return False, "Не удалось обновить даты задачи"
+            # 1. Обновляем даты самой задачи
+            from models.tasks import Task
+            self.session.query(Task).filter(Task.id == task_id).update({
+                Task.created_at: new_start,
+                Task.deadline: new_end,
+                Task.updated_at: datetime.now()
+            }, synchronize_session=False)
+            self.session.commit()
 
-            # Рассчитываем смещение
+            # Обновляем в кэше
+            for t in self._data.get_all_tasks():
+                if t.id == task_id:
+                    t.start_date = new_start
+                    t.end_date = new_end
+                    break
+
+            # 2. Обновляем все зависимые задачи (где task_id - предшественник)
             delta_days = (new_start - old_start).days if old_start else 0
 
-            # Обновляем зависимые задачи с учётом типа связи
-            linked_tasks = self.get_linked_tasks_for_update(task_id)
-
-            for linked_id in linked_tasks:
-                linked_task = None
-                for t in self._data.get_all_tasks():
-                    if t.id == linked_id:
-                        linked_task = t
-                        break
-
-                if not linked_task:
-                    continue
-
-                # Находим тип связи
-                link_type = "FS"  # По умолчанию
-                for dep in linked_task.dependencies:
+            # Получаем все задачи, которые зависят от task_id
+            for task in self._data.get_all_tasks():
+                # Проверяем зависимости задачи
+                for dep in task.dependencies:
                     if dep.get("successor_id") == task_id:
+                        # Это означает, что task_id является предшественником для task
                         link_type = dep.get("type", "FS")
+                        lag = dep.get("lag", 0)
+
+                        # Рассчитываем новые даты для зависимой задачи
+                        new_linked_start, new_linked_end = self._calculate_dates_for_successor(
+                            old_task,  # предшественник (старый, но используем для логики)
+                            task,  # зависимая задача
+                            link_type,
+                            lag
+                        )
+
+                        # Обновляем даты в БД
+                        self.session.query(Task).filter(Task.id == task.id).update({
+                            Task.created_at: new_linked_start,
+                            Task.deadline: new_linked_end,
+                            Task.updated_at: datetime.now()
+                        }, synchronize_session=False)
+                        self.session.commit()
+
+                        # Обновляем в кэше
+                        for t in self._data.get_all_tasks():
+                            if t.id == task.id:
+                                t.start_date = new_linked_start
+                                t.end_date = new_linked_end
+                                break
+
+                        # Рекурсивно обновляем задачи, зависящие от этой
+                        self.update_task_dates_with_linked(task.id, new_linked_start, new_linked_end)
                         break
 
-                # Рассчитываем новые даты в зависимости от типа связи
-                new_linked_start, new_linked_end = self._calculate_dates_by_link_type(
-                    linked_task,
-                    old_start,
-                    new_start,
-                    delta_days,
-                    link_type
-                )
-
-                if new_linked_start and new_linked_end:
-                    data_service.update_task_dates(linked_id, new_linked_start, new_linked_end)
-
-            return True, "Даты обновлены"
+            return True
 
         except Exception as e:
-            return False, f"Ошибка обновления дат: {str(e)}"
-
-    def _calculate_dates_by_link_type(
-        self,
-        task: TaskGanttData,
-        old_start: datetime,
-        new_start: datetime,
-        delta_days: int,
-        link_type: str
-    ) -> Tuple[Optional[datetime], Optional[datetime]]:
-        """
-        Рассчитывает новые даты для задачи в зависимости от типа связи.
-        """
-        if link_type == "FS":  # Финиш-Старт
-            # Задача начинается после завершения предшественника
-            return task.start_date + timedelta(days=delta_days), task.end_date + timedelta(days=delta_days)
-
-        elif link_type == "SS":  # Старт-Старт
-            # Обе задачи начинаются одновременно
-            duration = (task.end_date - task.start_date).days
-            new_start_date = new_start
-            new_end_date = new_start_date + timedelta(days=duration)
-            return new_start_date, new_end_date
-
-        elif link_type == "FF":  # Финиш-Финиш
-            # Обе задачи завершаются одновременно
-            duration = (task.end_date - task.start_date).days
-            new_end_date = new_start + (task.end_date - old_start)  # Используем смещение от старого старта
-            new_start_date = new_end_date - timedelta(days=duration)
-            return new_start_date, new_end_date
-
-        elif link_type == "SF":  # Старт-Финиш
-            # Задача завершается после начала предшественника
-            duration = (task.end_date - task.start_date).days
-            new_start_date = new_start + timedelta(days=delta_days)
-            new_end_date = new_start_date + timedelta(days=duration)
-            return new_start_date, new_end_date
-
-        else:
-            # По умолчанию - обычный сдвиг
-            return task.start_date + timedelta(days=delta_days), task.end_date + timedelta(days=delta_days)
+            self.session.rollback()
+            print(f"❌ Ошибка обновления дат: {e}")
+            import traceback
+            traceback.print_exc()
+            return False
 
     def get_link_type_info(self, link_type: str) -> Dict:
         """Возвращает информацию о типе связи."""

@@ -68,6 +68,14 @@ class GanttCanvas(QWidget):
     def set_links(self, links: Dict[int, List[Dict]]) -> None:
         """Установить связи между задачами (с типами)"""
         self._links = links
+        # Добавляем отладку
+        print(f"🔗 GanttCanvas.set_links: получено {len(links)} связей")
+        for from_id, deps in links.items():
+            for dep in deps:
+                if isinstance(dep, dict):
+                    print(f"   {from_id} -> {dep.get('successor_id')} type={dep.get('type', 'FS')}")
+                else:
+                    print(f"   {from_id} -> {dep} (не словарь!)")
         self.update()
 
     def clear_selection(self) -> None:
@@ -262,28 +270,35 @@ class GanttCanvas(QWidget):
             "SF": "↩",
         }
 
+        print(f"🎨 _draw_links: отрисовка {len(self._links)} связей")
+
         for from_id, deps in self._links.items():
             if from_id not in task_map:
+                print(f"   ⚠️ Задача {from_id} не найдена в task_map")
                 continue
 
             from_task = self._tasks[task_map[from_id]]
             from_x, from_width = self._service.calculate_bar_position(from_task, self._start_date)
             from_y = self._header_height + task_map[from_id] * self._row_height + self._row_height // 2
 
-            # deps теперь список словарей
             for dep in deps:
-                # Проверяем, является ли dep словарём
+                # Проверяем, является ли dep словарем или просто числом
                 if isinstance(dep, dict):
                     to_id = dep.get("successor_id")
                     link_type = dep.get("type", "FS")
+                    lag = dep.get("lag", 0)
+                    print(f"   📎 {from_id} -> {to_id}: type={link_type}")
                 else:
-                    # Если dep - это просто int (старый формат)
                     to_id = dep
                     link_type = "FS"
+                    lag = 0
+                    print(f"   ⚠️ {from_id} -> {to_id}: dep НЕ словарь! type=FS (по умолчанию)")
 
                 if to_id not in task_map:
+                    print(f"   ⚠️ Задача {to_id} не найдена в task_map")
                     continue
 
+                # Получаем цвет для типа связи
                 color = link_colors.get(link_type, QColor("#D22730"))
 
                 to_task = self._tasks[task_map[to_id]]
@@ -293,12 +308,13 @@ class GanttCanvas(QWidget):
                 start_point = QPointF(from_x + from_width + 5, from_y)
                 end_point = QPointF(to_x - 5, to_y)
 
-                # Рисуем линию связи
-                pen = QPen(color, 2)
-                painter.setPen(pen)
+                # Рисуем линию связи в зависимости от типа
+                painter.setPen(QPen(color, 2.5))
+                painter.setBrush(Qt.BrushStyle.NoBrush)
 
+                # Разная логика отрисовки для разных типов связей
                 if link_type in ("FS", "FF"):
-                    # Стандартная связь с изгибом
+                    # Финиш-Старт или Финиш-Финиш - с изгибом
                     mid_x = (start_point.x() + end_point.x()) // 2
                     path = QPainterPath()
                     path.moveTo(start_point)
@@ -306,14 +322,18 @@ class GanttCanvas(QWidget):
                     path.lineTo(QPointF(mid_x, to_y))
                     path.lineTo(end_point)
                     painter.drawPath(path)
+                    print(f"   📐 {from_id}->{to_id}: рисуем ИЗОГНУТУЮ линию (тип {link_type})")
                 else:
-                    # Прямая связь (SS, SF)
+                    # Старт-Старт или Старт-Финиш - прямая линия
                     painter.drawLine(start_point, end_point)
+                    print(f"   📐 {from_id}->{to_id}: рисуем ПРЯМУЮ линию (тип {link_type})")
 
                 # Рисуем стрелку на конце
                 if end_point.x() > start_point.x():
-                    arrow_size = 6
+                    arrow_size = 5
                     painter.setBrush(QBrush(color))
+                    painter.setPen(QPen(color, 1))
+
                     arrow = QPainterPath()
                     arrow.moveTo(end_point)
                     arrow.lineTo(QPointF(end_point.x() - arrow_size, end_point.y() - arrow_size))
@@ -323,6 +343,7 @@ class GanttCanvas(QWidget):
 
                     # Рисуем символ типа связи
                     symbol = link_symbols.get(link_type, "→")
+                    # Вычисляем позицию для символа
                     if abs(to_y - from_y) > 30:
                         symbol_x = mid_x - 10
                         symbol_y = (from_y + to_y) // 2 - 10
@@ -330,14 +351,15 @@ class GanttCanvas(QWidget):
                         symbol_x = (start_point.x() + end_point.x()) // 2 - 10
                         symbol_y = from_y - 15
 
-                    painter.setPen(QColor("#1B232A"))
-                    font = QFont("Arial", 10, QFont.Weight.Bold)
+                    painter.setPen(QPen(QColor("#1B232A"), 1))
+                    font = QFont("Arial", 9, QFont.Weight.Bold)
                     painter.setFont(font)
                     painter.drawText(
                         QRectF(symbol_x, symbol_y, 20, 20),
                         Qt.AlignmentFlag.AlignCenter,
                         symbol
                     )
+                    print(f"   🔤 {from_id}->{to_id}: символ '{symbol}'")
 
     def _draw_selection_highlight(self, painter: QPainter) -> None:
         """Рисует подсветку выбранной задачи для связи"""

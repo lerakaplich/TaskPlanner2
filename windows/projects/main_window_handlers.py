@@ -144,7 +144,7 @@ class GlobalSearchHandler:
         return 0
 
     def _search_projects(self, query: str) -> int:
-        """Поиск по проектам"""
+        """Поиск по проектам с учётом всех полей"""
         if not hasattr(self.main, 'project_handler'):
             return 0
 
@@ -167,8 +167,11 @@ class GlobalSearchHandler:
         return len(filtered)
 
     def _project_matches(self, project, query: str) -> bool:
-        """Проверяет соответствие проекта запросу"""
-        fields = [
+        """Проверяет соответствие проекта запросу по всем полям"""
+        query_lower = query.lower()
+
+        # Базовые поля проекта
+        fields_to_check = [
             getattr(project, 'name', '') or '',
             getattr(project, 'description', '') or '',
             getattr(project, 'customer', '') or '',
@@ -176,7 +179,87 @@ class GlobalSearchHandler:
             getattr(project, 'status', '') or '',
             getattr(project, 'type', '') or '',
         ]
-        return any(query in field.lower() for field in fields)
+
+        # Проверяем базовые поля
+        for field in fields_to_check:
+            if query_lower in field.lower():
+                return True
+
+        # Проверяем владельца (owner_name)
+        owner_name = getattr(project, 'owner_name', '') or ''
+        if query_lower in owner_name.lower():
+            return True
+
+        # Проверяем куратора (manager_name)
+        manager_name = getattr(project, 'manager_name', '') or ''
+        if manager_name and query_lower in manager_name.lower():
+            return True
+
+        # Проверяем ID проекта
+        project_id = getattr(project, 'id', None)
+        if project_id and query_lower in str(project_id):
+            return True
+
+        # Проверяем дату создания
+        created_at = getattr(project, 'created_at', '') or ''
+        if created_at and query_lower in str(created_at):
+            return True
+
+        # Проверяем количество задач
+        tasks_total = getattr(project, 'tasks_total', 0)
+        if tasks_total and query_lower in str(tasks_total):
+            return True
+
+        # Проверяем количество выполненных задач
+        tasks_done = getattr(project, 'tasks_done', 0)
+        if tasks_done and query_lower in str(tasks_done):
+            return True
+
+        # Проверяем прогресс (если есть)
+        if hasattr(project, 'tasks_total') and hasattr(project, 'tasks_done'):
+            if project.tasks_total > 0:
+                progress = int((project.tasks_done / project.tasks_total) * 100)
+                if query_lower in str(progress):
+                    return True
+
+        # Проверяем количество участников
+        member_count = getattr(project, 'member_count', 0)
+        if member_count and query_lower in str(member_count):
+            return True
+
+        # Проверяем количество администраторов
+        admin_count = getattr(project, 'admin_count', 0)
+        if admin_count and query_lower in str(admin_count):
+            return True
+
+        # Проверяем количество колонок
+        columns_count = getattr(project, 'columns_count', 0)
+        if columns_count and query_lower in str(columns_count):
+            return True
+
+        # Проверяем статус архивации
+        is_archived = getattr(project, 'is_archived', False)
+        if is_archived:
+            if query_lower in 'архив' or query_lower in 'archived' or query_lower in 'archive':
+                return True
+        else:
+            if query_lower in 'актив' or query_lower in 'active':
+                return True
+
+        # Проверяем участников проекта (если есть список участников)
+        if hasattr(project, 'members') and project.members:
+            for member in project.members:
+                if hasattr(member, 'full_name'):
+                    member_name = member.full_name or ''
+                elif hasattr(member, 'name'):
+                    member_name = member.name or ''
+                else:
+                    member_name = str(member) if member else ''
+
+                if query_lower in member_name.lower():
+                    return True
+
+        return False
 
     def _search_my_tasks(self, query: str) -> int:
         """Поиск по моим задачам"""

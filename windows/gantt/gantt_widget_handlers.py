@@ -3,6 +3,7 @@
 from datetime import datetime
 from typing import Optional
 from PyQt6.QtCore import QDate, Qt
+from PyQt6.QtGui import QColor
 from PyQt6.QtWidgets import QDialog, QMessageBox, QApplication, QTreeWidgetItem
 
 
@@ -84,13 +85,11 @@ class GanttWidgetHandlers:
             all_tasks = self.widget._service.get_all_tasks()
             return len(all_tasks)
 
-        # Считаем отфильтрованные задачи
         filtered_tasks = self.widget._service.get_filtered_tasks(
             self.widget._current_project_filter,
             self.widget._current_executor_filter
         )
 
-        # Фильтруем по поисковому запросу
         search_text = self.widget._current_search_text
         result = []
         for task in filtered_tasks:
@@ -106,20 +105,17 @@ class GanttWidgetHandlers:
             self.widget._current_executor_filter
         )
 
-        # Фильтруем задачи по поисковому запросу
         filtered = []
         for task in all_tasks:
             if self._task_matches_search(task, query):
                 filtered.append(task)
 
-        # Обновляем отображение
         if hasattr(self.widget, 'gantt_canvas'):
             self.widget.gantt_canvas.set_tasks(filtered)
 
         if hasattr(self.widget, 'calendar_widget'):
             self.widget.calendar_widget.set_tasks(filtered)
 
-        # Обновляем дерево проектов
         self._update_tree_with_search(query)
 
     def _task_matches_search(self, task, query: str) -> bool:
@@ -143,13 +139,11 @@ class GanttWidgetHandlers:
         self.widget.projectsTree.clear()
         all_tasks = self.widget._service.get_all_tasks()
 
-        # Фильтруем задачи по поиску
         if query:
             filtered_tasks = [t for t in all_tasks if self._task_matches_search(t, query)]
         else:
             filtered_tasks = all_tasks
 
-        # Группируем по проектам
         projects_dict = {}
         for task in filtered_tasks:
             if task.project_id not in projects_dict:
@@ -159,7 +153,6 @@ class GanttWidgetHandlers:
                 }
             projects_dict[task.project_id]["tasks"].append(task)
 
-        # Добавляем в дерево
         for project_id, data in projects_dict.items():
             project_item = QTreeWidgetItem(self.widget.projectsTree)
             project_item.setText(0, f"📁 {data['name']}")
@@ -170,7 +163,6 @@ class GanttWidgetHandlers:
                 task_item.setText(0, f"{task.name} ({task.executor_name or 'Не назначен'})")
                 task_item.setData(0, Qt.ItemDataRole.UserRole, f"task_{task.id}")
 
-                # Подсветка найденных совпадений
                 if query and self._task_matches_search(task, query):
                     task_item.setBackground(0, QColor("#FFF3E0"))
 
@@ -186,7 +178,6 @@ class GanttWidgetHandlers:
             QMessageBox.warning(self.widget, "Доступ запрещён", "У вас нет прав на создание задач.")
             return
 
-        # ✅ Получаем проекты, где пользователь может управлять задачами
         manageable_projects = self.widget._service.get_manageable_projects()
 
         if not manageable_projects:
@@ -198,7 +189,6 @@ class GanttWidgetHandlers:
             )
             return
 
-        # Проверяем, есть ли проекты для выбранного фильтра
         if self.widget._current_project_filter != "all":
             project_id = None
             if isinstance(self.widget._current_project_filter, str) and self.widget._current_project_filter.startswith(
@@ -206,7 +196,6 @@ class GanttWidgetHandlers:
                 project_id = int(self.widget._current_project_filter.split("_")[1])
 
             if project_id:
-                # Проверяем, есть ли выбранный проект в списке доступных
                 project_exists = any(p["id"] == project_id for p in manageable_projects)
                 if not project_exists:
                     QMessageBox.warning(
@@ -228,7 +217,6 @@ class GanttWidgetHandlers:
             column_service=ColumnService(self.widget.session)
         )
 
-        # Открываем диалог с предустановленным проектом (если выбран)
         task_data = {}
         if self.widget._current_project_filter != "all":
             project_id = None
@@ -237,7 +225,6 @@ class GanttWidgetHandlers:
                 project_id = int(self.widget._current_project_filter.split("_")[1])
             if project_id:
                 project_name = self.widget._service.get_project_name(project_id)
-                # Проверяем, доступен ли проект
                 if any(p["id"] == project_id for p in manageable_projects):
                     task_data = {"project_id": project_id, "project_name": project_name}
                 else:
@@ -253,7 +240,6 @@ class GanttWidgetHandlers:
 
         dialog.set_service(task_service)
 
-        # ✅ Фильтруем комбобокс проектов в диалоге
         if hasattr(dialog, 'comboBoxProject'):
             dialog.comboBoxProject.blockSignals(True)
             dialog.comboBoxProject.clear()
@@ -261,7 +247,6 @@ class GanttWidgetHandlers:
             for project in manageable_projects:
                 dialog.comboBoxProject.addItem(project["name"], project["id"])
 
-            # Если есть предустановленный проект - выбираем его
             if task_data.get("project_id"):
                 for i in range(dialog.comboBoxProject.count()):
                     if dialog.comboBoxProject.itemData(i) == task_data["project_id"]:
@@ -300,31 +285,101 @@ class GanttWidgetHandlers:
             QMessageBox.critical(self.widget, "Ошибка", "Не удалось создать задачу")
 
     def on_create_link(self) -> None:
+        """Создание связи между задачами через диалог"""
         if not self.widget._service.can_create_link():
             QMessageBox.warning(self.widget, "Доступ запрещён", "У вас нет прав на создание связей между задачами.")
             return
 
-        if not self.widget._dont_show_link_dialog:
-            from windows.gantt.link_dialog import LinkDialog
-            dialog = LinkDialog(self.widget)
-            if dialog.exec() == QDialog.DialogCode.Accepted:
-                if dialog.dont_show_checkbox.isChecked():
-                    self.widget._dont_show_link_dialog = True
+        # Получаем все задачи для отображения в диалоге
+        all_tasks = self.widget._service.get_all_tasks()
 
-        QMessageBox.information(
-            self.widget, "Создание связи",
-            "Чтобы создать связь между задачами:\n"
-            "1. Нажмите Ctrl+клик на первой задаче (предшественник)\n"
-            "2. Затем Ctrl+клик на второй задаче (последователь)\n"
-            "3. Подтвердите создание связи"
+        if len(all_tasks) < 2:
+            QMessageBox.warning(
+                self.widget,
+                "Недостаточно задач",
+                "Для создания связи необходимо как минимум 2 задачи.\n"
+                "Сначала создайте задачи в проектах."
+            )
+            return
+
+        from windows.gantt.link_dialog import LinkDialog
+
+        # Создаём диалог с выбором задач
+        dialog = LinkDialog(
+            parent=self.widget,
+            tasks=all_tasks,
+            link_type=getattr(self.widget, '_default_link_type', 'FS'),
+            show_instruction=True
         )
 
+        # Подключаем сигнал создания связи
+        dialog.link_created.connect(self._on_link_created_from_dialog)
+
+        # Показываем диалог
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            # Сохраняем выбор "Не показывать"
+            if dialog.get_dont_show():
+                self.widget._dont_show_link_dialog = True
+                # Обновляем информацию о связи
+                link_type = dialog.get_link_type()
+                link_type_name = LinkDialog.LINK_TYPES.get(link_type, "").split(" — ")[0]
+                QMessageBox.information(
+                    self.widget,
+                    "Информация",
+                    f"Связь типа '{link_type_name}' будет создана.\n"
+                    f"В будущем это окно показываться не будет."
+                )
+
+    def _on_link_created_from_dialog(self, predecessor_id: int, successor_id: int, link_type: str) -> None:
+        """Обработка создания связи из диалога."""
+        self._create_link_internal(predecessor_id, successor_id, link_type)
+
     def on_link_created(self, predecessor_id: int, successor_id: int) -> None:
-        """Обработка создания связи между задачами."""
+        """Обработка создания связи через Ctrl+клик (для обратной совместимости)."""
         if not self.widget._service.can_create_link():
             QMessageBox.warning(self.widget, "Доступ запрещён", "У вас нет прав на создание связей.")
             return
 
+        # Используем тип связи по умолчанию
+        link_type = getattr(self.widget, '_default_link_type', 'FS')
+
+        # Если есть диалог связи - используем его
+        if not self.widget._dont_show_link_dialog:
+            all_tasks = self.widget._service.get_all_tasks()
+            pred_task = self.widget._service.get_task_by_id(predecessor_id)
+            succ_task = self.widget._service.get_task_by_id(successor_id)
+
+            if not pred_task or not succ_task:
+                QMessageBox.warning(self.widget, "Ошибка", "Задачи не найдены")
+                return
+
+            from windows.gantt.link_dialog import LinkDialog
+
+            dialog = LinkDialog(
+                parent=self.widget,
+                tasks=all_tasks,
+                predecessor_id=predecessor_id,
+                successor_id=successor_id,
+                link_type=link_type,
+                show_instruction=False
+            )
+
+            dialog.link_created.connect(self._on_link_created_from_dialog)
+
+            if dialog.exec() != QDialog.DialogCode.Accepted:
+                if hasattr(self.widget, 'gantt_canvas'):
+                    self.widget.gantt_canvas.clear_selection()
+                return
+
+            # Сохраняем выбор "Не показывать"
+            if dialog.get_dont_show():
+                self.widget._dont_show_link_dialog = True
+        else:
+            # Создаём связь без диалога
+            self._create_link_internal(predecessor_id, successor_id, link_type)
+
+    def _create_link_internal(self, predecessor_id: int, successor_id: int, link_type: str) -> None:
+        """Внутренний метод создания связи."""
         pred_task = self.widget._service.get_task_by_id(predecessor_id)
         succ_task = self.widget._service.get_task_by_id(successor_id)
 
@@ -335,26 +390,9 @@ class GanttWidgetHandlers:
         pred_name = pred_task.name
         succ_name = succ_task.name
 
+        # Получаем название типа связи
         from windows.gantt.link_dialog import LinkDialog
-        show_instruction = not self.widget._dont_show_link_dialog
-
-        dialog = LinkDialog(
-            self.widget,
-            predecessor_name=pred_name,
-            successor_name=succ_name,
-            show_instruction=show_instruction
-        )
-
-        if dialog.exec() != QDialog.DialogCode.Accepted:
-            if hasattr(self.widget, 'gantt_canvas'):
-                self.widget.gantt_canvas.clear_selection()
-            return
-
-        link_type = dialog.get_link_type()
-        link_type_name = dialog.LINK_TYPES.get(link_type, "").split(" — ")[0]
-
-        if dialog.get_dont_show():
-            self.widget._dont_show_link_dialog = True
+        link_type_name = LinkDialog.LINK_TYPES.get(link_type, "").split(" — ")[0]
 
         # Сохраняем старые даты
         old_start = succ_task.start_date
@@ -384,7 +422,7 @@ class GanttWidgetHandlers:
             QMessageBox.information(
                 self.widget,
                 "Успех",
-                f"✅ Связь успешно создана!\n"
+                f"Связь успешно создана!\n"
                 f"{pred_name} → {succ_name}"
                 f"{date_changed}"
             )

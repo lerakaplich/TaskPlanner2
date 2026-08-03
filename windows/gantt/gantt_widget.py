@@ -108,6 +108,164 @@ class GanttWidget(QWidget):
             uic.loadUi(ui_path, self)
             self._setup_loaded_ui()
             QTimer.singleShot(100, self._setup_priorities)
+            QTimer.singleShot(150, self._setup_link_legend)
+
+    def _setup_link_legend(self) -> None:
+        """Настраивает легенду типов связей в левой панели"""
+        # Цвета для разных типов связей
+        link_colors = {
+            "FS": "#D22730",  # Красный
+            "SS": "#2196F3",  # Синий
+            "FF": "#4CAF50",  # Зелёный
+            "SF": "#FF9800",  # Оранжевый
+        }
+
+        link_symbols = {
+            "FS": "→",
+            "SS": "⇉",
+            "FF": "⇇",
+            "SF": "↩",
+        }
+
+        link_names = {
+            "FS": "Финиш-Старт",
+            "SS": "Старт-Старт",
+            "FF": "Финиш-Финиш",
+            "SF": "Старт-Финиш",
+        }
+
+        # Пытаемся найти группу для приоритетов
+        container = self.findChild(QGroupBox, "prioritiesGroup")
+        if not container:
+            # Если нет группы приоритетов, создаем новую для связей
+            container = self.findChild(QGroupBox, "projectsGroup")
+            if container:
+                parent = container.parent()
+                if parent:
+                    # Создаем новую группу для связей
+                    link_group = QGroupBox("Типы связей")
+                    link_group.setStyleSheet("""
+                        QGroupBox {
+                            font-weight: bold;
+                            font-size: 16px;
+                            color: #1B232A;
+                            border: 1px solid #E0E0E0;
+                            border-radius: 8px;
+                            margin-top: 10px;
+                            padding-top: 15px;
+                        }
+                        QGroupBox::title {
+                            subcontrol-origin: margin;
+                            left: 10px;
+                            padding: 0 5px 0 5px;
+                        }
+                    """)
+                    link_group.setMinimumHeight(80)
+                    link_group.setMaximumHeight(160)
+
+                    link_layout = QVBoxLayout(link_group)
+                    link_layout.setSpacing(4)
+                    link_layout.setContentsMargins(10, 5, 10, 5)
+
+                    # Добавляем элементы для каждого типа связи
+                    for link_type in ["FS", "SS", "FF", "SF"]:
+                        item_widget = QWidget()
+                        item_layout = QHBoxLayout(item_widget)
+                        item_layout.setContentsMargins(0, 2, 0, 2)
+                        item_layout.setSpacing(8)
+
+                        # Цветовой индикатор
+                        indicator = QLabel()
+                        indicator.setFixedSize(14, 14)
+                        indicator.setStyleSheet(f"""
+                            background-color: {link_colors.get(link_type, "#666666")};
+                            border-radius: 3px;
+                        """)
+                        item_layout.addWidget(indicator)
+
+                        # Символ и название
+                        symbol = link_symbols.get(link_type, "→")
+                        name = link_names.get(link_type, link_type)
+                        label = QLabel(f"{symbol} {name}")
+                        label.setStyleSheet("font-size: 12px; color: #1B232A;")
+                        item_layout.addWidget(label)
+
+                        item_layout.addStretch()
+                        link_layout.addWidget(item_widget)
+
+                    # Вставляем группу связей после группы проектов
+                    layout = parent.layout()
+                    if layout:
+                        # Находим индекс группы проектов
+                        for i in range(layout.count()):
+                            item = layout.itemAt(i)
+                            if item and item.widget() == container:
+                                layout.insertWidget(i + 1, link_group)
+                                return
+
+        else:
+            # Есть группа приоритетов - добавляем легенду связей под ней
+            parent = container.parent()
+            if parent:
+                link_group = QGroupBox("Типы связей")
+                link_group.setStyleSheet(container.styleSheet())
+                link_group.setMinimumHeight(80)
+                link_group.setMaximumHeight(160)
+
+                link_layout = QVBoxLayout(link_group)
+                link_layout.setSpacing(4)
+                link_layout.setContentsMargins(10, 5, 10, 5)
+
+                link_colors = {
+                    "FS": "#D22730",
+                    "SS": "#2196F3",
+                    "FF": "#4CAF50",
+                    "SF": "#FF9800",
+                }
+                link_symbols = {
+                    "FS": "→",
+                    "SS": "⇉",
+                    "FF": "⇇",
+                    "SF": "↩",
+                }
+                link_names = {
+                    "FS": "Финиш-Старт",
+                    "SS": "Старт-Старт",
+                    "FF": "Финиш-Финиш",
+                    "SF": "Старт-Финиш",
+                }
+
+                for link_type in ["FS", "SS", "FF", "SF"]:
+                    item_widget = QWidget()
+                    item_layout = QHBoxLayout(item_widget)
+                    item_layout.setContentsMargins(0, 2, 0, 2)
+                    item_layout.setSpacing(8)
+
+                    indicator = QLabel()
+                    indicator.setFixedSize(14, 14)
+                    indicator.setStyleSheet(f"""
+                        background-color: {link_colors.get(link_type, "#666666")};
+                        border-radius: 3px;
+                    """)
+                    item_layout.addWidget(indicator)
+
+                    symbol = link_symbols.get(link_type, "→")
+                    name = link_names.get(link_type, link_type)
+                    label = QLabel(f"{symbol} {name}")
+                    label.setStyleSheet("font-size: 12px; color: #1B232A;")
+                    item_layout.addWidget(label)
+
+                    item_layout.addStretch()
+                    link_layout.addWidget(item_widget)
+
+                # Вставляем группу связей после группы приоритетов
+                layout = parent.layout()
+                if layout:
+                    for i in range(layout.count()):
+                        item = layout.itemAt(i)
+                        if item and item.widget() == container:
+                            layout.insertWidget(i + 1, link_group)
+                            return
 
     def _create_ui_programmatically(self) -> None:
         from PyQt6.QtWidgets import QTreeWidget
@@ -160,6 +318,56 @@ class GanttWidget(QWidget):
         self.prioritiesLayout = QVBoxLayout()
         legend_layout.addLayout(self.prioritiesLayout)
         left_layout.addWidget(legend_group)
+
+        # Легенда связей
+        link_legend_group = QFrame()
+        link_legend_group.setStyleSheet("background-color: white; border-radius: 10px; margin: 10px;")
+        link_legend_layout = QVBoxLayout(link_legend_group)
+        link_legend_layout.addWidget(QLabel("🔗 Типы связей:"))
+
+        link_colors = {
+            "FS": "#D22730",
+            "SS": "#2196F3",
+            "FF": "#4CAF50",
+            "SF": "#FF9800",
+        }
+        link_symbols = {
+            "FS": "→",
+            "SS": "⇉",
+            "FF": "⇇",
+            "SF": "↩",
+        }
+        link_names = {
+            "FS": "Финиш-Старт",
+            "SS": "Старт-Старт",
+            "FF": "Финиш-Финиш",
+            "SF": "Старт-Финиш",
+        }
+
+        for link_type in ["FS", "SS", "FF", "SF"]:
+            item_widget = QWidget()
+            item_layout = QHBoxLayout(item_widget)
+            item_layout.setContentsMargins(5, 2, 5, 2)
+            item_layout.setSpacing(8)
+
+            indicator = QLabel()
+            indicator.setFixedSize(12, 12)
+            indicator.setStyleSheet(f"""
+                background-color: {link_colors.get(link_type, "#666666")};
+                border-radius: 3px;
+            """)
+            item_layout.addWidget(indicator)
+
+            symbol = link_symbols.get(link_type, "→")
+            name = link_names.get(link_type, link_type)
+            label = QLabel(f"{symbol} {name}")
+            label.setStyleSheet("font-size: 11px; color: #1B232A;")
+            item_layout.addWidget(label)
+
+            item_layout.addStretch()
+            link_legend_layout.addWidget(item_widget)
+
+        left_layout.addWidget(link_legend_group)
 
         # Дерево проектов
         self.projectsTree = QTreeWidget()
@@ -337,7 +545,6 @@ class GanttWidget(QWidget):
 
         if hasattr(self, 'calendar_widget') and self.calendar_widget:
             self.calendar_widget.task_clicked.connect(self._handlers.on_calendar_task_clicked)
-
 
     def _refresh_ui(self):
         self._views.refresh_ui()

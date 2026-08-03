@@ -109,7 +109,8 @@ class GanttService(GanttBaseService):
     def validate_project_selected(self, project_filter: str) -> Tuple:
         return self.filter.validate_project_selected(project_filter)
 
-    def get_all_links(self) -> Dict[int, List[int]]:
+    def get_all_links(self) -> Dict[int, List[Dict]]:
+        """Возвращает все связи между задачами с типами"""
         return self.deps.get_all_links()
 
     def get_linked_tasks_for_update(self, task_id: int) -> List[int]:
