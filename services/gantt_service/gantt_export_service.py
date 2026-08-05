@@ -598,14 +598,13 @@ class GanttExportService(GanttBaseService):
             import traceback
             traceback.print_exc()
             return None
- 
+
     def get_task_info_text(self, task: TaskGanttData) -> str:
-        """Возвращает информацию о задаче"""
         return (
             f"Проект: {task.project_name}\n"
             f"Исполнитель: {task.executor_name or 'Не назначен'}\n"
             f"Приоритет: {task.priority}\n"
             f"Прогресс: {task.progress}%\n"
-            f"Даты: {task.start_date.date()} - {task.end_date.date()}\n"
+            f"Сроки: {task.start_date.strftime('%d.%m.%Y')} - {task.end_date.strftime('%d.%m.%Y')}\n"
             f"Длительность: {task.duration_days} дней"
         )
