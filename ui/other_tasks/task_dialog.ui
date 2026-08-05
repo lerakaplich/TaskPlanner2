@@ -159,11 +159,11 @@
    </item>
    <item>
     <widget class="QComboBox" name="comboBoxAssignee">
-     <property name="placeholderText" stdset="0">
-      <string>Выберите исполнителя</string>
-     </property>
+        <property name="placeholderText" stdset="0">
+            <string>Выберите исполнителя</string>
+        </property>
     </widget>
-   </item>
+</item>
    <item>
     <layout class="QHBoxLayout" name="difficultyLayout">
      <property name="spacing">

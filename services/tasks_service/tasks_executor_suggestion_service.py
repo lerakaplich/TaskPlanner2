@@ -179,11 +179,10 @@ class TasksExecutorSuggestionService:
         result = tasks_session.execute(stmt).scalar()
         return result or 0
 
+    # services/tasks_service/tasks_executor_suggestion_service.py
+
     def suggest_executor_for_new_task(self, tag_names: List[str], creator_id: int = None) -> Optional[Dict]:
-        """
-        Предлагает исполнителя для новой задачи на основе тегов.
-        Возвращает словарь с информацией о лучшем кандидате.
-        """
+        """Предлагает исполнителя для новой задачи на основе тегов."""
         if not tag_names:
             return None
 
@@ -217,6 +216,7 @@ class TasksExecutorSuggestionService:
             "employee_name": best["employee_name"],
             "avg_difficulty": best["avg_difficulty"],
             "tasks_count": best["tasks_count"],
+            "matched_tags": tag_names,  # ✅ Добавляем теги для отображения
             "explanation": explanation,
             "all_suggestions": suggestions
         }

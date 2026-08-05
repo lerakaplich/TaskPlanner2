@@ -401,7 +401,7 @@ class GanttExportService(GanttBaseService):
             pass
 
     def _auto_fit_table_columns(self, table):
-        """Автоматически подбирает ширину колонок таблицы"""
+        """Автоматически  подбирает ширину колонок таблицы"""
         widths = [0.7, 3.0, 2.0, 2.0, 1.2, 1.5, 1.0, 1.2, 1.2, 1.0]
         for i, cell in enumerate(table.columns):
             try:
