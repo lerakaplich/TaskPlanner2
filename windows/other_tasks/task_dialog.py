@@ -3,8 +3,9 @@
 import os
 from typing import Dict, Optional, List
 from PyQt6 import uic, QtWidgets
-from PyQt6.QtWidgets import QDialog, QMessageBox, QVBoxLayout, QWidget, QScrollArea, QLineEdit, QPushButton, QHBoxLayout, QCheckBox
-from PyQt6.QtCore import QDate, QDateTime, pyqtSignal, Qt, QEvent, QPoint
+from PyQt6.QtWidgets import QDialog, QMessageBox, QVBoxLayout, QWidget, QScrollArea, QLineEdit, QPushButton, \
+    QHBoxLayout, QCheckBox, QLabel
+from PyQt6.QtCore import QDate, QDateTime, pyqtSignal, Qt, QEvent, QPoint, QTimer
 
 from services.tasks_service.tasks_service import TasksService
 
@@ -24,11 +25,13 @@ class TaskDialog(QDialog):
         self.service: Optional[TasksService] = None
         self.task_data = task_data
         self.mode = mode
-        self.current_user = current_user or {"id": 1, "last_name": "Копейкина", "first_name": "Виктория",
-                                             "middle_name": "Анатольевна"}
+        self.current_user = current_user
         self.selected_tag_ids = set()
         self.all_tags = []
         self.selected_assignee_ids = []  # Список ID выбранных исполнителей
+
+        # Флаг для предотвращения множественных предложений
+        self._suggestion_shown_for_tags = set()
 
         # Загружаем UI
         ui_path = os.path.join(os.path.dirname(__file__), "..", "..", "ui", "other_tasks", "task_dialog.ui")
@@ -48,6 +51,159 @@ class TaskDialog(QDialog):
 
         if hasattr(self, 'createBtn'):
             self.createBtn.clicked.connect(self.validate_and_save)
+
+    # ... (остальной код без изменений до метода on_tag_toggled) ...
+
+    def on_tag_toggled(self, tag_id: int, checked: bool):
+        """Обработчик изменения состояния чекбокса тега"""
+        if checked:
+            self.selected_tag_ids.add(tag_id)
+        else:
+            self.selected_tag_ids.discard(tag_id)
+        self.update_tags_button_text()
+
+        # === НОВОЕ: ПРЕДЛОЖЕНИЕ ИСПОЛНИТЕЛЯ СРАЗУ ПОСЛЕ ВЫБОРА ТЕГОВ ===
+        self._suggest_executor_after_tag_change()
+
+    def _suggest_executor_after_tag_change(self):
+        """
+        Предлагает исполнителя на основе выбранных тегов.
+        Вызывается сразу после изменения выбора тегов.
+        """
+        # Проверяем, что есть выбранные теги
+        if not self.selected_tag_ids:
+            return
+
+        # Получаем названия выбранных тегов
+        selected_tag_names = []
+        for tag_id in self.selected_tag_ids:
+            cb = self.tag_checkboxes_by_id.get(tag_id)
+            if cb and cb.isChecked():
+                tag_name = cb.property("tag_name")
+                if tag_name:
+                    selected_tag_names.append(tag_name)
+
+        if not selected_tag_names:
+            return
+
+        # Проверяем, не предлагали ли уже для этого набора тегов
+        tags_key = tuple(sorted(selected_tag_names))
+        if tags_key in self._suggestion_shown_for_tags:
+            # Уже предлагали для этого набора, но если это новый набор - предлагаем снова
+            # Сбрасываем, чтобы можно было предложить снова при изменении набора
+            pass
+
+        # Получаем предложение от сервиса
+        if not self.service:
+            return
+
+        try:
+            suggestion = self.service.suggest_executor_for_tags(selected_tag_names)
+
+            if suggestion:
+                suggested_id = suggestion.get('employee_id')
+                suggested_name = suggestion.get('employee_name', 'Неизвестен')
+
+                # Проверяем, не назначен ли уже этот исполнитель
+                if suggested_id in self.selected_assignee_ids:
+                    return
+
+                # Показываем предложение в виде уведомления (не блокирующего)
+                self._show_suggestion_notification(suggestion)
+
+                # Автоматически добавляем предложенного исполнителя
+                self.selected_assignee_ids.append(suggested_id)
+                for cb in self.assignee_checkboxes:
+                    emp_id = cb.property("employee_id")
+                    if emp_id == suggested_id:
+                        cb.setChecked(True)
+                        break
+                self.update_assignees_button_text()
+
+                # Запоминаем, что предложение показано для этого набора тегов
+                self._suggestion_shown_for_tags.add(tags_key)
+
+        except Exception as e:
+            print(f"⚠️ Ошибка при предложении исполнителя: {e}")
+
+    def _show_suggestion_notification(self, suggestion: Dict):
+        """
+        Показывает уведомление о предложенном исполнителе
+        (неблокирующее, исчезает через 3 секунды)
+        """
+        # Создаём всплывающее уведомление
+        notification = QWidget(self)
+        notification.setWindowFlags(
+            Qt.WindowType.Popup | Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint
+        )
+        notification.setStyleSheet("""
+            QWidget {
+                background-color: #1B232A;
+                border-radius: 10px;
+                padding: 12px 20px;
+                border: 1px solid #333;
+            }
+            QLabel {
+                color: white;
+                font-size: 13px;
+                border: none;
+            }
+            QLabel#title {
+                font-weight: bold;
+                color: #ccab6e;
+                font-size: 14px;
+            }
+        """)
+
+        layout = QVBoxLayout(notification)
+        layout.setSpacing(4)
+
+        # Заголовок
+        title_label = QLabel("Рекомендация исполнителя")
+        title_label.setObjectName("title")
+        layout.addWidget(title_label)
+
+        # Информация о предложении
+        employee_name = suggestion.get('employee_name', 'Неизвестен')
+        avg_difficulty = suggestion.get('avg_difficulty', 0)
+        tasks_count = suggestion.get('tasks_count', 0)
+
+        info_label = QLabel(
+            f"Назначен {employee_name} "
+            f"(средняя сложность: {avg_difficulty:.1f}⭐, задач: {tasks_count})"
+        )
+        layout.addWidget(info_label)
+
+        # Подсказка
+        hint_label = QLabel("Вы можете изменить исполнителя при необходимости")
+        hint_label.setStyleSheet("color: #999; font-size: 11px;")
+        layout.addWidget(hint_label)
+
+        # Позиционируем уведомление рядом с полем исполнителя
+        if hasattr(self, 'comboAssignees'):
+            pos = self.comboAssignees.mapToGlobal(self.comboAssignees.rect().topLeft())
+            notification.move(pos.x(), pos.y() - 80)
+        else:
+            # Fallback позиция
+            notification.move(self.width() // 2 - 150, 20)
+
+        notification.show()
+
+        # Автоматически скрываем через 3 секунды
+        QTimer.singleShot(3000, notification.deleteLater)
+
+    def on_tag_search_changed(self, text):
+        """Фильтрация чекбоксов по поиску"""
+        search_text = self.tag_search_line.text().lower().strip()
+        for cb in self.tag_checkboxes:
+            tag_name = cb.property("tag_name").lower()
+            is_visible = not search_text or search_text in tag_name
+            cb.setVisible(is_visible)
+
+    def tags_popup_closed(self):
+        """Вызывается, когда popup с тегами закрыт"""
+        self.update_tags_button_text()
+        # Убираем автоматический вызов, так как предложение уже было сделано
 
     def setup_assignees_popup(self):
         """Настройка popup с чекбоксами для выбора исполнителей"""
@@ -378,22 +534,6 @@ class TaskDialog(QDialog):
         self.tags_layout.addStretch()
         self.update_tags_button_text()
 
-    def on_tag_search_changed(self, text):
-        """Фильтрация чекбоксов по поиску"""
-        search_text = self.tag_search_line.text().lower().strip()
-        for cb in self.tag_checkboxes:
-            tag_name = cb.property("tag_name").lower()
-            is_visible = not search_text or search_text in tag_name
-            cb.setVisible(is_visible)
-
-    def on_tag_toggled(self, tag_id: int, checked: bool):
-        """Обработчик изменения состояния чекбокса тега"""
-        if checked:
-            self.selected_tag_ids.add(tag_id)
-        else:
-            self.selected_tag_ids.discard(tag_id)
-        self.update_tags_button_text()
-
     def select_all_tags(self):
         """Выбрать все видимые теги"""
         for cb in self.tag_checkboxes:
@@ -487,13 +627,6 @@ class TaskDialog(QDialog):
             emp_name = cb.property("employee_name").lower()
             is_visible = not search_text or search_text in emp_name
             cb.setVisible(is_visible)
-
-    def tags_popup_closed(self):
-        """Вызывается, когда popup с тегами закрыт"""
-        self.update_tags_button_text()
-        if self.mode == "create":
-            from PyQt6.QtCore import QTimer
-            QTimer.singleShot(100, self.auto_fill_executor)
 
     def assignees_popup_closed(self):
         """Вызывается, когда popup с исполнителями закрыт"""
@@ -678,7 +811,7 @@ class TaskDialog(QDialog):
             self.createdByLabel.setText(f"Создатель: {creator_name if creator_name else 'Неизвестен'}")
             self.createdByLabel.show()
 
-        # Устанавливаем даты создания и обновления
+
         if self.mode == "edit":
             if hasattr(self, 'createdAtLabel'):
                 created_at = task_data.get("created_at", "")

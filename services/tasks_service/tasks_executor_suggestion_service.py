@@ -204,12 +204,12 @@ class TasksExecutorSuggestionService:
             difficulty_desc = "базовой"
 
         explanation = (
-            f"🎯 *Рекомендация исполнителя*\n\n"
-            f"На основе анализа тегов '{', '.join(tag_names)}' "
-            f"рекомендуется назначить *{best['employee_name']}*.\n\n"
-            f"📊 *Статистика:*\n"
+            f"🎯 Рекомендация исполнителя\n\n"
+            f"На основе анализа тем '{', '.join(tag_names)}' "
+            f"рекомендуется назначить {best['employee_name']}.\n\n"
+            f"📊 Статистика:\n"
             f"   • Средняя сложность выполненных задач по теме: {best['avg_difficulty']} ⭐ ({difficulty_desc})\n"
-            f"   • Выполнено задач по теме: {best['tasks_count']}\n"
+            f"   • Выполнено задач по теме(-ам): {best['tasks_count']}\n"
         )
 
         return {

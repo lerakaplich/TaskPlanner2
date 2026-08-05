@@ -15,20 +15,32 @@ class GanttFilterService:
     def get_filtered_tasks(self, project_filter: str, executor_filter: str) -> List[TaskGanttData]:
         """Возвращает задачи с применением фильтров"""
         all_tasks = self._data.get_all_tasks()
+        print(f"🔍 get_filtered_tasks: всего задач {len(all_tasks)}")
+        print(f"   Фильтр проекта: '{project_filter}'")
+        print(f"   Фильтр исполнителя: '{executor_filter}'")
 
         # Фильтр по проекту
         if project_filter != "all":
             try:
-                project_id = int(project_filter.split("_")[1])
+                # Пытаемся извлечь ID проекта из строки вида "project_123"
+                if isinstance(project_filter, str) and project_filter.startswith("project_"):
+                    project_id = int(project_filter.split("_")[1])
+                else:
+                    project_id = int(project_filter)
+
                 filtered = [t for t in all_tasks if t.project_id == project_id]
-            except (ValueError, IndexError):
+                print(f"   После фильтра по проекту {project_id}: {len(filtered)} задач")
+            except (ValueError, IndexError) as e:
+                print(f"   Ошибка парсинга project_filter '{project_filter}': {e}")
                 filtered = all_tasks.copy()
         else:
             filtered = all_tasks.copy()
+            print(f"   Все проекты: {len(filtered)} задач")
 
         # Фильтр по исполнителю
         if executor_filter != "all":
             filtered = [t for t in filtered if t.executor_name == executor_filter]
+            print(f"   После фильтра по исполнителю '{executor_filter}': {len(filtered)} задач")
 
         return filtered
 
@@ -66,6 +78,8 @@ class GanttFilterService:
     def get_default_export_period(self, tasks: List[TaskGanttData]) -> Tuple[datetime, datetime]:
         return self.get_date_range_for_tasks(tasks, padding_days=0)
 
+    # services/gantt_service/gantt_filter_service.py
+
     def get_date_range(self, period: str) -> Tuple[datetime, datetime]:
         """Возвращает диапазон дат для выбранного периода"""
         today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
@@ -85,6 +99,15 @@ class GanttFilterService:
                 end = start.replace(year=start.year + 1, month=1, day=1) - timedelta(days=1)
             else:
                 end = start.replace(month=start.month + 3, day=1) - timedelta(days=1)
+            return start, end
+
+        elif period == "Полгода":  # ✅ ДОБАВЛЕНО
+            if today.month <= 6:
+                start = today.replace(month=1, day=1)
+                end = today.replace(month=6, day=30)
+            else:
+                start = today.replace(month=7, day=1)
+                end = today.replace(month=12, day=31)
             return start, end
 
         elif period == "Год":

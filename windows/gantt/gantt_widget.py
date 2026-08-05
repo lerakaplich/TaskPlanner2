@@ -72,18 +72,18 @@ class GanttWidget(QWidget):
         return self._handlers.get_filtered_count()
 
     def _setup_permission_ui(self):
+        """Настройка UI в зависимости от прав пользователя"""
         if hasattr(self, 'addTaskButton') and self.addTaskButton:
-            self.addTaskButton.setVisible(self._service.can_create_task())
+            # Проверяем, может ли пользователь создавать задачи
+            can_create = self._service.can_create_task()
+            self.addTaskButton.setVisible(can_create)
+            print(f"🔍 Кнопка 'Добавить задачу' видима: {can_create}")
 
         if hasattr(self, 'createLinkButton') and self.createLinkButton:
             self.createLinkButton.setVisible(self._service.can_create_link())
 
         if hasattr(self, 'btnExport') and self.btnExport:
             self.btnExport.setVisible(self._service.can_export())
-
-    # ==========================================================
-    # ЖИЗНЕННЫЙ ЦИКЛ
-    # ==========================================================
 
     def showEvent(self, event):
         super().showEvent(event)
@@ -423,8 +423,8 @@ class GanttWidget(QWidget):
 
     def _setup_loaded_ui(self) -> None:
         from windows.gantt.gantt_canvas import GanttCanvas
-        from windows.gantt.calendar_widget import CalendarWidget
 
+        # Настройка холста Ганта
         self.gantt_canvas = GanttCanvas(self._service)
 
         if hasattr(self, 'ganttScrollArea'):
@@ -441,9 +441,7 @@ class GanttWidget(QWidget):
             gantt_layout.addWidget(self.gantt_canvas)
             self.ganttScrollArea.setWidget(self.gantt_canvas)
 
-        # Календарь
-        self.calendar_widget = CalendarWidget(self._service)
-
+        # Находим вкладку календаря и заменяем её содержимое
         calendar_tab = self.findChild(QWidget, "calendarTab")
         if calendar_tab:
             tab_layout = calendar_tab.layout()
@@ -458,12 +456,15 @@ class GanttWidget(QWidget):
                     if item.widget():
                         item.widget().deleteLater()
 
+            from windows.gantt.calendar_widget import CalendarWidget
+            self.calendar_widget = CalendarWidget(self._service)
             tab_layout.addWidget(self.calendar_widget)
+            self.calendar_widget.task_clicked.connect(self._handlers.on_calendar_task_clicked)
 
-        placeholder = self.findChild(QLabel, "calendarPlaceholder")
-        if placeholder:
-            placeholder.hide()
-            placeholder.deleteLater()
+        # ✅ ВАЖНО: Заполняем фильтры и восстанавливаем состояние
+        # Используем QTimer.singleShot чтобы дать UI завершить загрузку
+        QTimer.singleShot(50, self._views.update_filters)
+        QTimer.singleShot(100, self._views.apply_filters)
 
     def _setup_priorities(self) -> None:
         priorities = [
@@ -519,38 +520,83 @@ class GanttWidget(QWidget):
         layout.addStretch()
         container.updateGeometry()
 
-    # ==========================================================
-    # ПОДКЛЮЧЕНИЕ СИГНАЛОВ
-    # ==========================================================
-
     def _connect_signals(self) -> None:
         if hasattr(self, 'addTaskButton') and self.addTaskButton:
             self.addTaskButton.clicked.connect(self._handlers.on_add_task)
         if hasattr(self, 'createLinkButton') and self.createLinkButton:
             self.createLinkButton.clicked.connect(self._handlers.on_create_link)
-        if hasattr(self, 'periodFilter') and self.periodFilter:
-            self.periodFilter.currentTextChanged.connect(self._handlers.on_period_changed)
-        if hasattr(self, 'projectFilter') and self.projectFilter:
-            self.projectFilter.currentTextChanged.connect(self._handlers.on_project_filter_changed)
-        if hasattr(self, 'executorFilter') and self.executorFilter:
-            self.executorFilter.currentTextChanged.connect(self._handlers.on_executor_filter_changed)
+        if hasattr(self, 'periodFilter'):
+            self.periodFilter.currentTextChanged.connect(self._on_period_changed)
+        if hasattr(self, 'projectFilter'):
+            self.projectFilter.currentTextChanged.connect(self._on_project_filter_changed)
+        if hasattr(self, 'executorFilter'):
+            self.executorFilter.currentTextChanged.connect(self._on_executor_filter_changed)
         if hasattr(self, 'projectsTree') and self.projectsTree:
             self.projectsTree.itemClicked.connect(self._handlers.on_project_item_clicked)
         if hasattr(self, 'btnExport') and self.btnExport:
             self.btnExport.clicked.connect(self._handlers.on_export_clicked)
-
         if hasattr(self, 'gantt_canvas') and self.gantt_canvas:
             self.gantt_canvas.task_moved_signal.connect(self._handlers.on_task_moved)
             self.gantt_canvas.link_created_signal.connect(self._handlers.on_link_created)
+            self.gantt_canvas.link_deleted_signal.connect(self._handlers.on_link_deleted)
 
-        if hasattr(self, 'calendar_widget') and self.calendar_widget:
-            self.calendar_widget.task_clicked.connect(self._handlers.on_calendar_task_clicked)
+    def _on_period_changed(self, text: str) -> None:
+        """Обработка изменения периода"""
+        if text == "Выбрать период":
+            from windows.gantt.period_dialog import PeriodDialog
+            dialog = PeriodDialog(self)
+            if dialog.exec() == QDialog.DialogCode.Accepted:
+                start, end = dialog.get_dates()
+                self.gantt_canvas.set_date_range(start, end)
+        else:
+            start, end = self._service.get_date_range(text)
+            self.gantt_canvas.set_date_range(start, end)
+        self.gantt_canvas.update()
+
+    def _on_project_filter_changed(self, text: str) -> None:
+        """Обработка изменения фильтра проектов"""
+        current_data = self.projectFilter.currentData()
+
+        if current_data is None or current_data == "all":
+            if text == "Все проекты" or text == "":
+                self._current_project_filter = "all"
+            else:
+                for i in range(self.projectFilter.count()):
+                    if self.projectFilter.itemText(i) == text:
+                        self._current_project_filter = self.projectFilter.itemData(i)
+                        break
+        else:
+            self._current_project_filter = current_data
+
+        self._apply_filters()
+
+    def _on_executor_filter_changed(self, text: str) -> None:
+        """Обработка изменения фильтра исполнителей"""
+        current_data = self.executorFilter.currentData()
+
+        if current_data is None or current_data == "all":
+            if text == "Все исполнители" or text == "":
+                self._current_executor_filter = "all"
+            else:
+                for i in range(self.executorFilter.count()):
+                    if self.executorFilter.itemText(i) == text:
+                        self._current_executor_filter = self.executorFilter.itemData(i)
+                        break
+        else:
+            self._current_executor_filter = current_data
+
+        self._apply_filters()
 
     def _refresh_ui(self):
         self._views.refresh_ui()
 
     def _apply_filters(self):
+        """Применяет фильтры"""
+        print("📢 _apply_filters вызван")
         self._views.apply_filters()
+        if hasattr(self, 'gantt_canvas') and self.gantt_canvas:
+            self.gantt_canvas.update()
+            self.gantt_canvas.repaint()
 
     def _load_initial_data(self):
         self._handlers.load_initial_data()

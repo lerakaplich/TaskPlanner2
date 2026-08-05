@@ -52,11 +52,15 @@ class PermissionService:
                 result = self.session.execute(stmt, {'user_id': self.user_id}).first()
                 if result:
                     role_str = str(result[0]).strip().lower()
+                    print(f"🔍 _get_app_role: role from DB = '{role_str}'")
                     if role_str in ('super_admin', 'superadmin'):
                         return AppRole.SUPER_ADMIN
                     elif role_str == 'admin':
                         return AppRole.ADMIN
-                    elif role_str == 'user':
+                    elif role_str in ('user', 'employee'):
+                        return AppRole.USER  # <-- Это для обычного пользователя
+                    else:
+                        # Если роль не распознана, считаем пользователем
                         return AppRole.USER
         except Exception as e:
             print(f"⚠️ Ошибка получения роли из БД: {e}")
@@ -76,7 +80,7 @@ class PermissionService:
                     except:
                         pass
 
-        return AppRole.USER
+        return AppRole.USER  # По умолчанию пользователь
 
     def _get_project_role(self, project_id: int) -> Optional[ProjectRole]:
         """Определяет роль пользователя в проекте с кэшированием"""

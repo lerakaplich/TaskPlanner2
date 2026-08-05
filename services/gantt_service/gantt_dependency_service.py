@@ -42,6 +42,41 @@ class GanttDependencyService:
                 })
         return links
 
+    def delete_dependency(self, predecessor_id: int, successor_id: int) -> Tuple[bool, Optional[str]]:
+        """Удаляет связь между задачами."""
+        if not self._can_edit_task():
+            return False, "Нет прав на удаление связей"
+
+        try:
+            # Ищем связь в БД
+            dependency = self.session.query(TaskDependency).filter(
+                TaskDependency.predecessor_id == predecessor_id,
+                TaskDependency.successor_id == successor_id
+            ).first()
+
+            if not dependency:
+                return False, "Связь не найдена"
+
+            # Удаляем из БД
+            self.session.delete(dependency)
+            self.session.commit()
+
+            # Удаляем из кэша
+            for task in self._data.get_all_tasks():
+                if task.id == predecessor_id:
+                    task.dependencies = [
+                        dep for dep in task.dependencies
+                        if dep.get("successor_id") != successor_id
+                    ]
+                    break
+
+            return True, "Связь успешно удалена"
+
+        except Exception as e:
+            self.session.rollback()
+            print(f"❌ Ошибка удаления связи: {e}")
+            return False, f"Ошибка удаления связи: {str(e)}"
+
     def get_linked_tasks_for_update(self, task_id: int) -> List[int]:
         """Возвращает ID задач, которые зависят от данной (где данная - предшественник)"""
         linked = []

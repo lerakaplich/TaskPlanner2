@@ -22,33 +22,59 @@ class GanttWidgetHandlers:
         self.widget._service.load_data()
         self.widget._refresh_ui()
 
-    def on_project_filter_changed(self, text: str) -> None:
-        current_data = self.widget.projectFilter.currentData()
-        if current_data is None or current_data == "all":
-            if text == "Все проекты" or text == "":
-                self.widget._current_project_filter = "all"
-            else:
-                for i in range(self.widget.projectFilter.count()):
-                    if self.widget.projectFilter.itemText(i) == text:
-                        self.widget._current_project_filter = self.widget.projectFilter.itemData(i)
-                        break
-        else:
-            self.widget._current_project_filter = current_data
-        self.widget._apply_filters()
+    def on_project_filter_changed(self, index: int) -> None:
+        """Обработчик изменения фильтра по проекту (по индексу)"""
+        if index < 0:
+            print("❌ on_project_filter_changed: index < 0")
+            return
 
-    def on_executor_filter_changed(self, text: str) -> None:
-        current_data = self.widget.executorFilter.currentData()
-        if current_data is None or current_data == "all":
-            if text == "Все исполнители" or text == "":
-                self.widget._current_executor_filter = "all"
-            else:
-                for i in range(self.widget.executorFilter.count()):
-                    if self.widget.executorFilter.itemText(i) == text:
-                        self.widget._current_executor_filter = self.widget.executorFilter.itemData(i)
-                        break
+        data = self.widget.projectFilter.itemData(index)
+        text = self.widget.projectFilter.itemText(index)
+
+        print(f"📁 on_project_filter_changed: index={index}, text='{text}', data='{data}'")
+
+        if data is None or data == "all":
+            self.widget._current_project_filter = "all"
         else:
-            self.widget._current_executor_filter = current_data
-        self.widget._apply_filters()
+            self.widget._current_project_filter = data
+
+        print(f"📁 Фильтр проекта установлен: {self.widget._current_project_filter}")
+
+        # ✅ Применяем фильтры
+        self.widget._views.apply_filters()
+
+        # ✅ Принудительно обновляем холст
+        if hasattr(self.widget, 'gantt_canvas') and self.widget.gantt_canvas:
+            self.widget.gantt_canvas.update()
+            self.widget.gantt_canvas.repaint()
+            self.widget.gantt_canvas.updateGeometry()
+
+    def on_executor_filter_changed(self, index: int) -> None:
+        """Обработчик изменения фильтра по исполнителю (по индексу)"""
+        if index < 0:
+            print("❌ on_executor_filter_changed: index < 0")
+            return
+
+        data = self.widget.executorFilter.itemData(index)
+        text = self.widget.executorFilter.itemText(index)
+
+        print(f"👤 on_executor_filter_changed: index={index}, text='{text}', data='{data}'")
+
+        if data is None or data == "all":
+            self.widget._current_executor_filter = "all"
+        else:
+            self.widget._current_executor_filter = data
+
+        print(f"👤 Фильтр исполнителя установлен: {self.widget._current_executor_filter}")
+
+        # ✅ Применяем фильтры
+        self.widget._views.apply_filters()
+
+        # ✅ Принудительно обновляем холст
+        if hasattr(self.widget, 'gantt_canvas') and self.widget.gantt_canvas:
+            self.widget.gantt_canvas.update()
+            self.widget.gantt_canvas.repaint()
+            self.widget.gantt_canvas.updateGeometry()
 
     def on_period_changed(self, text: str) -> None:
         from windows.gantt.period_dialog import PeriodDialog
@@ -433,6 +459,27 @@ class GanttWidgetHandlers:
 
         if hasattr(self.widget, 'gantt_canvas'):
             self.widget.gantt_canvas.clear_selection()
+
+    def on_link_deleted(self, predecessor_id: int, successor_id: int) -> None:
+        """Обработка удаления связи."""
+        success, message = self.widget._service.delete_dependency(predecessor_id, successor_id)
+
+        if success:
+            # Перезагружаем данные
+            self.widget._service.refresh_all_data()
+            self.widget._refresh_ui()
+
+            QMessageBox.information(
+                self.widget,
+                "Успех",
+                "Связь успешно удалена!"
+            )
+        else:
+            QMessageBox.warning(
+                self.widget,
+                "Ошибка",
+                f"Не удалось удалить связь:\n{message}"
+            )
 
     def on_task_moved(self, task_id: int, new_start: datetime, new_end: datetime) -> None:
         if self.widget._service.update_task_dates_with_linked(task_id, new_start, new_end):

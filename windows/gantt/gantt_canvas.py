@@ -4,7 +4,7 @@ from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Tuple
 
 from PyQt6.QtCore import (
-    Qt, pyqtSignal, QRectF, QPointF, QEvent
+    Qt, pyqtSignal, QRectF, QPointF, QEvent, QPoint
 )
 from PyQt6.QtGui import (
     QPainter, QColor, QBrush, QPen, QFont,
@@ -16,12 +16,31 @@ from services.gantt_service.gantt_base_service import TaskGanttData
 from services.gantt_service.gantt_service import GanttService
 
 
+# windows/gantt/gantt_canvas.py
+
+from datetime import datetime, timedelta
+from typing import Dict, List, Optional, Tuple
+
+from PyQt6.QtCore import (
+    Qt, pyqtSignal, QRectF, QPointF, QEvent, QPoint
+)
+from PyQt6.QtGui import (
+    QPainter, QColor, QBrush, QPen, QFont,
+    QPainterPath, QMouseEvent
+)
+from PyQt6.QtWidgets import QWidget, QMessageBox, QApplication, QMenu
+
+from services.gantt_service.gantt_base_service import TaskGanttData
+from services.gantt_service.gantt_service import GanttService
+
+
 class GanttCanvas(QWidget):
     """Холст для отрисовки диаграммы Ганта - только отображение и UI события"""
 
     # Сигналы для передачи действий в сервис
     task_moved_signal = pyqtSignal(int, datetime, datetime)
     link_created_signal = pyqtSignal(int, int)
+    link_deleted_signal = pyqtSignal(int, int)  # <-- ДОБАВЛЕНО
 
     def __init__(self, gantt_service: GanttService, parent=None):
         super().__init__(parent)
@@ -42,15 +61,212 @@ class GanttCanvas(QWidget):
 
         # Для создания связей (Ctrl+клик)
         self._selected_for_link: Optional[TaskGanttData] = None
+        self._selected_link = None  # <-- Для хранения выбранной связи
 
         self.setMouseTracking(True)
         self.setMinimumSize(800, 600)
         self.setAutoFillBackground(True)
+        self.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.customContextMenuRequested.connect(self._show_context_menu)
 
         # Устанавливаем фон
         p = self.palette()
         p.setColor(self.backgroundRole(), QColor("#FFFFFF"))
         self.setPalette(p)
+
+    def _get_link_at_position(self, pos: QPointF) -> Optional[Tuple[int, int, str]]:
+        """
+        Определяет, есть ли связь в указанной позиции.
+        Возвращает (predecessor_id, successor_id, link_type) или None.
+        """
+        if not self._links:
+            return None
+
+        task_map = {task.id: idx for idx, task in enumerate(self._tasks)}
+
+        for from_id, deps in self._links.items():
+            if from_id not in task_map:
+                continue
+
+            from_task = self._tasks[task_map[from_id]]
+            from_x, from_width = self._service.calculate_bar_position(from_task, self._start_date)
+            from_y = self._header_height + task_map[from_id] * self._row_height + self._row_height // 2
+
+            for dep in deps:
+                if isinstance(dep, dict):
+                    to_id = dep.get("successor_id")
+                    link_type = dep.get("type", "FS")
+                else:
+                    to_id = dep
+                    link_type = "FS"
+
+                if to_id not in task_map:
+                    continue
+
+                to_task = self._tasks[task_map[to_id]]
+                to_x, _ = self._service.calculate_bar_position(to_task, self._start_date)
+                to_y = self._header_height + task_map[to_id] * self._row_height + self._row_height // 2
+
+                start_point = QPointF(from_x + from_width + 5, from_y)
+                end_point = QPointF(to_x - 5, to_y)
+
+                # Проверяем, находится ли позиция мыши рядом с линией
+                if self._is_point_near_link(pos, start_point, end_point, from_y, to_y):
+                    return (from_id, to_id, link_type)
+
+        return None
+
+    def _is_point_near_link(self, pos: QPointF, start: QPointF, end: QPointF, from_y: float, to_y: float,
+                            threshold: float = 10.0) -> bool:
+        """
+        Проверяет, находится ли точка рядом с линией связи.
+        """
+        # Если линия с изгибом (FS, FF)
+        if abs(to_y - from_y) > 30:
+            mid_x = (start.x() + end.x()) // 2
+            # Проверяем три сегмента: горизонтальный от start до mid, вертикальный, горизонтальный от mid до end
+            # Сегмент 1: от start до (mid_x, from_y)
+            if self._point_near_segment(pos, start, QPointF(mid_x, from_y), threshold):
+                return True
+            # Сегмент 2: вертикальный от (mid_x, from_y) до (mid_x, to_y)
+            if self._point_near_segment(pos, QPointF(mid_x, from_y), QPointF(mid_x, to_y), threshold):
+                return True
+            # Сегмент 3: от (mid_x, to_y) до end
+            if self._point_near_segment(pos, QPointF(mid_x, to_y), end, threshold):
+                return True
+        else:
+            # Прямая линия (SS, SF)
+            if self._point_near_segment(pos, start, end, threshold):
+                return True
+
+        return False
+
+    def _point_near_segment(self, point: QPointF, seg_start: QPointF, seg_end: QPointF, threshold: float) -> bool:
+        """
+        Проверяет, находится ли точка рядом с отрезком.
+        """
+        # Вектор от seg_start к seg_end
+        dx = seg_end.x() - seg_start.x()
+        dy = seg_end.y() - seg_start.y()
+
+        # Длина отрезка
+        length = (dx * dx + dy * dy) ** 0.5
+        if length < 0.001:
+            return False
+
+        # Нормализованный вектор
+        ux = dx / length
+        uy = dy / length
+
+        # Вектор от seg_start к point
+        vx = point.x() - seg_start.x()
+        vy = point.y() - seg_start.y()
+
+        # Проекция v на u
+        proj = vx * ux + vy * uy
+
+        # Ближайшая точка на отрезке
+        if proj < 0:
+            closest = seg_start
+        elif proj > length:
+            closest = seg_end
+        else:
+            closest = QPointF(seg_start.x() + proj * ux, seg_start.y() + proj * uy)
+
+        # Расстояние от point до closest
+        dist = ((point.x() - closest.x()) ** 2 + (point.y() - closest.y()) ** 2) ** 0.5
+
+        return dist < threshold
+
+    def _show_context_menu(self, pos: QPoint) -> None:
+        """Показывает контекстное меню в позиции курсора."""
+        # Проверяем, есть ли связь в этой позиции
+        link_info = self._get_link_at_position(pos)
+
+        if not link_info:
+            # Если связи нет, возможно показываем меню для задачи
+            task = self._get_task_at_position(pos)
+            if task:
+                self._show_task_context_menu(pos, task)
+            return
+
+        pred_id, succ_id, link_type = link_info
+        self._selected_link = (pred_id, succ_id)
+
+        # Создаём контекстное меню
+        menu = QMenu(self)
+        menu.setStyleSheet("""
+            QMenu {
+                background-color: #ffffff;
+                border: 1px solid #e0e0e0;
+                border-radius: 8px;
+                padding: 4px 0;
+                font-size: 13px;
+            }
+            QMenu::item {
+                padding: 8px 25px 8px 15px;
+                color: #333333;
+            }
+            QMenu::item:selected {
+                background-color: #ccab6e;
+                color: white;
+                border-radius: 4px;
+                margin: 2px 6px;
+            }
+        """)
+
+        # Получаем названия задач
+        pred_task = self._service.get_task_by_id(pred_id)
+        succ_task = self._service.get_task_by_id(succ_id)
+        pred_name = pred_task.name if pred_task else f"Задача {pred_id}"
+        succ_name = succ_task.name if succ_task else f"Задача {succ_id}"
+
+        # Добавляем информацию о связи (неактивный пункт)
+        link_type_names = {
+            "FS": "Финиш-Старт",
+            "SS": "Старт-Старт",
+            "FF": "Финиш-Финиш",
+            "SF": "Старт-Финиш",
+        }
+        type_name = link_type_names.get(link_type, link_type)
+
+        info_action = menu.addAction(f"{pred_name} → {succ_name} ({type_name})")
+        info_action.setEnabled(False)
+        menu.addSeparator()
+
+        # Кнопка удаления
+        delete_action = menu.addAction("Удалить связь")
+        delete_action.triggered.connect(lambda: self._on_delete_link(pred_id, succ_id))
+
+        # Показываем меню
+        menu.exec(self.mapToGlobal(pos))
+
+    def _show_task_context_menu(self, pos: QPoint, task: TaskGanttData) -> None:
+        """Показывает контекстное меню для задачи."""
+        # Можно добавить меню для задачи, но пока оставим пустым
+        pass
+
+    def _on_delete_link(self, pred_id: int, succ_id: int) -> None:
+        """Обработчик удаления связи."""
+        # Спрашиваем подтверждение
+        pred_task = self._service.get_task_by_id(pred_id)
+        succ_task = self._service.get_task_by_id(succ_id)
+        pred_name = pred_task.name if pred_task else f"Задача {pred_id}"
+        succ_name = succ_task.name if succ_task else f"Задача {succ_id}"
+
+        reply = QMessageBox.question(
+            self,
+            "Удаление связи",
+            f"Вы уверены, что хотите удалить связь между задачами:\n"
+            f"«{pred_name}» → «{succ_name}»?\n\n"
+            f"Это действие нельзя отменить.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+        )
+
+        if reply == QMessageBox.StandardButton.Yes:
+            # Отправляем сигнал для удаления связи
+            self.link_deleted_signal.emit(pred_id, succ_id)
+            self._selected_link = None
 
     # ==================== Публичные методы для UI ====================
 
@@ -270,8 +486,6 @@ class GanttCanvas(QWidget):
             "SF": "↩",
         }
 
-        print(f"🎨 _draw_links: отрисовка {len(self._links)} связей")
-
         for from_id, deps in self._links.items():
             if from_id not in task_map:
                 print(f"   ⚠️ Задача {from_id} не найдена в task_map")
@@ -287,7 +501,6 @@ class GanttCanvas(QWidget):
                     to_id = dep.get("successor_id")
                     link_type = dep.get("type", "FS")
                     lag = dep.get("lag", 0)
-                    print(f"   📎 {from_id} -> {to_id}: type={link_type}")
                 else:
                     to_id = dep
                     link_type = "FS"
@@ -322,11 +535,9 @@ class GanttCanvas(QWidget):
                     path.lineTo(QPointF(mid_x, to_y))
                     path.lineTo(end_point)
                     painter.drawPath(path)
-                    print(f"   📐 {from_id}->{to_id}: рисуем ИЗОГНУТУЮ линию (тип {link_type})")
                 else:
                     # Старт-Старт или Старт-Финиш - прямая линия
                     painter.drawLine(start_point, end_point)
-                    print(f"   📐 {from_id}->{to_id}: рисуем ПРЯМУЮ линию (тип {link_type})")
 
                 # Рисуем стрелку на конце
                 if end_point.x() > start_point.x():

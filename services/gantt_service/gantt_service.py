@@ -16,14 +16,12 @@ class GanttService(GanttBaseService):
     def __init__(self, session: Session, current_user_id: int = None, project_service=None, permission_service=None):
         self.session = session
         self.current_user_id = current_user_id
-        self.permission_service = permission_service  # <-- ДОБАВЛЕНО
+        self.permission_service = permission_service
 
         self.data = GanttDataService(session, current_user_id, project_service, permission_service)
         self.filter = GanttFilterService(self.data)
         self.deps = GanttDependencyService(session, self.data, permission_service)
-        self.export = GanttExportService(permission_service)
-
-    # services/gantt_service/gantt_service.py
+        self.export = GanttExportService(permission_service, self)
 
     def add_dependency_with_message(
             self,
@@ -109,6 +107,10 @@ class GanttService(GanttBaseService):
     def validate_project_selected(self, project_filter: str) -> Tuple:
         return self.filter.validate_project_selected(project_filter)
 
+    def delete_dependency(self, predecessor_id: int, successor_id: int) -> Tuple[bool, str]:
+        """Удаляет связь между задачами."""
+        return self.deps.delete_dependency(predecessor_id, successor_id)
+
     def get_all_links(self) -> Dict[int, List[Dict]]:
         """Возвращает все связи между задачами с типами"""
         return self.deps.get_all_links()
@@ -123,6 +125,7 @@ class GanttService(GanttBaseService):
         return self.deps.update_task_dates_with_linked(task_id, new_start, new_end)
 
     def can_export(self) -> bool:
+        """Проверяет права на экспорт"""
         return self.export.can_export()
 
     def export_to_image_with_period(self, canvas_widget, tasks, start_date, end_date) -> Optional[str]:
@@ -181,8 +184,6 @@ class GanttService(GanttBaseService):
             print(f"❌ Ошибка создания задачи: {e}")
             return None
 
-    # services/gantt_service/gantt_service.py
-
     def get_manageable_projects(self) -> List[Dict[str, Any]]:
         """Возвращает проекты, где пользователь может управлять задачами"""
         return self.data.get_manageable_projects()
@@ -195,12 +196,17 @@ class GanttService(GanttBaseService):
             return False
 
         from services.permissions.app_permissions import AppRole
+
         app_role = self.permission_service.app_manager.role
 
-        # Суперадмин и админ могут создавать
+        # Суперадмин и админ могут создавать задачи
         if app_role in (AppRole.SUPER_ADMIN, AppRole.ADMIN):
             return True
 
-        # Проверяем, есть ли у пользователя проекты, где он администратор или куратор
-        manageable_projects = self.get_manageable_projects()
-        return len(manageable_projects) > 0
+        # Обычный пользователь (USER) - проверяем, есть ли проекты,
+        # где он является администратором или куратором
+        if app_role == AppRole.USER:
+            manageable_projects = self.get_manageable_projects()
+            return len(manageable_projects) > 0
+
+        return False

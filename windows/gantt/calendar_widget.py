@@ -2,11 +2,12 @@
 
 from datetime import datetime, timedelta, date
 from typing import List, Dict, Optional
-from PyQt6.QtCore import Qt, QDate, pyqtSignal
+from PyQt6.QtCore import Qt, QDate, pyqtSignal, QPropertyAnimation, QEasingCurve
 from PyQt6.QtGui import QColor, QFont, QPainter, QBrush, QPen
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
-    QGridLayout, QFrame, QScrollArea, QMessageBox
+    QGridLayout, QFrame, QScrollArea, QMessageBox, QSizePolicy,
+    QApplication
 )
 
 from services.gantt_service.gantt_base_service import TaskGanttData
@@ -24,6 +25,7 @@ class CalendarWidget(QWidget):
         self._service = gantt_service
         self._current_date = datetime.now().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
         self._tasks: List[TaskGanttData] = []
+        self._day_widgets: List[CalendarDayWidget] = []
 
         self._setup_ui()
 
@@ -31,7 +33,7 @@ class CalendarWidget(QWidget):
         """Настройка UI"""
         main_layout = QVBoxLayout(self)
         main_layout.setSpacing(10)
-        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setContentsMargins(10, 10, 10, 10)
 
         # Панель навигации
         nav_layout = QHBoxLayout()
@@ -120,13 +122,14 @@ class CalendarWidget(QWidget):
                 border-radius: 8px;
             """)
             label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
             days_layout.addWidget(label)
 
         main_layout.addLayout(days_layout)
 
         # Сетка календаря
         self.calendar_grid = QGridLayout()
-        self.calendar_grid.setSpacing(1)
+        self.calendar_grid.setSpacing(2)
         self.calendar_grid.setContentsMargins(0, 0, 0, 0)
 
         main_layout.addLayout(self.calendar_grid)
@@ -150,11 +153,24 @@ class CalendarWidget(QWidget):
         """Обновляет отображение календаря"""
         print(f"📅 Обновление календаря: {self._current_date.strftime('%B %Y')}, задач: {len(self._tasks)}")
 
+        # Очищаем сетку и отключаем сигналы от старых виджетов
+        for widget in self._day_widgets:
+            try:
+                widget.task_clicked.disconnect()
+            except (TypeError, RuntimeError):
+                pass
+            widget.deleteLater()
+
+        self._day_widgets.clear()
+
         # Очищаем сетку
         for i in reversed(range(self.calendar_grid.count())):
-            widget = self.calendar_grid.itemAt(i).widget()
-            if widget:
-                widget.deleteLater()
+            item = self.calendar_grid.itemAt(i)
+            if item:
+                widget = item.widget()
+                if widget:
+                    widget.deleteLater()
+                self.calendar_grid.removeItem(item)
 
         # Обновляем заголовок месяца
         month_names = ["Январь", "Февраль", "Март", "Апрель", "Май", "Июнь",
@@ -186,6 +202,7 @@ class CalendarWidget(QWidget):
 
             # Создаём контейнер для дня
             day_widget = CalendarDayWidget()
+            day_widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
 
             if 1 <= day_number <= days_in_month:
                 # День текущего месяца
@@ -198,7 +215,7 @@ class CalendarWidget(QWidget):
                 day_widget.set_tasks(day_tasks, self._service)
 
                 # Подключаем сигнал клика
-                day_widget.task_clicked.connect(self.task_clicked.emit)
+                day_widget.task_clicked.connect(self._on_task_clicked)
 
                 # Подсветка текущего дня
                 today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
@@ -209,12 +226,19 @@ class CalendarWidget(QWidget):
                 day_widget.set_empty()
 
             self.calendar_grid.addWidget(day_widget, row, col)
+            self._day_widgets.append(day_widget)
 
-        # Настраиваем растяжение колонок
+        # Настраиваем растяжение колонок и строк
         for i in range(7):
             self.calendar_grid.setColumnStretch(i, 1)
+        for i in range(6):
+            self.calendar_grid.setRowStretch(i, 1)
 
         print(f"📅 Создано {total_cells} ячеек, найдено задач: {tasks_found}")
+
+    def _on_task_clicked(self, task_id: int) -> None:
+        """Обработчик клика по задаче - единая точка входа для сигнала"""
+        self.task_clicked.emit(task_id)
 
     def showEvent(self, event) -> None:
         """Обновляет календарь при показе"""
@@ -263,23 +287,28 @@ class CalendarDayWidget(QFrame):
         self._tasks = []
         self._service = None
         self._is_today = False
+        self._task_widgets = []
+        self._is_expanded = False
+        self._all_tasks_visible = False
+        self._more_label = None
 
         self._setup_ui()
 
     def _setup_ui(self) -> None:
         """Настройка UI"""
         self.setFrameShape(QFrame.Shape.StyledPanel)
-        self.setMinimumSize(100, 100)
+        self.setMinimumSize(70, 70)
         self.setMaximumSize(16777215, 16777215)
 
+        # Основной вертикальный layout
         layout = QVBoxLayout(self)
-        layout.setSpacing(5)
-        layout.setContentsMargins(8, 8, 8, 8)
+        layout.setSpacing(3)
+        layout.setContentsMargins(5, 5, 5, 5)
 
         # Верхняя панель с номером дня
         self.day_label = QLabel()
         self.day_label.setStyleSheet("""
-            font-size: 14px;
+            font-size: 13px;
             font-weight: bold;
             padding: 2px;
         """)
@@ -288,14 +317,16 @@ class CalendarDayWidget(QFrame):
 
         # Контейнер для задач
         self.tasks_container = QWidget()
-        tasks_layout = QVBoxLayout(self.tasks_container)
-        tasks_layout.setSpacing(4)
-        tasks_layout.setContentsMargins(0, 0, 0, 0)
-        tasks_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
-        layout.addWidget(self.tasks_container)
+        self.tasks_container.setStyleSheet("background-color: transparent;")
+        self.tasks_layout = QVBoxLayout(self.tasks_container)
+        self.tasks_layout.setSpacing(3)
+        self.tasks_layout.setContentsMargins(0, 0, 0, 0)
+        self.tasks_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
 
+        layout.addWidget(self.tasks_container)
         layout.addStretch()
 
+        # Стиль рамки
         self.setStyleSheet("""
             CalendarDayWidget {
                 background-color: #FFFFFF;
@@ -318,31 +349,141 @@ class CalendarDayWidget(QFrame):
         """Устанавливает задачи для отображения"""
         self._tasks = tasks
         self._service = service
+        self._all_tasks_visible = False
+        self._is_expanded = False
+
+        # Отключаем сигналы от старых карточек
+        for widget in self._task_widgets:
+            try:
+                widget.clicked.disconnect()
+            except (TypeError, RuntimeError):
+                pass
+            widget.deleteLater()
+
+        self._task_widgets.clear()
 
         # Очищаем контейнер
-        while self.tasks_container.layout().count():
-            item = self.tasks_container.layout().takeAt(0)
+        while self.tasks_layout.count():
+            item = self.tasks_layout.takeAt(0)
             if item.widget():
                 item.widget().deleteLater()
 
-        # Добавляем задачи (максимум 3, остальные сворачиваем)
-        visible_tasks = tasks[:3]
-        remaining = len(tasks) - 3
+        if not tasks:
+            return
+
+        # Показываем максимум 2 задачи, остальные сворачиваем
+        visible_tasks = tasks[:2]
+        remaining = len(tasks) - 2
 
         for task in visible_tasks:
             task_widget = TaskMiniCard(task, self._service)
-            task_widget.clicked.connect(self.task_clicked.emit)
-            self.tasks_container.layout().addWidget(task_widget)
+            task_widget.clicked.connect(self._on_task_clicked)
+            self.tasks_layout.addWidget(task_widget)
+            self._task_widgets.append(task_widget)
 
+        # Добавляем метку "+N задач" если есть скрытые
         if remaining > 0:
-            more_label = QLabel(f"+{remaining} задач")
-            more_label.setStyleSheet("""
+            self._more_label = QLabel(f"+{remaining} задач")
+            self._more_label.setStyleSheet("""
                 font-size: 10px;
                 color: #998664;
-                padding: 2px;
+                padding: 4px 2px;
+                background-color: #F0F0F0;
+                border-radius: 4px;
             """)
-            more_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            self.tasks_container.layout().addWidget(more_label)
+            self._more_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            self._more_label.setCursor(Qt.CursorShape.PointingHandCursor)
+            self._more_label.mousePressEvent = self._on_more_label_clicked
+            self.tasks_layout.addWidget(self._more_label)
+
+        # Добавляем растяжение в конец
+        self.tasks_layout.addStretch()
+
+    def _on_more_label_clicked(self, event) -> None:
+        """Обработчик клика по метке +N задач - раскрывает все задачи"""
+        if not self._tasks:
+            return
+
+        self._all_tasks_visible = True
+        self._update_task_display()
+
+    def _update_task_display(self) -> None:
+        """Обновляет отображение задач (свёрнуто/развёрнуто)"""
+        # Очищаем контейнер
+        while self.tasks_layout.count():
+            item = self.tasks_layout.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+
+        self._task_widgets.clear()
+
+        if self._all_tasks_visible:
+            # Показываем все задачи - просто добавляем их без изменения размера карточек
+            for task in self._tasks:
+                task_widget = TaskMiniCard(task, self._service)
+                task_widget.clicked.connect(self._on_task_clicked)
+                self.tasks_layout.addWidget(task_widget)
+                self._task_widgets.append(task_widget)
+
+            # Добавляем кнопку "Скрыть"
+            hide_label = QLabel("▲ Скрыть задачи")
+            hide_label.setStyleSheet("""
+                font-size: 10px;
+                color: #ccab6e;
+                padding: 4px 2px;
+                background-color: #F5F0EA;
+                border-radius: 4px;
+            """)
+            hide_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            hide_label.setCursor(Qt.CursorShape.PointingHandCursor)
+            hide_label.mousePressEvent = self._on_hide_label_clicked
+            self.tasks_layout.addWidget(hide_label)
+
+            # Добавляем растяжение
+            self.tasks_layout.addStretch()
+
+            # Увеличиваем размер виджета, чтобы все задачи поместились
+            # Расчёт высоты: (количество задач * 28px) + отступы + заголовок
+            task_height = len(self._tasks) * 28 + 40
+            self.setMinimumHeight(max(120, task_height))
+        else:
+            # Показываем только 2 задачи
+            visible_tasks = self._tasks[:2]
+            remaining = len(self._tasks) - 2
+
+            for task in visible_tasks:
+                task_widget = TaskMiniCard(task, self._service)
+                task_widget.clicked.connect(self._on_task_clicked)
+                self.tasks_layout.addWidget(task_widget)
+                self._task_widgets.append(task_widget)
+
+            if remaining > 0:
+                self._more_label = QLabel(f"+{remaining} задач")
+                self._more_label.setStyleSheet("""
+                    font-size: 10px;
+                    color: #998664;
+                    padding: 4px 2px;
+                    background-color: #F0F0F0;
+                    border-radius: 4px;
+                """)
+                self._more_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+                self._more_label.setCursor(Qt.CursorShape.PointingHandCursor)
+                self._more_label.mousePressEvent = self._on_more_label_clicked
+                self.tasks_layout.addWidget(self._more_label)
+
+            self.tasks_layout.addStretch()
+
+            # Возвращаем обычный размер
+            self.setMinimumHeight(80)
+
+    def _on_hide_label_clicked(self, event) -> None:
+        """Обработчик клика по кнопке 'Скрыть задачи'"""
+        self._all_tasks_visible = False
+        self._update_task_display()
+
+    def _on_task_clicked(self, task_id: int) -> None:
+        """Промежуточный обработчик клика по карточке задачи"""
+        self.task_clicked.emit(task_id)
 
     def set_empty(self) -> None:
         """Устанавливает пустой день (другого месяца)"""
@@ -354,16 +495,42 @@ class CalendarDayWidget(QFrame):
                 border-radius: 8px;
             }
         """)
+        # Отключаем сигналы и очищаем задачи
+        for widget in self._task_widgets:
+            try:
+                widget.clicked.disconnect()
+            except (TypeError, RuntimeError):
+                pass
+            widget.deleteLater()
+
+        self._task_widgets.clear()
+
+        while self.tasks_layout.count():
+            item = self.tasks_layout.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+
+        self.setMinimumHeight(80)
 
     def set_today(self, is_today: bool = True) -> None:
         """Подсвечивает текущий день"""
         self._is_today = is_today
         if is_today:
             self.day_label.setStyleSheet("""
-                font-size: 14px;
+                font-size: 13px;
                 font-weight: bold;
                 padding: 2px;
                 color: #ccab6e;
+            """)
+            self.setStyleSheet("""
+                CalendarDayWidget {
+                    background-color: #FFF8F0;
+                    border: 2px solid #ccab6e;
+                    border-radius: 8px;
+                }
+                CalendarDayWidget:hover {
+                    background-color: #FFF0E0;
+                }
             """)
 
 
@@ -382,47 +549,55 @@ class TaskMiniCard(QFrame):
     def _setup_ui(self) -> None:
         """Настройка UI мини-карточки"""
         self.setFrameShape(QFrame.Shape.NoFrame)
+        self.setMinimumHeight(20)
+        self.setMaximumHeight(28)
 
         layout = QHBoxLayout(self)
-        layout.setSpacing(5)
-        layout.setContentsMargins(4, 4, 4, 4)
+        layout.setSpacing(4)
+        layout.setContentsMargins(4, 2, 4, 2)
 
         # Цветовая индикация приоритета
         color_indicator = QLabel()
-        color_indicator.setFixedSize(8, 8)
+        color_indicator.setFixedSize(6, 6)
         color_indicator.setStyleSheet(f"""
             background-color: {self._task.color};
-            border-radius: 4px;
+            border-radius: 3px;
         """)
+        color_indicator.setMinimumWidth(6)
 
         # Название задачи
         name_label = QLabel(self._task.name)
         name_label.setStyleSheet("""
-            font-size: 11px;
+            font-size: 10px;
             color: #1B232A;
             font-weight: normal;
         """)
-        name_label.setWordWrap(True)
+        name_label.setWordWrap(False)
+        name_label.setMinimumWidth(15)
 
         # Инициалы исполнителя
         if self._task.executor_initials:
             executor_label = QLabel(self._task.executor_initials)
             executor_label.setStyleSheet("""
-                font-size: 9px;
+                font-size: 8px;
                 color: #998664;
                 font-weight: bold;
             """)
             executor_label.setAlignment(Qt.AlignmentFlag.AlignRight)
-            layout.addWidget(executor_label)
+            executor_label.setMinimumWidth(14)
+        else:
+            executor_label = None
 
         layout.addWidget(color_indicator)
         layout.addWidget(name_label, 1)
+        if executor_label:
+            layout.addWidget(executor_label)
 
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         self.setStyleSheet("""
             TaskMiniCard {
                 background-color: #F5F5F5;
-                border-radius: 6px;
+                border-radius: 4px;
             }
             TaskMiniCard:hover {
                 background-color: #E8E8E8;
@@ -434,3 +609,23 @@ class TaskMiniCard(QFrame):
         if event.button() == Qt.MouseButton.LeftButton:
             self.clicked.emit(self._task.id)
         super().mousePressEvent(event)
+
+    def enterEvent(self, event) -> None:
+        """Подсветка при наведении"""
+        self.setStyleSheet("""
+            TaskMiniCard {
+                background-color: #E8E8E8;
+                border-radius: 3px;
+            }
+        """)
+        super().enterEvent(event)
+
+    def leaveEvent(self, event) -> None:
+        """Сброс подсветки"""
+        self.setStyleSheet("""
+            TaskMiniCard {
+                background-color: #F5F5F5;
+                border-radius: 3px;
+            }
+        """)
+        super().leaveEvent(event)
