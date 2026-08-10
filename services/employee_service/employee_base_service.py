@@ -1,9 +1,9 @@
 # services/employee_service/employee_base_service.py
 
-from typing import List, Dict, Any, Optional
+from typing import List
 from sqlalchemy.orm import Session
-from database import get_employees_session, get_tasks_session
-from models.employees import Employee, Department, Division, EmployeeData, RoleEnum
+from server_app.database import get_employees_session, get_tasks_session
+from models.employees import Employee, Department, Division
 from repositories.employee_repo import EmployeeRepo
 
 

@@ -1,7 +1,6 @@
 # services/permissions/permission_service.py
 
 from typing import Optional, Dict, List, Set, Any
-from functools import lru_cache
 
 from models.permissions import ProjectRole, SystemRole, CombinedRole
 from services.permissions.app_permissions import AppRole
@@ -142,6 +141,13 @@ class PermissionService:
             return target_employee_id == self.user_id
 
         return False
+
+    def can_view_analytics(self) -> bool:
+        """
+        Может ли пользователь видеть страницу аналитики.
+        """
+        combined = self.get_combined_role()
+        return combined.can_view_analytics()
 
     def can_delete_employee(self, target_employee_id: int) -> bool:
         """
@@ -629,7 +635,7 @@ class PermissionService:
         """Проверяет, находится ли отдел в подразделении пользователя (начальника подразделения)"""
         try:
             from sqlalchemy import text
-            from database import get_employees_session
+            from server_app.database import get_employees_session
 
             with get_employees_session() as emp_session:
                 # Получаем отдел
@@ -661,7 +667,7 @@ class PermissionService:
         """Проверяет, управляет ли пользователь отделом (начальник отдела)"""
         try:
             from sqlalchemy import text
-            from database import get_employees_session
+            from server_app.database import get_employees_session
 
             with get_employees_session() as emp_session:
                 stmt = text("SELECT boss FROM departments WHERE id = :dept_id")
@@ -751,7 +757,7 @@ class PermissionService:
         """Проверяет, управляет ли пользователь указанным подразделением"""
         try:
             from sqlalchemy import text
-            from database import get_employees_session
+            from server_app.database import get_employees_session
 
             # ✅ ИСПРАВЛЕНО: используем отдельную сессию для employees БД
             with get_employees_session() as emp_session:
@@ -792,7 +798,7 @@ class PermissionService:
             return []
 
         try:
-            from database import get_employees_session
+            from server_app.database import get_employees_session
             from sqlalchemy import text
 
             with get_employees_session() as emp_session:
@@ -872,16 +878,11 @@ class _AppManagerProxy:
     def get_visible_tabs(self) -> Set[str]:
         # Базовые вкладки, которые видят все
         tabs = {'projects', 'my_tasks', 'other_tasks', 'gantt', 'chat', 'archive'}
-
-        # Переработки - ВИДЯТ ВСЕ (страница с вкладкой "Мои переработки")
         tabs.add('overtime')
-
-        # Настройки - видят все (но с разными правами)
         tabs.add('settings')
 
-        # Аналитика - только для админов и суперадминов
-        combined = self._service.get_combined_role()
-        if combined.is_super_admin or combined.is_admin:
+        # ✅ Исправлено: используем сервис для проверки аналитики
+        if self._service and self._service.can_view_analytics():
             tabs.add('analytics')
 
         return tabs

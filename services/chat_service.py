@@ -2,7 +2,7 @@
 from typing import List, Optional
 from sqlalchemy.orm import Session
 
-from database import get_employees_session
+from server_app.database import get_employees_session
 from repositories.chat_repo import ChatRepo
 from repositories.employee_repo import EmployeeRepo  # ← ИСПРАВЛЕНО (было external_employee_repo)
 from models.schemas.chat_dto import MessageReadDTO, ChatReadDTO

@@ -1,8 +1,7 @@
 # services/projects_service/projects_members_service.py
 
 from typing import List, Dict, Optional
-from sqlalchemy import select, text
-from database import get_employees_session
+from sqlalchemy import text
 
 
 class ProjectsMembersService:
@@ -116,7 +115,7 @@ class ProjectsMembersService:
         """Получает данные пользователя по ID"""
         from models.employees import Employee, EmployeeData
         from sqlalchemy import select
-        from database import get_tasks_session
+        from server_app.database import get_tasks_session
 
         emp_session = self.employees_session
         if emp_session is None:

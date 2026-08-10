@@ -352,6 +352,13 @@ class OthersTaskCard(TaskCard):
 
     def update_task_data(self, new_data):
         """Обновляет данные задачи."""
+        if "completed" in new_data:
+            self.task_data["completed"] = new_data["completed"]
+        elif new_data.get("progress_percent", 0) >= 100 and new_data.get("status") in ["Готово", "Done", "Выполнено"]:
+            self.task_data["completed"] = True
+        elif new_data.get("status") not in ["Готово", "Done", "Выполнено"]:
+            self.task_data["completed"] = False
+
         self.task_data.update(new_data)
         self.fill_ui()
         self.setup_creator_ui()

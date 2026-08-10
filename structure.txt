@@ -37,12 +37,10 @@
 |  |  +-- TasksServer.pkg
 |  |  +-- warn-TasksServer.txt
 |  |  +-- xref-TasksServer.html
-+-- chat_server.py
 +-- cli
 |  +-- train_model.py
 +-- data
 |  +-- training
-+-- database.py
 +-- dist
 |  +-- main
 |  |  +-- main.exe
@@ -62,10 +60,6 @@
 |  +-- taskplanner_icon.png
 +-- main.py
 +-- main.spec
-+-- ml
-|  +-- __pycache__
-|  +-- models
-|  +-- task_time_predictor.py
 +-- models
 |  +-- __pycache__
 |  +-- chat.py
@@ -93,6 +87,17 @@
 |  +-- task_repo.py
 +-- requirements.txt
 +-- script.iss
++-- server_app
+|  +-- chat_server.py
+|  +-- database.py
+|  +-- ml
+|  |  +-- __pycache__
+|  |  +-- models
+|  |  +-- task_time_predictor.py
+|  +-- services
+|  |  +-- tasks_service
+|  |  |  +-- task_data_collector.py
+|  |  +-- training_scheduler.py
 +-- ServerApp.spec
 +-- services
 |  +-- __pycache__
@@ -164,7 +169,6 @@
 |  |  +-- tasks_service.py
 |  |  +-- tasks_statistics_service.py
 |  |  +-- tasks_tag_service.py
-|  +-- training_scheduler.py
 +-- shared_state.py
 +-- structure.txt
 +-- taskplanner_icon.ico
@@ -206,7 +210,9 @@
 |  |  +-- archived_project_card.ui
 |  |  +-- archived_task_card.ui
 |  +-- gantt
+|  |  +-- calendar_widget.ui
 |  |  +-- gantt_widget.ui
+|  |  +-- link_dialog.ui
 |  +-- left_panel.ui
 |  +-- login
 |  |  +-- login_window.ui
@@ -307,6 +313,14 @@
 |  |  |  +-- tasks_data_20260707_112216.json
 |  |  |  +-- tasks_data_20260729_092006.json
 |  |  |  +-- tasks_data_20260729_133622.json
+|  |  |  +-- tasks_data_20260729_134422.json
+|  |  |  +-- tasks_data_20260729_134800.json
+|  |  |  +-- tasks_data_20260730_134238.json
+|  |  |  +-- tasks_data_20260807_113316.json
+|  |  |  +-- tasks_data_20260807_115437.json
+|  |  |  +-- tasks_data_20260807_115512.json
+|  |  |  +-- tasks_data_20260807_115548.json
+|  |  |  +-- tasks_data_20260807_115812.json
 |  +-- gantt
 |  |  +-- __pycache__
 |  |  +-- calendar_widget.py
@@ -319,12 +333,17 @@
 |  |  +-- period_dialog.py
 |  +-- gantt_chart_20260608_144211.png
 |  +-- gantt_chart_20260608_144232.xlsx
+|  +-- gantt_chart_20260805_084409.png
+|  +-- gantt_chart_20260805_120645.png
+|  +-- gantt_chart_20260805_121015.xlsx
 |  +-- gantt_report_20260608_144313.docx
+|  +-- gantt_report_20260805_121653.docx
 |  +-- login
 |  |  +-- __pycache__
 |  |  +-- login_window.py
 |  +-- ml
 |  |  +-- models
+|  |  |  +-- task_time_predictor.pkl
 |  +-- my_tasks
 |  |  +-- __pycache__
 |  |  +-- my_tasks_handlers.py

@@ -86,6 +86,8 @@ class GanttDependencyService:
                     linked.append(task.id)
         return linked
 
+    # services/gantt_service/gantt_dependency_service.py
+
     def add_dependency(
             self,
             predecessor_id: int,
@@ -123,10 +125,23 @@ class GanttDependencyService:
             if self._would_create_cycle(predecessor_id, successor_id):
                 return False, "Создание связи создаст циклическую зависимость"
 
+            # ✅ Рассчитываем новые даты для задачи-последователя
             new_start, new_end = self._calculate_dates_for_successor(
                 pred_task, succ_task, dep_type, lag
             )
 
+            # ✅ Если даты изменились - обновляем задачу-последователя
+            date_changed = False
+            if new_start != succ_task.start_date or new_end != succ_task.end_date:
+                date_changed = True
+                succ_task.start_date = new_start
+                succ_task.end_date = new_end
+                print(f"🔄 Обновлены даты для задачи {succ_task.id} '{succ_task.name}'")
+                print(f"   Было: {succ_task.start_date.date()} - {succ_task.end_date.date()}")
+                print(f"   Стало: {new_start.date()} - {new_end.date()}")
+                print(f"   Тип связи: {dep_type}")
+
+            # Создаём связь в БД
             dependency = TaskDependency(
                 predecessor_id=predecessor_id,
                 successor_id=successor_id,
@@ -136,14 +151,18 @@ class GanttDependencyService:
             self.session.add(dependency)
             self.session.flush()
 
-            from models.tasks import Task
-            self.session.query(Task).filter(Task.id == successor_id).update({
-                Task.created_at: new_start,
-                Task.deadline: new_end,
-                Task.updated_at: datetime.now()
-            }, synchronize_session=False)
+            # ✅ Если даты изменились - обновляем в БД
+            if date_changed:
+                from models.tasks import Task
+                self.session.query(Task).filter(Task.id == successor_id).update({
+                    Task.created_at: new_start,
+                    Task.deadline: new_end,
+                    Task.updated_at: datetime.now()
+                }, synchronize_session=False)
+
             self.session.commit()
 
+            # Обновляем кэш
             for t in self._data.get_all_tasks():
                 if t.id == predecessor_id:
                     t.dependencies.append({
@@ -151,15 +170,15 @@ class GanttDependencyService:
                         "lag": lag,
                         "type": dep_type
                     })
-                    break
-
-            for t in self._data.get_all_tasks():
                 if t.id == successor_id:
                     t.start_date = new_start
                     t.end_date = new_end
-                    break
 
-            return True, f"Связь типа {dep_type} успешно создана, даты обновлены"
+            message = f"Связь типа {dep_type} успешно создана"
+            if date_changed:
+                message += f", даты задачи '{succ_task.name}' обновлены"
+
+            return True, message
 
         except Exception as e:
             self.session.rollback()
@@ -190,6 +209,8 @@ class GanttDependencyService:
 
         return False
 
+    # services/gantt_service/gantt_dependency_service.py
+
     def _calculate_dates_for_successor(
             self,
             pred_task: TaskGanttData,
@@ -197,31 +218,42 @@ class GanttDependencyService:
             dep_type: str,
             lag: int = 0
     ) -> Tuple[datetime, datetime]:
-        """Рассчитывает новые даты для задачи-последователя"""
+        """Рассчитывает новые даты для задачи-последователя с учётом ограничений"""
         pred_start = pred_task.start_date
         pred_end = pred_task.end_date
         succ_start = succ_task.start_date
         succ_end = succ_task.end_date
 
+        # Длительность задачи-последователя
         duration = (succ_end - succ_start).days
         if duration <= 0:
             duration = 1
 
-        if dep_type == "FS":
+        if dep_type == "FS":  # Финиш-Старт
+            # Старт последователя = финиш предшественника + lag
             new_start = pred_end + timedelta(days=lag)
             new_end = new_start + timedelta(days=duration)
 
-        elif dep_type == "SS":
-            new_start = max(succ_start, pred_start + timedelta(days=lag))
+        elif dep_type == "SS":  # Старт-Старт
+            # ✅ Старт последователя = старт предшественника + lag
+            new_start = pred_start + timedelta(days=lag)
             new_end = new_start + timedelta(days=duration)
 
-        elif dep_type == "FF":
-            new_end = max(succ_end, pred_end + timedelta(days=lag))
+        elif dep_type == "FF":  # Финиш-Финиш
+            # Финиш последователя = финиш предшественника + lag
+            new_end = pred_end + timedelta(days=lag)
             new_start = new_end - timedelta(days=duration)
+            # Старт второй не может быть позже старта первой
+            if new_start > pred_start:
+                new_start = pred_start
 
-        elif dep_type == "SF":
-            new_end = max(succ_end, pred_start + timedelta(days=lag))
+        elif dep_type == "SF":  # Старт-Финиш
+            # Финиш последователя = старт предшественника + lag
+            new_end = pred_start + timedelta(days=lag)
             new_start = new_end - timedelta(days=duration)
+            # Старт второй не может быть позже старта первой
+            if new_start > pred_start:
+                new_start = pred_start
 
         else:
             new_start = succ_start
@@ -234,6 +266,8 @@ class GanttDependencyService:
         new_end = new_end.replace(hour=0, minute=0, second=0, microsecond=0)
 
         return new_start, new_end
+
+    # services/gantt_service/gantt_dependency_service.py
 
     def update_task_dates_with_linked(
             self,
@@ -249,20 +283,19 @@ class GanttDependencyService:
             return False
 
         try:
+            from models.tasks import Task
+
             # Находим задачу в кэше
             old_task = None
-            old_start = None
             for t in self._data.get_all_tasks():
                 if t.id == task_id:
-                    old_start = t.start_date
                     old_task = t
                     break
 
             if not old_task:
                 return False
 
-            # 1. Обновляем даты самой задачи
-            from models.tasks import Task
+            # 1. Обновляем даты самой задачи в БД
             self.session.query(Task).filter(Task.id == task_id).update({
                 Task.created_at: new_start,
                 Task.deadline: new_end,
@@ -270,51 +303,82 @@ class GanttDependencyService:
             }, synchronize_session=False)
             self.session.commit()
 
-            # Обновляем в кэше
+            # ✅ Обновляем в кэше для самой задачи
             for t in self._data.get_all_tasks():
                 if t.id == task_id:
                     t.start_date = new_start
                     t.end_date = new_end
                     break
 
-            # 2. Обновляем все зависимые задачи (где task_id - предшественник)
-            delta_days = (new_start - old_start).days if old_start else 0
+            # 2. Строим полную карту зависимостей (в обе стороны)
+            all_tasks = self._data.get_all_tasks()
+            dependency_map = {}  # predecessor_id -> [list of successor info]
+            reverse_dependency_map = {}  # successor_id -> [list of predecessor info]
 
-            # Получаем все задачи, которые зависят от task_id
-            for task in self._data.get_all_tasks():
-                # Проверяем зависимости задачи
+            for task in all_tasks:
                 for dep in task.dependencies:
-                    if dep.get("successor_id") == task_id:
-                        # Это означает, что task_id является предшественником для task
+                    pred_id = task.id
+                    succ_id = dep.get("successor_id")
+                    if succ_id:
                         link_type = dep.get("type", "FS")
                         lag = dep.get("lag", 0)
 
-                        # Рассчитываем новые даты для зависимой задачи
-                        new_linked_start, new_linked_end = self._calculate_dates_for_successor(
-                            old_task,  # предшественник (старый, но используем для логики)
-                            task,  # зависимая задача
-                            link_type,
-                            lag
-                        )
-
-                        # Обновляем даты в БД
-                        self.session.query(Task).filter(Task.id == task.id).update({
-                            Task.created_at: new_linked_start,
-                            Task.deadline: new_linked_end,
-                            Task.updated_at: datetime.now()
-                        }, synchronize_session=False)
-                        self.session.commit()
-
-                        # Обновляем в кэше
-                        for t in self._data.get_all_tasks():
-                            if t.id == task.id:
-                                t.start_date = new_linked_start
-                                t.end_date = new_linked_end
+                        # Прямая карта (предшественник -> последователь)
+                        if pred_id not in dependency_map:
+                            dependency_map[pred_id] = []
+                        succ_task = None
+                        for t in all_tasks:
+                            if t.id == succ_id:
+                                succ_task = t
                                 break
+                        if succ_task:
+                            dependency_map[pred_id].append({
+                                "task": succ_task,
+                                "type": link_type,
+                                "lag": lag
+                            })
 
-                        # Рекурсивно обновляем задачи, зависящие от этой
-                        self.update_task_dates_with_linked(task.id, new_linked_start, new_linked_end)
-                        break
+                        # Обратная карта (последователь -> предшественник)
+                        if succ_id not in reverse_dependency_map:
+                            reverse_dependency_map[succ_id] = []
+                        pred_task = None
+                        for t in all_tasks:
+                            if t.id == pred_id:
+                                pred_task = t
+                                break
+                        if pred_task:
+                            reverse_dependency_map[succ_id].append({
+                                "task": pred_task,
+                                "type": link_type,
+                                "lag": lag
+                            })
+
+            # 3. Обновляем зависимые задачи в обе стороны
+            visited = set()
+
+            # Сначала обновляем последователей (если двигаем предшественника)
+            self._update_dependent_tasks_recursive_bidirectional(
+                task_id,
+                new_start,
+                new_end,
+                dependency_map,
+                reverse_dependency_map,
+                visited,
+                is_forward=True
+            )
+
+            # ✅ Затем обновляем предшественников (если двигаем последователя)
+            # Для SS и FF связей - двусторонняя синхронизация
+            self._update_predecessors_recursive(
+                task_id,
+                new_start,
+                new_end,
+                reverse_dependency_map,
+                set()
+            )
+
+            # ✅ Дополнительно обновляем кэш для всех затронутых задач
+            self.session.commit()
 
             return True
 
@@ -324,6 +388,376 @@ class GanttDependencyService:
             import traceback
             traceback.print_exc()
             return False
+
+    # services/gantt_service/gantt_dependency_service.py
+
+    def _update_predecessors_recursive(
+            self,
+            task_id: int,
+            new_start: datetime,
+            new_end: datetime,
+            reverse_dependency_map: Dict,
+            visited: set
+    ) -> None:
+        """
+        Рекурсивно обновляет предшественников задачи (для двусторонней синхронизации).
+        """
+        from models.tasks import Task
+
+        if task_id in visited:
+            return
+        visited.add(task_id)
+
+        # Находим задачу
+        curr_task = None
+        for t in self._data.get_all_tasks():
+            if t.id == task_id:
+                curr_task = t
+                break
+
+        if not curr_task:
+            return
+
+        # Находим предшественников (задачи, от которых зависит текущая)
+        predecessors = reverse_dependency_map.get(task_id, [])
+
+        for pred_info in predecessors:
+            pred_task = pred_info["task"]
+            link_type = pred_info["type"]
+            lag = pred_info["lag"]
+
+            # Для SS связи - синхронизируем старты в обе стороны
+            if link_type == "SS":
+                required_start = curr_task.start_date - timedelta(days=lag)
+                old_start = pred_task.start_date
+                old_end = pred_task.end_date
+                duration = (pred_task.end_date - pred_task.start_date).days
+                if duration <= 0:
+                    duration = 1
+
+                new_pred_start = required_start
+                new_pred_end = new_pred_start + timedelta(days=duration)
+
+                if pred_task.start_date != new_pred_start or pred_task.end_date != new_pred_end:
+                    print(
+                        f"🔄 Двусторонняя синхронизация (SS): обновление предшественника {pred_task.id} '{pred_task.name}'")
+                    print(f"   Было: {old_start.date()} - {old_end.date()}")
+                    print(f"   Стало: {new_pred_start.date()} - {new_pred_end.date()}")
+                    print(f"   Текущая задача: {curr_task.id} '{curr_task.name}' старт {curr_task.start_date.date()}")
+
+                    self.session.query(Task).filter(Task.id == pred_task.id).update({
+                        Task.created_at: new_pred_start,
+                        Task.deadline: new_pred_end,
+                        Task.updated_at: datetime.now()
+                    }, synchronize_session=False)
+                    self.session.commit()
+
+                    for t in self._data.get_all_tasks():
+                        if t.id == pred_task.id:
+                            t.start_date = new_pred_start
+                            t.end_date = new_pred_end
+                            break
+
+                    self._update_predecessors_recursive(
+                        pred_task.id,
+                        new_pred_start,
+                        new_pred_end,
+                        reverse_dependency_map,
+                        visited
+                    )
+
+            # Для FF связи - синхронизируем финиши в обе стороны
+            elif link_type == "FF":
+                required_end = curr_task.end_date - timedelta(days=lag)
+                old_start = pred_task.start_date
+                old_end = pred_task.end_date
+                duration = (pred_task.end_date - pred_task.start_date).days
+                if duration <= 0:
+                    duration = 1
+
+                new_pred_end = required_end
+                new_pred_start = new_pred_end - timedelta(days=duration)
+
+                if pred_task.start_date != new_pred_start or pred_task.end_date != new_pred_end:
+                    print(
+                        f"🔄 Двусторонняя синхронизация (FF): обновление предшественника {pred_task.id} '{pred_task.name}'")
+                    print(f"   Было: {old_start.date()} - {old_end.date()}")
+                    print(f"   Стало: {new_pred_start.date()} - {new_pred_end.date()}")
+                    print(f"   Текущая задача: {curr_task.id} '{curr_task.name}' финиш {curr_task.end_date.date()}")
+
+                    self.session.query(Task).filter(Task.id == pred_task.id).update({
+                        Task.created_at: new_pred_start,
+                        Task.deadline: new_pred_end,
+                        Task.updated_at: datetime.now()
+                    }, synchronize_session=False)
+                    self.session.commit()
+
+                    for t in self._data.get_all_tasks():
+                        if t.id == pred_task.id:
+                            t.start_date = new_pred_start
+                            t.end_date = new_pred_end
+                            break
+
+                    self._update_predecessors_recursive(
+                        pred_task.id,
+                        new_pred_start,
+                        new_pred_end,
+                        reverse_dependency_map,
+                        visited
+                    )
+
+            # ✅ Для FS связи - синхронизируем финиш предшественника со стартом последователя
+            elif link_type == "FS":
+                # Финиш предшественника = старт последователя - lag
+                required_end = curr_task.start_date - timedelta(days=lag)
+                old_start = pred_task.start_date
+                old_end = pred_task.end_date
+                duration = (pred_task.end_date - pred_task.start_date).days
+                if duration <= 0:
+                    duration = 1
+
+                new_pred_end = required_end
+                new_pred_start = new_pred_end - timedelta(days=duration)
+
+                if pred_task.start_date != new_pred_start or pred_task.end_date != new_pred_end:
+                    print(f"🔄 Синхронизация (FS): обновление предшественника {pred_task.id} '{pred_task.name}'")
+                    print(f"   Было: {old_start.date()} - {old_end.date()}")
+                    print(f"   Стало: {new_pred_start.date()} - {new_pred_end.date()}")
+                    print(f"   Текущая задача: {curr_task.id} '{curr_task.name}' старт {curr_task.start_date.date()}")
+
+                    self.session.query(Task).filter(Task.id == pred_task.id).update({
+                        Task.created_at: new_pred_start,
+                        Task.deadline: new_pred_end,
+                        Task.updated_at: datetime.now()
+                    }, synchronize_session=False)
+                    self.session.commit()
+
+                    for t in self._data.get_all_tasks():
+                        if t.id == pred_task.id:
+                            t.start_date = new_pred_start
+                            t.end_date = new_pred_end
+                            break
+
+                    self._update_predecessors_recursive(
+                        pred_task.id,
+                        new_pred_start,
+                        new_pred_end,
+                        reverse_dependency_map,
+                        visited
+                    )
+
+            # ✅ Для SF связи - синхронизируем старт предшественника с финишем последователя
+            elif link_type == "SF":
+                # Старт предшественника = финиш последователя - lag
+                required_start = curr_task.end_date - timedelta(days=lag)
+                old_start = pred_task.start_date
+                old_end = pred_task.end_date
+                duration = (pred_task.end_date - pred_task.start_date).days
+                if duration <= 0:
+                    duration = 1
+
+                new_pred_start = required_start
+                new_pred_end = new_pred_start + timedelta(days=duration)
+
+                if pred_task.start_date != new_pred_start or pred_task.end_date != new_pred_end:
+                    print(f"🔄 Синхронизация (SF): обновление предшественника {pred_task.id} '{pred_task.name}'")
+                    print(f"   Было: {old_start.date()} - {old_end.date()}")
+                    print(f"   Стало: {new_pred_start.date()} - {new_pred_end.date()}")
+                    print(f"   Текущая задача: {curr_task.id} '{curr_task.name}' финиш {curr_task.end_date.date()}")
+
+                    self.session.query(Task).filter(Task.id == pred_task.id).update({
+                        Task.created_at: new_pred_start,
+                        Task.deadline: new_pred_end,
+                        Task.updated_at: datetime.now()
+                    }, synchronize_session=False)
+                    self.session.commit()
+
+                    for t in self._data.get_all_tasks():
+                        if t.id == pred_task.id:
+                            t.start_date = new_pred_start
+                            t.end_date = new_pred_end
+                            break
+
+                    self._update_predecessors_recursive(
+                        pred_task.id,
+                        new_pred_start,
+                        new_pred_end,
+                        reverse_dependency_map,
+                        visited
+                    )
+
+    # services/gantt_service/gantt_dependency_service.py
+
+    def _update_dependent_tasks_recursive_bidirectional(
+            self,
+            task_id: int,
+            new_start: datetime,
+            new_end: datetime,
+            dependency_map: Dict,
+            reverse_dependency_map: Dict,
+            visited: set,
+            is_forward: bool = True
+    ) -> None:
+        """
+        Рекурсивно обновляет все зависимые задачи с учётом двусторонней синхронизации.
+        """
+        from models.tasks import Task
+
+        if task_id in visited:
+            return
+        visited.add(task_id)
+
+        # Получаем обновлённую задачу-предшественника
+        pred_task = None
+        for t in self._data.get_all_tasks():
+            if t.id == task_id:
+                pred_task = t
+                break
+
+        if not pred_task:
+            return
+
+        # Находим задачи, которые зависят от обновлённой
+        dependent = dependency_map.get(task_id, [])
+
+        for dep_info in dependent:
+            succ_task = dep_info["task"]
+            link_type = dep_info["type"]
+            lag = dep_info["lag"]
+
+            # Рассчитываем новые даты с учётом ограничений
+            new_succ_start, new_succ_end = self._calculate_dates_for_successor(
+                pred_task, succ_task, link_type, lag
+            )
+
+            # Проверяем, изменились ли даты
+            if (new_succ_start != succ_task.start_date or
+                    new_succ_end != succ_task.end_date):
+
+                print(f"🔄 Обновление задачи {succ_task.id} '{succ_task.name}'")
+                print(f"   Было: {succ_task.start_date.date()} - {succ_task.end_date.date()}")
+                print(f"   Стало: {new_succ_start.date()} - {new_succ_end.date()}")
+                print(f"   Тип связи: {link_type}")
+
+                # Обновляем даты в БД
+                self.session.query(Task).filter(Task.id == succ_task.id).update({
+                    Task.created_at: new_succ_start,
+                    Task.deadline: new_succ_end,
+                    Task.updated_at: datetime.now()
+                }, synchronize_session=False)
+                self.session.commit()
+
+                # Обновляем в кэше
+                for t in self._data.get_all_tasks():
+                    if t.id == succ_task.id:
+                        t.start_date = new_succ_start
+                        t.end_date = new_succ_end
+                        break
+
+                # Рекурсивно обновляем задачи, зависящие от этой
+                self._update_dependent_tasks_recursive_bidirectional(
+                    succ_task.id,
+                    new_succ_start,
+                    new_succ_end,
+                    dependency_map,
+                    reverse_dependency_map,
+                    visited,
+                    is_forward
+                )
+
+                # ✅ Для SS и FF - обновляем предшественников (двусторонняя синхронизация)
+                if link_type in ("SS", "FF") and is_forward:
+                    self._update_predecessors_recursive(
+                        succ_task.id,
+                        new_succ_start,
+                        new_succ_end,
+                        reverse_dependency_map,
+                        set()
+                    )
+
+                # ✅ Для FS и SF - также обновляем предшественников
+                if link_type in ("FS", "SF") and is_forward:
+                    self._update_predecessors_recursive(
+                        succ_task.id,
+                        new_succ_start,
+                        new_succ_end,
+                        reverse_dependency_map,
+                        set()
+                    )
+
+    def _update_dependent_tasks_recursive(
+            self,
+            task_id: int,
+            new_start: datetime,
+            new_end: datetime,
+            dependency_map: Dict,
+            visited: set
+    ) -> None:
+        """
+        Рекурсивно обновляет все зависимые задачи.
+        """
+        from models.tasks import Task
+
+        # Защита от циклов
+        if task_id in visited:
+            return
+        visited.add(task_id)
+
+        # Получаем обновлённую задачу-предшественника
+        pred_task = None
+        for t in self._data.get_all_tasks():
+            if t.id == task_id:
+                pred_task = t
+                break
+
+        if not pred_task:
+            return
+
+        # Находим задачи, которые зависят от обновлённой
+        dependent = dependency_map.get(task_id, [])
+
+        for dep_info in dependent:
+            succ_task = dep_info["task"]
+            link_type = dep_info["type"]
+            lag = dep_info["lag"]
+
+            # Рассчитываем новые даты с учётом ограничений
+            new_succ_start, new_succ_end = self._calculate_dates_for_successor(
+                pred_task, succ_task, link_type, lag
+            )
+
+            # Проверяем, изменились ли даты
+            if (new_succ_start != succ_task.start_date or
+                    new_succ_end != succ_task.end_date):
+
+                print(f"🔄 Обновление задачи {succ_task.id} '{succ_task.name}'")
+                print(f"   Было: {succ_task.start_date.date()} - {succ_task.end_date.date()}")
+                print(f"   Стало: {new_succ_start.date()} - {new_succ_end.date()}")
+                print(f"   Тип связи: {link_type}")
+
+                # Обновляем даты в БД
+                self.session.query(Task).filter(Task.id == succ_task.id).update({
+                    Task.created_at: new_succ_start,
+                    Task.deadline: new_succ_end,
+                    Task.updated_at: datetime.now()
+                }, synchronize_session=False)
+                self.session.commit()
+
+                # Обновляем в кэше
+                for t in self._data.get_all_tasks():
+                    if t.id == succ_task.id:
+                        t.start_date = new_succ_start
+                        t.end_date = new_succ_end
+                        break
+
+                # Рекурсивно обновляем задачи, зависящие от этой
+                self._update_dependent_tasks_recursive(
+                    succ_task.id,
+                    new_succ_start,
+                    new_succ_end,
+                    dependency_map,
+                    visited
+                )
 
     def get_link_type_info(self, link_type: str) -> Dict:
         """Возвращает информацию о типе связи."""

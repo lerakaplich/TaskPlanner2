@@ -2,7 +2,7 @@
 
 import asyncio
 import logging
-from typing import List, Optional, Dict
+from typing import List, Optional
 from sqlalchemy import text
 
 from telegram_bot.bot import telegram_bot
@@ -120,7 +120,7 @@ class ProjectsNotificationService:
     def get_user_chats(self, user_id: int) -> List:
         """Получает чаты пользователя"""
         from services.chat_service import ChatService
-        from database import get_tasks_session
+        from server_app.database import get_tasks_session
 
         chat_session = get_tasks_session()
         if chat_session is None:

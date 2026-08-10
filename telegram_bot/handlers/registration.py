@@ -1,14 +1,11 @@
 from datetime import datetime
 
 from aiogram import types
-from aiogram.filters import Command
-from aiogram.fsm.context import FSMContext
 from sqlalchemy import text
-from database import get_employees_session, get_tasks_session
-from models.employees import Employee, EmployeeData
+from server_app.database import get_employees_session, get_tasks_session
+from models.employees import EmployeeData
 from shared_state import pending_registrations
 from ..keyboards import get_main_keyboard
-from ..utils import get_phone_by_chat
 
 
 def register_registration_handlers(dp, bot_instance):

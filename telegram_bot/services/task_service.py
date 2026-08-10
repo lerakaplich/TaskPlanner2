@@ -1,8 +1,6 @@
 from typing import Dict, List, Optional
-from datetime import datetime
 from sqlalchemy import text
-from database import get_tasks_session, get_employees_session
-from models.employees import Employee
+from server_app.database import get_tasks_session
 
 
 class TaskService:

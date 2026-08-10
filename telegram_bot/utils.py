@@ -1,7 +1,7 @@
 import hashlib
-from typing import Optional, Dict, List
+from typing import Optional
 from sqlalchemy import text
-from database import get_employees_session, get_tasks_session
+from server_app.database import get_employees_session
 
 
 def simple_hash(password: str) -> str:

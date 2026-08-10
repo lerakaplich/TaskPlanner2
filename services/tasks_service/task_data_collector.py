@@ -1,12 +1,10 @@
 # services/tasks_service/task_data_collector.py
 
 import json
-import os
-from datetime import datetime, timedelta
-from typing import Dict, List, Optional, Any
+from datetime import datetime
+from typing import Dict, List, Optional
 from pathlib import Path
 import threading
-import time
 
 
 class TaskDataCollector:
@@ -22,7 +20,7 @@ class TaskDataCollector:
         self._cache_size = 50  # Сохраняем в файл каждые 50 записей
         self._training_lock = threading.Lock()
         self._last_training_time = None
-        self._min_interval_seconds = 10  # Минимальный интервал между дообучениями
+        self._min_samples_for_training = 1
 
     def collect_task_data(self, task_data: Dict, user_id: int, project_id: int) -> Dict:
         """
@@ -90,7 +88,7 @@ class TaskDataCollector:
 
         # === 4. ДОБАВЛЯЕМ ПРОГНОЗ ===
         try:
-            from ml.task_time_predictor import get_task_predictor
+            from server_app.ml.task_time_predictor import get_task_predictor
             predictor = get_task_predictor()
             prediction = predictor.predict(task_info)
             task_info["predicted_hours"] = prediction.get("predicted_hours", 0)
@@ -115,7 +113,7 @@ class TaskDataCollector:
                     return
 
             try:
-                from ml.task_time_predictor import get_task_predictor
+                from server_app.ml.task_time_predictor import get_task_predictor
                 predictor = get_task_predictor()
 
                 # Используем быстрое инкрементальное обучение
@@ -127,8 +125,6 @@ class TaskDataCollector:
                 print(f"   ❌ Ошибка дообучения: {e}")
                 import traceback
                 traceback.print_exc()
-
-    # services/tasks_service/task_data_collector.py
 
     def save_task_data(self, task_data: Dict, user_id: int, project_id: int):
         """Сохраняет данные о задаче в файл для обучения"""
@@ -142,18 +138,16 @@ class TaskDataCollector:
         print(
             f"📊 save_task_data: task_id={data.get('task_id')}, completed={is_completed}, effective_hours={effective_hours}")
 
-        # === ДООБУЧЕНИЕ ТОЛЬКО ПРИ ЗАВЕРШЕНИИ ===
         if is_completed and effective_hours > 0:
             print(f"🧠 Задача {data.get('task_id')} завершена с фактическим временем {effective_hours:.1f}ч")
 
-            # Проверяем, сколько всего завершённых задач в данных
             all_data = self.get_training_data()
             completed_tasks = [d for d in all_data if d.get("completed", False) and d.get("effective_hours", 0) > 0]
 
             print(f"📊 Всего завершённых задач в данных: {len(completed_tasks)}")
 
             # Если есть минимум 10 завершённых задач — обучаем модель
-            if len(completed_tasks) >= 10:
+            if len(completed_tasks) > 0:
                 print(f"📊 Достаточно данных ({len(completed_tasks)} завершённых задач), обучаем модель...")
                 self._train_model_on_all_data()
             else:
@@ -172,7 +166,7 @@ class TaskDataCollector:
         with self._training_lock:
             try:
                 all_data = self.get_training_data()
-                from ml.task_time_predictor import get_task_predictor
+                from server_app.ml.task_time_predictor import get_task_predictor
                 predictor = get_task_predictor()
                 result = predictor.train(all_data)
                 print(f"   ✅ Модель обучена: {result}")
@@ -198,7 +192,7 @@ class TaskDataCollector:
                     return
 
             try:
-                from ml.task_time_predictor import get_task_predictor
+                from server_app.ml.task_time_predictor import get_task_predictor
                 predictor = get_task_predictor()
 
                 # Получаем все данные для обучения
@@ -362,7 +356,7 @@ class TaskDataCollector:
     def train_model_on_all_data(self) -> Dict:
         """Принудительное обучение модели на всех данных"""
         all_data = self.get_training_data()
-        from ml.task_time_predictor import get_task_predictor
+        from server_app.ml.task_time_predictor import get_task_predictor
         predictor = get_task_predictor()
         return predictor.train(all_data)
 
@@ -380,7 +374,7 @@ class TaskDataCollector:
                 'message': f'Недостаточно данных: {len(completed_tasks)}/{min_samples}'
             }
 
-        from ml.task_time_predictor import get_task_predictor
+        from server_app.ml.task_time_predictor import get_task_predictor
         predictor = get_task_predictor()
         return predictor.train(all_data)
 

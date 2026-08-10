@@ -65,6 +65,30 @@ class CombinedRole:
     def __repr__(self) -> str:
         return f"CombinedRole(app_role={self.app_role}, project_role={self.project_role}, system_role={self.system_role})"
 
+    def can_view_analytics(self) -> bool:
+        """
+        Может ли пользователь видеть страницу аналитики.
+        Доступна:
+        - Суперадминам и админам
+        - Кураторам проектов
+        - Руководителям проектов
+        - Начальникам отделов
+        - Начальникам подразделений
+        """
+        # Суперадмин и админ
+        if self.is_super_admin or self.is_admin:
+            return True
+
+        # Руководитель проекта или куратор
+        if self.is_project_manager or self.is_curator:
+            return True
+
+        # Начальник отдела или подразделения
+        if self.is_department_head or self.is_division_head:
+            return True
+
+        return False
+
     def can_view_all_tasks(self) -> bool:
         """Может ли пользователь видеть все задачи в проекте"""
         # Суперадмин, админ, руководитель проекта, куратор

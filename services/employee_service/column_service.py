@@ -2,9 +2,8 @@
 
 from typing import List, Optional, Dict, Any
 from sqlalchemy.orm import Session
-from datetime import datetime
 from repositories.column_repo import ColumnRepo
-from database import get_tasks_session
+from server_app.database import get_tasks_session
 
 from PyQt6.QtCore import QObject, pyqtSignal
 

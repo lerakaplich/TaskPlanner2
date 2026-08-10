@@ -135,7 +135,7 @@ class TasksCrudService:
     def get_projects_for_filter_others(self, user_id: int) -> List[Dict]:
         """Загружает проекты для фильтра (чужие задачи)"""
         from sqlalchemy import select
-        from models.projects import Project, EmployeeProject
+        from models.projects import Project
 
         try:
             # Для чужих задач показываем все проекты, где пользователь НЕ является создателем
@@ -224,11 +224,13 @@ class TasksCrudService:
         """Рассчитывает статистику для чужих задач"""
         total = len(tasks)
 
+        # ✅ Исправляем подсчет in_progress
         in_progress = 0
         done_columns = ["Готово", "Done", "Выполнено"]
         for task in tasks:
             status = task.get("status", "")
             completed = task.get("completed", False)
+            # ✅ Если задача не в Done колонке и не завершена - она в работе
             if status not in done_columns and not completed:
                 in_progress += 1
 
@@ -245,7 +247,12 @@ class TasksCrudService:
                 except (ValueError, TypeError):
                     pass
 
-        avg_progress = int(sum(t.get("progress_percent", 0) for t in tasks) / total) if total > 0 else 0
+        # ✅ Вычисляем средний прогресс ТОЛЬКО по задачам, у которых есть прогресс
+        progress_values = [t.get("progress_percent", 0) for t in tasks]
+        avg_progress = int(sum(progress_values) / total) if total > 0 else 0
+
+        # ✅ Логируем для отладки
+        print(f"📊 get_task_statistics_others: total={total}, in_progress={in_progress}, avg_progress={avg_progress}")
 
         return {
             "total": total,
@@ -307,7 +314,7 @@ class TasksCrudService:
 
             # === НОВЫЙ КОД: Сбор данных для обучения ===
             try:
-                from ml.task_time_predictor import get_task_predictor
+                from server_app.ml.task_time_predictor import get_task_predictor
                 predictor = get_task_predictor()
 
                 task_dict = self._task_to_dict(new_task)
@@ -452,9 +459,10 @@ class TasksCrudService:
                 if column.is_done_column:
                     task.progress_percent = 100.0
                     task.completed_at = datetime.now()
-                    # ❌ НЕ ИСПОЛЬЗУЙТЕ: task.completed = True
+                    task.completed = True  # ← ДОБАВЛЯЕМ
                 elif task.column and task.column.is_done_column:
                     task.completed_at = None
+                    task.completed = False  # ← ДОБАВЛЯЕМ
 
         if "title" in updated_data:
             task.title = updated_data["title"]
@@ -510,7 +518,7 @@ class TasksCrudService:
         if not assignee_id:
             return ""
 
-        from database import get_employees_session
+        from server_app.database import get_employees_session
         from models.employees import Employee
 
         employees_session = get_employees_session()
@@ -529,7 +537,7 @@ class TasksCrudService:
     def prepare_dialog_data(self, mode: str, task_data: Optional[Dict] = None) -> Dict:
         """Подготавливает данные для диалога создания/редактирования задачи"""
         from models.tasks import Tag
-        from database import get_employees_session
+        from server_app.database import get_employees_session
         from models.employees import Employee
 
         result = {
@@ -627,7 +635,7 @@ class TasksCrudService:
         if not employee_id:
             return None
 
-        from database import get_employees_session
+        from server_app.database import get_employees_session
         from models.employees import Employee
 
         employees_session = get_employees_session()

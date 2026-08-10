@@ -6,9 +6,8 @@ from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
-from database import get_employees_session
+from server_app.database import get_employees_session
 from ..states import RegistrationStates
-from ..keyboards import get_main_keyboard, get_priority_keyboard, get_difficulty_keyboard
 
 
 def register_tasks_handlers(dp, bot_instance):

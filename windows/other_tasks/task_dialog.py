@@ -350,7 +350,6 @@ class TaskDialog(QDialog):
         avg_difficulty = suggestion.get('avg_difficulty', 0)
         tasks_count = suggestion.get('tasks_count', 0)
 
-        # Проверяем, изменился ли исполнитель
         is_new = (self.selected_assignee_id == suggestion.get('employee_id'))
 
         title_text = f"Рекомендуемый исполнитель на основе компетенций: {employee_name}"
@@ -625,10 +624,6 @@ class TaskDialog(QDialog):
                     self.updatedAtLabel.setText(f"Обновлено: {updated_at}")
                     self.updatedAtLabel.show()
 
-    # ==========================================================
-    # СОХРАНЕНИЕ
-    # ==========================================================
-
     def collect_form_data(self) -> Dict:
         data = {}
 
@@ -682,10 +677,6 @@ class TaskDialog(QDialog):
             import traceback
             traceback.print_exc()
             QMessageBox.critical(self, "Ошибка", f"Ошибка при сохранении: {str(e)}")
-
-    # ==========================================================
-    # EVENT FILTER
-    # ==========================================================
 
     def eventFilter(self, obj, event):
         if event.type() == QEvent.Type.MouseButtonPress:

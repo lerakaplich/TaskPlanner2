@@ -481,11 +481,39 @@ class GanttWidgetHandlers:
                 f"Не удалось удалить связь:\n{message}"
             )
 
+    # windows/gantt/gantt_widget_handlers.py
+
     def on_task_moved(self, task_id: int, new_start: datetime, new_end: datetime) -> None:
+        """Обработка перемещения задачи"""
+        print(f"🔄 on_task_moved: задача {task_id}, новые даты: {new_start.date()} - {new_end.date()}")
+
+        # Обновляем даты задачи и всех зависимых
         if self.widget._service.update_task_dates_with_linked(task_id, new_start, new_end):
+            # ✅ ВАЖНО: Полностью перезагружаем данные из БД
+            self.widget._service.refresh_all_data()
+
+            # ✅ Обновляем холст с новыми данными
             if hasattr(self.widget, 'gantt_canvas'):
+                filtered_tasks = self.widget._service.get_filtered_tasks(
+                    self.widget._current_project_filter,
+                    self.widget._current_executor_filter
+                )
+                self.widget.gantt_canvas.set_tasks(filtered_tasks)
                 self.widget.gantt_canvas.set_links(self.widget._service.get_all_links())
-            print(f"✅ Задача {task_id} перемещена: {new_start.date()} - {new_end.date()}")
+                self.widget.gantt_canvas.update()
+                self.widget.gantt_canvas.repaint()
+
+            # ✅ Обновляем календарь
+            if hasattr(self.widget, 'calendar_widget'):
+                filtered_tasks = self.widget._service.get_filtered_tasks(
+                    self.widget._current_project_filter,
+                    self.widget._current_executor_filter
+                )
+                self.widget.calendar_widget.set_tasks(filtered_tasks)
+
+            print(f"✅ Задача {task_id} перемещена и данные обновлены")
+        else:
+            print(f"❌ Ошибка перемещения задачи {task_id}")
 
     def on_project_item_clicked(self, item, column: int) -> None:
         if item.childCount() > 0:

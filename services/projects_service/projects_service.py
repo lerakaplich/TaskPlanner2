@@ -1,7 +1,7 @@
 # services/projects_service/projects_service.py
 from datetime import datetime
-from typing import List, Optional, Dict, Any
-from database import get_tasks_session, get_employees_session
+from typing import List, Optional, Dict
+from server_app.database import get_tasks_session, get_employees_session
 from sqlalchemy import text
 from .projects_crud_service import ProjectsCrudService
 from .projects_members_service import ProjectsMembersService
@@ -386,7 +386,7 @@ class ProjectsService:
     def prepare_edit_dialog_data(self, project_dto) -> Dict:
         from models.employees import Employee
         from sqlalchemy import select
-        from database import get_employees_session
+        from server_app.database import get_employees_session
 
         result = {
             'id': project_dto.id,

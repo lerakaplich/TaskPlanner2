@@ -4,7 +4,7 @@ from typing import List, Dict, Optional, Tuple
 from PyQt6.QtCore import QDate, QTime
 from sqlalchemy.orm import Session
 
-from database import get_tasks_session, get_employees_session
+from server_app.database import get_tasks_session, get_employees_session
 from .overtime_base_service import OvertimeBaseService
 from .overtime_crud_service import OvertimeCrudService
 from .overtime_import_service import OvertimeImportService

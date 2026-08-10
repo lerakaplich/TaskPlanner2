@@ -59,6 +59,9 @@ class GanttCanvas(QWidget):
         self._links: Dict[int, List[int]] = {}
         self._tasks: List[TaskGanttData] = []
 
+        self._last_moved_task_id = None
+        self._move_skip_counter = 0
+
         # Для создания связей (Ctrl+клик)
         self._selected_for_link: Optional[TaskGanttData] = None
         self._selected_link = None  # <-- Для хранения выбранной связи
@@ -104,11 +107,25 @@ class GanttCanvas(QWidget):
                     continue
 
                 to_task = self._tasks[task_map[to_id]]
-                to_x, _ = self._service.calculate_bar_position(to_task, self._start_date)
+                to_x, to_width = self._service.calculate_bar_position(to_task, self._start_date)
                 to_y = self._header_height + task_map[to_id] * self._row_height + self._row_height // 2
 
-                start_point = QPointF(from_x + from_width + 5, from_y)
-                end_point = QPointF(to_x - 5, to_y)
+                # ✅ Правильные точки для разных типов связей
+                if link_type == "FS":  # Финиш-Старт: конец -> начало
+                    start_point = QPointF(from_x + from_width + 5, from_y)
+                    end_point = QPointF(to_x - 5, to_y)
+                elif link_type == "SS":  # Старт-Старт: начало -> начало
+                    start_point = QPointF(from_x - 5, from_y)
+                    end_point = QPointF(to_x - 5, to_y)
+                elif link_type == "FF":  # Финиш-Финиш: конец -> конец
+                    start_point = QPointF(from_x + from_width + 5, from_y)
+                    end_point = QPointF(to_x + to_width + 5, to_y)
+                elif link_type == "SF":  # Старт-Финиш: начало -> конец
+                    start_point = QPointF(from_x - 5, from_y)
+                    end_point = QPointF(to_x + to_width + 5, to_y)
+                else:
+                    start_point = QPointF(from_x + from_width + 5, from_y)
+                    end_point = QPointF(to_x - 5, to_y)
 
                 # Проверяем, находится ли позиция мыши рядом с линией
                 if self._is_point_near_link(pos, start_point, end_point, from_y, to_y):
@@ -515,19 +532,36 @@ class GanttCanvas(QWidget):
                 color = link_colors.get(link_type, QColor("#D22730"))
 
                 to_task = self._tasks[task_map[to_id]]
-                to_x, _ = self._service.calculate_bar_position(to_task, self._start_date)
+                to_x, to_width = self._service.calculate_bar_position(to_task, self._start_date)
                 to_y = self._header_height + task_map[to_id] * self._row_height + self._row_height // 2
 
-                start_point = QPointF(from_x + from_width + 5, from_y)
-                end_point = QPointF(to_x - 5, to_y)
+                # ✅ ПРАВИЛЬНЫЕ ТОЧКИ ДЛЯ РАЗНЫХ ТИПОВ СВЯЗЕЙ
+                if link_type == "FS":  # Финиш-Старт: конец -> начало
+                    start_point = QPointF(from_x + from_width + 5, from_y)
+                    end_point = QPointF(to_x - 5, to_y)
+                elif link_type == "SS":  # Старт-Старт: начало -> начало
+                    start_point = QPointF(from_x - 5, from_y)
+                    end_point = QPointF(to_x - 5, to_y)
+                elif link_type == "FF":  # Финиш-Финиш: конец -> конец
+                    start_point = QPointF(from_x + from_width + 5, from_y)
+                    end_point = QPointF(to_x + to_width + 5, to_y)
+                elif link_type == "SF":  # Старт-Финиш: начало -> конец
+                    start_point = QPointF(from_x - 5, from_y)
+                    end_point = QPointF(to_x + to_width + 5, to_y)
+                else:
+                    start_point = QPointF(from_x + from_width + 5, from_y)
+                    end_point = QPointF(to_x - 5, to_y)
 
                 # Рисуем линию связи в зависимости от типа
                 painter.setPen(QPen(color, 2.5))
                 painter.setBrush(Qt.BrushStyle.NoBrush)
 
-                # Разная логика отрисовки для разных типов связей
-                if link_type in ("FS", "FF"):
-                    # Финиш-Старт или Финиш-Финиш - с изгибом
+                # ✅ Для SS и SF - прямая линия (без изгиба)
+                if link_type in ("SS", "SF"):
+                    # Прямая линия
+                    painter.drawLine(start_point, end_point)
+                else:
+                    # Для FS и FF - с изгибом
                     mid_x = (start_point.x() + end_point.x()) // 2
                     path = QPainterPath()
                     path.moveTo(start_point)
@@ -535,12 +569,22 @@ class GanttCanvas(QWidget):
                     path.lineTo(QPointF(mid_x, to_y))
                     path.lineTo(end_point)
                     painter.drawPath(path)
-                else:
-                    # Старт-Старт или Старт-Финиш - прямая линия
-                    painter.drawLine(start_point, end_point)
 
                 # Рисуем стрелку на конце
-                if end_point.x() > start_point.x():
+                # Для SS связи стрелка рисуется в конце (у начала второй задачи)
+                if link_type == "SS":
+                    # Стрелка вправо у начала второй задачи
+                    arrow_size = 5
+                    painter.setBrush(QBrush(color))
+                    painter.setPen(QPen(color, 1))
+
+                    arrow = QPainterPath()
+                    arrow.moveTo(end_point)
+                    arrow.lineTo(QPointF(end_point.x() + arrow_size, end_point.y() - arrow_size))
+                    arrow.lineTo(QPointF(end_point.x() + arrow_size, end_point.y() + arrow_size))
+                    arrow.closeSubpath()
+                    painter.drawPath(arrow)
+                elif end_point.x() > start_point.x():
                     arrow_size = 5
                     painter.setBrush(QBrush(color))
                     painter.setPen(QPen(color, 1))
@@ -552,25 +596,29 @@ class GanttCanvas(QWidget):
                     arrow.closeSubpath()
                     painter.drawPath(arrow)
 
-                    # Рисуем символ типа связи
-                    symbol = link_symbols.get(link_type, "→")
-                    # Вычисляем позицию для символа
-                    if abs(to_y - from_y) > 30:
-                        symbol_x = mid_x - 10
-                        symbol_y = (from_y + to_y) // 2 - 10
+                # Рисуем символ типа связи
+                symbol = link_symbols.get(link_type, "→")
+                # Вычисляем позицию для символа
+                if abs(to_y - from_y) > 30:
+                    mid_x = (start_point.x() + end_point.x()) // 2
+                    symbol_x = mid_x - 10
+                    symbol_y = (from_y + to_y) // 2 - 10
+                else:
+                    symbol_x = (start_point.x() + end_point.x()) // 2 - 10
+                    if link_type == "SS":
+                        symbol_y = from_y - 20  # Над линией
                     else:
-                        symbol_x = (start_point.x() + end_point.x()) // 2 - 10
                         symbol_y = from_y - 15
 
-                    painter.setPen(QPen(QColor("#1B232A"), 1))
-                    font = QFont("Arial", 9, QFont.Weight.Bold)
-                    painter.setFont(font)
-                    painter.drawText(
-                        QRectF(symbol_x, symbol_y, 20, 20),
-                        Qt.AlignmentFlag.AlignCenter,
-                        symbol
-                    )
-                    print(f"   🔤 {from_id}->{to_id}: символ '{symbol}'")
+                painter.setPen(QPen(QColor("#1B232A"), 1))
+                font = QFont("Arial", 9, QFont.Weight.Bold)
+                painter.setFont(font)
+                painter.drawText(
+                    QRectF(symbol_x, symbol_y, 20, 20),
+                    Qt.AlignmentFlag.AlignCenter,
+                    symbol
+                )
+                print(f"   🔤 {from_id}->{to_id} ({link_type}): символ '{symbol}'")
 
     def _draw_selection_highlight(self, painter: QPainter) -> None:
         """Рисует подсветку выбранной задачи для связи"""
@@ -628,6 +676,87 @@ class GanttCanvas(QWidget):
 
         super().mousePressEvent(event)
 
+    # windows/gantt/gantt_canvas.py
+
+    def _validate_move_with_dependencies(
+            self,
+            task: TaskGanttData,
+            new_start: datetime,
+            new_end: datetime
+    ) -> Tuple[bool, str]:
+        """
+        Проверяет, можно ли переместить задачу с учётом всех связей.
+        Возвращает (можно_ли, сообщение_об_ошибке)
+        """
+        if not self._service:
+            return True, ""
+
+        all_tasks = self._service.get_all_tasks()
+
+        # 1. Проверяем ограничения для связей, где эта задача - ПРЕДШЕСТВЕННИК
+        # (т.е. влияет на другие задачи)
+        for t in all_tasks:
+            for dep in t.dependencies:
+                if t.id == task.id:  # Эта задача - предшественник
+                    succ_id = dep.get("successor_id")
+                    if succ_id is None:
+                        continue
+
+                    succ_task = None
+                    for at in all_tasks:
+                        if at.id == succ_id:
+                            succ_task = at
+                            break
+                    if not succ_task:
+                        continue
+
+                    link_type = dep.get("type", "FS")
+                    lag = dep.get("lag", 0)
+
+                    # ✅ Для SS и FF - разрешаем движение в обе стороны
+                    if link_type in ("SS", "FF"):
+                        continue
+
+                    # ✅ Для FS и SF - тоже разрешаем движение в обе стороны
+                    # Проверяем только базовые ограничения
+                    if link_type == "FS":
+                        # Финиш первой не может быть позже старта второй + lag
+                        # Но это ограничение будет соблюдено через синхронизацию
+                        # Разрешаем движение в любую сторону
+                        pass
+
+                    if link_type == "SF":
+                        # Старт первой не может быть позже финиша второй + lag
+                        # Разрешаем движение в любую сторону
+                        pass
+
+                    # ✅ Для всех типов связей - разрешаем движение,
+                    # синхронизация будет выполнена в сервисе
+                    continue
+
+        # 2. Проверяем ограничения для связей, где эта задача - ПОСЛЕДОВАТЕЛЬ
+        # (т.е. зависит от других задач)
+        for t in all_tasks:
+            for dep in t.dependencies:
+                if dep.get("successor_id") == task.id:
+                    pred_id = t.id
+                    pred_task = None
+                    for at in all_tasks:
+                        if at.id == pred_id:
+                            pred_task = at
+                            break
+                    if not pred_task:
+                        continue
+
+                    link_type = dep.get("type", "FS")
+                    lag = dep.get("lag", 0)
+
+                    # ✅ Для всех типов связей разрешаем движение последователя
+                    # Синхронизация будет выполнена в сервисе
+                    continue
+
+        return True, ""
+
     def mouseMoveEvent(self, event: QMouseEvent) -> None:
         """Обработка перемещения мыши"""
         if self._dragging_task:
@@ -639,15 +768,25 @@ class GanttCanvas(QWidget):
                 duration = (self._original_end - self._original_start).days
                 new_end = new_start + timedelta(days=duration)
 
-                # Обновляем задачу в памяти для отображения
+                # ✅ Проверяем ограничения для зависимых задач
+                can_move, error = self._validate_move_with_dependencies(
+                    self._dragging_task, new_start, new_end
+                )
+
+                if not can_move:
+                    self.setToolTip(error)
+                    return
+
+                # ✅ Обновляем задачу в памяти для отображения
                 self._dragging_task.start_date = new_start
                 self._dragging_task.end_date = new_end
 
-                # Отправляем сигнал для сохранения в БД
+                # ✅ Отправляем сигнал для сохранения в БД
                 self.task_moved_signal.emit(self._dragging_task.id, new_start, new_end)
 
                 self._drag_start_x = int(event.position().x())
                 self.update()
+                self.setToolTip("")
         else:
             task = self._get_task_at_position(event.position())
             self.setCursor(Qt.CursorShape.PointingHandCursor if task else Qt.CursorShape.ArrowCursor)

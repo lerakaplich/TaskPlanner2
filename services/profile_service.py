@@ -1,12 +1,10 @@
 # services/profile_service.py
 
-from datetime import datetime
 from typing import Dict, List, Optional, Tuple, Any
 from PyQt6.QtCore import QDate
 from sqlalchemy.orm import Session
-from sqlalchemy import select, func
 
-from database import get_employees_session, get_tasks_session
+from server_app.database import get_employees_session, get_tasks_session
 from repositories.employee_repo import EmployeeRepo
 from repositories.project_repo import ProjectRepo
 from models.employees import Employee, EmployeeData

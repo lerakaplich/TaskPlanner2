@@ -30,7 +30,7 @@ class ProfilePage(QWidget):
         if not self.employee_id and current_user:
             self.employee_id = current_user.get('id')
 
-        from database import get_tasks_session
+        from server_app.database import get_tasks_session
         session = get_tasks_session()
         self.profile_service = service or ProfileService(session=session)
 
@@ -297,7 +297,6 @@ class ProfilePage(QWidget):
 
     def _on_logout(self):
         """Обработчик нажатия кнопки выхода из профиля"""
-        from services.auth_service import AuthService
 
         reply = QMessageBox.question(
             self,

@@ -1,11 +1,10 @@
 # utils/model_manager.py
 import json
 from pathlib import Path
-from typing import Dict, List
-from datetime import datetime
+from typing import Dict
 
 from services.tasks_service.task_data_collector import get_task_data_collector
-from ml.task_time_predictor import get_task_predictor
+from server_app.ml.task_time_predictor import get_task_predictor
 
 
 class ModelManager:

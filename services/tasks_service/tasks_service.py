@@ -2,7 +2,6 @@
 
 from typing import Dict, Optional, List
 
-from services.employee_service import column_service
 from services.tasks_service.tasks_crud_service import TasksCrudService
 from services.tasks_service.tasks_executor_suggestion_service import TasksExecutorSuggestionService
 from services.tasks_service.tasks_move_service import TasksMoveService
@@ -39,7 +38,7 @@ class TasksService:
         self._task_to_dict = self.crud._task_to_dict
 
         # Исправленная инициализация suggestion_service
-        from database import get_employees_session
+        from server_app.database import get_employees_session
         self.suggestion_service = TasksExecutorSuggestionService(
             db_session,  # передаём сессию напрямую, не как фабрику
             get_employees_session  # фабрика для employees

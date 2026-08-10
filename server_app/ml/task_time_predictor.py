@@ -1,4 +1,4 @@
-# ml/task_time_predictor.py - полная версия
+# ServerApp/ml/task_time_predictor.py
 
 import numpy as np
 from pathlib import Path
@@ -8,33 +8,80 @@ from sklearn.ensemble import RandomForestRegressor
 from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import mean_absolute_error, r2_score
 import joblib
+import threading
 
 
 class TaskTimePredictor:
-    """
-    Модель для прогнозирования времени выполнения задачи
-    с быстрым инкрементальным дообучением
-    """
+    """Модель на СЕРВЕРЕ - общая для всех клиентов"""
+
+    _instance = None
+    _lock = threading.Lock()
+
+    def __new__(cls, model_path: str = "ml/models/task_time_predictor.pkl"):
+        if cls._instance is None:
+            with cls._lock:
+                if cls._instance is None:
+                    cls._instance = super().__new__(cls)
+        return cls._instance
 
     def __init__(self, model_path: str = "ml/models/task_time_predictor.pkl"):
+        if hasattr(self, '_initialized'):
+            return
+
         self.model_path = Path(model_path)
         self.model_path.parent.mkdir(parents=True, exist_ok=True)
 
         self.model = None
         self.scaler = None
-        self.feature_names = [
-            'difficulty',
-            'priority_low', 'priority_medium', 'priority_high', 'priority_critical',
-            'tags_count',
-            'description_length',
-            'title_word_count',
-            'has_deadline',
-            'days_to_deadline',
-            'hour_of_day',
-            'day_of_week'
-        ]
+        self.feature_names = [...]  # те же признаки
         self.training_stats = {}
+
+        self._version = 1
+        self._backup_path = self.model_path.parent / f"{self.model_path.stem}_v{self._version}.pkl"
+
         self._load_or_create_model()
+        self._initialized = True
+
+    def save_with_version_check(self, new_metrics: Dict) -> bool:
+        """
+        Сохраняет модель только если качество улучшилось.
+        Возвращает True если модель обновлена.
+        """
+        current_r2 = self.training_stats.get('r2', -1)
+        new_r2 = new_metrics.get('r2', -1)
+        current_mae = self.training_stats.get('mae', float('inf'))
+        new_mae = new_metrics.get('mae', float('inf'))
+
+        # Проверяем улучшение
+        is_better = False
+
+        # Если R² улучшился хотя бы на 0.05
+        if new_r2 > current_r2 + 0.05:
+            is_better = True
+            print(f"📈 R² улучшился: {current_r2:.3f} → {new_r2:.3f}")
+
+        # Или если MAE уменьшился хотя бы на 10%
+        if new_mae < current_mae * 0.9:
+            is_better = True
+            print(f"📉 MAE улучшился: {current_mae:.2f}ч → {new_mae:.2f}ч")
+
+        # Если данных стало значительно больше (>= 20% новых примеров)
+        current_samples = self.training_stats.get('samples', 0)
+        new_samples = new_metrics.get('samples', 0)
+        if new_samples > current_samples * 1.2 and new_r2 >= current_r2:
+            is_better = True
+            print(f"📊 Добавлено много данных: {current_samples} → {new_samples}")
+
+        if is_better:
+            # Сохраняем новую модель
+            self.save()
+            print(f"💾 Модель сохранена (v{self._version})")
+            return True
+        else:
+            print(f"⏩ Качество не улучшилось, модель не обновлена")
+            print(f"   Текущая: R²={current_r2:.3f}, MAE={current_mae:.2f}ч")
+            print(f"   Новая:   R²={new_r2:.3f}, MAE={new_mae:.2f}ч")
+            return False
 
     def _load_or_create_model(self):
         """Загружает существующую модель или создаёт новую"""
@@ -73,6 +120,7 @@ class TaskTimePredictor:
         }
         print("🆕 Создана новая модель с поддержкой инкрементального обучения")
 
+
     def _prepare_features(self, task_data: Dict) -> np.ndarray:
         """Преобразует данные задачи в вектор признаков"""
         features = {
@@ -82,11 +130,23 @@ class TaskTimePredictor:
             'title_word_count': int(task_data.get('title_word_count', 0)),
             'has_deadline': 1 if task_data.get('has_deadline', False) else 0,
             'days_to_deadline': float(task_data.get('days_to_deadline', 30) or 30),
+            'hour_of_day': 9,
+            'day_of_week': 0,
+            'priority_low': 0,
+            'priority_medium': 1,
+            'priority_high': 0,
+            'priority_critical': 0,
         }
 
         priority = task_data.get('priority', 'medium')
+        # Сброс всех priority-флагов
         for p in ['low', 'medium', 'high', 'critical']:
-            features[f'priority_{p}'] = 1 if priority == p else 0
+            features[f'priority_{p}'] = 0
+        # Установка нужного
+        if priority in ['low', 'medium', 'high', 'critical']:
+            features[f'priority_{priority}'] = 1
+        else:
+            features['priority_medium'] = 1  # default
 
         created_at = task_data.get('created_at')
         if created_at:
@@ -95,15 +155,23 @@ class TaskTimePredictor:
                 features['hour_of_day'] = dt.hour
                 features['day_of_week'] = dt.weekday()
             except:
-                features['hour_of_day'] = 9
-                features['day_of_week'] = 0
-        else:
-            features['hour_of_day'] = 9
-            features['day_of_week'] = 0
+                pass
 
-        return np.array([features.get(name, 0) for name in self.feature_names]).reshape(1, -1)
-
-    # ml/task_time_predictor.py
+        # ✅ ВАЖНО: порядок должен совпадать с feature_names!
+        return np.array([
+            features['difficulty'],
+            features['priority_low'],
+            features['priority_medium'],
+            features['priority_high'],
+            features['priority_critical'],
+            features['tags_count'],
+            features['description_length'],
+            features['title_word_count'],
+            features['has_deadline'],
+            features['days_to_deadline'],
+            features['hour_of_day'],
+            features['day_of_week']
+        ]).reshape(1, -1)
 
     def train(self, data: List[Dict]) -> Dict:
         """

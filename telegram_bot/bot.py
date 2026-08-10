@@ -1,7 +1,6 @@
 import asyncio
 import logging
 from datetime import datetime, timedelta
-from typing import Dict, Optional, List
 from aiogram import Bot, Dispatcher
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
@@ -13,16 +12,14 @@ from .handlers.registration import register_registration_handlers
 from .handlers.support import register_support_handlers
 from .handlers.tasks import register_tasks_handlers
 from .states import RegistrationStates
-from .keyboards import get_main_keyboard, get_priority_keyboard, get_difficulty_keyboard
-from .utils import get_phone_by_chat, get_employee_id_by_chat
+from .keyboards import get_main_keyboard, get_priority_keyboard
 from .services.user_service import UserService
 from .services.task_service import TaskService
 from .services.notification_service import NotificationService
 
 from sqlalchemy import text, select
-from database import get_tasks_session, get_employees_session
-from models.employees import Employee, Department, Division, EmployeeData
-from shared_state import pending_registrations
+from server_app.database import get_tasks_session, get_employees_session
+from models.employees import Department, Division
 
 logger = logging.getLogger(__name__)
 

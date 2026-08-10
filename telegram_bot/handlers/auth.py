@@ -3,10 +3,7 @@ from datetime import datetime
 from aiogram import types
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
-from ..states import RegistrationStates
 from ..keyboards import get_main_keyboard
-from ..utils import get_phone_by_chat, get_employee_id_by_chat
-from ..services.user_service import UserService
 
 
 def register_auth_handlers(dp, bot_instance):
@@ -21,7 +18,7 @@ def register_auth_handlers(dp, bot_instance):
         await state.clear()
         chat_id = message.chat.id
 
-        from database import get_employees_session, get_tasks_session
+        from server_app.database import get_employees_session, get_tasks_session
         from sqlalchemy import select
         from models.employees import Employee, EmployeeData
 

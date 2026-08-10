@@ -1,15 +1,13 @@
 from aiogram import types
 from aiogram.fsm.context import FSMContext
-from datetime import datetime
 
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from sqlalchemy import text
-from database import get_employees_session, get_tasks_session
-from models.employees import Employee, EmployeeData
+from server_app.database import get_employees_session, get_tasks_session
+from models.employees import Employee
 from shared_state import pending_registrations
 from ..states import RegistrationStates
 from ..keyboards import get_main_keyboard
-from ..utils import get_employee_id_by_chat
 
 
 def register_callback_handlers(dp, bot_instance):

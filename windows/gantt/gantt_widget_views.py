@@ -20,16 +20,27 @@ class GanttWidgetViews:
         self.apply_filters()
         self.update_canvas_date_range()
 
+        # ✅ Получаем свежие данные из сервиса
+        filtered_tasks = self.widget._service.get_filtered_tasks(
+            self.widget._current_project_filter,
+            self.widget._current_executor_filter
+        )
+        links = self.widget._service.get_all_links()
+
         if hasattr(self.widget, 'gantt_canvas') and self.widget.gantt_canvas:
-            links = self.widget._service.get_all_links()
+            self.widget.gantt_canvas.set_tasks(filtered_tasks)
             self.widget.gantt_canvas.set_links(links)
             self.widget.gantt_canvas.update()
             self.widget.gantt_canvas.repaint()
             self.widget.gantt_canvas.updateGeometry()
 
         if hasattr(self.widget, 'calendar_widget') and self.widget.calendar_widget:
+            self.widget.calendar_widget.set_tasks(filtered_tasks)
             self.widget.calendar_widget.update()
             self.widget.calendar_widget.repaint()
+
+        # ✅ Обновляем дерево проектов
+        self.update_projects_tree()
 
     def update_projects_tree(self) -> None:
         """Обновление дерева проектов с учётом фильтров"""

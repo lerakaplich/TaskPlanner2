@@ -3,7 +3,7 @@
 from typing import List, Dict, Any, Optional
 from sqlalchemy.orm import Session
 
-from database import get_tasks_session
+from server_app.database import get_tasks_session
 from .analytics_base_service import AnalyticsBaseService
 from .employees_analytics import EmployeesAnalytics
 from .projects_analytics import ProjectsAnalytics

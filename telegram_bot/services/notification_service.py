@@ -1,9 +1,8 @@
 import asyncio
 import logging
 from datetime import datetime, timedelta
-from typing import List
 from sqlalchemy import text
-from database import get_tasks_session, get_employees_session
+from server_app.database import get_tasks_session, get_employees_session
 from models.employees import Employee
 
 logger = logging.getLogger(__name__)

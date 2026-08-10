@@ -1,7 +1,7 @@
 from typing import Dict, List, Optional
 from sqlalchemy import text
-from database import get_employees_session, get_tasks_session
-from models.employees import Employee, EmployeeData
+from server_app.database import get_employees_session
+from models.employees import Employee
 
 
 class UserService:

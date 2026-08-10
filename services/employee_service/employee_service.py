@@ -1,8 +1,7 @@
 # services/employee_service.py (исправленный фасад)
-from select import select
 from typing import List, Optional, Dict, Any
 from sqlalchemy.orm import Session
-from database import get_employees_session, get_tasks_session
+from server_app.database import get_employees_session, get_tasks_session
 from models.employees import Employee, Division
 from repositories.employee_repo import EmployeeRepo
 from repositories.employee_data_repo import EmployeeDataRepo
@@ -37,7 +36,6 @@ class EmployeeService:
         Определяет системную роль пользователя (начальник отдела, подразделения и т.д.)
         """
         from services.permissions.system_permissions import SystemRole
-        from sqlalchemy import select
         from models.employees import Department, Division
 
         user_id_str = str(user_id)

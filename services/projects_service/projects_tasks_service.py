@@ -5,7 +5,7 @@ from datetime import datetime
 from models.schemas.tasks_dto import TaskPriority
 from repositories.task_repo import TaskRepo
 from repositories.employee_repo import EmployeeRepo
-from database import get_employees_session
+from server_app.database import get_employees_session
 
 
 class ProjectsTasksService:

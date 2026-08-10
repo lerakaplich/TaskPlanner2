@@ -246,6 +246,8 @@ class OthersTasksHandlers:
         else:
             QMessageBox.warning(self.page, "Ошибка", "Не удалось отметить задачу как выполненную")
 
+    # windows/other_tasks/others_tasks_handlers.py
+
     def on_task_dropped(self, task_id: int, target_column_id: int):
         """Обработчик drop из KanbanColumn"""
         target_column = None
@@ -274,8 +276,15 @@ class OthersTasksHandlers:
         result = self.page.service.move_task_to_column(task_id, target_column_id)
 
         if result:
+            # ✅ Сначала обновляем статистику (до обновления карточки)
+            # или после - но убедитесь, что данные актуальны
+
+            # Обновляем карточку
             self.page.update_task_card(result)
+
+            # ✅ Принудительно пересчитываем статистику
             self.page.update_statistics()
+
             self.page.taskUpdated.emit()
             self.page.updateGeometry()
         else:

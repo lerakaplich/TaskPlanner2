@@ -124,6 +124,22 @@ class AppPermissionManager:
         return self.has_permission('can_edit_any_project')
 
     def can_view_analytics(self) -> bool:
+        """
+        Проверяет, может ли пользователь видеть страницу аналитики.
+        Доступна:
+        - Суперадминам и админам
+        - Кураторам проектов
+        - Руководителям проектов
+        - Начальникам отделов
+        - Начальникам подразделений
+        """
+        # Проверяем через сервис, если он доступен
+        if hasattr(self, '_service') and self._service:
+            combined = self._service.get_combined_role()
+            if combined.can_view_analytics():
+                return True
+
+        # Если нет сервиса - проверяем роль
         return self.has_permission('can_view_analytics')
 
     def can_view_settings(self) -> bool:
@@ -150,15 +166,12 @@ class AppPermissionManager:
     def get_visible_tabs(self) -> Set[str]:
         """Возвращает набор видимых для пользователя вкладок"""
         tabs = {'projects', 'my_tasks', 'other_tasks', 'gantt', 'chat', 'archive'}
+        tabs.add('overtime')
+        tabs.add('settings')
 
+        # ✅ Проверяем право can_view_analytics
         if self.has_permission('can_view_analytics'):
             tabs.add('analytics')
-
-        if self.has_permission('can_view_settings'):
-            tabs.add('settings')
-
-        if self.has_permission('can_view_own_overtime'):
-            tabs.add('overtime')
 
         return tabs
 

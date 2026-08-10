@@ -55,7 +55,7 @@ class EmployeeRepo:
     def update_role(self, employee_id: int, role) -> bool:
         """Обновляет роль сотрудника через EmployeeData"""
         from models.employees import EmployeeData
-        from database import get_tasks_session
+        from server_app.database import get_tasks_session
 
         tasks_session = get_tasks_session()
         try:
@@ -75,7 +75,7 @@ class EmployeeRepo:
     def set_active(self, employee_id: int, is_active: bool) -> bool:
         """Устанавливает статус активности через EmployeeData"""
         from models.employees import EmployeeData
-        from database import get_tasks_session
+        from server_app.database import get_tasks_session
 
         tasks_session = get_tasks_session()
         try:

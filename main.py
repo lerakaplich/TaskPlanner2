@@ -4,11 +4,12 @@ import sys
 from PyQt6.QtWidgets import QApplication
 from PyQt6.QtCore import QTimer
 
-from services.tasks_service.task_data_collector import get_task_data_collector
-from services.training_scheduler import get_training_scheduler
+from server_app.services.training_scheduler import get_training_scheduler
+from server_app.services.tasks_service.task_data_collector import get_task_data_collector
+
 from windows.login.login_window import LoginWindow
 from windows.projects.main_window import MainWindow
-from database import get_tasks_session
+from server_app.database import get_tasks_session
 from utils.error_handler import setup_exception_hook
 from utils.socket_manager import get_socket_client
 from services.auth_service import AuthService
@@ -21,44 +22,49 @@ def create_main_window(user_id: int, socket_client):
     return MainWindow(session=session, user_id=user_id, socket_client=socket_client)
 
 
-# main.py
-
 def setup_training_system():
-    """Настраивает систему машинного обучения"""
+    """
+    Настраивает систему машинного обучения.
+    Теперь обучение происходит на сервере, клиент только инициализирует.
+    """
     print("\n🧠 Настройка системы прогнозирования...")
 
     try:
+        # Получаем планировщик (на сервере)
         scheduler = get_training_scheduler()
         scheduler.start()
         print("   ✅ Планировщик дообучения запущен")
 
-        def initial_training():
+        # Проверяем текущее состояние модели на сервере
+        def check_model_status():
             try:
-                from ml.task_time_predictor import get_task_predictor
-                from services.tasks_service.task_data_collector import get_task_data_collector
-
                 collector = get_task_data_collector()
-                all_data = collector.get_training_data()
+                stats = collector.get_training_stats()
 
-                # Проверяем, есть ли завершённые задачи
-                completed = [d for d in all_data if d.get('completed', False) and d.get('effective_hours', 0) > 0]
+                print(f"   📊 Статистика данных:")
+                print(f"      - Всего записей: {stats.get('total_records', 0)}")
+                print(f"      - Завершённых задач: {stats.get('completed_tasks', 0)}")
+                print(f"      - Минимум для обучения: {stats.get('min_samples', 10)}")
+                print(f"      - Можно обучать: {stats.get('can_train', False)}")
 
-                if len(completed) >= 10:
-                    print(f"   📊 Найдено {len(completed)} завершённых задач, обучаем модель...")
-                    predictor = get_task_predictor()
-                    result = predictor.train(all_data)
-                    print(f"   📊 Результат: {result}")
+                if stats.get('can_train', False):
+                    print(f"   🧠 Достаточно данных, запускаем обучение...")
+                    collector.force_train()
                 else:
-                    print(f"   ⏳ Недостаточно завершённых задач: {len(completed)}/10")
+                    print(f"   ⏳ Ждём ещё данных: {stats.get('completed_tasks', 0)}/{stats.get('min_samples', 10)}")
 
             except Exception as e:
-                print(f"   ⚠️ Ошибка первоначального обучения: {e}")
+                print(f"   ⚠️ Ошибка проверки модели: {e}")
 
-        QTimer.singleShot(5000, initial_training)
+        # Запускаем через 3 секунды после старта приложения
+        QTimer.singleShot(3000, check_model_status)
+
         return scheduler
 
     except Exception as e:
         print(f"   ❌ Ошибка настройки системы обучения: {e}")
+        import traceback
+        traceback.print_exc()
         return None
 
 
@@ -107,6 +113,7 @@ def main():
 
         # Настраиваем систему обучения ПОСЛЕ создания окна
         scheduler = setup_training_system()
+        app.scheduler = scheduler  # Сохраняем для завершения
     else:
         login_window = LoginWindow()
 
@@ -127,12 +134,11 @@ def main():
         # Инициализируем scheduler как None для случая без входа
         app.scheduler = None
 
-
     def on_exit():
         """Обработчик завершения приложения"""
         print("\n🔄 Завершение работы приложения...")
 
-        # Сохраняем собранные данные
+        # Сохраняем собранные данные (если есть локальный кэш)
         try:
             collector = get_task_data_collector()
             collector.flush_cache()
@@ -140,7 +146,7 @@ def main():
         except Exception as e:
             print(f"⚠️ Ошибка сохранения данных: {e}")
 
-        # Останавливаем планировщик обучения
+        # Останавливаем планировщик обучения (на сервере)
         try:
             if hasattr(app, 'scheduler') and app.scheduler:
                 shutdown_training_system(app.scheduler)

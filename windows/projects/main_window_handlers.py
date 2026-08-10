@@ -1,10 +1,9 @@
 # windows/projects/main_window_handlers.py
 
-from PyQt6.QtWidgets import QMessageBox, QDialog, QSizePolicy, QSpacerItem, QApplication
-from PyQt6.QtCore import QObject, pyqtSignal, QTimer, Qt
+from PyQt6.QtWidgets import QMessageBox, QDialog, QSizePolicy, QSpacerItem
+from PyQt6.QtCore import QObject, pyqtSignal, QTimer
 
 from services.employee_service.employee_service import EmployeeService
-from windows.other_tasks.others_tasks_page import OthersTasksPage
 from windows.projects.project_card import ProjectCard
 from windows.projects.project_edit_dialog import ProjectEditDialog
 from windows.projects.project_creation_dialog import ProjectCreationDialog
@@ -1318,7 +1317,7 @@ class SocketHandler:
     def _join_user_chat_rooms(self):
         try:
             from services.chat_service import ChatService
-            from database import get_tasks_session
+            from server_app.database import get_tasks_session
 
             chat_session = get_tasks_session()
             if chat_session is None:

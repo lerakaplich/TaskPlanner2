@@ -1,4 +1,6 @@
 # chat_server.py
+from datetime import datetime
+
 import uvicorn
 import socketio
 import asyncio
@@ -7,6 +9,8 @@ from sqlalchemy import select
 
 from database import get_tasks_session
 from services.chat_service import ChatService
+from server_app.services.tasks_service.task_data_collector import get_task_data_collector
+from server_app.services.training_scheduler import get_training_scheduler  # ← ИСПРАВЛЕНО
 from shared_state import pending_registrations
 
 user_sid_map = {}
@@ -25,6 +29,54 @@ def get_chat_service():
     """Получить сервис чата с автоматическим закрытием сессии"""
     session = get_tasks_session()
     return ChatService(session), session
+
+
+@sio.event
+async def task_completed(sid, data):
+    """
+    Клиент сообщает о завершении задачи.
+    Сервер дообучает модель в реальном времени.
+    """
+    task_id = data.get('task_id')
+    user_id = data.get('user_id')
+
+    if not task_id:
+        return
+
+    try:
+        # 1. Сохраняем данные задачи
+        collector = get_task_data_collector()
+
+        # Используем правильный метод для сбора данных
+        task_data = collector.collect_and_save_task(task_id)
+
+        if not task_data:
+            await sio.emit("task_training_error", {
+                "task_id": task_id,
+                "error": "Не удалось собрать данные о задаче"
+            }, to=sid)
+            return
+
+        # 2. Получаем статистику
+        stats = collector.get_training_stats()
+
+        # 3. Отправляем результат клиенту
+        await sio.emit("task_training_completed", {
+            "task_id": task_id,
+            "status": "success" if stats.get('can_train', False) else "pending",
+            "total_completed": stats.get('completed_tasks', 0),
+            "min_samples": stats.get('min_samples', 10),
+            "can_train": stats.get('can_train', False)
+        }, to=sid)
+
+    except Exception as e:
+        print(f"❌ Ошибка обработки завершения задачи: {e}")
+        import traceback
+        traceback.print_exc()
+        await sio.emit("task_training_error", {
+            "task_id": task_id,
+            "error": str(e)
+        }, to=sid)
 
 
 @sio.event
@@ -242,7 +294,16 @@ async def update_chat_settings(sid, data):
 
 
 async def main():
-    print("✅ Запуск сокет-сервера...")
+    print("🚀 Запуск сокет-сервера...")
+
+    # Запускаем планировщик обучения
+    try:
+        scheduler = get_training_scheduler()
+        scheduler.start()
+        print("✅ Планировщик обучения запущен")
+    except Exception as e:
+        print(f"⚠️ Ошибка запуска планировщика: {e}")
+
     config = uvicorn.Config(socket_app, host="0.0.0.0", port=8081, log_level="warning")
     server = uvicorn.Server(config)
     await server.serve()

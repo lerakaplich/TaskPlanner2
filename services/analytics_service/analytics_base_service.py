@@ -1,12 +1,12 @@
 # services/analytics_service/analytics_base_service.py
 
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict
 from sqlalchemy.orm import Session
 from datetime import datetime
 from models.tasks import Task
-from models.projects import Project, BoardColumn
+from models.projects import Project
 from models.employees import Employee
-from database import get_employees_session
+from server_app.database import get_employees_session
 
 
 class AnalyticsBaseService:

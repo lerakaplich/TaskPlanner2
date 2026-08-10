@@ -7,7 +7,7 @@ from PyQt6 import uic
 from PyQt6.QtCore import Qt, pyqtSignal, QTimer
 from PyQt6.QtWidgets import QWidget, QScrollArea, QHBoxLayout, QSizePolicy
 
-from database import get_tasks_session
+from server_app.database import get_tasks_session
 from models.permissions import ProjectRole
 from services.tasks_service.tasks_service import TasksService
 from windows.other_tasks.others_task_card import OthersTaskCard
@@ -549,9 +549,13 @@ class OthersTasksPage(QWidget):
                     column.remove_task(card)
                     return
 
+    # windows/other_tasks/others_tasks_page.py
+
     def update_task_card(self, updated_task: Dict):
+        """Обновляет карточку задачи после перемещения или изменения"""
         task_id = updated_task.get("id")
         new_status = updated_task.get("status")
+        new_progress = updated_task.get("progress_percent", 0)
 
         found_card = None
         found_column = None
@@ -567,9 +571,27 @@ class OthersTasksPage(QWidget):
 
         if not found_card:
             self.load_tasks()
+            self.update_statistics()
             return
 
         old_status = found_card.task_data.get("status")
+        old_progress = found_card.task_data.get("progress_percent", 0)
+
+        # ✅ Обновляем completed в данных карточки
+        found_card.task_data.update(updated_task)
+
+        # ✅ Синхронизируем completed с прогрессом
+        if new_progress >= 100 and new_status in ["Готово", "Done", "Выполнено"]:
+            found_card.task_data["completed"] = True
+        elif new_status not in ["Готово", "Done", "Выполнено"]:
+            found_card.task_data["completed"] = False
+
+        # ✅ ОБНОВЛЯЕМ ПРОГРЕСС В UI КАРТОЧКИ
+        if new_progress != old_progress:
+            found_card.overallProgress.blockSignals(True)
+            found_card.overallProgress.setValue(int(new_progress))
+            found_card.overallProgress.setFormat(f"Общий прогресс: {int(new_progress)}%")
+            found_card.overallProgress.blockSignals(False)
 
         if old_status != new_status:
             found_column.remove_task(found_card)
@@ -585,6 +607,8 @@ class OthersTasksPage(QWidget):
                 found_column.add_task(found_card)
         else:
             found_card.update_task_data(updated_task)
+            found_card.fill_ui()
+            found_card.setup_creator_ui()
 
         self.updateGeometry()
         self.update_statistics()
@@ -592,6 +616,26 @@ class OthersTasksPage(QWidget):
         for column in self.column_widgets:
             column.update_count(len(column.get_tasks()))
             column.updateGeometry()
+
+    def update_task_data(self, new_data):
+        """Обновляет данные задачи и UI"""
+        old_progress = self.task_data.get("progress_percent", 0)
+        new_progress = new_data.get("progress_percent", 0)
+
+        # Обновляем данные
+        self.task_data.update(new_data)
+        self.task_id = self.task_data.get("id")
+
+        # ✅ Обновляем прогресс в UI
+        if new_progress != old_progress:
+            self.overallProgress.blockSignals(True)
+            self.overallProgress.setValue(int(new_progress))
+            self.overallProgress.setFormat(f"Общий прогресс: {int(new_progress)}%")
+            self.overallProgress.blockSignals(False)
+
+        # Обновляем остальной UI
+        self.fill_ui()
+        self.setup_creator_ui()
 
     def _update_existing_task_card(self, task_id: int, updated_task: Dict):
         for column in self.column_widgets:
@@ -615,15 +659,20 @@ class OthersTasksPage(QWidget):
                 else:
                     self.clear_layout(item.layout())
 
-    # ==========================================================
-    # СТАТИСТИКА
-    # ==========================================================
-
     def update_statistics(self):
+        """Обновляет статистику задач"""
+        # ✅ Собираем задачи из ВСЕХ колонок
         all_tasks = []
         for column in self.column_widgets:
             for card in column.get_tasks():
-                all_tasks.append(card.task_data)
+                if card and hasattr(card, 'task_data'):
+                    all_tasks.append(card.task_data)
+
+        # ✅ Логируем для отладки
+        print(f"📊 update_statistics: собрано {len(all_tasks)} задач")
+        for task in all_tasks:
+            print(
+                f"   - task_id={task.get('id')}, progress={task.get('progress_percent')}, status={task.get('status')}")
 
         stats = self.service.crud.get_task_statistics_others(all_tasks)
 
@@ -637,16 +686,13 @@ class OthersTasksPage(QWidget):
             self.overdueTasksLabel.setText(f"⏰ Просрочено: {stats['overdue']}")
 
         if hasattr(self, 'overallProgress'):
-            self.overallProgress.setValue(stats['avg_progress'])
-            self.overallProgress.setFormat(f"Общий прогресс: {stats['avg_progress']}%")
+            avg_progress = stats.get('avg_progress', 0)
+            self.overallProgress.setValue(avg_progress)
+            self.overallProgress.setFormat(f"Общий прогресс: {avg_progress}%")
 
         for column in self.column_widgets:
             tasks_count = len(column.get_tasks())
             column.update_count(tasks_count)
-
-    # ==========================================================
-    # ФИЛЬТРАЦИЯ
-    # ==========================================================
 
     def filter_tasks(self):
         priority = self.priorityFilter.currentText()

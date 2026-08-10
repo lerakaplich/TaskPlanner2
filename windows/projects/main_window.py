@@ -3,7 +3,6 @@
 import os
 from PyQt6 import uic
 from PyQt6.QtWidgets import QMainWindow, QMessageBox
-from PyQt6.QtCore import QTimer
 
 from services.analytics_service.analytics_service import AnalyticsService
 from services.archive_service import ArchiveService
@@ -76,7 +75,7 @@ class MainWindow(QMainWindow):
         """Инициализация сервиса прав доступа"""
         try:
             from services.employee_service.employee_service import EmployeeService
-            from database import get_employees_session
+            from server_app.database import get_employees_session
 
             employees_session = get_employees_session()
             employee_service = EmployeeService(employees_session)

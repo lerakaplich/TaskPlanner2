@@ -4,7 +4,7 @@ from typing import List, Optional, Dict, Any
 from sqlalchemy.orm import Session
 from datetime import datetime
 from repositories.tag_repo import TagRepo
-from database import get_tasks_session
+from server_app.database import get_tasks_session
 
 
 class TagService:

@@ -1,7 +1,7 @@
 # windows/settings/settings_page.py
 
 from PyQt6 import uic
-from PyQt6.QtWidgets import QWidget, QMessageBox, QTabWidget
+from PyQt6.QtWidgets import QWidget, QTabWidget
 from PyQt6.QtCore import pyqtSignal, QTimer
 import os
 
@@ -12,7 +12,7 @@ from windows.settings.employees.employees_tab import EmployeesTab
 from windows.settings.departments.departments_tab import DepartmentsTab
 from windows.settings.divisions.divisions_tab import DivisionsTab
 from windows.permissions.ui_permission_mixin import UIPermissionMixin
-from database import get_employees_session
+from server_app.database import get_employees_session
 
 
 class SettingsPage(QWidget, UIPermissionMixin):

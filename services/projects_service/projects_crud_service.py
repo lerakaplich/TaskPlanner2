@@ -145,7 +145,7 @@ class ProjectsCrudService:
             Optional[Dict]: данные созданного проекта или None
         """
         from services.chat_service import ChatService
-        from database import get_tasks_session
+        from server_app.database import get_tasks_session
 
         # Создаём проект
         new_project = self.create_new_project(project_data, creator_id)
@@ -387,7 +387,7 @@ class ProjectsCrudService:
         Отправляет уведомления о новом проекте всем участникам, администраторам и куратору
         """
         try:
-            from database import get_employees_session
+            from server_app.database import get_employees_session
             from models.employees import Employee
             import threading
 
@@ -556,7 +556,7 @@ class ProjectsCrudService:
         Отправляет уведомления об изменении проекта
         """
         try:
-            from database import get_employees_session
+            from server_app.database import get_employees_session
             from models.employees import Employee
             import threading
 
