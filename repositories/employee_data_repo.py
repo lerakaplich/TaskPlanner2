@@ -14,9 +14,57 @@ class EmployeeDataRepo:
     def __init__(self, session: Session):
         self.session = session
 
+    def save_avatar_data(self, employee_id: int, image_data: bytes, mime_type: str = "image/png") -> bool:
+        """
+        Сохраняет фото в БД как BLOB
+        """
+        from datetime import datetime
+        stmt = (
+            update(EmployeeData)
+            .where(EmployeeData.employee_id == employee_id)
+            .values(
+                avatar_data=image_data,
+                avatar_mime_type=mime_type,
+                updated_at=datetime.now()
+            )
+        )
+        result = self.session.execute(stmt)
+        return result.rowcount > 0
+
+    def get_avatar_data(self, employee_id: int) -> Optional[bytes]:
+        """
+        Получает фото из БД
+        """
+        emp_data = self.get_by_id(employee_id)
+        return emp_data.avatar_data if emp_data else None
+
+    def delete_avatar_data(self, employee_id: int) -> bool:
+        """
+        Удаляет фото из БД
+        """
+        from datetime import datetime
+        stmt = (
+            update(EmployeeData)
+            .where(EmployeeData.employee_id == employee_id)
+            .values(
+                avatar_data=None,
+                avatar_mime_type=None,
+                updated_at=datetime.now()
+            )
+        )
+        result = self.session.execute(stmt)
+        return result.rowcount > 0
+
     def get_by_id(self, employee_id: int) -> Optional[EmployeeData]:
         stmt = select(EmployeeData).where(EmployeeData.employee_id == employee_id)
         return self.session.scalar(stmt)
+
+    def get_avatar_mime_type(self, employee_id: int) -> Optional[str]:
+        """
+        Получает MIME-тип фото из БД
+        """
+        emp_data = self.get_by_id(employee_id)
+        return emp_data.avatar_mime_type if emp_data else None
 
     def get_all_active(self) -> List[EmployeeData]:
         stmt = select(EmployeeData).where(EmployeeData.is_active == True)
@@ -69,7 +117,6 @@ class EmployeeDataRepo:
         result = self.session.execute(stmt)
         return result.rowcount > 0
 
-    # ✅ Исправлен: только app_session_token
     def update_session_token(self, employee_id: int, session_token: str) -> bool:
         stmt = (
             update(EmployeeData)
@@ -78,10 +125,6 @@ class EmployeeDataRepo:
         )
         result = self.session.execute(stmt)
         return result.rowcount > 0
-
-    # ============================================
-    # Только CRUD для КПД (без бизнес-логики)
-    # ============================================
 
     def update_kpd_rating(self, employee_id: int, kpd_rating: float) -> bool:
         stmt = (

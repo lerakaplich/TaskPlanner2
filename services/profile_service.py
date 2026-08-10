@@ -1,11 +1,32 @@
 # services/profile_service.py
-
+import os
+from datetime import datetime
 from typing import Dict, List, Optional, Tuple, Any
-from PyQt6.QtCore import QDate
+from PyQt6.QtCore import QDate, Qt
+from PyQt6.QtGui import QPixmap
 from sqlalchemy.orm import Session
 
 from server_app.database import get_employees_session, get_tasks_session
 from repositories.employee_repo import EmployeeRepo
+from repositories.employee_data_repo import EmployeeDataRepo
+from repositories.project_repo import ProjectRepo
+from models.employees import Employee, EmployeeData
+from models.projects import EmployeeProject, BoardColumn
+from models.tasks import Task
+
+# services/profile_service.py
+
+import os
+import io
+from datetime import datetime
+from typing import Dict, List, Optional, Tuple, Any
+from PyQt6.QtCore import QDate, Qt
+from PyQt6.QtGui import QPixmap
+from sqlalchemy.orm import Session
+
+from server_app.database import get_employees_session, get_tasks_session
+from repositories.employee_repo import EmployeeRepo
+from repositories.employee_data_repo import EmployeeDataRepo
 from repositories.project_repo import ProjectRepo
 from models.employees import Employee, EmployeeData
 from models.projects import EmployeeProject, BoardColumn
@@ -18,9 +39,139 @@ class ProfileService:
     def __init__(self, session: Session = None):
         self.session = session or get_tasks_session()
         self.employees_session = get_employees_session()
+        self.tasks_session = get_tasks_session()
         self.employee_repo = EmployeeRepo(self.employees_session)
+        self.employee_data_repo = EmployeeDataRepo(self.tasks_session)
         self.project_repo = ProjectRepo(self.session)
         self.current_user_id = None
+
+    # services/profile_service.py
+
+    def get_avatar_pixmap(self, employee_id: int, size: int = 100) -> Optional[QPixmap]:
+        """
+        Возвращает QPixmap с аватаром сотрудника из БД.
+        Если аватар не найден, возвращает None.
+        """
+        try:
+            # Используем существующую сессию, а не создаём новую
+            repo = EmployeeDataRepo(self.tasks_session)
+            avatar_data = repo.get_avatar_data(employee_id)
+
+            if avatar_data:
+                try:
+                    from PyQt6.QtCore import QByteArray
+                    pixmap = QPixmap()
+                    if pixmap.loadFromData(QByteArray(avatar_data)):
+                        print(f"✅ Аватар загружен из БД: {len(avatar_data)} байт")
+                        return pixmap.scaled(size, size,
+                                             Qt.AspectRatioMode.KeepAspectRatio,
+                                             Qt.TransformationMode.SmoothTransformation)
+                    else:
+                        print("❌ Не удалось загрузить изображение из данных")
+                except Exception as e:
+                    print(f"❌ Ошибка загрузки аватара из БД: {e}")
+            else:
+                print(f"❌ Аватар не найден для сотрудника {employee_id}")
+            return None
+        except Exception as e:
+            print(f"❌ Ошибка в get_avatar_pixmap: {e}")
+            import traceback
+            traceback.print_exc()
+            return None
+
+    def save_avatar(self, employee_id: int, image_data: bytes, filename: str = None) -> Tuple[bool, Optional[str]]:
+        """
+        Сохраняет аватар сотрудника в БД (как BLOB).
+        """
+        try:
+            # Определяем MIME-тип
+            mime_type = "image/png"
+            if filename:
+                ext = filename.lower().split('.')[-1] if '.' in filename else ''
+                mime_map = {
+                    'jpg': 'image/jpeg',
+                    'jpeg': 'image/jpeg',
+                    'png': 'image/png',
+                    'gif': 'image/gif',
+                    'bmp': 'image/bmp',
+                }
+                mime_type = mime_map.get(ext, 'image/png')
+
+            # Сохраняем в БД
+            success = self.employee_data_repo.save_avatar_data(employee_id, image_data, mime_type)
+            if not success:
+                return False, None
+
+            self.tasks_session.commit()
+
+            # ✅ ОБНОВЛЯЕМ СЕССИЮ - принудительно обновляем объект
+            self.tasks_session.refresh(self.employee_data_repo.get_by_id(employee_id))
+
+            return True, None
+
+        except Exception as e:
+            self.tasks_session.rollback()
+            print(f"❌ Ошибка сохранения аватара: {e}")
+            return False, None
+
+    def delete_avatar(self, employee_id: int) -> bool:
+        """Удаляет аватар сотрудника из БД"""
+        try:
+            success = self.employee_data_repo.delete_avatar_data(employee_id)
+            self.tasks_session.commit()
+            return success
+        except Exception as e:
+            self.tasks_session.rollback()
+            print(f"❌ Ошибка удаления аватара: {e}")
+            return False
+
+    def get_employee_profile(self, employee_id: int) -> Dict[str, Any]:
+        """Получает полный профиль сотрудника"""
+        try:
+            employee = self.employee_repo.get_by_id(employee_id)
+            if not employee:
+                return self._get_empty_profile(employee_id)
+
+            employee_data = self.employee_data_repo.get_by_id(employee_id)
+
+            department_name = self._get_department_name(employee.department_id)
+            division_name = self._get_division_name(employee.division_id)
+
+            role_value = "user"
+            if employee_data and employee_data.role:
+                role_value = employee_data.role.value if hasattr(employee_data.role, 'value') else str(
+                    employee_data.role)
+
+            return {
+                "id": employee.id,
+                "last_name": employee.last_name or "",
+                "first_name": employee.first_name or "",
+                "middle_name": employee.middle_name or "",
+                "position": employee.position or "",
+                "phone_number": employee.phone_number or "",
+                "work_number": employee.work_number or "",
+                "email": employee.email or "",
+                "birth_date": employee.birth_date.isoformat() if employee.birth_date else "",
+                "department_id": employee.department_id,
+                "department_name": department_name or "—",
+                "division_id": employee.division_id,
+                "division_name": division_name or "—",
+                "organization_id": employee.organization_id or 1,
+                "role": role_value,
+                "is_active": employee_data.is_active if employee_data else True,
+                "full_name": self._format_full_name(employee),
+                # ❌ УДАЛЯЕМ avatar_path - он больше не используется
+                # "avatar_path": employee_data.avatar_path if employee_data else None,
+            }
+        except Exception as e:
+            print(f"❌ Ошибка загрузки профиля: {e}")
+            import traceback
+            traceback.print_exc()
+            try:
+                self.tasks_session.rollback()
+            except:
+                pass
+            return self._get_empty_profile(employee_id)
 
     def get_project_tasks(self, project_id: int, employee_id: int = None) -> List[Dict]:
         """
@@ -78,7 +229,6 @@ class ProfileService:
                 tags = []
                 try:
                     from models.tasks import Tag, TaskTag
-                    # Правильный запрос тегов через связь TaskTag
                     tags = self.session.query(Tag).join(
                         TaskTag, Tag.id == TaskTag.tag_id
                     ).filter(
@@ -125,54 +275,13 @@ class ProfileService:
         try:
             if hasattr(self, 'employees_session') and self.employees_session:
                 self.employees_session.close()
+            if hasattr(self, 'tasks_session') and self.tasks_session:
+                self.tasks_session.close()
         except:
             pass
 
     def set_current_user_id(self, user_id: int):
         self.current_user_id = user_id
-
-    def get_employee_profile(self, employee_id: int) -> Dict[str, Any]:
-        """Получает полный профиль сотрудника"""
-        try:
-            employee = self.employee_repo.get_by_id(employee_id)
-            if not employee:
-                return self._get_empty_profile(employee_id)
-
-            employee_data = self.session.query(EmployeeData).filter(
-                EmployeeData.employee_id == employee_id
-            ).first()
-
-            department_name = self._get_department_name(employee.department_id)
-            division_name = self._get_division_name(employee.division_id)
-
-            # ✅ ИСПРАВЛЕНО: получаем роль из EmployeeData
-            role_value = "user"
-            if employee_data and employee_data.role:
-                role_value = employee_data.role.value if hasattr(employee_data.role, 'value') else str(
-                    employee_data.role)
-
-            return {
-                "id": employee.id,
-                "last_name": employee.last_name or "",
-                "first_name": employee.first_name or "",
-                "middle_name": employee.middle_name or "",
-                "position": employee.position or "",
-                "phone_number": employee.phone_number or "",
-                "work_number": employee.work_number or "",
-                "email": employee.email or "",
-                "birth_date": employee.birth_date.isoformat() if employee.birth_date else "",
-                "department_id": employee.department_id,
-                "department_name": department_name or "—",
-                "division_id": employee.division_id,
-                "division_name": division_name or "—",
-                "organization_id": employee.organization_id or 1,
-                "role": role_value,
-                "is_active": employee_data.is_active if employee_data else True,
-                "full_name": self._format_full_name(employee)
-            }
-        except Exception as e:
-            print(f"❌ Ошибка загрузки профиля: {e}")
-            return self._get_empty_profile(employee_id)
 
     def get_employee_statistics(self, employee_id: int) -> Dict[str, int]:
         """Получает статистику сотрудника (только его задачи)"""
@@ -233,7 +342,6 @@ class ProfileService:
 
                     total_tasks = len(tasks)
 
-                    # ✅ ИСПРАВЛЕНО: проверяем роль вместо is_admin
                     is_admin = False
                     if membership.role == 'project_manager':
                         is_admin = True
@@ -245,7 +353,7 @@ class ProfileService:
                         "total_tasks": total_tasks,
                         "completed_tasks": completed_tasks,
                         "progress": int((completed_tasks / total_tasks * 100)) if total_tasks > 0 else 0,
-                        "is_admin": is_admin,  # ✅ теперь правильно определяется
+                        "is_admin": is_admin,
                         "created_at": project.created_at.strftime("%d.%m.%Y") if project.created_at else "",
                         "is_archived": project.is_archived
                     })
@@ -273,7 +381,7 @@ class ProfileService:
 
             print(f"   Найдено завершенных задач: {len(completed_tasks)}")
 
-            for task in completed_tasks[:3]:  # Показываем первые 3 для отладки
+            for task in completed_tasks[:3]:
                 print(f"      - Задача: {task.title}, КПД: {task.kpd_score}")
 
             if not completed_tasks:
@@ -430,13 +538,13 @@ class ProfileService:
                         role_value = RoleEnum(role_value)
                     except ValueError:
                         role_value = RoleEnum.user
-                self.employee_repo.update_role(employee_id, role_value)
-                self.session.commit()
+                self.employee_data_repo.update_role(employee_id, role_value)
+                self.tasks_session.commit()  # ✅ используем tasks_session
 
             return True
         except Exception as e:
             self.employees_session.rollback()
-            self.session.rollback()
+            self.tasks_session.rollback()
             print(f"❌ Ошибка обновления профиля: {e}")
             return False
 

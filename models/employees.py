@@ -6,7 +6,7 @@ from sqlalchemy import (
     String, Integer, BigInteger, Boolean, Date, DateTime, ForeignKey, Text, Float,
     Enum as SQLAlchemyEnum
 )
-from sqlalchemy.sql.sqltypes import Time as SQLTime
+from sqlalchemy.sql.sqltypes import Time as SQLTime, LargeBinary
 from sqlalchemy.orm import Mapped, mapped_column, relationship, DeclarativeBase
 import enum
 
@@ -83,6 +83,9 @@ class EmployeeData(Base):
     password_hash: Mapped[Optional[str]] = mapped_column(String(255))
 
     app_session_token: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+
+    avatar_data: Mapped[Optional[bytes]] = mapped_column(LargeBinary, nullable=True)
+    avatar_mime_type: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
 
     # Временные метки
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
