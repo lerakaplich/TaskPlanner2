@@ -18,8 +18,6 @@ class TasksService:
     Объединяет все функциональные модули через композицию.
     """
 
-    # В методе __init__ класса TasksService:
-
     def __init__(self, db_session, current_user=None, mode="all", column_service=None):
         self.crud = TasksCrudService(db_session, current_user, mode, column_service)
         self.move = TasksMoveService(db_session, self.crud.repo, current_user, mode)
@@ -43,6 +41,65 @@ class TasksService:
             db_session,  # передаём сессию напрямую, не как фабрику
             get_employees_session  # фабрика для employees
         )
+
+    def predict_time_from_tags(self, tag_names: List[str]) -> Optional[Dict]:
+        """
+        Прогнозирует время выполнения на основе тегов.
+        Использует историю завершённых задач с этими тегами.
+        """
+        if not tag_names:
+            return None
+
+        try:
+            # Получаем завершённые задачи с этими тегами
+            from sqlalchemy import select, func
+            from models.tasks import Task, TaskTag, Tag
+            from models.projects import BoardColumn
+
+            # Получаем ID тегов
+            tag_ids = self.db_session.scalars(
+                select(Tag.id).where(Tag.name.in_(tag_names))
+            ).all()
+
+            if not tag_ids:
+                return None
+
+            # Получаем среднее время выполнения по тегам
+            stmt = select(
+                func.avg(Task.actual_hours).label('avg_hours'),
+                func.count(Task.id).label('task_count')
+            ).join(
+                TaskTag, Task.id == TaskTag.task_id
+            ).join(
+                BoardColumn, Task.column_id == BoardColumn.id
+            ).where(
+                TaskTag.tag_id.in_(tag_ids),
+                BoardColumn.is_done_column == True,
+                Task.actual_hours > 0
+            )
+
+            result = self.db_session.execute(stmt).first()
+
+            if result and result.avg_hours:
+                avg_hours = float(result.avg_hours)
+                task_count = result.task_count
+
+                # Корректируем прогноз: если задач мало, добавляем запас
+                if task_count < 3:
+                    avg_hours *= 1.5  # +50% если мало данных
+
+                return {
+                    'predicted_hours': round(avg_hours, 1),
+                    'predicted_days': round(avg_hours / 8, 1),
+                    'tasks_analyzed': task_count,
+                    'confidence': min(0.9, task_count / 10)  # уверенность от количества задач
+                }
+
+            return None
+
+        except Exception as e:
+            print(f"⚠️ Ошибка прогноза времени по тегам: {e}")
+            return None
 
     def suggest_executor_for_tags(self, tag_names: List[str], creator_id: int = None) -> Optional[Dict]:
         """Предлагает исполнителя для задачи на основе тегов"""

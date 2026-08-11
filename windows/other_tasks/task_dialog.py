@@ -41,6 +41,8 @@ class TaskDialog(QDialog):
         # Настройка простого комбобокса исполнителей
         self.setup_assignees_combo()
 
+        self._set_default_deadline()
+
         # Настройка звезд
         self.setup_stars()
         self.setup_ui()
@@ -48,9 +50,142 @@ class TaskDialog(QDialog):
         if hasattr(self, 'createBtn'):
             self.createBtn.clicked.connect(self.validate_and_save)
 
-    # ==========================================================
-    # ИСПОЛНИТЕЛИ (ПРОСТАЯ ВЕРСИЯ)
-    # ==========================================================
+    # windows/other_tasks/task_dialog.py
+
+    def _suggest_executor_after_tag_change(self):
+        """Предлагает исполнителя и прогноз времени на основе выбранных тегов"""
+        if not self.selected_tag_ids:
+            self.set_selected_assignee(None)
+            self._clear_notification()
+            # ✅ Сбрасываем дедлайн на +10 дней
+            self._set_default_deadline()
+            return
+
+        selected_tag_names = []
+        for tag_id in self.selected_tag_ids:
+            cb = self.tag_checkboxes_by_id.get(tag_id)
+            if cb and cb.isChecked():
+                tag_name = cb.property("tag_name")
+                if tag_name:
+                    selected_tag_names.append(tag_name)
+
+        if not selected_tag_names or not self.service:
+            return
+
+        old_assignee_id = self.selected_assignee_id
+
+        try:
+            # 1. Предлагаем исполнителя
+            suggestion = self.service.suggest_executor_for_tags(selected_tag_names)
+            if suggestion:
+                suggested_id = suggestion.get('employee_id')
+                suggested_name = suggestion.get('employee_name', 'Неизвестен')
+                avg_difficulty = suggestion.get('avg_difficulty', 0)
+                tasks_count = suggestion.get('tasks_count', 0)
+
+                if suggested_id and suggested_id != old_assignee_id:
+                    self.set_selected_assignee(suggested_id)
+
+                self._show_suggestion_notification(suggestion, force=bool(selected_tag_names))
+
+            # 2. ✅ ПРОГНОЗ ВРЕМЕНИ НА ОСНОВЕ ТЕГОВ
+            self._predict_deadline_from_tags(selected_tag_names)
+
+        except Exception as e:
+            print(f"⚠️ Ошибка при предложении исполнителя: {e}")
+
+    def _predict_deadline_from_tags(self, tag_names: List[str]):
+        """
+        Прогнозирует время выполнения на основе тегов и устанавливает дедлайн.
+        """
+        try:
+            # Получаем прогноз от сервиса
+            prediction = self.service.predict_time_from_tags(tag_names)
+
+            if prediction and prediction.get('predicted_hours', 0) > 0:
+                predicted_hours = prediction['predicted_hours']
+                predicted_days = predicted_hours / 8  # 8-часовой рабочий день
+
+                print(f"📊 Прогноз времени по тегам {tag_names}: {predicted_hours:.1f}ч ({predicted_days:.1f} дн)")
+
+                # Устанавливаем дедлайн
+                if hasattr(self, 'dateEditDeadline'):
+                    today = QDate.currentDate()
+                    # Округляем дни вверх (минимум 1 день)
+                    days_to_add = max(1, int(predicted_days) + 1)
+                    predicted_date = today.addDays(days_to_add)
+                    self.dateEditDeadline.setDate(predicted_date)
+
+                    # Показываем уведомление о прогнозе
+                    self._show_prediction_notification(predicted_hours, predicted_days)
+            else:
+                # Если прогноз недоступен - ставим +10 дней
+                self._set_default_deadline()
+
+        except Exception as e:
+            print(f"⚠️ Ошибка прогноза времени: {e}")
+            self._set_default_deadline()
+
+    def _show_prediction_notification(self, hours: float, days: float):
+        """Показывает уведомление о прогнозе времени"""
+        notification = QWidget(self)
+        notification.setWindowFlags(
+            Qt.WindowType.Popup | Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint
+        )
+        notification.setStyleSheet("""
+            QWidget {
+                background-color: #1B232A;
+                border-radius: 8px;
+                padding: 8px 16px;
+                border: 1px solid #333;
+            }
+            QLabel {
+                color: white;
+                font-size: 12px;
+                border: none;
+            }
+            QLabel#title {
+                font-weight: bold;
+                color: #ccab6e;
+                font-size: 13px;
+            }
+        """)
+
+        layout = QVBoxLayout(notification)
+        layout.setSpacing(2)
+        layout.setContentsMargins(8, 6, 8, 6)
+
+        title_label = QLabel(f"⏱ Прогноз времени: {hours:.1f} ч ({days:.1f} дн)")
+        title_label.setObjectName("title")
+        layout.addWidget(title_label)
+
+        # Позиционируем над полем дедлайна
+        if hasattr(self, 'dateEditDeadline'):
+            pos = self.dateEditDeadline.mapToGlobal(self.dateEditDeadline.rect().topLeft())
+            notification.move(pos.x(), pos.y() - 50)
+        else:
+            notification.move(self.width() // 2 - 150, 20)
+
+        notification.show()
+        self._prediction_notification = notification
+
+        def safe_delete():
+            try:
+                if hasattr(self, '_prediction_notification') and self._prediction_notification:
+                    self._prediction_notification.deleteLater()
+                    self._prediction_notification = None
+            except RuntimeError:
+                pass
+
+        QTimer.singleShot(3000, safe_delete)
+
+    def _set_default_deadline(self):
+        """Устанавливает дедлайн по умолчанию +10 дней от сегодня"""
+        if hasattr(self, 'dateEditDeadline'):
+            today = QDate.currentDate()
+            default_date = today.addDays(10)
+            self.dateEditDeadline.setDate(default_date)
+            self.dateEditDeadline.setMinimumDate(today)  # Запрещаем выбор прошлых дат
 
     def setup_assignees_combo(self):
         """Настройка простого комбобокса для выбора исполнителя"""
@@ -353,10 +488,6 @@ class TaskDialog(QDialog):
         is_new = (self.selected_assignee_id == suggestion.get('employee_id'))
 
         title_text = f"Рекомендуемый исполнитель на основе компетенций: {employee_name}"
-        if is_new:
-            title_text = f"✅ {title_text}"
-        else:
-            title_text = f"🔄 {title_text}"
 
         title_label = QLabel(title_text)
         title_label.setObjectName("title")
@@ -464,9 +595,7 @@ class TaskDialog(QDialog):
             difficulty_names = ["", "Очень низкая", "Низкая", "Средняя", "Высокая", "Максимальная"]
             self.labelDifficultyValue.setText(difficulty_names[value] if value <= 5 else "")
 
-    # ==========================================================
-    # UI
-    # ==========================================================
+    # windows/other_tasks/task_dialog.py
 
     def setup_ui(self):
         if self.mode == "create":
@@ -500,6 +629,108 @@ class TaskDialog(QDialog):
                 self.createdAtLabel.show()
             if hasattr(self, 'updatedAtLabel'):
                 self.updatedAtLabel.show()
+
+        # ✅ ДОБАВЛЯЕМ СТИЛИЗАЦИЮ КАЛЕНДАРЯ
+        self._style_calendar()
+
+    def _style_calendar(self):
+        """Стилизация календаря для выбора дедлайна"""
+        if hasattr(self, 'dateEditDeadline'):
+            # Получаем QCalendarWidget из QDateEdit
+            calendar = self.dateEditDeadline.calendarWidget()
+            if calendar:
+                calendar.setStyleSheet("""
+                    QCalendarWidget {
+                        background-color: white;
+                    }
+                    QCalendarWidget QToolButton {
+                        color: #1B232A;
+                        background-color: transparent;
+                        font-weight: bold;
+                        font-size: 14px;
+                        border: none;
+                    }
+                    QCalendarWidget QToolButton:hover {
+                        background-color: #f0f0f0;
+                        border-radius: 4px;
+                    }
+                    QCalendarWidget QMenu {
+                        color: #1B232A;
+                        background-color: white;
+                    }
+                    QCalendarWidget QSpinBox {
+                        color: #1B232A;
+                        background-color: white;
+                        selection-background-color: #ccab6e;
+                        selection-color: white;
+                    }
+                    QCalendarWidget QSpinBox::up-button {
+                        width: 16px;
+                        height: 16px;
+                    }
+                    QCalendarWidget QSpinBox::down-button {
+                        width: 16px;
+                        height: 16px;
+                    }
+                    QCalendarWidget QWidget#qt_calendar_navigationbar {
+                        background-color: white;
+                    }
+                    QCalendarWidget QAbstractItemView {
+                        color: #1B232A;
+                        background-color: white;
+                        selection-background-color: #ccab6e;
+                        selection-color: white;
+                    }
+                    QCalendarWidget QAbstractItemView:enabled {
+                        color: #1B232A;
+                    }
+                    QCalendarWidget QAbstractItemView:disabled {
+                        color: #aaaaaa;
+                    }
+                    /* Дни недели и номера дней */
+                    QCalendarWidget QTableView {
+                        color: #1B232A;
+                        background-color: white;
+                        alternate-background-color: #f8f9fa;
+                        gridline-color: #e9ecef;
+                    }
+                    QCalendarWidget QTableView::item:selected {
+                        background-color: #ccab6e;
+                        color: white;
+                    }
+                    QCalendarWidget QTableView::item:hover {
+                        background-color: #f0f0f0;
+                    }
+                    /* Заголовки дней недели */
+                    QCalendarWidget QHeaderView {
+                        color: #1B232A;
+                        background-color: #f8f9fa;
+                    }
+                    QCalendarWidget QHeaderView::section {
+                        color: #1B232A;
+                        background-color: #f8f9fa;
+                        padding: 4px;
+                        border: none;
+                        font-weight: bold;
+                    }
+                    /* Кнопки навигации */
+                    QCalendarWidget QToolButton#qt_calendar_monthbutton {
+                        color: #1B232A;
+                        font-weight: bold;
+                    }
+                    QCalendarWidget QToolButton#qt_calendar_yearbutton {
+                        color: #1B232A;
+                        font-weight: bold;
+                    }
+                    QCalendarWidget QToolButton#qt_calendar_prevmonth {
+                        color: #1B232A;
+                        font-size: 18px;
+                    }
+                    QCalendarWidget QToolButton#qt_calendar_nextmonth {
+                        color: #1B232A;
+                        font-size: 18px;
+                    }
+                """)
 
     def format_creator_name(self) -> str:
         last = self.current_user.get('last_name', '')

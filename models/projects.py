@@ -58,9 +58,6 @@ class BoardColumn(Base):
     color: Mapped[str] = mapped_column(String(7), default="#ffffff")
     position: Mapped[int] = mapped_column(Integer, default=0)
     is_done_column: Mapped[bool] = mapped_column(Boolean, default=False)
-
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
-
     project: Mapped[Optional["Project"]] = relationship(back_populates="columns")
     tasks: Mapped[List["Task"]] = relationship(
         back_populates="column",

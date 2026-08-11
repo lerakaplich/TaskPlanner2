@@ -1,4 +1,4 @@
-# chat_server.py
+# chat_server.py - исправленный
 from datetime import datetime
 
 import uvicorn
@@ -7,10 +7,16 @@ import asyncio
 from fastapi import FastAPI
 from sqlalchemy import select
 
+# Добавьте путь к корневой директории проекта
+import sys
+import os
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+# Теперь импорты будут работать
 from database import get_tasks_session
 from services.chat_service import ChatService
 from server_app.services.tasks_service.task_data_collector import get_task_data_collector
-from server_app.services.training_scheduler import get_training_scheduler  # ← ИСПРАВЛЕНО
+from server_app.services.training_scheduler import get_training_scheduler
 from shared_state import pending_registrations
 
 user_sid_map = {}

@@ -108,6 +108,5 @@ class ColumnService(QObject):
             'is_done_column': column.is_done_column,
             'project_id': column.project_id,
             'is_template': getattr(column, 'is_template', False),
-            'template_order': getattr(column, 'template_order', 0),
-            'created_at': column.created_at.isoformat() if column.created_at else None,
+            'template_order': getattr(column, 'template_order', 0)
         }
