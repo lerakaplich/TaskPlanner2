@@ -253,13 +253,8 @@ class EditProfileDialog(QDialog):
     def _connect_signals(self):
         if hasattr(self, 'btnSave'):
             self.btnSave.clicked.connect(self._save_profile)
-        if hasattr(self, 'btnCancel'):
-            self.btnCancel.clicked.connect(self.reject)
 
-        # Используем btnEditPhotoLabel как основную кнопку выбора фото
-        if hasattr(self, 'btnEditPhotoLabel'):
-            self.btnEditPhotoLabel.clicked.connect(self._choose_avatar)
-        elif hasattr(self, 'btnEditPhoto'):
+        if hasattr(self, 'btnEditPhoto'):
             self.btnEditPhoto.clicked.connect(self._choose_avatar)
 
         if hasattr(self, 'btnDeletePhoto'):

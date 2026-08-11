@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>450</width>
-    <height>550</height>
+    <height>532</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -32,8 +32,6 @@
    <property name="bottomMargin">
     <number>30</number>
    </property>
-
-   <!-- КОНТЕЙНЕР ДЛЯ ФОТО -->
    <item>
     <widget class="QFrame" name="photoContainer">
      <property name="minimumSize">
@@ -52,13 +50,22 @@
       <string>background-color: #dddddd; border-radius: 80px; border: 4px solid #D22730;</string>
      </property>
      <layout class="QGridLayout" name="gridLayout">
-      <property name="margin" stdset="0">
+      <property name="leftMargin">
+       <number>0</number>
+      </property>
+      <property name="topMargin">
+       <number>0</number>
+      </property>
+      <property name="rightMargin">
+       <number>0</number>
+      </property>
+      <property name="bottomMargin">
        <number>0</number>
       </property>
       <property name="spacing">
        <number>0</number>
       </property>
-      <item row="0" column="0" alignment="Qt::AlignmentFlag::AlignRight|Qt::AlignmentFlag::AlignBottom">
+      <item row="0" column="0">
        <widget class="QPushButton" name="btnEditPhoto">
         <property name="sizePolicy">
          <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
@@ -104,83 +111,38 @@
      </layout>
     </widget>
    </item>
-
-   <!-- КНОПКИ УПРАВЛЕНИЯ ФОТО -->
    <item>
-    <layout class="QHBoxLayout" name="photoButtonsLayout">
-     <property name="spacing">
-      <number>10</number>
+    <widget class="QPushButton" name="btnDeletePhoto">
+     <property name="minimumSize">
+      <size>
+       <width>120</width>
+       <height>30</height>
+      </size>
      </property>
-     <property name="alignment">
-      <set>Qt::AlignmentFlag::AlignCenter</set>
+     <property name="styleSheet">
+      <string notr="true">
+       QPushButton {
+           background-color: transparent;
+           color: #D22730;
+           border: 1px solid #D22730;
+           border-radius: 8px;
+           font-size: 12px;
+           padding: 5px 15px;
+       }
+       QPushButton:hover {
+           background-color: #D22730;
+           color: white;
+       }
+       QPushButton:pressed {
+           background-color: #a01a24;
+       }
+      </string>
      </property>
-     <item>
-      <widget class="QPushButton" name="btnEditPhotoLabel">
-       <property name="minimumSize">
-        <size>
-         <width>120</width>
-         <height>30</height>
-        </size>
-       </property>
-       <property name="styleSheet">
-        <string notr="true">
-         QPushButton {
-             background-color: #1B232A;
-             color: white;
-             border-radius: 8px;
-             border: none;
-             font-size: 12px;
-             padding: 5px 15px;
-         }
-         QPushButton:hover {
-             background-color: #333333;
-         }
-         QPushButton:pressed {
-             background-color: #000000;
-         }
-        </string>
-       </property>
-       <property name="text">
-        <string>📷 Выбрать фото</string>
-       </property>
-      </widget>
-     </item>
-     <item>
-      <widget class="QPushButton" name="btnDeletePhoto">
-       <property name="minimumSize">
-        <size>
-         <width>100</width>
-         <height>30</height>
-        </size>
-       </property>
-       <property name="styleSheet">
-        <string notr="true">
-         QPushButton {
-             background-color: transparent;
-             color: #D22730;
-             border: 1px solid #D22730;
-             border-radius: 8px;
-             font-size: 12px;
-             padding: 5px 15px;
-         }
-         QPushButton:hover {
-             background-color: #D22730;
-             color: white;
-         }
-         QPushButton:pressed {
-             background-color: #a01a24;
-         }
-        </string>
-       </property>
-       <property name="text">
-        <string>🗑 Удалить</string>
-       </property>
-      </widget>
-     </item>
-    </layout>
+     <property name="text">
+      <string>Удалить фото</string>
+     </property>
+    </widget>
    </item>
-
-   <!-- ФОРМА -->
    <item>
     <widget class="QFrame" name="formFrame">
      <layout class="QFormLayout" name="formLayout">
@@ -192,11 +154,11 @@
       </property>
       <item row="0" column="0">
        <widget class="QLabel" name="labelBirth">
-        <property name="text">
-         <string>Дата рождения:</string>
-        </property>
         <property name="styleSheet">
          <string>font-weight: bold; color: #1B232A;</string>
+        </property>
+        <property name="text">
+         <string>Дата рождения:</string>
         </property>
        </widget>
       </item>
@@ -215,63 +177,47 @@
       </item>
       <item row="1" column="0">
        <widget class="QLabel" name="labelPhone">
-        <property name="text">
-         <string>Телефон:</string>
-        </property>
         <property name="styleSheet">
          <string>font-weight: bold; color: #1B232A;</string>
+        </property>
+        <property name="text">
+         <string>Телефон:</string>
         </property>
        </widget>
       </item>
       <item row="1" column="1">
        <widget class="QLineEdit" name="lineEditPhone">
-        <property name="placeholderText">
-         <string>+375 XX XXX-XX-XX</string>
-        </property>
         <property name="styleSheet">
          <string notr="true">QLineEdit { border-radius: 10px; border: 1px solid #ccab6e; padding: 8px; background: white; }</string>
+        </property>
+        <property name="placeholderText">
+         <string>+375 XX XXX-XX-XX</string>
         </property>
        </widget>
       </item>
       <item row="2" column="0">
        <widget class="QLabel" name="labelEmail">
-        <property name="text">
-         <string>Почта:</string>
-        </property>
         <property name="styleSheet">
          <string>font-weight: bold; color: #1B232A;</string>
+        </property>
+        <property name="text">
+         <string>Почта:</string>
         </property>
        </widget>
       </item>
       <item row="2" column="1">
        <widget class="QLineEdit" name="lineEditEmail">
-        <property name="placeholderText">
-         <string>example@mail.com</string>
-        </property>
         <property name="styleSheet">
          <string notr="true">QLineEdit { border-radius: 10px; border: 1px solid #ccab6e; padding: 8px; background: white; }</string>
+        </property>
+        <property name="placeholderText">
+         <string>example@mail.com</string>
         </property>
        </widget>
       </item>
      </layout>
     </widget>
    </item>
-
-   <item>
-    <spacer name="verticalSpacer">
-     <property name="orientation">
-      <enum>Qt::Orientation::Vertical</enum>
-     </property>
-     <property name="sizeHint" stdset="0">
-      <size>
-       <width>20</width>
-       <height>10</height>
-      </size>
-     </property>
-    </spacer>
-   </item>
-
-   <!-- КНОПКИ ДЕЙСТВИЙ -->
    <item>
     <layout class="QHBoxLayout" name="buttonsLayout">
      <property name="spacing">
@@ -304,38 +250,7 @@
         </string>
        </property>
        <property name="text">
-        <string>💾 Сохранить</string>
-       </property>
-      </widget>
-     </item>
-     <item>
-      <widget class="QPushButton" name="btnCancel">
-       <property name="minimumSize">
-        <size>
-         <width>0</width>
-         <height>40</height>
-        </size>
-       </property>
-       <property name="styleSheet">
-        <string notr="true">
-         QPushButton {
-             background-color: #1B232A;
-             color: white;
-             border-radius: 10px;
-             border: none;
-             font-weight: bold;
-             font-size: 14px;
-         }
-         QPushButton:hover {
-             background-color: #333333;
-         }
-         QPushButton:pressed {
-             background-color: #000000;
-         }
-        </string>
-       </property>
-       <property name="text">
-        <string>✖ Отмена</string>
+        <string>Сохранить</string>
        </property>
       </widget>
      </item>

@@ -1,10 +1,8 @@
-# windows/profile/avatar_crop_dialog.py
-
 import os
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QPushButton,
     QGraphicsView, QGraphicsScene, QGraphicsPixmapItem,
-    QLabel, QSlider, QFrame, QSizePolicy
+    QLabel, QFrame
 )
 from PyQt6.QtCore import Qt, QRectF, QPointF, pyqtSignal
 from PyQt6.QtGui import QPixmap, QPainter, QPen, QColor, QBrush, QPainterPath
@@ -28,7 +26,6 @@ class CropGraphicsView(QGraphicsView):
         self.setScene(self.scene)
 
         self.pixmap_item = None
-        self.crop_rect = QRectF()
         self.zoom_factor = 1.0
         self.min_zoom = 0.5
         self.max_zoom = 5.0
@@ -38,34 +35,38 @@ class CropGraphicsView(QGraphicsView):
         self._is_dragging = False
 
         # Размер области обрезки (круг)
-        self.crop_size = 400  # Базовый размер, будет масштабироваться
+        self.crop_size = 400
 
     def set_pixmap(self, pixmap: QPixmap):
         """Устанавливает изображение для обрезки"""
         self.scene.clear()
         self.pixmap_item = QGraphicsPixmapItem(pixmap)
         self.scene.addItem(self.pixmap_item)
-        self.scene.setSceneRect(self.pixmap_item.boundingRect())
-        self.fitInView(self.scene.sceneRect(), Qt.AspectRatioMode.KeepAspectRatio)
+
+        # РАСШИРЯЕМ СЦЕНУ: добавляем отступы вокруг картинки,
+        # чтобы её можно было свободно двигать влево/вправо и вверх/вниз
+        w, h = pixmap.width(), pixmap.height()
+        margin_w = w * 1.5
+        margin_h = h * 1.5
+        self.scene.setSceneRect(-margin_w, -margin_h, w + margin_w * 2, h + margin_h * 2)
+
+        # Центрируем камеру на самой картинке
+        self.centerOn(self.pixmap_item)
         self.zoom_factor = 1.0
 
-        # Определяем размер обрезки на основе видимой области
+        # Определяем размер обрезки
         self._update_crop_size()
 
     def _update_crop_size(self):
         """Обновляет размер области обрезки"""
         if self.pixmap_item:
             view_rect = self.mapToScene(self.viewport().rect()).boundingRect()
-            # Берем минимальную сторону видимой области
             self.crop_size = min(view_rect.width(), view_rect.height()) * 0.75
 
     def wheelEvent(self, event):
         """Масштабирование колесиком мыши"""
         delta = event.angleDelta().y()
-        if delta > 0:
-            factor = 1.25
-        else:
-            factor = 0.8
+        factor = 1.25 if delta > 0 else 0.8
 
         new_zoom = self.zoom_factor * factor
         if self.min_zoom <= new_zoom <= self.max_zoom:
@@ -115,41 +116,34 @@ class CropGraphicsView(QGraphicsView):
         if not self.pixmap_item:
             return
 
-        # Получаем видимую область сцены
         view_rect = self.mapToScene(self.viewport().rect()).boundingRect()
         center = view_rect.center()
         radius = self.crop_size / 2
 
-        # Строим путь для всей видимой области
         full_path = QPainterPath()
         full_path.addRect(view_rect)
 
-        # Строим путь для круга
         circle_path = QPainterPath()
         circle_path.addEllipse(center, radius, radius)
 
-        # Вычитаем круг из полного пути → остаётся только область вне круга
         mask_path = full_path.subtracted(circle_path)
 
-        # Заливаем маску полупрозрачным чёрным
+        # Маска
         painter.setBrush(QBrush(QColor(0, 0, 0, 180)))
         painter.setPen(Qt.PenStyle.NoPen)
         painter.drawPath(mask_path)
 
-        # Рисуем обводку круга (белая)
+        # Белая рамка
         painter.setBrush(Qt.BrushStyle.NoBrush)
         pen = QPen(QColor(255, 255, 255, 220), 3)
         painter.setPen(pen)
         painter.drawEllipse(center, radius, radius)
 
-        # Рисуем перекрестие
+        # Перекрестие
         pen = QPen(QColor(255, 255, 255, 120), 1, Qt.PenStyle.DashLine)
         painter.setPen(pen)
 
-        cx = int(center.x())
-        cy = int(center.y())
-        r = int(radius)
-
+        cx, cy, r = int(center.x()), int(center.y()), int(radius)
         painter.drawLine(cx - int(r * 0.6), cy, cx + int(r * 0.6), cy)
         painter.drawLine(cx, cy - int(r * 0.6), cx, cy + int(r * 0.6))
 
@@ -165,59 +159,34 @@ class CropGraphicsView(QGraphicsView):
             painter.drawLine(x, y - dy * corner_size, x, y)
 
     def get_cropped_pixmap(self) -> QPixmap:
-        """Получает обрезанное изображение в круге"""
+        """Получает обрезанное изображение в круге с корректным захватом сцены"""
         if not self.pixmap_item:
             return QPixmap()
 
-        # Получаем видимую область
         view_rect = self.mapToScene(self.viewport().rect()).boundingRect()
         center = view_rect.center()
         radius = self.crop_size / 2
 
-        # Создаём квадратную область обрезки вокруг круга
-        crop_rect = QRectF(
-            center.x() - radius,
-            center.y() - radius,
-            radius * 2,
-            radius * 2
-        )
+        # Запрашиваем рендеринг ровно той области, что находится внутри круга
+        target_size = int(radius * 2)
+        result = QPixmap(target_size, target_size)
+        result.fill(Qt.GlobalColor.transparent)
 
-        pixmap = self.pixmap_item.pixmap()
-        scene_rect = self.scene.sceneRect()
-
-        if not scene_rect.intersects(crop_rect):
-            return pixmap
-
-        # Обрезаем изображение по квадрату
-        cropped = pixmap.copy(
-            int(max(0, crop_rect.x())),
-            int(max(0, crop_rect.y())),
-            int(min(crop_rect.width(), scene_rect.width())),
-            int(min(crop_rect.height(), scene_rect.height()))
-        )
-
-        # Делаем круглым
-        size = min(cropped.width(), cropped.height())
-        rounded = QPixmap(size, size)
-        rounded.fill(Qt.GlobalColor.transparent)
-
-        painter = QPainter(rounded)
+        painter = QPainter(result)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
+
+        # Создаем круглую маску
         path = QPainterPath()
-        path.addEllipse(0, 0, size, size)
+        path.addEllipse(0, 0, target_size, target_size)
         painter.setClipPath(path)
 
-        scaled = cropped.scaled(
-            size, size,
-            Qt.AspectRatioMode.KeepAspectRatio,
-            Qt.TransformationMode.SmoothTransformation
-        )
-        x = (size - scaled.width()) // 2
-        y = (size - scaled.height()) // 2
-        painter.drawPixmap(x, y, scaled)
+        # Рендерим нужный участок сцены
+        source_rect = QRectF(center.x() - radius, center.y() - radius, radius * 2, radius * 2)
+        self.scene.render(painter, QRectF(0, 0, target_size, target_size), source_rect)
         painter.end()
 
-        return rounded
+        return result
 
 
 class AvatarCropDialog(QDialog):
@@ -238,42 +207,30 @@ class AvatarCropDialog(QDialog):
         self._setup_ui()
         self._connect_signals()
 
-        # Устанавливаем изображение
         self.crop_view.set_pixmap(original_pixmap)
 
     def _setup_ui(self):
-        """Настраивает интерфейс"""
         layout = QVBoxLayout(self)
         layout.setSpacing(10)
         layout.setContentsMargins(15, 15, 15, 15)
 
-        # Заголовок
         title = QLabel("Выберите область для аватара")
         title.setStyleSheet("font-size: 18px; font-weight: bold; color: #1B232A;")
         title.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(title)
 
-        # Подсказка
         hint = QLabel("Перетаскивайте изображение и используйте колёсико мыши для масштабирования")
         hint.setStyleSheet("font-size: 12px; color: #666;")
         hint.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(hint)
 
-        # Graphics View
         self.crop_view = CropGraphicsView()
         self.crop_view.setMinimumHeight(400)
         layout.addWidget(self.crop_view)
 
-        # Инфо о размере
-        size_label = QLabel("Итоговый размер аватара: 142×110 пикселей")
-        size_label.setStyleSheet("font-size: 12px; color: #888;")
-        size_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        layout.addWidget(size_label)
-
-        # Панель управления
         controls = QHBoxLayout()
 
-        self.btn_reset = QPushButton("🔄 Сбросить")
+        self.btn_reset = QPushButton("Сбросить")
         self.btn_reset.setStyleSheet("""
             QPushButton {
                 background-color: #E0E0E0;
@@ -291,26 +248,10 @@ class AvatarCropDialog(QDialog):
 
         controls.addStretch()
 
-        self.btn_cancel = QPushButton("✖ Отмена")
-        self.btn_cancel.setStyleSheet("""
-            QPushButton {
-                background-color: #E0E0E0;
-                color: #1B232A;
-                border: none;
-                border-radius: 8px;
-                padding: 8px 20px;
-                font-weight: bold;
-            }
-            QPushButton:hover {
-                background-color: #C0C0C0;
-            }
-        """)
-        controls.addWidget(self.btn_cancel)
-
-        self.btn_save = QPushButton("✅ Сохранить")
+        self.btn_save = QPushButton("Сохранить")
         self.btn_save.setStyleSheet("""
             QPushButton {
-                background-color: #D22730;
+                background-color: #ccab6e;
                 color: white;
                 border: none;
                 border-radius: 8px;
@@ -319,30 +260,24 @@ class AvatarCropDialog(QDialog):
                 font-size: 14px;
             }
             QPushButton:hover {
-                background-color: #862633;
+                background-color: #998664;
             }
         """)
         controls.addWidget(self.btn_save)
 
         layout.addLayout(controls)
-
-        self.setStyleSheet("""
-            QDialog {
-                background-color: white;
-            }
-        """)
+        self.setStyleSheet("QDialog { background-color: white; }")
 
     def _connect_signals(self):
         self.btn_reset.clicked.connect(self._reset_view)
-        self.btn_cancel.clicked.connect(self.reject)
+        if hasattr(self, 'btn_cancel'):
+            self.btn_cancel.clicked.connect(self.reject)
         self.btn_save.clicked.connect(self._save_cropped)
 
     def _reset_view(self):
         if self.crop_view.pixmap_item:
-            self.crop_view.fitInView(
-                self.crop_view.scene.sceneRect(),
-                Qt.AspectRatioMode.KeepAspectRatio
-            )
+            self.crop_view.resetTransform()
+            self.crop_view.centerOn(self.crop_view.pixmap_item)
             self.crop_view.zoom_factor = 1.0
             self.crop_view._update_crop_size()
             self.crop_view.scene.update()

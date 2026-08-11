@@ -270,83 +270,72 @@ QPushButton:pressed {
          <layout class="QHBoxLayout" name="horizontalLayout_3">
           <item>
            <widget class="QFrame" name="frameAvatar">
-            <property name="minimumSize">
-             <size>
-              <width>150</width>
-              <height>150</height>
-             </size>
-            </property>
-            <property name="maximumSize">
-             <size>
-              <width>150</width>
-              <height>150</height>
-             </size>
-            </property>
-            <property name="styleSheet">
-             <string notr="true">QFrame#frameAvatar {
+ <property name="minimumSize">
+  <size>
+   <width>150</width>
+   <height>150</height>
+  </size>
+ </property>
+ <property name="maximumSize">
+  <size>
+   <width>150</width>
+   <height>150</height>
+  </size>
+ </property>
+ <property name="styleSheet">
+  <string notr="true">QFrame#frameAvatar {
     background-color: #E0E0E0;
     border-radius: 75px;
     border: 4px solid #ccab6e;
 }</string>
-            </property>
-            <layout class="QVBoxLayout" name="verticalLayout_3">
-             <property name="spacing">
-              <number>2</number>
-             </property>
-             <property name="leftMargin">
-              <number>0</number>
-             </property>
-             <property name="topMargin">
-              <number>5</number>
-             </property>
-             <property name="rightMargin">
-              <number>0</number>
-             </property>
-             <property name="bottomMargin">
-              <number>5</number>
-             </property>
-             <item>
-              <widget class="QLabel" name="labelPhoto">
-               <property name="minimumSize">
-                <size>
-                 <width>142</width>
-                 <height>110</height>
-                </size>
-               </property>
-               <property name="maximumSize">
-                <size>
-                 <width>142</width>
-                 <height>110</height>
-                </size>
-               </property>
-               <property name="font">
-                <font>
-                 <pointsize>-1</pointsize>
-                </font>
-               </property>
-               <property name="layoutDirection">
-                <enum>Qt::LeftToRight</enum>
-               </property>
-               <property name="styleSheet">
-                <string notr="true">QLabel#labelPhoto {
-    font-size: 36px;
-    text-align: center;
-    color: #666;
+ </property>
+ <layout class="QVBoxLayout" name="verticalLayout_3">
+  <property name="spacing">
+   <number>0</number>
+  </property>
+  <property name="leftMargin">
+   <number>0</number>
+  </property>
+  <property name="topMargin">
+   <number>0</number>
+  </property>
+  <property name="rightMargin">
+   <number>0</number>
+  </property>
+  <property name="bottomMargin">
+   <number>0</number>
+  </property>
+  <item>
+   <widget class="QLabel" name="labelPhoto">
+    <property name="minimumSize">
+     <size>
+      <width>142</width>
+      <height>142</height>
+     </size>
+    </property>
+    <property name="maximumSize">
+     <size>
+      <width>142</width>
+      <height>142</height>
+     </size>
+    </property>
+    <property name="styleSheet">
+     <string notr="true">QLabel#labelPhoto {
     background-color: transparent;
     border: none;
-    border-radius: 0px;
+    border-radius: 71px;
 }</string>
-               </property>
-               <property name="text">
-                <string>📷</string>
-               </property>
-               <property name="alignment">
-                <set>Qt::AlignCenter</set>
-               </property>
-              </widget>
-             </item>
-            </layout>
-           </widget>
+    </property>
+    <property name="text">
+     <string>📷</string>
+    </property>
+    <property name="alignment">
+     <set>Qt::AlignCenter</set>
+    </property>
+   </widget>
+  </item>
+ </layout>
+</widget>
           </item>
           <item>
            <layout class="QGridLayout" name="gridLayout">

@@ -106,7 +106,7 @@ class ProfilePage(QWidget):
         # Применяем права доступа
         self._apply_permissions()
 
-    def _apply_permissions(self):
+    def  _apply_permissions(self):
         """Применяет права доступа к кнопкам профиля"""
         # Определяем, свой ли это профиль
         is_own_profile = False
@@ -151,85 +151,90 @@ class ProfilePage(QWidget):
             self._set_default_avatar()
             return
 
-        # Размер контейнера frameAvatar
-        container = getattr(self, 'frameAvatar', None)
-        if container:
-            size = min(container.width(), container.height())
-        else:
-            size = 150
+        # 150px (ширина фрейма) - 8px (две рамки по 4px) = 142px
+        size = 142
 
-        if size <= 0:
-            size = 150
-
-        # Создаём круглую маску
+        # Создаём прозрачный холст
         rounded = QPixmap(size, size)
         rounded.fill(Qt.GlobalColor.transparent)
 
-        from PyQt6.QtGui import QPainter, QPainterPath
         painter = QPainter(rounded)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, True)
 
-        # Создаём круглую область
+        # Вырезаем круг под размер
         path = QPainterPath()
         path.addEllipse(0, 0, size, size)
         painter.setClipPath(path)
 
-        # Масштабируем изображение с сохранением пропорций
+        # Масштабируем изображение с сохранением пропорций (Crop / Fill)
         scaled = pixmap.scaled(
             size, size,
-            Qt.AspectRatioMode.KeepAspectRatio,
+            Qt.AspectRatioMode.KeepAspectRatioByExpanding,
             Qt.TransformationMode.SmoothTransformation
         )
 
-        # Центрируем изображение внутри круга
+        # Центрируем изображение перед отрисовкой
         x = (size - scaled.width()) // 2
         y = (size - scaled.height()) // 2
         painter.drawPixmap(x, y, scaled)
         painter.end()
 
-        self.labelPhoto.setPixmap(rounded)
-        self.labelPhoto.setScaledContents(True)  # Включаем масштабирование
+        # Настраиваем labelPhoto
+        self.labelPhoto.setFixedSize(size, size)
+        self.labelPhoto.setScaledContents(False)
         self.labelPhoto.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.labelPhoto.setStyleSheet("""
+            QLabel#labelPhoto {
+                background-color: transparent;
+                border: none;
+                padding: 0px;
+                margin: 0px;
+            }
+        """)
+
+        self.labelPhoto.setPixmap(rounded)
+        self.labelPhoto.update()
 
     def _set_default_avatar(self):
         """Устанавливает аватар по умолчанию (инициалы)"""
         if not hasattr(self, 'labelPhoto'):
             return
 
-        # Размер контейнера
-        container = getattr(self, 'frameAvatar', None)
-        if container:
-            size = min(container.width(), container.height())
-        else:
-            size = 150
+        size = 142
 
-        if size <= 0:
-            size = 150
+        self.labelPhoto.setFixedSize(size, size)
+        self.labelPhoto.setScaledContents(False)
+        self.labelPhoto.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.labelPhoto.setStyleSheet("""
+            QLabel#labelPhoto {
+                background-color: transparent;
+                border: none;
+                padding: 0px;
+                margin: 0px;
+            }
+        """)
 
         # Получаем инициалы
         data = self.employee_data
         first = data.get('first_name', '')[:1].upper()
         last = data.get('last_name', '')[:1].upper()
-        initials = f"{last}{first}" if last and first else "??"
+        initials = f"{last}{first}" if last and first else "?"
 
-        # Создаём цветной круг с инициалами
-        from PyQt6.QtGui import QPainter, QColor, QFont
+        # Создаём круг с инициалами
         pixmap = QPixmap(size, size)
         pixmap.fill(Qt.GlobalColor.transparent)
 
         painter = QPainter(pixmap)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
 
-        # Цвет фона (на основе ID)
         colors = ["#D22730", "#ccab6e", "#1B232A", "#862633", "#4CAF50"]
         color = colors[self.employee_id % len(colors)] if self.employee_id else colors[0]
 
-        # Рисуем круг
         painter.setBrush(QColor(color))
         painter.setPen(Qt.PenStyle.NoPen)
         painter.drawEllipse(0, 0, size, size)
 
-        # Рисуем инициалы
         painter.setPen(QColor("white"))
         font_size = size // 3
         font = QFont("Arial", font_size, QFont.Weight.Bold)
@@ -238,8 +243,7 @@ class ProfilePage(QWidget):
         painter.end()
 
         self.labelPhoto.setPixmap(pixmap)
-        self.labelPhoto.setScaledContents(True)  # Включаем масштабирование
-        self.labelPhoto.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.labelPhoto.update()
 
     def _update_ui(self):
         """Обновляет UI из self.employee_data"""
@@ -247,12 +251,19 @@ class ProfilePage(QWidget):
 
         # ✅ Загружаем аватар
         if hasattr(self, 'labelPhoto'):
+            print(f"\n🔍 [AVATAR DEBUG] _update_ui")
+            print(f"   frameAvatar.size: {self.frameAvatar.size()}")
+            print(f"   labelPhoto.size ДО: {self.labelPhoto.size()}")
+
+            # ПРИНУДИТЕЛЬНО обновляем геометрию перед установкой аватара
+            self.frameAvatar.updateGeometry()
+            self.labelPhoto.updateGeometry()
+
             if self.profile_service and self.employee_id:
                 print(f"🖼️ Загрузка аватара для сотрудника {self.employee_id}")
-                # Загружаем в большом размере
                 pixmap = self.profile_service.get_avatar_pixmap(self.employee_id, 400)
                 if pixmap:
-                    print("   ✅ Аватар загружен успешно")
+                    print(f"   ✅ Аватар загружен: {pixmap.width()}x{pixmap.height()}")
                     self._set_round_avatar(pixmap)
                 else:
                     print("   ❌ Аватар не найден, показываем по умолчанию")
@@ -260,7 +271,7 @@ class ProfilePage(QWidget):
             else:
                 self._set_default_avatar()
 
-        # ФИО
+         # ФИО
         if hasattr(self, 'labelFullName'):
             middle = f" {data.get('middle_name', '')}" if data.get('middle_name') else ""
             self.labelFullName.setText(f"{data.get('last_name', '')} {data.get('first_name', '')}{middle}")
