@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>650</width>
-    <height>400</height>
+    <height>412</height>
    </rect>
   </property>
   <property name="minimumSize">
@@ -237,6 +237,9 @@
      <property name="text">
       <string>Добавление новой колонки</string>
      </property>
+     <property name="alignment">
+      <set>Qt::AlignmentFlag::AlignCenter</set>
+     </property>
     </widget>
    </item>
    <item>
@@ -250,7 +253,7 @@
         <x>0</x>
         <y>0</y>
         <width>608</width>
-        <height>227</height>
+        <height>236</height>
        </rect>
       </property>
       <layout class="QVBoxLayout" name="verticalLayoutScroll">
@@ -398,7 +401,10 @@
                  </string>
                 </property>
                 <property name="frameShape">
-                 <enum>QFrame::NoFrame</enum>
+                 <enum>QFrame::Shape::StyledPanel</enum>
+                </property>
+                <property name="frameShadow">
+                 <enum>QFrame::Shadow::Raised</enum>
                 </property>
                </widget>
               </item>
@@ -443,6 +449,61 @@
                   <string>Оранжевый (#e67e22)</string>
                  </property>
                 </item>
+               </widget>
+              </item>
+             </layout>
+            </item>
+           </layout>
+          </item>
+          <item>
+           <layout class="QHBoxLayout" name="horizontalLayoutColor_2">
+            <property name="spacing">
+             <number>10</number>
+            </property>
+            <item>
+             <widget class="QLabel" name="labelAssigment">
+              <property name="sizePolicy">
+               <sizepolicy hsizetype="Minimum" vsizetype="Preferred">
+                <horstretch>0</horstretch>
+                <verstretch>0</verstretch>
+               </sizepolicy>
+              </property>
+              <property name="minimumSize">
+               <size>
+                <width>119</width>
+                <height>0</height>
+               </size>
+              </property>
+              <property name="maximumSize">
+               <size>
+                <width>135</width>
+                <height>50</height>
+               </size>
+              </property>
+              <property name="text">
+               <string>Назначение колонки *</string>
+              </property>
+              <property name="required" stdset="0">
+               <bool>true</bool>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <layout class="QHBoxLayout" name="colorSelectionLayout_2">
+              <property name="spacing">
+               <number>8</number>
+              </property>
+              <item>
+               <widget class="QComboBox" name="comboBoxAssigment">
+                <property name="minimumSize">
+                 <size>
+                  <width>200</width>
+                  <height>39</height>
+                 </size>
+                </property>
+                <property name="currentIndex">
+                 <number>-1</number>
+                </property>
                </widget>
               </item>
              </layout>

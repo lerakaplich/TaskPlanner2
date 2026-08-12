@@ -14,6 +14,13 @@ class ColumnDialog(QDialog):
     """Диалог добавления/редактирования колонки доски задач"""
     column_saved = pyqtSignal(dict)
 
+    # ===== НАЗНАЧЕНИЯ КОЛОНОК =====
+    ASSIGNMENT_CHOICES = [
+        ('execution', 'Выполнение'),
+        ('review', 'Проверка'),
+        ('completion', 'Готово'),
+    ]
+
     def __init__(self, column_data=None, is_template_mode=True, parent=None, read_only=False):
         super().__init__(parent)
         self.column_data = column_data or {}
@@ -21,7 +28,9 @@ class ColumnDialog(QDialog):
         self.is_edit_mode = bool(column_data and column_data.get('id'))
         self.read_only = read_only
         self.current_color = self.column_data.get('color', '#ccab6e')
-        self.is_done_column = self.column_data.get('is_done_column', False)
+
+        # ===== ТЕКУЩЕЕ НАЗНАЧЕНИЕ =====
+        self.current_assignment = self.column_data.get('stage', 'execution')
         self.fields = []
 
         # Загрузка UI
@@ -41,23 +50,18 @@ class ColumnDialog(QDialog):
     def _apply_read_only_state(self):
         """Применяет состояние только просмотра к диалогу"""
         if self.read_only:
-            # Скрываем кнопку сохранения
             if hasattr(self, 'btnSave'):
                 self.btnSave.setVisible(False)
                 self.btnSave.hide()
 
-            # Блокируем все поля ввода
             self._set_all_fields_read_only()
 
-            # Скрываем кнопку выбора цвета (если есть)
             if hasattr(self, 'btnCustomColor'):
                 self.btnCustomColor.setVisible(False)
 
-            # Блокируем комбобокс цвета
             if hasattr(self, 'comboBoxColor'):
                 self.comboBoxColor.setEnabled(False)
 
-            # Блокируем комбобокс назначения (если есть)
             if hasattr(self, 'comboBoxAssigment'):
                 self.comboBoxAssigment.setEnabled(False)
 
@@ -103,6 +107,18 @@ class ColumnDialog(QDialog):
         if hasattr(self, 'lineEditName'):
             self.lineEditName.setMaxLength(100)
 
+        # ===== НАСТРОЙКА КОМБОБОКСА НАЗНАЧЕНИЯ =====
+        if hasattr(self, 'comboBoxAssigment'):
+            self.comboBoxAssigment.clear()
+            for value, label in self.ASSIGNMENT_CHOICES:
+                self.comboBoxAssigment.addItem(label, value)
+
+            index = self.comboBoxAssigment.findData(self.current_assignment)
+            if index >= 0:
+                self.comboBoxAssigment.setCurrentIndex(index)
+
+            self.comboBoxAssigment.setToolTip("Выберите назначение колонки")
+
         # Настройка индикатора цвета
         if hasattr(self, 'colorIndicator'):
             self.colorIndicator.setFixedSize(32, 32)
@@ -128,6 +144,8 @@ class ColumnDialog(QDialog):
             self.comboBoxColor.currentTextChanged.connect(self.on_color_changed)
         if hasattr(self, 'lineEditName'):
             self.lineEditName.textChanged.connect(self.update_preview)
+        if hasattr(self, 'comboBoxAssigment'):
+            self.comboBoxAssigment.currentIndexChanged.connect(self.on_assignment_changed)
 
     def fill_data(self):
         """Заполнение полей данными при редактировании"""
@@ -149,8 +167,63 @@ class ColumnDialog(QDialog):
                 self.comboBoxColor.addItem(f"{color_name} ({self.current_color})")
                 self.comboBoxColor.setCurrentIndex(self.comboBoxColor.count() - 1)
 
+        if hasattr(self, 'comboBoxAssigment'):
+            stage = self.column_data.get('stage', 'execution')
+            index = self.comboBoxAssigment.findData(stage)
+            if index >= 0:
+                self.comboBoxAssigment.setCurrentIndex(index)
+
         self.update_preview()
         self.update_color_indicator(self.current_color)
+        self.update_assignment_preview()
+
+    def on_assignment_changed(self, index: int):
+        """Обработка изменения назначения"""
+        if self.read_only:
+            return
+        if hasattr(self, 'comboBoxAssigment'):
+            self.current_assignment = self.comboBoxAssigment.currentData()
+            self.update_assignment_preview()
+
+    def update_assignment_preview(self):
+        """Обновление предпросмотра назначения"""
+        if hasattr(self, 'previewAssignmentLabel'):
+            assignment_label = self.get_assignment_display_name(self.current_assignment)
+            self.previewAssignmentLabel.setText(assignment_label)
+
+            assignment_color = self.get_assignment_color(self.current_assignment)
+            assignment_bg = self.get_assignment_bg_color(self.current_assignment)
+            self.previewAssignmentLabel.setStyleSheet(f"""
+                font-size: 13px;
+                font-weight: 500;
+                padding: 4px 12px;
+                border-radius: 12px;
+                background-color: {assignment_bg};
+                color: {assignment_color};
+            """)
+
+    def get_assignment_display_name(self, stage: str) -> str:
+        """Возвращает отображаемое название назначения"""
+        stage_map = dict(self.ASSIGNMENT_CHOICES)
+        return stage_map.get(stage, stage)
+
+    def get_assignment_color(self, stage: str) -> str:
+        """Возвращает цвет текста для назначения"""
+        colors = {
+            'execution': '#1565C0',
+            'review': '#E65100',
+            'completion': '#2E7D32',
+        }
+        return colors.get(stage, '#333333')
+
+    def get_assignment_bg_color(self, stage: str) -> str:
+        """Возвращает цвет фона для назначения"""
+        bg_colors = {
+            'execution': '#E3F2FD',
+            'review': '#FFF3E0',
+            'completion': '#E8F5E9',
+        }
+        return bg_colors.get(stage, '#F5F5F5')
 
     def on_save_clicked(self):
         """Обработка сохранения колонки"""
@@ -167,8 +240,8 @@ class ColumnDialog(QDialog):
             'id': self.column_data.get('id', None),
             'name': column_name,
             'color': self.current_color,
-            'is_done_column': self.is_done_column,
-            'position': self.column_data.get('position', 0)
+            'position': self.column_data.get('position', 0),
+            'stage': self.current_assignment,
         }
 
         self.column_saved.emit(column_data)
@@ -194,6 +267,10 @@ class ColumnDialog(QDialog):
 
         if not self.current_color:
             QMessageBox.warning(self, "Ошибка", "Пожалуйста, выберите цвет для колонки.")
+            return False
+
+        if not self.current_assignment:
+            QMessageBox.warning(self, "Ошибка", "Пожалуйста, выберите назначение колонки.")
             return False
 
         return True
@@ -284,6 +361,8 @@ class ColumnDialog(QDialog):
                 border: 1px solid #E0E0E0;
             """)
 
+        self.update_assignment_preview()
+
     def get_column_data(self):
         """Получение данных колонки"""
         if not hasattr(self, 'lineEditName'):
@@ -293,8 +372,8 @@ class ColumnDialog(QDialog):
             'id': self.column_data.get('id', None),
             'name': name,
             'color': self.current_color,
-            'is_done_column': self.is_done_column,
-            'position': self.column_data.get('position', 0)
+            'position': self.column_data.get('position', 0),
+            'stage': self.current_assignment,
         }
 
     def setup_keyboard_navigation(self):

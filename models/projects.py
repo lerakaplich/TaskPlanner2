@@ -13,6 +13,12 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from .employees import Base
 
 
+class ColumnStageEnum(str, PyEnum):
+    """Этап колонки на доске задач"""
+    EXECUTION = "execution"      # Выполнение
+    REVIEW = "review"            # Проверка
+    COMPLETION = "completion"    # Готово
+
 class ProjectRoleEnum(str, PyEnum):
     PROJECT_MANAGER = "project_manager"
     CURATOR = "curator"
@@ -43,9 +49,6 @@ class Project(Base):
     )
 
 
-# =========================
-# board_columns
-# =========================
 class BoardColumn(Base):
     __tablename__ = "board_columns"
 
@@ -58,6 +61,18 @@ class BoardColumn(Base):
     color: Mapped[str] = mapped_column(String(7), default="#ffffff")
     position: Mapped[int] = mapped_column(Integer, default=0)
     is_done_column: Mapped[bool] = mapped_column(Boolean, default=False)
+
+    # ===== НОВОЕ ПОЛЕ: этап/назначение колонки =====
+    stage: Mapped[str] = mapped_column(
+        String(20),
+        default=ColumnStageEnum.EXECUTION.value
+    )
+
+    # ===== НОВЫЕ ПОЛЯ ДЛЯ ШАБЛОНОВ =====
+    is_template: Mapped[bool] = mapped_column(Boolean, default=False)
+    template_order: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
+
     project: Mapped[Optional["Project"]] = relationship(back_populates="columns")
     tasks: Mapped[List["Task"]] = relationship(
         back_populates="column",
@@ -77,7 +92,6 @@ class EmployeeProject(Base):
         primary_key=True,
     )
 
-    # ✅ ИСПРАВЛЕНО: используем String вместо Enum для совместимости с существующими данными
     role: Mapped[str] = mapped_column(String(50), default="member")
     joined_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
 

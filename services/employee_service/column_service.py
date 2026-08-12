@@ -4,6 +4,7 @@ from typing import List, Optional, Dict, Any
 from sqlalchemy.orm import Session
 from repositories.column_repo import ColumnRepo
 from server_app.database import get_tasks_session
+from models.projects import ColumnStageEnum
 
 from PyQt6.QtCore import QObject, pyqtSignal
 
@@ -12,6 +13,13 @@ class ColumnService(QObject):
     """Сервис для работы с шаблонными колонками"""
 
     columns_updated = pyqtSignal()
+
+    # ===== СТАТИЧЕСКИЙ СПИСОК ЭТАПОВ ДЛЯ UI =====
+    STAGE_CHOICES = [
+        ('execution', 'Выполнение'),
+        ('review', 'Проверка'),
+        ('completion', 'Готово'),
+    ]
 
     def __init__(self, session: Session = None):
         super().__init__()
@@ -22,6 +30,29 @@ class ColumnService(QObject):
     def close(self):
         if self._own_session and self.session:
             self.session.close()
+
+    def get_stage_display_name(self, stage: str) -> str:
+        """Возвращает отображаемое название этапа"""
+        stage_map = dict(self.STAGE_CHOICES)
+        return stage_map.get(stage, stage)
+
+    def get_stage_color(self, stage: str) -> str:
+        """Возвращает цвет для этапа"""
+        colors = {
+            'execution': '#3498db',   # Синий
+            'review': '#f39c12',      # Оранжевый
+            'completion': '#2ecc71',  # Зелёный
+        }
+        return colors.get(stage, '#ccab6e')
+
+    def get_stage_icon(self, stage: str) -> str:
+        """Возвращает иконку для этапа"""
+        icons = {
+            'execution': '⚙️',
+            'review': '🔍',
+            'completion': '✅',
+        }
+        return icons.get(stage, '📋')
 
     def get_template_columns(self) -> List[Dict[str, Any]]:
         """Возвращает все шаблонные колонки в виде словарей"""
@@ -47,7 +78,8 @@ class ColumnService(QObject):
             column = self.repo.create_template_column(
                 name=column_data.get('name'),
                 color=column_data.get('color', '#ffffff'),
-                is_done_column=column_data.get('is_done_column', False)
+                is_done_column=column_data.get('is_done_column', False),
+                stage=column_data.get('stage', ColumnStageEnum.EXECUTION.value)
             )
             self.session.commit()
             print(f"✅ Колонка '{column.name}' создана, отправляем сигнал обновления")
@@ -65,7 +97,8 @@ class ColumnService(QObject):
                 column_id=column_id,
                 name=column_data.get('name'),
                 color=column_data.get('color'),
-                is_done_column=column_data.get('is_done_column')
+                is_done_column=column_data.get('is_done_column'),
+                stage=column_data.get('stage')
             )
             if success:
                 self.session.commit()
@@ -103,10 +136,11 @@ class ColumnService(QObject):
             'id': column.id,
             'name': column.name,
             'color': column.color,
-            'position': getattr(column, 'template_order', column.position) if hasattr(column,
-                                                                                      'template_order') else column.position,
+            'position': getattr(column, 'template_order', column.position) if hasattr(column, 'template_order') else column.position,
             'is_done_column': column.is_done_column,
+            'stage': getattr(column, 'stage', 'execution'),
             'project_id': column.project_id,
             'is_template': getattr(column, 'is_template', False),
-            'template_order': getattr(column, 'template_order', 0)
+            'template_order': getattr(column, 'template_order', 0),
+            'created_at': getattr(column, 'created_at', None),
         }

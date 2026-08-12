@@ -12,7 +12,25 @@ class ColumnCard(QFrame):
     edit_clicked = pyqtSignal(int)
     delete_clicked = pyqtSignal(int)
     color_changed = pyqtSignal(int, str)
-    done_changed = pyqtSignal(int, bool)
+
+    # ===== СТАТИЧЕСКИЕ ДАННЫЕ ДЛЯ НАЗНАЧЕНИЙ =====
+    ASSIGNMENT_DATA = {
+        'execution': {
+            'label': 'Выполнение',
+            'color': '#1565C0',
+            'bg_color': '#E3F2FD'
+        },
+        'review': {
+            'label': 'Проверка',
+            'color': '#E65100',
+            'bg_color': '#FFF3E0'
+        },
+        'completion': {
+            'label': 'Готово',
+            'color': '#2E7D32',
+            'bg_color': '#E8F5E9'
+        }
+    }
 
     def __init__(self, column_data: dict, parent=None, read_only=False):
         super().__init__(parent)
@@ -47,7 +65,6 @@ class ColumnCard(QFrame):
     def _apply_read_only_state(self):
         """Применяет состояние только просмотра"""
         if self.read_only:
-            # Скрываем ВСЕ кнопки
             if hasattr(self, 'editButton'):
                 self.editButton.setVisible(False)
                 self.editButton.hide()
@@ -56,11 +73,6 @@ class ColumnCard(QFrame):
                 self.deleteButton.setVisible(False)
                 self.deleteButton.hide()
 
-            # Блокируем чекбокс Done
-            if hasattr(self, 'doneCheckBox'):
-                self.doneCheckBox.setEnabled(False)
-
-            # Отключаем клик по цветному индикатору
             if hasattr(self, 'colorIndicator'):
                 self.colorIndicator.setCursor(Qt.CursorShape.ArrowCursor)
                 self.colorIndicator.setToolTip("Изменение цвета недоступно в режиме просмотра")
@@ -70,14 +82,8 @@ class ColumnCard(QFrame):
         if not self.read_only:
             self.editButton.clicked.connect(lambda: self.edit_clicked.emit(self.column_id))
             self.deleteButton.clicked.connect(lambda: self.delete_clicked.emit(self.column_id))
-            self.doneCheckBox.stateChanged.connect(self._on_done_changed)
             if hasattr(self, 'colorIndicator'):
                 self.colorIndicator.installEventFilter(self)
-
-    def _on_done_changed(self, state: int):
-        is_done = bool(state)
-        self.column_data['is_done_column'] = is_done
-        self.done_changed.emit(self.column_id, is_done)
 
     def eventFilter(self, obj, event: QEvent) -> bool:
         if self.read_only:
@@ -102,17 +108,9 @@ class ColumnCard(QFrame):
         if hasattr(self, 'nameLabel'):
             self.nameLabel.setStyleSheet(f"""
                 color: {new_color};
-                font-size: 15px;
+                font-size: 18px;
                 font-weight: bold;
             """)
-
-    def update_done_status(self, is_done: bool):
-        """Обновляет статус Done"""
-        self.column_data['is_done_column'] = is_done
-        if hasattr(self, 'doneCheckBox'):
-            self.doneCheckBox.blockSignals(True)
-            self.doneCheckBox.setChecked(is_done)
-            self.doneCheckBox.blockSignals(False)
 
     def fill_data(self):
         """Заполняем данные"""
@@ -123,7 +121,7 @@ class ColumnCard(QFrame):
             color = self.column_data.get('color', '#ccab6e')
             self.nameLabel.setStyleSheet(f"""
                 color: {color};
-                font-size: 15px;
+                font-size: 18px;
                 font-weight: bold;
             """)
 
@@ -132,9 +130,10 @@ class ColumnCard(QFrame):
             pos = self.column_data.get('position', 0)
             self.positionLabel.setText(f"Позиция: {pos}")
 
-        # Чекбокс «Готово»
-        if hasattr(self, 'doneCheckBox'):
-            self.doneCheckBox.setChecked(self.column_data.get('is_done_column', False))
+        # ===== НАЗНАЧЕНИЕ КОЛОНКИ =====
+        if hasattr(self, 'assignmentLabel'):
+            stage = self.column_data.get('stage', 'execution')
+            self._update_assignment_label(stage)
 
         # Цветной кружок
         color = self.column_data.get('color', '#ccab6e')
@@ -144,3 +143,28 @@ class ColumnCard(QFrame):
                 background-color: {color};
                 border: 1px solid #E0E0E0;
             """)
+
+    def _update_assignment_label(self, stage: str):
+        """Обновляет метку назначения колонки"""
+        if not hasattr(self, 'assignmentLabel'):
+            return
+
+        assignment = self.ASSIGNMENT_DATA.get(stage, self.ASSIGNMENT_DATA['execution'])
+        display_text = f"{assignment['label']}"
+
+        self.assignmentLabel.setText(display_text)
+        self.assignmentLabel.setStyleSheet(f"""
+            QLabel#assignmentLabel {{
+                font-size: 13px;
+                font-weight: 500;
+                padding: 4px 12px;
+                border-radius: 12px;
+                background-color: {assignment['bg_color']};
+                color: {assignment['color']};
+            }}
+        """)
+
+    def update_assignment(self, stage: str):
+        """Обновляет назначение колонки (вызывается извне)"""
+        self.column_data['stage'] = stage
+        self._update_assignment_label(stage)

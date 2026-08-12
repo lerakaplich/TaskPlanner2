@@ -41,7 +41,8 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
-Name: "servericon"; Description: "Создать ярлык для сервера"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
+; ❌ УДАЛЯЕМ строку ниже:
+; Name: "servericon"; Description: "Создать ярлык для сервера"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
 
 [Files]
 ; === КЛИЕНТСКОЕ ПРИЛОЖЕНИЕ (PyInstaller --onedir) ===
@@ -53,7 +54,9 @@ Source: "C:\TaskPlanner\dist\main\*"; DestDir: "{app}"; Flags: ignoreversion rec
 ; === СЕРВЕР (PyInstaller --onefile) ===
 Source: "C:\TaskPlanner\dist\TasksServer.exe"; DestDir: "{app}"; Flags: ignoreversion
 
-; NOTE: Don't use "Flags: ignoreversion" on any shared system files
+; ✅ ДОБАВЛЯЕМ РУКОВОДСТВО ПОЛЬЗОВАТЕЛЯ
+; Если файл в корне проекта:
+Source: "C:\TaskPlanner\presentation.txt"; DestDir: "{app}"; Flags: ignoreversion
 
 [Registry]
 Root: HKA; Subkey: "Software\Classes\{#MyAppAssocExt}\OpenWithProgids"; ValueType: string; ValueName: "{#MyAppAssocKey}"; ValueData: ""; Flags: uninsdeletevalue
@@ -64,8 +67,11 @@ Root: HKA; Subkey: "Software\Classes\{#MyAppAssocKey}\shell\open\command"; Value
 [Icons]
 Name: "{autoprograms}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
 Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
-Name: "{autodesktop}\TaskPlanner Server"; Filename: "{app}\{#MyAppServerName}"; Tasks: servericon
-Name: "{autoprograms}\TaskPlanner Server"; Filename: "{app}\{#MyAppServerName}"; Tasks: servericon
+; ❌ УДАЛЯЕМ строки ниже (ярлыки для сервера):
+; Name: "{autodesktop}\TaskPlanner Server"; Filename: "{app}\{#MyAppServerName}"; Tasks: servericon
+; Name: "{autoprograms}\TaskPlanner Server"; Filename: "{app}\{#MyAppServerName}"; Tasks: servericon
 
 [Run]
 Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent
+; ❌ УДАЛЯЕМ строку ниже (запуск сервера):
+; Filename: "{app}\{#MyAppServerName}"; Description: "Запустить сервер TaskPlanner"; Flags: nowait postinstall skipifsilent

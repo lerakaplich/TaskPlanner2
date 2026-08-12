@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import select, update, delete, func
 from datetime import datetime
 
-from models.projects import BoardColumn
+from models.projects import BoardColumn, ColumnStageEnum
 
 
 class ColumnRepo:
@@ -22,8 +22,10 @@ class ColumnRepo:
         return self.session.get(BoardColumn, column_id)
 
     def get_template_columns(self) -> List[BoardColumn]:
-        """Получить все колонки"""
-        stmt = select(BoardColumn).order_by(BoardColumn.position)
+        """Получить все шаблонные колонки"""
+        stmt = select(BoardColumn).where(
+            BoardColumn.is_template == True
+        ).order_by(BoardColumn.template_order)
         return list(self.session.scalars(stmt))
 
     def get_project_columns(self, project_id: int) -> List[BoardColumn]:
@@ -44,40 +46,56 @@ class ColumnRepo:
     # Создание колонок
     # =========================
 
-    def create_template_column(self, name: str, color: str = "#ffffff",
-                                is_done_column: bool = False) -> BoardColumn:
+    def create_template_column(
+        self,
+        name: str,
+        color: str = "#ffffff",
+        is_done_column: bool = False,
+        stage: str = ColumnStageEnum.EXECUTION.value
+    ) -> BoardColumn:
         """Создать шаблонную колонку"""
         # Находим максимальный template_order
         max_order = self.session.scalar(
             select(func.max(BoardColumn.template_order))
-            .where(BoardColumn.project_id == None)
+            .where(BoardColumn.is_template == True)
         )
-        next_order = (max_order + 1) if max_order else 0
+        next_order = (max_order + 1) if max_order is not None else 0
 
         column = BoardColumn(
             name=name,
             color=color,
             is_done_column=is_done_column,
+            stage=stage,
             template_order=next_order,
             is_template=True,
             project_id=None,
-            position=0
+            position=0,
+            created_at=datetime.now()
         )
         self.session.add(column)
         self.session.flush()
         return column
 
-    def create_project_column(self, project_id: int, name: str, color: str = "#ffffff",
-                              position: int = 0, is_done_column: bool = False) -> BoardColumn:
+    def create_project_column(
+        self,
+        project_id: int,
+        name: str,
+        color: str = "#ffffff",
+        position: int = 0,
+        is_done_column: bool = False,
+        stage: str = ColumnStageEnum.EXECUTION.value
+    ) -> BoardColumn:
         """Создать колонку проекта (project_id обязателен)"""
         column = BoardColumn(
             name=name,
             color=color,
             position=position,
             is_done_column=is_done_column,
-            project_id=project_id,  # обязательный
+            stage=stage,
+            project_id=project_id,
             is_template=False,
-            template_order=None
+            template_order=None,
+            created_at=datetime.now()
         )
         self.session.add(column)
         self.session.flush()
@@ -90,6 +108,7 @@ class ColumnRepo:
             color=template_column.color,
             position=template_column.template_order or template_column.position,
             is_done_column=template_column.is_done_column,
+            stage=template_column.stage,
             project_id=project_id,
             is_template=False,
             template_order=template_column.template_order,
@@ -103,8 +122,14 @@ class ColumnRepo:
     # Обновление колонок
     # =========================
 
-    def update_template_column(self, column_id: int, name: str = None,
-                                color: str = None, is_done_column: bool = None) -> bool:
+    def update_template_column(
+        self,
+        column_id: int,
+        name: str = None,
+        color: str = None,
+        is_done_column: bool = None,
+        stage: str = None
+    ) -> bool:
         """Обновить шаблонную колонку"""
         column = self.get_by_id(column_id)
         if not column or column.project_id is not None:
@@ -116,12 +141,20 @@ class ColumnRepo:
             column.color = color
         if is_done_column is not None:
             column.is_done_column = is_done_column
+        if stage is not None:
+            column.stage = stage
 
         return True
 
-    def update_project_column(self, column_id: int, name: str = None,
-                               color: str = None, position: int = None,
-                               is_done_column: bool = None) -> bool:
+    def update_project_column(
+        self,
+        column_id: int,
+        name: str = None,
+        color: str = None,
+        position: int = None,
+        is_done_column: bool = None,
+        stage: str = None
+    ) -> bool:
         """Обновить колонку проекта"""
         column = self.get_by_id(column_id)
         if not column:
@@ -135,12 +168,10 @@ class ColumnRepo:
             column.position = position
         if is_done_column is not None:
             column.is_done_column = is_done_column
+        if stage is not None:
+            column.stage = stage
 
         return True
-
-    # =========================
-    # Удаление колонок
-    # =========================
 
     def delete_template_column(self, column_id: int) -> bool:
         """Удалить шаблонную колонку"""

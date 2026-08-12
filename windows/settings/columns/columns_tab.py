@@ -42,59 +42,55 @@ class ColumnsTab(BaseTab):
     # ==========================================================
 
     def _get_card_search_text(self, card) -> str:
-        """Возвращает текст для поиска из карточки колонки"""
+        """Возвращает текст для поиска из карточки колонки (включая назначение)"""
         search_parts = []
 
         # Название колонки
         if hasattr(card, 'nameLabel'):
             search_parts.append(card.nameLabel.text())
 
-        # Позиция (можно искать по номеру позиции)
+        # Позиция
         if hasattr(card, 'positionLabel'):
             pos_text = card.positionLabel.text()
             if pos_text:
                 search_parts.append(pos_text)
 
+        # Назначение
+        if hasattr(card, 'assignmentLabel'):
+            assignment_text = card.assignmentLabel.text()
+            if assignment_text:
+                search_parts.append(assignment_text)
+
         return " ".join(search_parts)
 
     def _apply_search_to_items(self):
-        """Переопределяем для колонок - поиск по названию и позиции"""
+        """Переопределяем для колонок - поиск по названию, позиции и назначению"""
         query = self._search_query.lower().strip() if hasattr(self, '_search_query') else ""
 
-        # Если запрос пустой - показываем все карточки
         if not query:
             for card in self.cards:
                 card.setVisible(True)
             return
 
-        # Фильтруем карточки
         for card in self.cards:
             search_text = self._get_card_search_text(card).lower()
             card.setVisible(query in search_text)
 
     # ==========================================================
-    # ОСТАЛЬНЫЕ МЕТОДЫ (БЕЗ ИЗМЕНЕНИЙ)
+    # ОСТАЛЬНЫЕ МЕТОДЫ
     # ==========================================================
 
     def setup_permission_ui(self):
-        """
-        Настройка UI в зависимости от прав пользователя
-        Для USER и ADMIN - только просмотр (read-only)
-        Для SUPER_ADMIN - полный доступ
-        """
-        # Определяем режим на основе роли
+        """Настройка UI в зависимости от прав пользователя"""
         if self._permission_service:
             is_read_only = self._permission_service.is_columns_tab_read_only()
             self._read_only_mode = is_read_only
 
-        # Применяем состояние
         self._apply_read_only_state()
 
-        # Скрываем или показываем кнопку добавления
         if self.btnAdd:
             self.btnAdd.setVisible(self._should_show_add_buttons())
 
-        # Обновляем карточки только если данные уже загружены
         if self.columns:
             self.refresh_cards()
 
@@ -103,12 +99,11 @@ class ColumnsTab(BaseTab):
         self.clear_cards()
         for i, column in enumerate(self.columns):
             card = ColumnCard(column, parent=self, read_only=self._read_only_mode)
-            # В режиме просмотра НЕ подключаем сигналы кликов
             if not self._read_only_mode:
                 card.edit_clicked.connect(self.on_edit_clicked)
                 card.delete_clicked.connect(self.on_delete_clicked)
                 card.color_changed.connect(self.on_color_changed)
-                card.done_changed.connect(self.on_done_changed)
+                # done_changed больше не подключаем
             self.add_card_to_grid(card, i)
         self.set_last_row_stretch()
 
@@ -248,15 +243,3 @@ class ColumnsTab(BaseTab):
                         break
                 self.refresh_cards()
                 self.item_color_changed.emit(column_id, new_color)
-
-    def on_done_changed(self, column_id: int, is_done: bool):
-        """Изменение статуса Done"""
-        if self._read_only_mode:
-            return
-
-        if self.column_service:
-            self.column_service.update_template_column(column_id, {'is_done_column': is_done})
-            for column in self.columns:
-                if column.get('id') == column_id:
-                    column['is_done_column'] = is_done
-                    break
